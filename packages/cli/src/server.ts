@@ -8,6 +8,15 @@ import {
   type BaseContext,
   type Action,
 } from "@brick-ts/core";
+import {
+  requestLoggingPlugin,
+  type RequestLoggingOptions,
+} from "./request-logger";
+import {
+  scalarDocsHTML,
+  registerReferenceRoute,
+  type ReferenceOptions,
+} from "./docs";
 
 export interface CreateServerOptions {
   port?: number;
@@ -20,6 +29,8 @@ export interface CreateServerOptions {
   openApiPath?: string;
   docsPath?: string;
   swaggerPath?: string;
+  requestLogging?: boolean | RequestLoggingOptions; // default true
+  reference?: boolean | ReferenceOptions; // default false, path "/reference"
 }
 
 function coerceQueryParams(query: any, schema: any): any {
@@ -155,6 +166,26 @@ export function createBrickServer(options: CreateServerOptions = {}) {
     return getGlobalRegistry().exportArchitecture();
   });
 
+  // Request logging first so every route below is timed.
+  const requestLogging = options.requestLogging ?? true;
+  if (requestLogging !== false) {
+    const pluginOpts = requestLogging === true ? {} : requestLogging;
+    if (pluginOpts.enabled !== false) {
+      app.use(requestLoggingPlugin(pluginOpts));
+    }
+  }
+
+  // Scalar API reference (opt-in). Defaults to openApiPath for the spec URL.
+  const reference = options.reference ?? false;
+  if (reference !== false) {
+    const refOpts = reference === true ? {} : reference;
+    registerReferenceRoute(app, {
+      path: refOpts.path ?? "/reference",
+      title: refOpts.title ?? title,
+      specUrl: refOpts.specUrl ?? openApiPath,
+    });
+  }
+
   const services = options.services ?? getGlobalRegistry().list();
 
   // 1. Startup Schema Sync across all registered services (SQLite & Dev auto-creation)
@@ -178,26 +209,7 @@ export function createBrickServer(options: CreateServerOptions = {}) {
 
     app.get(docsPath, ({ set }) => {
       set.headers["content-type"] = "text/html; charset=utf-8";
-      return `<!doctype html>
-<html>
-  <head>
-    <title>${title} — Interactive Documentation</title>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" type="image/svg+xml" href="https://scalar.com/favicon.svg" />
-    <style>
-      body { margin: 0; padding: 0; height: 100vh; }
-    </style>
-  </head>
-  <body>
-    <script
-      id="api-reference"
-      data-url="${openApiPath}"
-      data-configuration='{"theme": "purple", "layout": "modern"}'
-      src="https://cdn.jsdelivr.net/npm/@scalar/api-reference">
-    </script>
-  </body>
-</html>`;
+      return scalarDocsHTML(openApiPath, title);
     });
 
     app.get(swaggerPath, ({ set }) => {
