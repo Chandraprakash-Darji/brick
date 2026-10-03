@@ -1,6 +1,6 @@
 {
   "name": "@elregaldo/cli",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "CLI and server engine for Brick-TS",
   "type": "module",
   "main": "./dist/index.js",
@@ -29,7 +29,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.build.json"
   },
   "dependencies": {
-    "@elregaldo/core": "^0.1.0",
+    "@elregaldo/core": "^0.1.2",
     "@sinclair/typebox": "^0.34.0",
     "elysia": "^1.2.0"
   },

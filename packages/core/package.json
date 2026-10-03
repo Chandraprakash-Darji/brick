@@ -1,6 +1,6 @@
 {
   "name": "@elregaldo/core",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Core engine primitives for the Brick-TS framework",
   "type": "module",
   "main": "./dist/index.js",
