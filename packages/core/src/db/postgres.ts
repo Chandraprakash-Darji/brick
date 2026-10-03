@@ -1,4 +1,5 @@
-import { loadDriver } from "./load";
+import postgres from "postgres";
+import { drizzle } from "drizzle-orm/postgres-js";
 
 export interface PostgresDatabaseConfig<
   TSchema extends Record<string, unknown> = Record<string, unknown>
@@ -36,9 +37,9 @@ export interface DatabaseAdapter<TDb = any, TConfig = any> {
 
 /**
  * Creates a PostgreSQL Drizzle instance using postgres-js.
- * Lazily loads 'postgres' and 'drizzle-orm/postgres-js' at runtime so
- * importing `@elregaldo/core` never requires the optional peer installed.
- * Works on Bun, Node CJS, and Node ESM.
+ * Static imports (both are hard dependencies in package.json) so bundlers
+ * (Nitro/Rollup) trace and ship the driver. `bun:sqlite` stays lazy in
+ * `sqlite.ts` since it only exists under Bun.
  */
 export function createPostgresDatabase<
   TSchema extends Record<string, unknown> = Record<string, unknown>
@@ -48,45 +49,25 @@ export function createPostgresDatabase<
     config.connectionString ??
     (typeof process !== "undefined" ? process.env?.DATABASE_URL : undefined);
 
-  try {
-    const postgresModule = loadDriver("postgres");
-    // CJS require returns the callable directly; ESM-interop loaders
-    // (e.g. the better-auth CLI config loader) hand back a namespace.
-    const postgres = postgresModule?.default ?? postgresModule;
-    const postgresJs = loadDriver("drizzle-orm/postgres-js");
-    const drizzle =
-      postgresJs?.drizzle ?? postgresJs?.default?.drizzle ?? postgresJs;
+  const client = connectionUrl
+    ? postgres(connectionUrl, {
+        max: config.max,
+        prepare: config.prepare,
+        ssl: config.ssl,
+      })
+    : postgres({
+        host: config.host ?? "localhost",
+        port: config.port ?? 5432,
+        user: config.user,
+        password: config.password,
+        database: config.database,
+        max: config.max,
+        prepare: config.prepare,
+        ssl: config.ssl,
+      });
 
-    const client = connectionUrl
-      ? postgres(connectionUrl, {
-          max: config.max,
-          prepare: config.prepare,
-          ssl: config.ssl,
-        })
-      : postgres({
-          host: config.host ?? "localhost",
-          port: config.port ?? 5432,
-          user: config.user,
-          password: config.password,
-          database: config.database,
-          max: config.max,
-          prepare: config.prepare,
-          ssl: config.ssl,
-        });
-
-    return drizzle(client, {
-      schema: config.schema,
-      ...(config.schemaName ? { schemaFilter: [config.schemaName] } : {}),
-    });
-  } catch (err: any) {
-    if (
-      err?.code === "MODULE_NOT_FOUND" ||
-      err?.message?.includes("Cannot find package")
-    ) {
-      throw new Error(
-        `[Brick-TS DB] PostgreSQL integration requires the 'postgres' package. Please install it using 'bun add postgres'. Original error: ${err.message}`
-      );
-    }
-    throw err;
-  }
+  return drizzle(client, {
+    schema: config.schema,
+    ...(config.schemaName ? { schemaFilter: [config.schemaName] } : {}),
+  });
 }
