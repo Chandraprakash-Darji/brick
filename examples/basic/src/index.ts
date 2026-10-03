@@ -4,103 +4,135 @@ import {
   ActionExecutionError,
 } from "@brick-ts/core";
 import {
-  dealsService,
-  createDeal,
-  getDeal,
-  listDeals,
-} from "./services/deals/service";
+  pagesService,
+  createPage,
+  getPage,
+  getPublicPage,
+  listPages,
+  updatePage,
+  renderPage,
+} from "./services/pages/service";
 
 export async function bootstrap() {
-  console.log("==================================================");
-  console.log("🧱 Brick-TS Example Application - Slice 0 Showcase");
-  console.log("==================================================\n");
+  console.log("===============================================================");
+  console.log("📄 Pages — Publishing Workspace Engine (Brick-TS Demo)");
+  console.log("   Direction: Content first, typeset canvas & publishing inspector");
+  console.log("===============================================================\n");
 
   // 1. Service Discovery & Architecture Introspection
   const registry = getGlobalRegistry();
   const architecture = registry.exportArchitecture();
 
-  console.log("📋 Registered Services & Endpoints:");
+  console.log("📋 Registered Services & Action Endpoints:");
   for (const serviceSchema of architecture.services) {
-    console.log(`\n  Service: '${serviceSchema.name}' (Database: ${serviceSchema.hasDatabase ? "Enabled" : "Disabled"})`);
+    console.log(
+      `\n  Service: '${serviceSchema.name}' (Database: ${
+        serviceSchema.hasDatabase ? "Enabled (Bun SQLite + Drizzle)" : "Disabled"
+      })`
+    );
     for (const action of serviceSchema.actions) {
-      console.log(`    ↳ Action: ${action.name}`);
+      console.log(`    ↳ Action: [${action.name}]`);
       if (action.description) {
-        console.log(`      Description: ${action.description}`);
+        console.log(`      ${action.description}`);
       }
     }
   }
 
-  console.log("\n--------------------------------------------------");
-  console.log("🚀 Executing Self-Test Demo Pipeline");
-  console.log("--------------------------------------------------\n");
+  console.log("\n---------------------------------------------------------------");
+  console.log("🚀 Executing Pages Lifecycle Demo Pipeline");
+  console.log("---------------------------------------------------------------\n");
 
-  // Step A: Create Deal with Valid Data
-  console.log("👉 1. Creating a deal with valid data...");
-  const newDeal = await createDeal({
+  // Step 1: Create a published documentation page with markdown headings
+  console.log("👉 1. Creating a technical specification page with Markdown headings...");
+  const guideMarkdown = `# Brick Architecture Guide
+The document is the main event. Its interface uses warm paper, deep ink, and quiet controls.
+
+## Design Principles
+1. Content first. Give writing the widest, quietest region.
+2. Show publishing consequences. URL, visibility, theme, and preview live beside document.
+
+## Ahead-of-Time TypeBox Validation
+All action schemas compile ahead-of-time into high-speed V8 byte code.
+
+### Performance Benchmarks
+- Sub-3ms p99 endpoint latency
+- Zero-latency local in-memory RPC
+`;
+
+  const newDoc = await createPage({
     input: {
-      title: "Enterprise Annual Subscription",
-      amount: 48000,
-      clientEmail: "procurement@acme.corp",
+      slug: "brick-architecture-guide",
+      title: "Brick-TS Architecture Specification",
+      content: guideMarkdown,
+      contentType: "markdown",
+      isPublic: true,
+      theme: "nord",
     },
   });
-  console.log("   ✅ Deal created successfully!");
-  console.log(`      ID:        ${newDeal.id}`);
-  console.log(`      Title:     ${newDeal.title}`);
-  console.log(`      Amount:    $${newDeal.amount}`);
-  console.log(`      Status:    ${newDeal.status}`);
-  console.log(`      CreatedAt: ${newDeal.createdAt}\n`);
 
-  // Step B: Create Deal with Invalid Data (demonstrating TypeBox validation)
-  console.log("👉 2. Testing input validation with invalid data (negative amount & empty title)...");
+  console.log("   ✅ Document created in database!");
+  console.log(`      ID:         ${newDoc.id}`);
+  console.log(`      Title:      ${newDoc.title}`);
+  console.log(`      Slug:       /${newDoc.slug}`);
+  console.log(`      Visibility: ${newDoc.isPublic ? "Public" : "Draft"}`);
+  console.log(`      Theme:      ${newDoc.theme}`);
+  console.log(`      Created:    ${newDoc.createdAt}\n`);
+
+  // Step 2: Extract Table of Contents via renderPage
+  console.log("👉 2. Rendering page and extracting Table of Contents (TOC) rail...");
+  const rendered = await renderPage({
+    input: { slug: "brick-architecture-guide" },
+  });
+  console.log(`   ✅ Rendered with theme '${rendered.theme}'. Generated TOC items:`);
+  for (const item of rendered.toc) {
+    const indent = "   ".repeat(item.level);
+    console.log(`      ${indent}H${item.level} [${item.text}] (anchor: #${item.id})`);
+  }
+  console.log("");
+
+  // Step 3: Test public reader retrieval by slug
+  console.log("👉 3. Fetching published page by slug via public reader endpoint...");
+  const publicPage = await getPublicPage({
+    input: { slug: "brick-architecture-guide" },
+  });
+  console.log(`   ✅ Public reader fetched: "${publicPage.title}" (${publicPage.slug})\n`);
+
+  // Step 4: Test validation - invalid slug format (uppercase / spaces)
+  console.log("👉 4. Testing slug schema validation (rejecting uppercase and spaces)...");
   try {
-    await createDeal({
+    await createPage({
       input: {
-        title: "",
-        amount: -500,
-        clientEmail: "invalid",
+        slug: "Invalid Slug With Spaces",
+        title: "Bad Slug Document",
+        content: "Draft content",
       },
     });
-    console.error("   ❌ Unexpected success: validation should have failed.");
+    console.error("   ❌ Should have failed slug validation.");
   } catch (err) {
     if (err instanceof ValidationError) {
-      console.log("   ✅ Caught expected ValidationError as designed:");
+      console.log("   ✅ Caught expected ValidationError:");
       console.log(`      Status:  ${err.status}`);
       console.log(`      Message: ${err.message}`);
-      console.log(`      Errors:  ${JSON.stringify(err.errors, null, 2).replace(/\n/g, "\n               ")}\n`);
+      console.log(`      Errors:  ${JSON.stringify(err.errors)}\n`);
     } else {
       throw err;
     }
   }
 
-  // Step C: Fetch the Created Deal
-  console.log(`👉 3. Fetching deal by ID '${newDeal.id}'...`);
-  const fetchedDeal = await getDeal({
-    input: { id: newDeal.id },
-  });
-  console.log("   ✅ Deal retrieved:");
-  console.log(`      Title:     ${fetchedDeal.title}`);
-  console.log(`      Amount:    $${fetchedDeal.amount}`);
-  console.log(`      Status:    ${fetchedDeal.status}\n`);
-
-  // Step D: List All Deals
-  console.log("👉 4. Listing all active deals...");
-  const dealList = await listDeals({
-    input: { limit: 10 },
-  });
-  console.log(`   ✅ Fetched ${dealList.deals.length} deal(s) (Total in store: ${dealList.total}):`);
-  for (const d of dealList.deals) {
-    console.log(`      - [${d.id}] ${d.title} ($${d.amount}) [${d.status}]`);
-  }
-
-  // Step E: Domain Error handling demo (NOT_FOUND)
-  console.log("\n👉 5. Testing domain error handling (requesting non-existent deal)...");
+  // Step 5: Test slug collision rejection (409 Conflict)
+  console.log("👉 5. Testing duplicate slug collision rejection (409 Conflict)...");
   try {
-    await getDeal({
-      input: { id: "deal_non_existent" },
+    await createPage({
+      input: {
+        slug: "brick-architecture-guide",
+        title: "Duplicate Document",
+        content: "Duplicate content",
+      },
     });
+    console.error("   ❌ Should have rejected duplicate slug.");
   } catch (err) {
     if (err instanceof ActionExecutionError) {
-      console.log("   ✅ Caught expected ActionExecutionError:");
+      console.log("   ✅ Caught expected ActionExecutionError (SLUG_EXISTS):");
       console.log(`      Code:    ${err.code}`);
       console.log(`      Status:  ${err.status}`);
       console.log(`      Message: ${err.message}\n`);
@@ -109,15 +141,34 @@ export async function bootstrap() {
     }
   }
 
-  console.log("==================================================");
-  console.log("🎉 All demo self-test assertions passed!");
-  console.log("==================================================");
+  // Step 6: Update document theme & visibility
+  console.log("👉 6. Updating page theme to 'dracula'...");
+  const updatedDoc = await updatePage({
+    input: {
+      id: newDoc.id,
+      theme: "dracula",
+    },
+  });
+  console.log(`   ✅ Page theme updated to: ${updatedDoc.theme}\n`);
+
+  // Step 7: List all pages in the publishing workspace
+  console.log("👉 7. Listing pages in workspace...");
+  const list = await listPages({
+    input: { limit: 10 },
+  });
+  console.log(`   ✅ Workspace contains ${list.pages.length} document(s) (Total: ${list.total}):`);
+  for (const page of list.pages) {
+    console.log(`      • [/${page.slug}] "${page.title}" (${page.theme}, ${page.isPublic ? "Public" : "Draft"})`);
+  }
+
+  console.log("\n===============================================================");
+  console.log("🎉 All Pages demo pipeline assertions succeeded!");
+  console.log("===============================================================");
 }
 
-// Run bootstrap when executed directly
 if (import.meta.main) {
   bootstrap().catch((err) => {
-    console.error("Demo failed with error:", err);
+    console.error("Pages demo encountered an error:", err);
     process.exit(1);
   });
 }
