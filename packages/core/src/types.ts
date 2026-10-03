@@ -7,15 +7,45 @@ export interface Logger {
   debug: (...args: any[]) => void;
 }
 
-export interface ActionContext<TDb = any, TUser = any> {
-  traceId: string;
-  requestId: string;
-  db?: TDb;
-  user?: TUser;
+/**
+ * Base framework context supplied to all service resolvers and action executions.
+ */
+export interface BaseContext<TDb = any> {
+  request: Request;
+  db: TDb;
   logger: Logger;
+  traceId: string;
+  requestId?: string;
   services?: Record<string, any>;
   metadata?: Record<string, unknown>;
 }
+
+/**
+ * Default fallback service context for untyped or simple services.
+ */
+export interface DefaultServiceContext {
+  user?: any;
+  session?: any;
+  [key: string]: any;
+}
+
+/**
+ * The combined execution context: BaseContext & TServiceContext.
+ */
+export type ActionContext<
+  TDb = any,
+  TServiceContext = DefaultServiceContext
+> = BaseContext<TDb> & TServiceContext;
+
+/**
+ * Type utility that automatically narrows ctx.user from User | null to User
+ * in execute() when authorize() is declared on the action.
+ */
+export type NarrowAuthorizedContext<TCtx> = TCtx extends { user: infer U }
+  ? [U] extends [null | undefined]
+    ? TCtx
+    : Omit<TCtx, "user"> & { user: NonNullable<U> }
+  : TCtx;
 
 export interface ActionErrorDefinition {
   status?: number;
@@ -78,51 +108,86 @@ export type ErrorBuilder<TErrors extends Record<string, ActionErrorDefinition>> 
   [K in keyof TErrors]: (overrideMessage?: string, details?: unknown) => never;
 };
 
-export interface ActionConfig<
-  TInputSchema extends TSchema = TSchema,
-  TOutputSchema extends TSchema = TSchema,
-  TErrors extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>,
-  TContext extends ActionContext = ActionContext
+export interface BaseActionConfig<
+  TInputSchema extends TSchema | undefined = undefined,
+  TOutputSchema extends TSchema | undefined = undefined,
+  TErrors extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>
 > {
   name: string;
   description?: string;
   input?: TInputSchema;
   output?: TOutputSchema;
-  authorize?: (params: {
-    user?: any;
-    input: TInputSchema extends TSchema ? Static<TInputSchema> : any;
-    ctx: TContext;
-  }) => boolean | Promise<boolean>;
   errors?: TErrors;
-  execute: (params: {
-    input: TInputSchema extends TSchema ? Static<TInputSchema> : any;
-    ctx: TContext;
-    error: ErrorBuilder<TErrors>;
-  }) => Promise<TOutputSchema extends TSchema ? Static<TOutputSchema> : any> | (TOutputSchema extends TSchema ? Static<TOutputSchema> : any);
   emits?: string[];
   tags?: string[];
 }
 
+export interface ActionConfigWithAuthorize<
+  TInputSchema extends TSchema | undefined = undefined,
+  TOutputSchema extends TSchema | undefined = undefined,
+  TErrors extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>,
+  TContext extends ActionContext = ActionContext
+> extends BaseActionConfig<TInputSchema, TOutputSchema, TErrors> {
+  authorize: (params: {
+    user?: TContext extends { user: infer U } ? U : any;
+    input: TInputSchema extends TSchema ? Static<TInputSchema> : any;
+    ctx: TContext;
+  }) => boolean | Promise<boolean>;
+  execute: (params: {
+    input: TInputSchema extends TSchema ? Static<TInputSchema> : any;
+    ctx: NarrowAuthorizedContext<TContext>;
+    error: ErrorBuilder<TErrors>;
+  }) =>
+    | Promise<TOutputSchema extends TSchema ? Static<TOutputSchema> : any>
+    | (TOutputSchema extends TSchema ? Static<TOutputSchema> : any);
+}
+
+export interface ActionConfigWithoutAuthorize<
+  TInputSchema extends TSchema | undefined = undefined,
+  TOutputSchema extends TSchema | undefined = undefined,
+  TErrors extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>,
+  TContext extends ActionContext = ActionContext
+> extends BaseActionConfig<TInputSchema, TOutputSchema, TErrors> {
+  authorize?: undefined;
+  execute: (params: {
+    input: TInputSchema extends TSchema ? Static<TInputSchema> : any;
+    ctx: TContext;
+    error: ErrorBuilder<TErrors>;
+  }) =>
+    | Promise<TOutputSchema extends TSchema ? Static<TOutputSchema> : any>
+    | (TOutputSchema extends TSchema ? Static<TOutputSchema> : any);
+}
+
+export type ActionConfig<
+  TInputSchema extends TSchema | undefined = any,
+  TOutputSchema extends TSchema | undefined = any,
+  TErrors extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>,
+  TContext extends ActionContext = ActionContext
+> =
+  | ActionConfigWithAuthorize<TInputSchema, TOutputSchema, TErrors, TContext>
+  | ActionConfigWithoutAuthorize<TInputSchema, TOutputSchema, TErrors, TContext>;
+
 export interface Action<
-  TInputSchema extends TSchema = TSchema,
-  TOutputSchema extends TSchema = TSchema,
-  TErrors extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>
+  TInputSchema extends TSchema | undefined = any,
+  TOutputSchema extends TSchema | undefined = any,
+  TErrors extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>,
+  TContext extends ActionContext = ActionContext
 > {
   (params: {
     input?: TInputSchema extends TSchema ? Static<TInputSchema> : any;
-    ctx?: Partial<ActionContext>;
+    ctx?: Partial<TContext>;
   }): Promise<TOutputSchema extends TSchema ? Static<TOutputSchema> : any>;
 
   name: string;
   serviceName?: string;
-  config: ActionConfig<TInputSchema, TOutputSchema, TErrors>;
+  config: ActionConfig<TInputSchema, TOutputSchema, TErrors, TContext>;
   run(
     input?: TInputSchema extends TSchema ? Static<TInputSchema> : any,
-    ctx?: Partial<ActionContext>
+    ctx?: Partial<TContext>
   ): Promise<TOutputSchema extends TSchema ? Static<TOutputSchema> : any>;
   execute(params: {
     input?: TInputSchema extends TSchema ? Static<TInputSchema> : any;
-    ctx?: Partial<ActionContext>;
+    ctx?: Partial<TContext>;
   }): Promise<TOutputSchema extends TSchema ? Static<TOutputSchema> : any>;
   validateInput(input: unknown): { success: true; data: any } | { success: false; errors: ValidationErrorItem[] };
   validateOutput(output: unknown): { success: true; data: any } | { success: false; errors: ValidationErrorItem[] };
@@ -188,8 +253,13 @@ export interface LifecycleOptions {
   onDestroy?: () => Promise<void>;
 }
 
-export interface ServiceOptions<TDbSchema = any> {
+export interface ServiceOptions<
+  TDbSchema = any,
+  TServiceContext extends Record<string, any> = Record<string, any>,
+  TDb = any
+> {
   database?: boolean | DatabaseOptions<TDbSchema>;
+  context?: (baseCtx: BaseContext<TDb>) => Promise<TServiceContext> | TServiceContext;
   auth?: ServiceAuthOptions;
   rateLimit?: RateLimitOptions;
   cache?: CacheOptions;
@@ -223,22 +293,46 @@ export interface ArchitectureSchema {
   services: ServiceSchema[];
 }
 
-export interface Service<TDb = any> {
+export interface Service<
+  TDb = any,
+  TServiceContext extends Record<string, any> = Record<string, any>
+> {
   readonly name: string;
-  readonly options: ServiceOptions;
-  readonly actions: Map<string, Action<any, any, any>>;
+  readonly options: ServiceOptions<any, TServiceContext, TDb>;
+  readonly actions: Map<string, Action<any, any, any, any>>;
   readonly db?: TDb;
+
   action<
-    TIn extends TSchema = TSchema,
-    TOut extends TSchema = TSchema,
+    TIn extends TSchema | undefined = undefined,
+    TOut extends TSchema | undefined = undefined,
     TErr extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>
   >(
-    actionOrConfig: Action<TIn, TOut, TErr> | ActionConfig<TIn, TOut, TErr>
+    action: Action<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>
   ): this;
-  getAction(name: string): Action<any, any, any> | undefined;
-  listActions(): Action<any, any, any>[];
+
+  action<
+    TIn extends TSchema | undefined = undefined,
+    TOut extends TSchema | undefined = undefined,
+    TErr extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>
+  >(
+    config: ActionConfigWithAuthorize<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>
+  ): Action<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>;
+
+  action<
+    TIn extends TSchema | undefined = undefined,
+    TOut extends TSchema | undefined = undefined,
+    TErr extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>
+  >(
+    config: ActionConfigWithoutAuthorize<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>
+  ): Action<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>;
+
+  getAction(name: string): Action<any, any, any, any> | undefined;
+  listActions(): Action<any, any, any, any>[];
   getDb<T = TDb>(): T | undefined;
   setDb(db: any): void;
+  resolveContext(
+    callCtx?: Partial<BaseContext<TDb> & TServiceContext>
+  ): Promise<BaseContext<TDb> & TServiceContext>;
   introspect(): ServiceSchema;
 }
 

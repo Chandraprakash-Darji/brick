@@ -4,7 +4,7 @@ import {
   getGlobalRegistry,
   ValidationError,
   ActionExecutionError,
-  type ActionContext,
+  type BaseContext,
 } from "@brick-ts/core";
 
 export interface CreateServerOptions {
@@ -35,7 +35,7 @@ export function createBrickServer(options: CreateServerOptions = {}) {
     for (const action of service.listActions()) {
       const actionPath = `${prefix}/${service.name}/${action.name}`;
 
-      const handler = async ({ body, query, headers, set }: any) => {
+      const handler = async ({ body, query, headers, request, set }: any) => {
         const traceId =
           headers["x-trace-id"] ||
           `tr_${Math.random().toString(36).substring(2, 10)}`;
@@ -65,7 +65,17 @@ export function createBrickServer(options: CreateServerOptions = {}) {
           input = undefined;
         }
 
-        const ctx: ActionContext = {
+        // Construct standard Web Request object if not already provided
+        const standardRequest =
+          request instanceof Request
+            ? request
+            : new Request(`http://localhost${actionPath}`, {
+                method: isGetLike ? "GET" : "POST",
+                headers: new Headers(headers as Record<string, string>),
+              });
+
+        const baseCtx: BaseContext = {
+          request: standardRequest,
           traceId,
           requestId,
           db: service.getDb(),
@@ -82,7 +92,10 @@ export function createBrickServer(options: CreateServerOptions = {}) {
         };
 
         try {
-          const result = await action.execute({ input, ctx });
+          // Resolve service-level context (runs once per request)
+          const resolvedCtx = await service.resolveContext(baseCtx);
+
+          const result = await action.execute({ input, ctx: resolvedCtx });
           return result;
         } catch (err: any) {
           if (err instanceof ValidationError) {

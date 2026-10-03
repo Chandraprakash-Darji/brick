@@ -8,7 +8,6 @@ import {
   eq,
   and,
   sql,
-  type Static,
 } from "@brick-ts/core";
 
 export type Theme = "github-dark" | "github-light" | "dracula" | "nord";

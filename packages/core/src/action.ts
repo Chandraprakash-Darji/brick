@@ -2,9 +2,12 @@ import type { TSchema, Static } from "@sinclair/typebox";
 import {
   type Action,
   type ActionConfig,
+  type ActionConfigWithAuthorize,
+  type ActionConfigWithoutAuthorize,
   type ActionContext,
   type ActionErrorDefinition,
   type ErrorBuilder,
+  type BaseContext,
   ActionExecutionError,
   ValidationError,
   type ValidationErrorItem,
@@ -20,9 +23,11 @@ const defaultLogger: Logger = {
   debug: (...args) => console.debug("[DEBUG]", ...args),
 };
 
-function createDefaultContext(partial?: Partial<ActionContext>): ActionContext {
+function createDefaultContext(partial?: any): BaseContext & any {
   const randomId = Math.random().toString(36).substring(2, 10);
+  const req = partial?.request ?? new Request("http://localhost");
   return {
+    request: req,
     traceId: partial?.traceId || `tr_${randomId}`,
     requestId: partial?.requestId || `req_${randomId}`,
     db: partial?.db,
@@ -30,6 +35,7 @@ function createDefaultContext(partial?: Partial<ActionContext>): ActionContext {
     logger: partial?.logger || defaultLogger,
     services: partial?.services || {},
     metadata: partial?.metadata || {},
+    ...partial,
   };
 }
 
@@ -51,20 +57,32 @@ function buildErrorHelpers<TErrors extends Record<string, ActionErrorDefinition>
 }
 
 export function defineAction<
-  TInputSchema extends TSchema = TSchema,
-  TOutputSchema extends TSchema = TSchema,
-  TErrors extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>
+  TInputSchema extends TSchema | undefined = undefined,
+  TOutputSchema extends TSchema | undefined = undefined,
+  TErrors extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>,
+  TContext extends ActionContext = ActionContext
 >(
-  config: ActionConfig<TInputSchema, TOutputSchema, TErrors>
-): Action<TInputSchema, TOutputSchema, TErrors> {
+  config: ActionConfigWithAuthorize<TInputSchema, TOutputSchema, TErrors, TContext>
+): Action<TInputSchema, TOutputSchema, TErrors, TContext>;
+
+export function defineAction<
+  TInputSchema extends TSchema | undefined = undefined,
+  TOutputSchema extends TSchema | undefined = undefined,
+  TErrors extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>,
+  TContext extends ActionContext = ActionContext
+>(
+  config: ActionConfigWithoutAuthorize<TInputSchema, TOutputSchema, TErrors, TContext>
+): Action<TInputSchema, TOutputSchema, TErrors, TContext>;
+
+export function defineAction(config: any): any {
   const errorHelpers = buildErrorHelpers(config.errors);
 
   const actionFn = (async (params: {
-    input?: TInputSchema extends TSchema ? Static<TInputSchema> : any;
-    ctx?: Partial<ActionContext>;
+    input?: any;
+    ctx?: any;
   }) => {
     return actionFn.execute(params);
-  }) as Action<TInputSchema, TOutputSchema, TErrors>;
+  }) as any;
 
   Object.defineProperty(actionFn, "name", {
     value: config.name,
@@ -81,15 +99,21 @@ export function defineAction<
     return validateWithSchema(config.output, output);
   };
 
-  actionFn.run = async (input?: any, ctx?: Partial<ActionContext>) => {
+  actionFn.run = async (input?: any, ctx?: any) => {
     return actionFn.execute({ input, ctx });
   };
 
   actionFn.execute = async (params: {
     input?: any;
-    ctx?: Partial<ActionContext>;
+    ctx?: any;
   }) => {
-    const fullCtx = createDefaultContext(params.ctx);
+    let fullCtx: any;
+    const boundService = (actionFn as any).service;
+    if (boundService && typeof boundService.resolveContext === "function") {
+      fullCtx = await boundService.resolveContext(params.ctx);
+    } else {
+      fullCtx = createDefaultContext(params.ctx);
+    }
 
     // Auto-populate ctx.db from the bound service or global registry if not provided in call ctx
     if (!fullCtx.db) {
@@ -108,7 +132,7 @@ export function defineAction<
       const inputValidation = actionFn.validateInput(params.input);
       if (!inputValidation.success) {
         throw new ValidationError(
-          `Validation failed for action '${config.name}' input`,
+          `Validation failed for action '${config.name}' input` as string,
           inputValidation.errors
         );
       }
@@ -142,7 +166,7 @@ export function defineAction<
       const outputValidation = actionFn.validateOutput(result);
       if (!outputValidation.success) {
         throw new ValidationError(
-          `Validation failed for action '${config.name}' output`,
+          `Validation failed for action '${config.name}' output` as string,
           outputValidation.errors,
           500
         );
