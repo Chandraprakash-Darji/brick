@@ -19,6 +19,12 @@ import {
   registerReferenceRoute,
   type ReferenceOptions,
 } from "./docs";
+import {
+  createEndpointHandler,
+  endpointPaths,
+  type BrickApp,
+  type EndpointDefinition,
+} from "./endpoints";
 
 export interface CreateServerOptions {
   port?: number;
@@ -34,6 +40,8 @@ export interface CreateServerOptions {
   requestLogging?: boolean | RequestLoggingOptions; // default true
   reference?: boolean | ReferenceOptions; // default false, path "/reference"
   secrets?: { source?: SecretSource; validate?: boolean };
+  /** Raw endpoints (outside the JSON action mesh), mounted at startup. */
+  endpoints?: EndpointDefinition[];
 }
 
 function coerceQueryParams(query: any, schema: any): any {
@@ -147,7 +155,7 @@ function createActionHandler(service: Service, action: Action, routePath: string
   };
 }
 
-export function createBrickServer(options: CreateServerOptions = {}) {
+export function createBrickServer(options: CreateServerOptions = {}): BrickApp {
   const prefix = options.prefix ?? "/api";
   const title = options.title ?? "Brick-TS API Mesh";
   const version = options.version ?? "1.0.0";
@@ -197,6 +205,9 @@ export function createBrickServer(options: CreateServerOptions = {}) {
 
   const services = options.services ?? getGlobalRegistry().list();
 
+  // Raw endpoints declared via options or app.endpoint() (declaration order).
+  const endpointDefs: EndpointDefinition[] = [];
+
   // 1. Startup Schema Sync across all registered services (SQLite & Dev auto-creation)
   for (const service of services) {
     if (typeof (service as any).syncSchema === "function") {
@@ -207,13 +218,15 @@ export function createBrickServer(options: CreateServerOptions = {}) {
   // OpenAPI 3.1 & Interactive Documentation Endpoints
   if (enableDocs) {
     app.get(openApiPath, () => {
-      return generateOpenApiSpec({
+      const spec = generateOpenApiSpec({
         title,
         version,
         description: options.description,
         prefix,
         services,
       });
+      // Raw endpoints show up in the spec alongside the action mesh.
+      return { ...spec, paths: { ...(spec.paths ?? {}), ...endpointPaths(endpointDefs) } };
     });
 
     app.get(docsPath, ({ set }) => {
@@ -292,6 +305,23 @@ export function createBrickServer(options: CreateServerOptions = {}) {
     }
   };
 
+  // Raw endpoints (outside the JSON action mesh). Mounted through the same
+  // deduping mountRoute so double registration is harmless.
+  const mountEndpoint = (def: EndpointDefinition) => {
+    endpointDefs.push(def);
+    mountRoute(def.method, def.path, createEndpointHandler(def, services));
+  };
+
+  for (const def of options.endpoints ?? []) {
+    mountEndpoint(def);
+  }
+
+  const brickApp = app as unknown as BrickApp;
+  brickApp.endpoint = (def: EndpointDefinition) => {
+    mountEndpoint(def);
+  };
+  brickApp.listEndpoints = () => [...endpointDefs];
+
   // Mount services
   for (const service of services) {
     // 2. Mount Service Resources REST endpoints
@@ -354,5 +384,5 @@ export function createBrickServer(options: CreateServerOptions = {}) {
     }
   }
 
-  return app;
+  return brickApp;
 }
