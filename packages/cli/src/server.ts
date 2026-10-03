@@ -53,7 +53,17 @@ export function createBrickServer(options: CreateServerOptions = {}) {
           action.name.startsWith("find") ||
           action.name.startsWith("read");
 
-        const input = isGetLike && Object.keys(query || {}).length > 0 ? query : body;
+        let input: any;
+        if (isGetLike) {
+          input = query && Object.keys(query).length > 0 ? query : (body ?? {});
+        } else {
+          input = body ?? (query && Object.keys(query).length > 0 ? query : {});
+        }
+
+        // If the action has no input schema defined, pass empty or undefined
+        if (!action.config.input && Object.keys(input).length === 0) {
+          input = undefined;
+        }
 
         const ctx: ActionContext = {
           traceId,

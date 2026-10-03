@@ -12,5 +12,8 @@ export {
 export { Type, t, getCompiledCheck, validateWithSchema } from "./typebox";
 export type { TSchema, Static } from "./typebox";
 
+// Database Integration
+export * from "./db";
+
 // Types & Errors
 export * from "./types";

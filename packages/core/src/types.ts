@@ -128,8 +128,15 @@ export interface Action<
   validateOutput(output: unknown): { success: true; data: any } | { success: false; errors: ValidationErrorItem[] };
 }
 
-export interface DatabaseOptions {
+export interface DatabaseOptions<TSchema = any> {
   engine?: "postgres" | "sqlite" | "clickhouse";
+  url?: string;
+  connectionString?: string;
+  path?: string;
+  filename?: string;
+  wal?: boolean;
+  foreignKeys?: boolean;
+  schema?: TSchema;
   schemaName?: string;
   migrationsDir?: string;
   pool?: {
@@ -181,8 +188,8 @@ export interface LifecycleOptions {
   onDestroy?: () => Promise<void>;
 }
 
-export interface ServiceOptions {
-  database?: boolean | DatabaseOptions;
+export interface ServiceOptions<TDbSchema = any> {
+  database?: boolean | DatabaseOptions<TDbSchema>;
   auth?: ServiceAuthOptions;
   rateLimit?: RateLimitOptions;
   cache?: CacheOptions;
@@ -216,10 +223,11 @@ export interface ArchitectureSchema {
   services: ServiceSchema[];
 }
 
-export interface Service {
+export interface Service<TDb = any> {
   readonly name: string;
   readonly options: ServiceOptions;
   readonly actions: Map<string, Action<any, any, any>>;
+  readonly db?: TDb;
   action<
     TIn extends TSchema = TSchema,
     TOut extends TSchema = TSchema,
@@ -229,7 +237,7 @@ export interface Service {
   ): this;
   getAction(name: string): Action<any, any, any> | undefined;
   listActions(): Action<any, any, any>[];
-  getDb<T = any>(): T | undefined;
+  getDb<T = TDb>(): T | undefined;
   setDb(db: any): void;
   introspect(): ServiceSchema;
 }

@@ -11,6 +11,7 @@ import {
   type Logger,
 } from "./types";
 import { validateWithSchema } from "./typebox";
+import { getGlobalRegistry } from "./registry";
 
 const defaultLogger: Logger = {
   info: (...args) => console.log("[INFO]", ...args),
@@ -89,6 +90,18 @@ export function defineAction<
     ctx?: Partial<ActionContext>;
   }) => {
     const fullCtx = createDefaultContext(params.ctx);
+
+    // Auto-populate ctx.db from the bound service or global registry if not provided in call ctx
+    if (!fullCtx.db) {
+      if ((actionFn as any).service?.getDb()) {
+        fullCtx.db = (actionFn as any).service.getDb();
+      } else if (actionFn.serviceName) {
+        const s = getGlobalRegistry().get(actionFn.serviceName);
+        if (s?.getDb()) {
+          fullCtx.db = s.getDb();
+        }
+      }
+    }
 
     // 1. Validate Input
     if (config.input) {

@@ -9,6 +9,7 @@ import type {
 } from "./types";
 import { defineAction } from "./action";
 import { getGlobalRegistry } from "./registry";
+import { createDatabase } from "./db";
 
 export class ServiceImpl implements Service {
   readonly name: string;
@@ -19,6 +20,28 @@ export class ServiceImpl implements Service {
   constructor(name: string, options: ServiceOptions = {}) {
     this.name = name;
     this.options = options;
+    if (options.database) {
+      const dbConfig =
+        typeof options.database === "object"
+          ? { ...options.database, name }
+          : { name };
+      this.dbInstance = createDatabase(dbConfig);
+    }
+  }
+
+  get db(): any {
+    if (!this.dbInstance && this.options.database) {
+      const dbConfig =
+        typeof this.options.database === "object"
+          ? { ...this.options.database, name: this.name }
+          : { name: this.name };
+      this.dbInstance = createDatabase(dbConfig);
+    }
+    return this.dbInstance;
+  }
+
+  set db(value: any) {
+    this.dbInstance = value;
   }
 
   action<
@@ -37,6 +60,7 @@ export class ServiceImpl implements Service {
     }
 
     actionInstance.serviceName = this.name;
+    (actionInstance as any).service = this;
     this.actions.set(actionInstance.name, actionInstance);
     return this;
   }
@@ -50,7 +74,7 @@ export class ServiceImpl implements Service {
   }
 
   getDb<T = any>(): T | undefined {
-    return this.dbInstance;
+    return this.db;
   }
 
   setDb(db: any): void {

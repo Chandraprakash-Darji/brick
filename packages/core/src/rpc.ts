@@ -27,6 +27,10 @@ export function createServiceProxy<T extends Record<string, any>>(
             ...callCtx,
           };
 
+          if (!mergedCtx.db && service.getDb()) {
+            mergedCtx.db = service.getDb();
+          }
+
           return action.execute({
             input: payload,
             ctx: mergedCtx,
