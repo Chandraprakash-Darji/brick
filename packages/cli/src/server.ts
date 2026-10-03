@@ -4,6 +4,7 @@ import {
   getGlobalRegistry,
   ValidationError,
   ActionExecutionError,
+  generateOpenApiSpec,
   type BaseContext,
 } from "@brick-ts/core";
 
@@ -11,10 +12,24 @@ export interface CreateServerOptions {
   port?: number;
   services?: Service[];
   prefix?: string;
+  title?: string;
+  version?: string;
+  description?: string;
+  docs?: boolean;
+  openApiPath?: string;
+  docsPath?: string;
+  swaggerPath?: string;
 }
 
 export function createBrickServer(options: CreateServerOptions = {}) {
   const prefix = options.prefix ?? "/api";
+  const title = options.title ?? "Brick-TS API Mesh";
+  const version = options.version ?? "1.0.0";
+  const enableDocs = options.docs ?? true;
+  const openApiPath = options.openApiPath ?? "/openapi.json";
+  const docsPath = options.docsPath ?? "/docs";
+  const swaggerPath = options.swaggerPath ?? "/swagger";
+
   const app = new Elysia();
 
   // Built-in diagnostics & health
@@ -30,6 +45,85 @@ export function createBrickServer(options: CreateServerOptions = {}) {
 
   // Services to mount
   const services = options.services ?? getGlobalRegistry().list();
+
+  // OpenAPI 3.1 & Interactive Documentation Endpoints
+  if (enableDocs) {
+    // 1. OpenAPI 3.1 JSON Specification
+    app.get(openApiPath, () => {
+      return generateOpenApiSpec({
+        title,
+        version,
+        description: options.description,
+        prefix,
+        services,
+      });
+    });
+
+    // 2. Modern Scalar API Reference UI
+    app.get(docsPath, ({ set }) => {
+      set.headers["content-type"] = "text/html; charset=utf-8";
+      return `<!doctype html>
+<html>
+  <head>
+    <title>${title} — Interactive Documentation</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="https://scalar.com/favicon.svg" />
+    <style>
+      body { margin: 0; padding: 0; height: 100vh; }
+    </style>
+  </head>
+  <body>
+    <script
+      id="api-reference"
+      data-url="${openApiPath}"
+      data-configuration='{"theme": "purple", "layout": "modern"}'
+      src="https://cdn.jsdelivr.net/npm/@scalar/api-reference">
+    </script>
+  </body>
+</html>`;
+    });
+
+    // 3. Swagger UI Interface
+    app.get(swaggerPath, ({ set }) => {
+      set.headers["content-type"] = "text/html; charset=utf-8";
+      return `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>${title} — Swagger UI</title>
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
+    <style>
+      html { box-sizing: border-box; overflow: -moz-scrollbars-vertical; overflow-y: scroll; }
+      *, *:before, *:after { box-sizing: inherit; }
+      body { margin:0; background: #fafafa; }
+    </style>
+  </head>
+  <body>
+    <div id="swagger-ui"></div>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js" charset="UTF-8"></script>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-standalone-preset.js" charset="UTF-8"></script>
+    <script>
+    window.onload = function() {
+      SwaggerUIBundle({
+        url: "${openApiPath}",
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIStandalonePreset
+        ],
+        plugins: [
+          SwaggerUIBundle.plugins.DownloadUrl
+        ],
+        layout: "StandaloneLayout"
+      });
+    };
+    </script>
+  </body>
+</html>`;
+    });
+  }
 
   for (const service of services) {
     for (const action of service.listActions()) {
