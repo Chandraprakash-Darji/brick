@@ -1,4 +1,5 @@
 import type { TSchema, Static } from "@sinclair/typebox";
+import type { BunSQLiteDatabase } from "./db/sqlite";
 
 export interface Logger {
   info: (...args: any[]) => void;
@@ -222,16 +223,28 @@ export interface ResourceOperationsConfig {
   delete?: boolean;
 }
 
-export interface ResourceHooks<TData = any, TCtx = any> {
-  beforeCreate?: (params: { data: any; ctx: TCtx; error: any }) => Promise<void> | void;
-  afterCreate?: (params: { data: any; result: any; ctx: TCtx }) => Promise<void> | void;
-  beforeUpdate?: (params: { id: string | number; data: any; existing: any; ctx: TCtx; error: any }) => Promise<void> | void;
-  afterUpdate?: (params: { id: string | number; data: any; result: any; ctx: TCtx }) => Promise<void> | void;
-  beforeDelete?: (params: { id: string | number; existing: any; ctx: TCtx; error: any }) => Promise<void> | void;
-  afterDelete?: (params: { id: string | number; existing: any; ctx: TCtx }) => Promise<void> | void;
+export type InferTableRow<TTable> = TTable extends { $inferSelect: infer S } ? S : any;
+export type InferTableInsert<TTable> = TTable extends { $inferInsert: infer S } ? S : any;
+
+export interface ResourceHooks<
+  TRow = any,
+  TInsert = any,
+  TCtx = any,
+  TErrors extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>
+> {
+  beforeCreate?: (params: { data: TInsert; ctx: TCtx; error: ErrorBuilder<TErrors> }) => Promise<void> | void;
+  afterCreate?: (params: { data: TInsert; result: TRow; ctx: TCtx }) => Promise<void> | void;
+  beforeUpdate?: (params: { id: string | number; data: Partial<TInsert>; existing: TRow; ctx: TCtx; error: ErrorBuilder<TErrors> }) => Promise<void> | void;
+  afterUpdate?: (params: { id: string | number; data: Partial<TInsert>; result: TRow; ctx: TCtx }) => Promise<void> | void;
+  beforeDelete?: (params: { id: string | number; existing: TRow; ctx: TCtx; error: ErrorBuilder<TErrors> }) => Promise<void> | void;
+  afterDelete?: (params: { id: string | number; existing: TRow; ctx: TCtx; error: ErrorBuilder<TErrors> }) => Promise<void> | void;
 }
 
-export interface ResourceConfig<TTable = any, TCtx = any> {
+export interface ResourceConfig<
+  TTable = any,
+  TCtx = any,
+  TErrors extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>
+> {
   name: string;
   table: TTable;
   ownerField?: string;
@@ -240,9 +253,9 @@ export interface ResourceConfig<TTable = any, TCtx = any> {
   idGenerator?: () => string;
   pluralName?: string;
   operations?: ResourceOperationsConfig;
-  hooks?: ResourceHooks<any, TCtx>;
+  hooks?: ResourceHooks<InferTableRow<TTable>, InferTableInsert<TTable>, TCtx, TErrors>;
   fields?: Record<string, TSchema>;
-  errors?: Record<string, ActionErrorDefinition>;
+  errors?: TErrors;
   searchable?: string[];
   sortable?: string[];
   defaultSort?: string;
@@ -381,7 +394,7 @@ export interface ArchitectureSchema {
 }
 
 export interface Service<
-  TDb = any,
+  TDb = BunSQLiteDatabase<Record<string, unknown>>,
   TServiceContext extends Record<string, any> = Record<string, any>
 > {
   readonly name: string;

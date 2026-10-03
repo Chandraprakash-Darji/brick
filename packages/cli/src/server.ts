@@ -20,7 +20,7 @@ import {
 
 export interface CreateServerOptions {
   port?: number;
-  services?: Service[];
+  services?: Service<any, any>[];
   prefix?: string;
   title?: string;
   version?: string;

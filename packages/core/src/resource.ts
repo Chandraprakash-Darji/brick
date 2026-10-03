@@ -432,7 +432,7 @@ export function defineResource<
     },
     execute: async ({ input, ctx, error }) => {
       const db = ctx.db ?? service.getDb();
-      const data: Record<string, any> = { ...input };
+      const data: any = { ...input };
 
       // Auto-generate primary key if not provided
       if (!data[idField]) {
@@ -838,7 +838,7 @@ export function defineResource<
         }
       }
 
-      const { id: _ignoreId, [idField]: _ignoreIdField, ...updateData } = input;
+      const { id: _ignoreId, [idField]: _ignoreIdField, ...updateData }: any = input;
 
       // Update timestamp
       const now = new Date().toISOString();
@@ -943,6 +943,7 @@ export function defineResource<
           id: idVal as string | number,
           existing,
           ctx: ctx as TCtx,
+          error: error as any,
         });
       }
 

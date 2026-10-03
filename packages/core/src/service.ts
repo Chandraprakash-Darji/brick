@@ -1,4 +1,5 @@
 import type { TSchema } from "@sinclair/typebox";
+import type { BunSQLiteDatabase } from "./db/sqlite";
 import type {
   Service,
   ServiceOptions,
@@ -25,7 +26,7 @@ const defaultLogger: Logger = {
 };
 
 export class ServiceImpl<
-  TDb = any,
+  TDb = BunSQLiteDatabase<Record<string, unknown>>,
   TServiceContext extends Record<string, any> = Record<string, any>
 > implements Service<TDb, TServiceContext> {
   readonly name: string;
@@ -237,7 +238,7 @@ export class ServiceImpl<
 }
 
 export function defineService<
-  TDb = any,
+  TDb = BunSQLiteDatabase<Record<string, unknown>>,
   TServiceContext extends Record<string, any> = Record<string, any>
 >(
   name: string,
