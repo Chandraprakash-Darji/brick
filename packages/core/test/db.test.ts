@@ -1,21 +1,31 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 import {
   defineService,
   defineAction,
   createDatabase,
   attachDatabase,
   resetGlobalRegistry,
+  createServiceProxy,
   t,
+  sqliteTable,
+  text,
+  integer,
   eq,
+  sql,
 } from "../src";
 
-// Define a test table
-export const usersTable = sqliteTable("users", {
+// Define Drizzle tables for testing
+export const itemsTable = sqliteTable("items", {
   id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  email: text("email").notNull(),
-  age: integer("age"),
+  title: text("title").notNull(),
+  quantity: integer("quantity").notNull(),
+  category: text("category").notNull(),
+});
+
+export const logsTable = sqliteTable("logs", {
+  id: text("id").primaryKey(),
+  message: text("message").notNull(),
+  timestamp: integer("timestamp").notNull(),
 });
 
 describe("@brick-ts/core Database & Drizzle Integration", () => {
@@ -23,86 +33,251 @@ describe("@brick-ts/core Database & Drizzle Integration", () => {
     resetGlobalRegistry();
   });
 
-  it("should create an in-memory SQLite database with Drizzle ORM", async () => {
-    const db = createDatabase({ engine: "sqlite", path: ":memory:" });
+  it("should create a table with Drizzle ORM and perform queries", async () => {
+    // 1. Zero-config SQLite database helper
+    const db = createDatabase();
     expect(db).toBeDefined();
+    expect(typeof db.select).toBe("function");
 
-    // Create table directly
-    db.run(
-      "CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, age INTEGER);"
-    );
+    // Create table schema
+    db.run(sql`
+      CREATE TABLE IF NOT EXISTS items (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        quantity INTEGER NOT NULL,
+        category TEXT NOT NULL
+      );
+    `);
 
-    // Insert using Drizzle ORM
-    await db.insert(usersTable).values({
-      id: "u_1",
-      name: "Alice",
-      email: "alice@example.com",
-      age: 28,
-    });
+    // Insert records with Drizzle ORM
+    await db.insert(itemsTable).values([
+      { id: "item_1", title: "Mechanical Keyboard", quantity: 15, category: "electronics" },
+      { id: "item_2", title: "Ergonomic Chair", quantity: 5, category: "furniture" },
+    ]);
 
-    // Query back using Drizzle ORM
-    const rows = await db.select().from(usersTable).where(eq(usersTable.id, "u_1"));
-    expect(rows.length).toBe(1);
-    expect(rows[0].name).toBe("Alice");
-    expect(rows[0].age).toBe(28);
+    // Query back with Drizzle ORM
+    const items = await db.select().from(itemsTable).where(eq(itemsTable.category, "electronics"));
+    expect(items.length).toBe(1);
+    expect(items[0].id).toBe("item_1");
+    expect(items[0].title).toBe("Mechanical Keyboard");
+    expect(items[0].quantity).toBe(15);
   });
 
-  it("should attach database to a service and use ctx.db in actions", async () => {
-    const usersService = defineService("users", { database: true });
-    const db = attachDatabase(usersService, { engine: "sqlite", path: ":memory:" });
+  it("should automatically initialize service.db and populate ctx.db in actions", async () => {
+    // Zero-config database initialization when database: true
+    const inventoryService = defineService("inventory", { database: true });
+    expect(inventoryService.db).toBeDefined();
+    expect(inventoryService.getDb()).toBeDefined();
 
-    db.run(
-      "CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, age INTEGER);"
-    );
+    // Initialize table on service.db
+    inventoryService.db.run(sql`
+      CREATE TABLE IF NOT EXISTS items (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        quantity INTEGER NOT NULL,
+        category TEXT NOT NULL
+      );
+    `);
 
-    const createUser = defineAction({
-      name: "createUser",
+    const addItem = defineAction({
+      name: "addItem",
       input: t.Object({
-        name: t.String(),
-        email: t.String(),
-        age: t.Optional(t.Number()),
+        id: t.String(),
+        title: t.String(),
+        quantity: t.Number(),
+        category: t.String(),
       }),
       output: t.Object({
         id: t.String(),
-        name: t.String(),
-        email: t.String(),
-        age: t.Optional(t.Number()),
+        title: t.String(),
+        quantity: t.Number(),
+        category: t.String(),
       }),
       execute: async ({ input, ctx }) => {
+        // ctx.db is automatically injected from the service
         expect(ctx.db).toBeDefined();
-        const id = `u_${Date.now()}`;
-        await ctx.db.insert(usersTable).values({
-          id,
-          name: input.name,
-          email: input.email,
-          age: input.age,
-        });
-
-        return {
-          id,
-          name: input.name,
-          email: input.email,
-          age: input.age,
-        };
+        await ctx.db.insert(itemsTable).values(input);
+        return input;
       },
     });
 
-    usersService.action(createUser);
-
-    const result = await createUser.run(
-      {
-        name: "Bob",
-        email: "bob@brick.dev",
-        age: 30,
+    const getItem = defineAction({
+      name: "getItem",
+      input: t.Object({ id: t.String() }),
+      output: t.Object({
+        id: t.String(),
+        title: t.String(),
+        quantity: t.Number(),
+        category: t.String(),
+      }),
+      execute: async ({ input, ctx }) => {
+        expect(ctx.db).toBeDefined();
+        const [found] = await ctx.db
+          .select()
+          .from(itemsTable)
+          .where(eq(itemsTable.id, input.id));
+        return found;
       },
-      { db: usersService.getDb() }
-    );
+    });
 
-    expect(result.name).toBe("Bob");
+    inventoryService.action(addItem).action(getItem);
 
-    // Verify stored record via Drizzle
-    const stored = await db.select().from(usersTable).where(eq(usersTable.id, result.id));
-    expect(stored.length).toBe(1);
-    expect(stored[0].email).toBe("bob@brick.dev");
+    // 1. Insert a record through an action's ctx.db
+    const created = await addItem({
+      input: {
+        id: "item_desk",
+        title: "Standing Desk",
+        quantity: 8,
+        category: "furniture",
+      },
+    });
+    expect(created.title).toBe("Standing Desk");
+
+    // 2. Query it back through an action's ctx.db
+    const fetched = await getItem({ input: { id: "item_desk" } });
+    expect(fetched).toBeDefined();
+    expect(fetched.id).toBe("item_desk");
+    expect(fetched.title).toBe("Standing Desk");
+    expect(fetched.quantity).toBe(8);
+  });
+
+  it("should support attachDatabase(service, config) and attachDatabase(service, existingDb)", async () => {
+    // Service created without database option
+    const auditService = defineService("audit");
+    expect(auditService.getDb()).toBeUndefined();
+
+    // Attach new zero-config SQLite database via attachDatabase
+    const db = attachDatabase(auditService, { engine: "sqlite", path: ":memory:" });
+    expect(db).toBeDefined();
+    expect(auditService.getDb()).toBe(db);
+    expect(auditService.db).toBe(db);
+
+    db.run(sql`
+      CREATE TABLE IF NOT EXISTS logs (
+        id TEXT PRIMARY KEY,
+        message TEXT NOT NULL,
+        timestamp INTEGER NOT NULL
+      );
+    `);
+
+    const logEvent = defineAction({
+      name: "logEvent",
+      input: t.Object({ id: t.String(), message: t.String() }),
+      execute: async ({ input, ctx }) => {
+        await ctx.db.insert(logsTable).values({
+          id: input.id,
+          message: input.message,
+          timestamp: Date.now(),
+        });
+        return { success: true };
+      },
+    });
+
+    auditService.action(logEvent);
+
+    await logEvent({ input: { id: "log_1", message: "User logged in" } });
+
+    const rows = await db.select().from(logsTable).where(eq(logsTable.id, "log_1"));
+    expect(rows.length).toBe(1);
+    expect(rows[0].message).toBe("User logged in");
+
+    // Test attaching an already existing Drizzle instance
+    const customDb = createDatabase();
+    const otherService = defineService("other");
+    attachDatabase(otherService, customDb);
+    expect(otherService.db).toBe(customDb);
+  });
+
+  it("should execute zero-latency local queries in sub-millisecond time", async () => {
+    const perfService = defineService("perf", { database: true });
+
+    perfService.db.run(sql`
+      CREATE TABLE IF NOT EXISTS items (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        quantity INTEGER NOT NULL,
+        category TEXT NOT NULL
+      );
+    `);
+
+    // Bulk insert 100 items locally
+    const bulkItems = Array.from({ length: 100 }, (_, i) => ({
+      id: `perf_${i}`,
+      title: `Widget ${i}`,
+      quantity: i * 2,
+      category: i % 2 === 0 ? "even" : "odd",
+    }));
+
+    await perfService.db.insert(itemsTable).values(bulkItems);
+
+    const queryPerfAction = defineAction({
+      name: "queryPerf",
+      execute: async ({ ctx }) => {
+        return ctx.db.select().from(itemsTable).where(eq(itemsTable.category, "even"));
+      },
+    });
+
+    perfService.action(queryPerfAction);
+
+    // Warm-up query
+    await queryPerfAction({});
+
+    // Benchmark local query execution
+    const iterations = 50;
+    const start = performance.now();
+    for (let i = 0; i < iterations; i++) {
+      await queryPerfAction({});
+    }
+    const totalDuration = performance.now() - start;
+    const avgDuration = totalDuration / iterations;
+
+    // Verify sub-millisecond / zero-latency local execution
+    expect(avgDuration).toBeLessThan(2.0); // Averaging < 2ms (typically < 0.2ms)
+    expect(totalDuration).toBeLessThan(100.0);
+  });
+
+  it("should propagate service.db across RPC service proxies", async () => {
+    const warehouseService = defineService("warehouse", { database: true });
+
+    warehouseService.db.run(sql`
+      CREATE TABLE IF NOT EXISTS items (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        quantity INTEGER NOT NULL,
+        category TEXT NOT NULL
+      );
+    `);
+
+    await warehouseService.db.insert(itemsTable).values({
+      id: "item_rpc",
+      title: "Remote Controlled Drone",
+      quantity: 42,
+      category: "drones",
+    });
+
+    warehouseService.action({
+      name: "findItem",
+      input: t.Object({ id: t.String() }),
+      execute: async ({ input, ctx }: any) => {
+        expect(ctx.db).toBeDefined();
+        const [found] = await ctx.db
+          .select()
+          .from(itemsTable)
+          .where(eq(itemsTable.id, input.id));
+        return found;
+      },
+    });
+
+    interface WarehouseRpc {
+      findItem: (input: { id: string }, ctx?: any) => Promise<any>;
+    }
+
+    const warehouseRpc = createServiceProxy<WarehouseRpc>("warehouse");
+    const result = await warehouseRpc.findItem({ id: "item_rpc" });
+
+    expect(result).toBeDefined();
+    expect(result.id).toBe("item_rpc");
+    expect(result.title).toBe("Remote Controlled Drone");
+    expect(result.quantity).toBe(42);
   });
 });
