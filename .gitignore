@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Bun / Binary artifacts
+*.exe
+*.wasm
+
+# Environment variables & secrets
+.env
+.env.production
+.env.development
+.env.local
+.env.*.local
+*.pem
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test coverage & caches
+coverage/
+.nyc_output/
+.turbo/
+.cache/
+
+# Brick-TS local dev cache & state
+.brick/
+*.db
+*.sqlite
+*.sqlite-journal
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.idea/
+*.sublime-project
+*.sublime-workspace
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
