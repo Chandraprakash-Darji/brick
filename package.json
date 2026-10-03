@@ -8,6 +8,7 @@
   ],
   "scripts": {
     "build": "bun run --filter @elregaldo/core build && bun run --filter @elregaldo/cli build",
+    "release": "bun scripts/release.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
