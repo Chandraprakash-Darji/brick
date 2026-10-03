@@ -16,8 +16,6 @@ import {
   sql,
 } from "drizzle-orm";
 import {
-  ensureResourceIndexes,
-  ensureSQLiteFts,
   buildFtsMatchQuery,
 } from "./db";
 import { t } from "./typebox";
@@ -293,29 +291,6 @@ export function defineResource<
 
   // Register table on service
   service.registerTable(table);
-
-  // Secondary indexes (owner scope, sort, composite) + FTS sidecar for search.
-  // Best-effort; LIKE fallback covers absence.
-  try {
-    const dbForIndex =
-      (service as any).getDb?.() ?? (service as any).dbInstance;
-    if (dbForIndex) {
-      const listCfg =
-        typeof config.operations?.list === "object"
-          ? (config.operations.list as any)
-          : {};
-      const searchFields =
-        config.searchable ?? listCfg.searchable ?? ["title", "slug"];
-      ensureResourceIndexes(dbForIndex, table, {
-        ownerField,
-        sortFields: ["updated_at", "created_at"],
-        searchFields,
-      });
-      ensureSQLiteFts(dbForIndex, table, searchFields);
-    }
-  } catch {
-    // best-effort
-  }
 
   // Derive TypeBox Schemas
   // 1. Row Schema (Full table row)

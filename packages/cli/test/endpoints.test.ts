@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import {
   defineService,
+  defineDatabase,
+  sqliteTable,
+  text,
   resetGlobalRegistry,
   ActionExecutionError,
 } from "@brick-ts/core";
@@ -9,6 +12,23 @@ import { createBrickServer } from "../src/server";
 describe("@brick-ts/cli app.endpoint()", () => {
   beforeEach(() => {
     resetGlobalRegistry();
+  });
+
+  it("accepts a database handle without applying schema at startup or on requests", async () => {
+    const table = sqliteTable("runtime_untouched", { id: text("id").primaryKey() });
+    const database = defineDatabase({ tables: { table } });
+    const service = defineService("runtime_untouched", { database });
+    service.resource({ name: "untouched", table });
+    const app = createBrickServer({ services: [service], secrets: { validate: false } });
+    app.endpoint({ database, method: "GET", path: "/database", handler: ({ db }) => ({
+      same: db === database.getDb(),
+    }) });
+    const response = await app.handle(new Request("http://localhost/database"));
+    expect(await response.json()).toEqual({ same: true });
+    expect(database.getDb().all("SELECT name FROM sqlite_master WHERE type IN ('table', 'index', 'trigger')")).toEqual([]);
+    const architecture = await app.handle(new Request("http://localhost/_brick/services"));
+    expect(architecture.status).toBe(200);
+    expect(await architecture.json()).toBeDefined();
   });
 
   it("serves a raw HTML endpoint with status and headers", async () => {
@@ -40,7 +60,7 @@ describe("@brick-ts/cli app.endpoint()", () => {
   });
 
   it("injects the service db into the handler", async () => {
-    const svc = defineService("ep_svc", { database: true });
+    const svc = defineService("ep_svc", { database: defineDatabase() });
     const app = createBrickServer({ services: [svc] });
 
     // Note: like raw app.get, endpoints must be registered before the first

@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import {
   defineService,
+  defineDatabase,
+  syncSchema,
   sqliteTable,
   text,
   integer,
@@ -19,12 +21,14 @@ const notesTable = sqliteTable("notes", {
 });
 
 describe("REST Route Binding for Resources (@brick-ts/cli)", () => {
-  let notesService: ReturnType<typeof defineService>;
+  let notesService: import("@brick-ts/core").Service;
   let app: ReturnType<typeof createBrickServer>;
 
   beforeEach(() => {
+    const database = defineDatabase({ tables: [notesTable] });
+    syncSchema(database.tables, database.getDb());
     notesService = defineService("notes_svc", {
-      database: true,
+      database,
     });
 
     notesService.resource({

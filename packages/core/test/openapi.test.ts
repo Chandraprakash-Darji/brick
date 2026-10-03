@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import {
   defineService,
+  defineDatabase,
   defineAction,
   t,
   resetGlobalRegistry,
@@ -13,7 +14,7 @@ describe("OpenAPI 3.1 Specification Generator", () => {
   });
 
   it("should generate a complete OpenAPI 3.1.0 specification from service registry", () => {
-    const pagesService = defineService("pages", { database: true });
+    const pagesService = defineService("pages", { database: defineDatabase() });
 
     // 1. Action with input, output, errors, tags
     const createPage = defineAction({

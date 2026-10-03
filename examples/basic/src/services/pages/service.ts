@@ -1,5 +1,6 @@
 import {
   defineService,
+  defineDatabase,
   sqliteTable,
   text,
   integer,
@@ -30,8 +31,12 @@ export const pagesTable = sqliteTable("pages", {
 export type Page = typeof pagesTable.$inferSelect;
 
 // 2. Define Service with SQLite database
+export const pagesDb = defineDatabase({
+  path: process.env.DB_PATH ?? "./data/pages.db",
+  tables: { pagesTable },
+});
 export const pagesService = defineService("pages", {
-  database: true,
+  database: pagesDb,
 });
 
 // 3. Attach Resource at Service Level (Automatic CRUD & Schema Registration)

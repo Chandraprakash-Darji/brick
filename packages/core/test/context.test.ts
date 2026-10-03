@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import {
   defineService,
+  defineDatabase,
   t,
   resetGlobalRegistry,
 } from "../src";
@@ -56,7 +57,7 @@ describe("Service-Level Context Resolution & Session Injection", () => {
   it("should declare service-level context with Better Auth session injection", async () => {
     // 1. Define service with context hook
     const docsService = defineService("docs", {
-      database: true,
+      database: defineDatabase(),
       context: async ({ request }) => {
         // Resolve authentication session once per request from request.headers
         const session = await mockAuth.api.getSession({

@@ -1,5 +1,6 @@
 import type { TSchema, Static } from "@sinclair/typebox";
 import type { BunSQLiteDatabase } from "./db/sqlite";
+import type { DatabaseHandle } from "./db/define";
 
 export interface Logger {
   info: (...args: any[]) => void;
@@ -288,25 +289,6 @@ export interface Resource<
   delete: Action<any, any, any, TCtx>;
 }
 
-export interface DatabaseOptions<TSchema = any> {
-  engine?: "postgres" | "sqlite" | "clickhouse";
-  url?: string;
-  connectionString?: string;
-  path?: string;
-  filename?: string;
-  wal?: boolean;
-  foreignKeys?: boolean;
-  schema?: TSchema;
-  schemaName?: string;
-  migrationsDir?: string;
-  pool?: {
-    min?: number;
-    max?: number;
-    idleTimeoutSeconds?: number;
-  };
-  multiTenant?: boolean;
-}
-
 export interface ServiceAuthOptions {
   requireAuth?: boolean;
   allowedRoles?: string[];
@@ -349,11 +331,10 @@ export interface LifecycleOptions {
 }
 
 export interface ServiceOptions<
-  TDbSchema = any,
   TServiceContext extends Record<string, any> = Record<string, any>,
   TDb = any
 > {
-  database?: boolean | DatabaseOptions<TDbSchema>;
+  database?: DatabaseHandle<TDb>;
   context?: (baseCtx: BaseContext<TDb>) => Promise<TServiceContext> | TServiceContext;
   auth?: ServiceAuthOptions;
   rateLimit?: RateLimitOptions;
@@ -377,9 +358,11 @@ export interface ActionSchema {
 
 export interface ServiceSchema {
   name: string;
-  options: ServiceOptions;
+  options: Omit<ServiceOptions, "database"> & {
+    database?: { name?: string; engine: "sqlite" | "postgres"; tables: string[] };
+  };
   hasDatabase: boolean;
-  databaseConfig?: DatabaseOptions;
+  databaseConfig?: { name?: string; engine: "sqlite" | "postgres"; tables: string[] };
   actions: ActionSchema[];
   resources?: {
     name: string;
@@ -398,7 +381,7 @@ export interface Service<
   TServiceContext extends Record<string, any> = Record<string, any>
 > {
   readonly name: string;
-  readonly options: ServiceOptions<any, TServiceContext, TDb>;
+  readonly options: ServiceOptions<TServiceContext, TDb>;
   readonly actions: Map<string, Action<any, any, any, any>>;
   readonly tables: Map<string, any>;
   readonly resources: Map<string, Resource<any, BaseContext<TDb> & TServiceContext>>;
@@ -437,9 +420,8 @@ export interface Service<
   listActions(): Action<any, any, any, any>[];
   getResource(name: string): Resource<any, BaseContext<TDb> & TServiceContext> | undefined;
   listResources(): Resource<any, BaseContext<TDb> & TServiceContext>[];
-  getDb<T = TDb>(): T | undefined;
-  setDb(db: any): void;
-  syncSchema(): Promise<void> | void;
+  getDb(): TDb | undefined;
+  setDb(database: DatabaseHandle<TDb>): void;
   resolveContext(
     callCtx?: Partial<BaseContext<TDb> & TServiceContext>
   ): Promise<BaseContext<TDb> & TServiceContext>;

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { createBrickServer } from "@brick-ts/cli";
+import { defineDatabase, syncSchema } from "@brick-ts/core";
 import {
   pagesService,
   createPage,
@@ -16,6 +17,9 @@ describe("Pages Service E2E Tests (Mirroring ../pages)", () => {
   let app: ReturnType<typeof createBrickServer>;
 
   beforeEach(async () => {
+    const database = defineDatabase({ tables: { pagesTable } });
+    syncSchema(database.tables, database.getDb());
+    pagesService.setDb(database);
     app = createBrickServer({ services: [pagesService] });
     const db = pagesService.getDb();
     if (db) {

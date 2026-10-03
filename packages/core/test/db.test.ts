@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import {
   defineService,
+  defineDatabase,
   defineAction,
   createDatabase,
   attachDatabase,
@@ -64,8 +65,7 @@ describe("@brick-ts/core Database & Drizzle Integration", () => {
   });
 
   it("should automatically initialize service.db and populate ctx.db in actions", async () => {
-    // Zero-config database initialization when database: true
-    const inventoryService = defineService("inventory", { database: true });
+    const inventoryService = defineService("inventory", { database: defineDatabase() });
     expect(inventoryService.db).toBeDefined();
     expect(inventoryService.getDb()).toBeDefined();
 
@@ -141,13 +141,13 @@ describe("@brick-ts/core Database & Drizzle Integration", () => {
     expect(fetched.quantity).toBe(8);
   });
 
-  it("should support attachDatabase(service, config) and attachDatabase(service, existingDb)", async () => {
+  it("should support attachDatabase(service, definedDatabase)", async () => {
     // Service created without database option
     const auditService = defineService("audit");
     expect(auditService.getDb()).toBeUndefined();
 
     // Attach new zero-config SQLite database via attachDatabase
-    const db = attachDatabase(auditService, { engine: "sqlite", path: ":memory:" });
+    const db = attachDatabase(auditService, defineDatabase({ path: ":memory:" }));
     expect(db).toBeDefined();
     expect(auditService.getDb()).toBe(db);
     expect(auditService.db).toBe(db);
@@ -182,14 +182,14 @@ describe("@brick-ts/core Database & Drizzle Integration", () => {
     expect(rows[0].message).toBe("User logged in");
 
     // Test attaching an already existing Drizzle instance
-    const customDb = createDatabase();
+    const customDb = defineDatabase();
     const otherService = defineService("other");
     attachDatabase(otherService, customDb);
-    expect(otherService.db).toBe(customDb);
+    expect(otherService.db).toBe(customDb.getDb());
   });
 
   it("should execute zero-latency local queries in sub-millisecond time", async () => {
-    const perfService = defineService("perf", { database: true });
+    const perfService = defineService("perf", { database: defineDatabase() });
 
     perfService.db!.run(sql`
       CREATE TABLE IF NOT EXISTS items (
@@ -237,7 +237,7 @@ describe("@brick-ts/core Database & Drizzle Integration", () => {
   });
 
   it("should propagate service.db across RPC service proxies", async () => {
-    const warehouseService = defineService("warehouse", { database: true });
+    const warehouseService = defineService("warehouse", { database: defineDatabase() });
 
     warehouseService.db!.run(sql`
       CREATE TABLE IF NOT EXISTS items (

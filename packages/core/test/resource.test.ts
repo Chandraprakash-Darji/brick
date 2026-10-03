@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import {
   defineService,
+  defineDatabase,
+  syncSchema,
   sqliteTable,
   text,
   integer,
@@ -18,13 +20,15 @@ const articlesTable = sqliteTable("articles", {
   updatedAt: text("updated_at").notNull(),
 });
 
-describe("Service-Level Resources & Auto-Schema Sync (@brick-ts/core)", () => {
-  let articlesService: ReturnType<typeof defineService>;
+describe("Service-Level Resources & User-Owned Schema (@brick-ts/core)", () => {
+  let articlesService: import("../src").Service;
   let articlesResource: any;
 
   beforeEach(() => {
+    const database = defineDatabase({ tables: [articlesTable] });
+    syncSchema(database.tables, database.getDb());
     articlesService = defineService("articles_svc", {
-      database: true,
+      database,
     });
 
     articlesResource = articlesService.resource({

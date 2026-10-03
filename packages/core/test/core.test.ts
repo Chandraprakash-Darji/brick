@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import {
   defineService,
+  defineDatabase,
   defineAction,
   createServiceProxy,
   getGlobalRegistry,
@@ -16,7 +17,7 @@ describe("@brick-ts/core Engine", () => {
   });
 
   it("should define and register a service with actions", async () => {
-    const dealsService = defineService("deals", { database: true });
+    const dealsService = defineService("deals", { database: defineDatabase() });
 
     const createDeal = defineAction({
       name: "createDeal",

@@ -1,5 +1,5 @@
 import type { Elysia } from "elysia";
-import type { Service } from "@brick-ts/core";
+import type { Service, DatabaseHandle } from "@brick-ts/core";
 import { ActionExecutionError, ValidationError } from "@brick-ts/core";
 
 export type EndpointMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -35,6 +35,8 @@ export interface EndpointDefinition {
   handler: (ctx: EndpointContext) => unknown | Promise<unknown>;
   /** Db source: instance or registered service name. Defaults to first service with a db. */
   service?: Service<any, any> | string;
+  /** Explicit database handle, independent of a service. */
+  database?: DatabaseHandle<unknown>;
   summary?: string;
   description?: string;
   tags?: string[];
@@ -80,7 +82,7 @@ export function createEndpointHandler(
     const tag = `endpoint:${def.method} ${def.path}`;
     const ctx: EndpointContext = {
       body,
-      db: resolveEndpointDb(def.service, services),
+      db: def.database ? def.database.getDb() : resolveEndpointDb(def.service, services),
       headers: headers ?? {},
       logger: {
         info: (...args) => console.log(`[${tag}]`, ...args),

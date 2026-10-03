@@ -15,7 +15,7 @@ import type {
 } from "./types";
 import { defineAction } from "./action";
 import { getGlobalRegistry } from "./registry";
-import { createDatabase, syncSchema, getTableName } from "./db";
+import { getTableName, isDatabaseHandle, type DatabaseHandle } from "./db";
 import { defineResource } from "./resource";
 
 const defaultLogger: Logger = {
@@ -30,31 +30,23 @@ export class ServiceImpl<
   TServiceContext extends Record<string, any> = Record<string, any>
 > implements Service<TDb, TServiceContext> {
   readonly name: string;
-  readonly options: ServiceOptions<any, TServiceContext, TDb>;
+  readonly options: ServiceOptions<TServiceContext, TDb>;
   readonly actions = new Map<string, Action<any, any, any, any>>();
   readonly tables = new Map<string, any>();
   readonly resources = new Map<string, Resource<any, BaseContext<TDb> & TServiceContext>>();
-  private dbInstance: any = undefined;
-  private schemaSynced = false;
+  private database?: DatabaseHandle<TDb>;
 
-  constructor(name: string, options: ServiceOptions<any, TServiceContext, TDb> = {}) {
+  constructor(name: string, options: ServiceOptions<TServiceContext, TDb> = {}) {
     this.name = name;
     this.options = options;
-    if (options.database) {
-      const dbConfig =
-        typeof options.database === "object"
-          ? { ...options.database, name }
-          : { name };
-      this.dbInstance = createDatabase(dbConfig);
+    if (options.database !== undefined && !isDatabaseHandle(options.database)) {
+      throw new Error("Service database must be created with defineDatabase()");
     }
+    this.database = options.database;
   }
 
   get db(): TDb | undefined {
     return this.getDb();
-  }
-
-  set db(value: any) {
-    this.dbInstance = value;
   }
 
   registerTable(table: any): this {
@@ -66,10 +58,6 @@ export class ServiceImpl<
       this.tables.set(fallbackName, table);
     }
 
-    if (this.dbInstance) {
-      this.syncSchema();
-    }
-
     return this;
   }
 
@@ -78,10 +66,6 @@ export class ServiceImpl<
   ): Resource<TTable, BaseContext<TDb> & TServiceContext> {
     const resourceInstance = defineResource(this, config);
     this.resources.set(resourceInstance.name, resourceInstance);
-
-    if (this.dbInstance) {
-      this.syncSchema();
-    }
 
     return resourceInstance;
   }
@@ -92,15 +76,6 @@ export class ServiceImpl<
 
   listResources(): Resource<any, BaseContext<TDb> & TServiceContext>[] {
     return Array.from(this.resources.values());
-  }
-
-  syncSchema(): Promise<void> | void {
-    if (this.schemaSynced) return;
-    this.schemaSynced = true;
-    const db = this.getDb();
-    if (db && this.tables.size > 0) {
-      return syncSchema(this.tables, db);
-    }
   }
 
   action<
@@ -153,22 +128,13 @@ export class ServiceImpl<
     return Array.from(new Set(this.actions.values()));
   }
 
-  getDb<T = TDb>(): T | undefined {
-    if (!this.dbInstance && this.options.database) {
-      const dbConfig =
-        typeof this.options.database === "object"
-          ? { ...this.options.database, name: this.name }
-          : { name: this.name };
-      this.dbInstance = createDatabase(dbConfig);
-    }
-    return this.dbInstance as T | undefined;
+  getDb(): TDb | undefined {
+    return this.database?.getDb();
   }
 
-  setDb(db: any): void {
-    this.dbInstance = db;
-    if (db && this.tables.size > 0) {
-      this.syncSchema();
-    }
+  setDb(database: DatabaseHandle<TDb>): void {
+    if (!isDatabaseHandle(database)) throw new Error("Use defineDatabase() to set a service database");
+    this.database = database;
   }
 
   /**
@@ -209,14 +175,15 @@ export class ServiceImpl<
   }
 
   introspect(): ServiceSchema {
+    const databaseConfig = this.database
+      ? { name: this.database.name, engine: this.database.engine, tables: Object.keys(this.database.tables) }
+      : undefined;
+    const { database: _database, ...options } = this.options;
     return {
       name: this.name,
-      options: this.options,
-      hasDatabase: Boolean(this.options.database),
-      databaseConfig:
-        typeof this.options.database === "object"
-          ? (this.options.database as any)
-          : undefined,
+      options: { ...options, database: databaseConfig },
+      hasDatabase: Boolean(this.database),
+      databaseConfig,
       actions: this.listActions().map((act) => ({
         name: act.name,
         serviceName: this.name,
@@ -242,7 +209,7 @@ export function defineService<
   TServiceContext extends Record<string, any> = Record<string, any>
 >(
   name: string,
-  options?: ServiceOptions<any, TServiceContext, TDb>
+  options?: ServiceOptions<TServiceContext, TDb>
 ): Service<TDb, TServiceContext> {
   const service = new ServiceImpl<TDb, TServiceContext>(name, options);
   getGlobalRegistry().register(service as any);

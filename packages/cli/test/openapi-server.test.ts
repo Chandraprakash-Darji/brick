@@ -14,7 +14,6 @@ describe("@brick-ts/cli OpenAPI & Interactive Documentation Server", () => {
 
   it("should serve OpenAPI 3.1 JSON at /openapi.json and documentation at /docs & /swagger", async () => {
     const pagesService = defineService("pages", {
-      database: false,
     });
 
     const createPage = defineAction({

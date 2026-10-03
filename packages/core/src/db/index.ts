@@ -1,4 +1,5 @@
 import type { Service } from "../types";
+import type { DatabaseHandle } from "./define";
 import {
   createSQLiteDatabase,
   type SQLiteDatabaseConfig,
@@ -14,6 +15,7 @@ import { getTableColumns, getTableName, sql } from "drizzle-orm";
 
 export * from "./sqlite";
 export * from "./postgres";
+export * from "./define";
 
 // Re-export core Drizzle SQL expressions & operators for convenience
 export {
@@ -77,48 +79,10 @@ export function createDatabase<
   throw new Error(`[Brick-TS DB] Unsupported database engine: '${engine}'`);
 }
 
-/**
- * Attaches a Drizzle database instance to a service.
- * Accepts either:
- *  - A `DatabaseConfig` object
- *  - A boolean (true for default zero-config SQLite)
- *  - An existing Drizzle instance
- *  - undefined (defaults to zero-config SQLite)
- *
- * Sets `service.setDb(db)` and returns the initialized Drizzle instance.
- */
-export function attachDatabase<
-  TSchema extends Record<string, unknown> = Record<string, unknown>
->(
-  service: Service,
-  config?: DatabaseConfig<TSchema> | boolean
-): BunSQLiteDatabase<TSchema> | PostgresDatabase<TSchema>;
-export function attachDatabase<TDb extends object>(
-  service: Service,
-  dbInstance: TDb
-): TDb;
-export function attachDatabase(
-  service: Service,
-  configOrDb?: any
-): any {
-  let db: any;
-
-  if (
-    configOrDb &&
-    typeof configOrDb === "object" &&
-    ("select" in configOrDb || "query" in configOrDb)
-  ) {
-    db = configOrDb;
-  } else {
-    const config =
-      typeof configOrDb === "object" && configOrDb !== null
-        ? (configOrDb as DatabaseConfig)
-        : undefined;
-    db = createDatabase(config);
-  }
-
-  service.setDb(db);
-  return db;
+/** Attach a defined database. Schema changes remain the caller's responsibility. */
+export function attachDatabase<TDb>(service: Service<TDb, any>, database: DatabaseHandle<TDb>): TDb {
+  service.setDb(database);
+  return database.getDb();
 }
 
 /**
@@ -375,9 +339,9 @@ export function buildFtsMatchQuery(search: string): string | null {
 }
 
 /**
- * Synchronizes database schemas for registered tables.
- * In SQLite mode: generates and executes CREATE TABLE IF NOT EXISTS once during startup.
- * In Postgres mode: runs migrations or pending schema updates.
+ * Explicit SQLite development/test schema preparation helper.
+ * Never called by services, resources, auth, or server startup.
+ * Not a migration runner; PostgreSQL schema management is caller-owned.
  */
 export function syncSchema(
   tablesOrService: Map<string, any> | any[] | Record<string, any> | Service,

@@ -208,13 +208,6 @@ export function createBrickServer(options: CreateServerOptions = {}): BrickApp {
   // Raw endpoints declared via options or app.endpoint() (declaration order).
   const endpointDefs: EndpointDefinition[] = [];
 
-  // 1. Startup Schema Sync across all registered services (SQLite & Dev auto-creation)
-  for (const service of services) {
-    if (typeof (service as any).syncSchema === "function") {
-      (service as any).syncSchema();
-    }
-  }
-
   // OpenAPI 3.1 & Interactive Documentation Endpoints
   if (enableDocs) {
     app.get(openApiPath, () => {
