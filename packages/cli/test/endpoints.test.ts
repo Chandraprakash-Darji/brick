@@ -1,0 +1,141 @@
+import { describe, it, expect, beforeEach } from "bun:test";
+import {
+  defineService,
+  resetGlobalRegistry,
+  ActionExecutionError,
+} from "@brick-ts/core";
+import { createBrickServer } from "../src/server";
+
+describe("@brick-ts/cli app.endpoint()", () => {
+  beforeEach(() => {
+    resetGlobalRegistry();
+  });
+
+  it("serves a raw HTML endpoint with status and headers", async () => {
+    const app = createBrickServer({ services: [] });
+    app.endpoint({
+      handler: ({ params, set }) => {
+        set.headers["content-type"] = "text/html; charset=utf-8";
+        if (params.slug !== "hello") {
+          set.status = 404;
+          return "<h1>404</h1>";
+        }
+        set.status = 200;
+        return "<h1>hello</h1>";
+      },
+      method: "GET",
+      path: "/p/:slug",
+      summary: "Public page viewer",
+    });
+
+    const ok = await app.handle(new Request("http://localhost/p/hello"));
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get("content-type")).toContain("text/html");
+    expect(await ok.text()).toBe("<h1>hello</h1>");
+    expect(ok.headers.get("x-trace-id")).toBeDefined();
+    expect(ok.headers.get("x-request-id")).toBeDefined();
+
+    const missing = await app.handle(new Request("http://localhost/p/nope"));
+    expect(missing.status).toBe(404);
+  });
+
+  it("injects the service db into the handler", async () => {
+    const svc = defineService("ep_svc", { database: true });
+    const app = createBrickServer({ services: [svc] });
+
+    // Note: like raw app.get, endpoints must be registered before the first
+    // request (Elysia compiles routes ahead-of-time).
+    app.endpoint({
+      handler: ({ db }) => ({ hasDb: Boolean(db) }),
+      method: "GET",
+      path: "/db-check",
+    });
+    app.endpoint({
+      handler: ({ db }) => ({ hasDb: Boolean(db) }),
+      method: "GET",
+      path: "/db-named",
+      service: "ep_svc",
+    });
+    app.endpoint({
+      handler: ({ db }) => ({ hasDb: Boolean(db) }),
+      method: "GET",
+      path: "/db-missing",
+      service: "nope",
+    });
+
+    const byDefault = await app.handle(new Request("http://localhost/db-check"));
+    expect(await byDefault.json()).toEqual({ hasDb: true });
+
+    const byName = await app.handle(new Request("http://localhost/db-named"));
+    expect(await byName.json()).toEqual({ hasDb: true });
+
+    const missing = await app.handle(new Request("http://localhost/db-missing"));
+    expect(await missing.json()).toEqual({ hasDb: false });
+  });
+
+  it("mounts startup endpoints from options and lists them", async () => {
+    const app = createBrickServer({
+      endpoints: [{ handler: () => "ok", method: "GET", path: "/ready" }],
+      services: [],
+    });
+    expect(app.listEndpoints()).toHaveLength(1);
+    const res = await app.handle(new Request("http://localhost/ready"));
+    expect(await res.text()).toBe("ok");
+  });
+
+  it("dedupes double registration through the shared mountRoute", async () => {
+    const app = createBrickServer({ services: [] });
+    const def = { handler: () => "once", method: "GET" as const, path: "/once" };
+    app.endpoint(def);
+    app.endpoint(def);
+    expect(app.listEndpoints()).toHaveLength(2);
+    const res = await app.handle(new Request("http://localhost/once"));
+    expect(await res.text()).toBe("once");
+  });
+
+  it("maps handler errors to mesh-consistent JSON", async () => {
+    const app = createBrickServer({ services: [] });
+    app.endpoint({
+      handler: () => {
+        throw new ActionExecutionError("GONE", "nope", 410);
+      },
+      method: "GET",
+      path: "/fail-known",
+    });
+    app.endpoint({
+      handler: () => {
+        throw new Error("kaput");
+      },
+      method: "GET",
+      path: "/fail-unknown",
+    });
+
+    const known = await app.handle(new Request("http://localhost/fail-known"));
+    expect(known.status).toBe(410);
+    const unknown = await app.handle(new Request("http://localhost/fail-unknown"));
+    expect(unknown.status).toBe(500);
+    expect(await unknown.json()).toEqual({ message: "kaput", status: 500 });
+  });
+
+  it("lists raw endpoints in the OpenAPI spec with {param} paths", async () => {
+    const app = createBrickServer({
+      endpoints: [
+        {
+          description: "Raw HTML page viewer",
+          handler: () => "html",
+          method: "GET",
+          path: "/p/:slug",
+          summary: "Public page viewer",
+        },
+      ],
+      services: [],
+    });
+    const res = await app.handle(new Request("http://localhost/openapi.json"));
+    const spec = await res.json();
+    const op = spec.paths["/p/{slug}"]?.get;
+    expect(op?.summary).toBe("Public page viewer");
+    expect(op?.parameters).toEqual([
+      { in: "path", name: "slug", required: true, schema: { type: "string" } },
+    ]);
+  });
+});
