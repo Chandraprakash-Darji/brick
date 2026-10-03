@@ -207,7 +207,15 @@ export interface Action<
 }
 
 export interface ResourceOperationsConfig {
-  list?: boolean | { defaultLimit?: number; maxLimit?: number };
+  list?:
+    | boolean
+    | {
+        defaultLimit?: number;
+        maxLimit?: number;
+        searchable?: string[];
+        sortable?: string[];
+        defaultSort?: string;
+      };
   get?: boolean;
   create?: boolean;
   update?: boolean;
@@ -235,6 +243,9 @@ export interface ResourceConfig<TTable = any, TCtx = any> {
   hooks?: ResourceHooks<any, TCtx>;
   fields?: Record<string, TSchema>;
   errors?: Record<string, ActionErrorDefinition>;
+  searchable?: string[];
+  sortable?: string[];
+  defaultSort?: string;
 }
 
 export interface Resource<

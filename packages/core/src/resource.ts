@@ -1,5 +1,5 @@
 import type { TSchema } from "@sinclair/typebox";
-import { getTableColumns, eq, and } from "drizzle-orm";
+import { getTableColumns, eq, and, or, like, asc, desc, sql } from "drizzle-orm";
 import { t } from "./typebox";
 import { defineAction } from "./action";
 import type {
@@ -18,6 +18,127 @@ function getColumn(table: any, fieldName: string) {
     if ((col as any).name === fieldName) return col;
   }
   return undefined;
+}
+
+const RESERVED_LIST_KEYS = new Set([
+  "limit",
+  "offset",
+  "page",
+  "sort",
+  "search",
+  "select",
+  "order",
+  "orderBy",
+]);
+
+function isStringColumn(col: any): boolean {
+  const dt = col.dataType;
+  const ct = col.columnType;
+  return (
+    dt === "string" ||
+    ct === "SQLiteText" ||
+    ct === "PgText" ||
+    ct === "PgVarchar" ||
+    ct === "PgChar" ||
+    (typeof ct === "string" && ct.toLowerCase().includes("text"))
+  );
+}
+
+function resolveSearchColumns(
+  table: any,
+  columns: Record<string, any>,
+  explicit?: string[]
+): any[] {
+  if (explicit && explicit.length > 0) {
+    const out: any[] = [];
+    for (const f of explicit) {
+      const col = getColumn(table, f);
+      if (col) out.push(col);
+    }
+    if (out.length > 0) return out;
+  }
+  // Prefer conventional searchable fields when present (Go DSL: slug, title).
+  const preferred = ["title", "slug", "name", "email"];
+  const found: any[] = [];
+  for (const key of preferred) {
+    const col = getColumn(table, key);
+    if (col && isStringColumn(col)) found.push(col);
+  }
+  if (found.length > 0) return found;
+  // Fallback: all string columns except id / owner-like / content bodies.
+  const out: any[] = [];
+  for (const [key, col] of Object.entries(columns)) {
+    const name = (col as any).name ?? key;
+    if (key === "id" || name === "id") continue;
+    if (key === "userId" || name === "user_id") continue;
+    if (key === "content" || name === "content") continue;
+    if (isStringColumn(col)) out.push(col);
+  }
+  return out;
+}
+
+function parseSortParam(
+  table: any,
+  sort: string | string[] | undefined,
+  allowed?: string[]
+): any[] {
+  const parts: string[] = Array.isArray(sort)
+    ? sort.flatMap((s) => String(s).split(","))
+    : String(sort ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+  const orders: any[] = [];
+  for (const part of parts) {
+    let field = part;
+    let dir: "asc" | "desc" | undefined;
+    if (field.startsWith("-")) {
+      field = field.slice(1);
+      dir = "desc";
+    } else if (field.startsWith("+")) {
+      field = field.slice(1);
+      dir = "asc";
+    } else if (field.includes(":")) {
+      const [f, d] = field.split(":");
+      field = f.trim();
+      const dl = d.trim().toLowerCase();
+      dir = dl === "desc" ? "desc" : "asc";
+    }
+    if (!field) continue;
+    if (allowed && allowed.length > 0 && !allowed.includes(field)) continue;
+    const col = getColumn(table, field);
+    if (!col) continue;
+    orders.push(dir === "desc" ? desc(col) : asc(col));
+  }
+  return orders;
+}
+
+function parseSelectParam(
+  table: any,
+  columns: Record<string, any>,
+  select: string[] | string | undefined
+): Record<string, any> | undefined {
+  if (!select) return undefined;
+  const names: string[] = Array.isArray(select)
+    ? select.flatMap((s) => String(s).split(","))
+    : String(select)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+  if (names.length === 0) return undefined;
+  const proj: Record<string, any> = {};
+  for (const n of names) {
+    const col = getColumn(table, n);
+    if (col) {
+      // Key by drizzle key so row shape stays consistent.
+      const key =
+        Object.keys(columns).find((k) => columns[k] === col) ??
+        (col as any).name ??
+        n;
+      proj[key] = col;
+    }
+  }
+  return Object.keys(proj).length > 0 ? proj : undefined;
 }
 
 function columnToTypeBox(col: any, customSchema?: TSchema): TSchema {
@@ -150,13 +271,16 @@ export function defineResource<
 
   // 6. List Query Schema
   const operations = config.operations ?? {};
-  const maxLimit =
-    typeof operations.list === "object" && operations.list.maxLimit
-      ? operations.list.maxLimit
-      : 100;
+  const listOpts =
+    typeof operations.list === "object" ? operations.list : {};
+  const maxLimit = listOpts.maxLimit ?? 100;
   const listProperties: Record<string, TSchema> = {
     limit: t.Optional(t.Number({ minimum: 1, maximum: maxLimit })),
     offset: t.Optional(t.Number({ minimum: 0 })),
+    page: t.Optional(t.Number({ minimum: 1 })),
+    sort: t.Optional(t.String()),
+    search: t.Optional(t.String()),
+    select: t.Optional(t.Union([t.String(), t.Array(t.String())])),
   };
 
   for (const [key, col] of Object.entries(columns) as [string, any][]) {
@@ -240,7 +364,11 @@ export function defineResource<
       const idCol = getColumn(table, idField);
       let createdRow: any = data;
       if (idCol) {
-        const [row] = await db.select().from(table).where(eq(idCol, idVal));
+        const [row] = await db
+          .select()
+          .from(table)
+          .where(eq(idCol, idVal))
+          .limit(1);
         if (row) createdRow = row;
       }
 
@@ -278,7 +406,11 @@ export function defineResource<
         error.NOT_FOUND(`${capitalizedName} with ID '${idVal}' does not exist`);
       }
 
-      const [row] = await db.select().from(table).where(eq(idCol, idVal));
+      const [row] = await db
+        .select()
+        .from(table)
+        .where(eq(idCol, idVal))
+        .limit(1);
       if (!row) {
         error.NOT_FOUND(`${capitalizedName} with ID '${idVal}' does not exist`);
       }
@@ -297,33 +429,51 @@ export function defineResource<
   });
 
   // 3. List Action
+  // List items use a partial row schema so ?select=id,slug projections pass
+  // output validation while full rows still validate (all fields optional).
+  const listItemProperties: Record<string, TSchema> = {};
+  for (const [key, prop] of Object.entries(rowProperties)) {
+    listItemProperties[key] = t.Optional(prop);
+  }
+  const listItemSchema = t.Object(listItemProperties);
   const listAction = defineAction({
     name: `${resourceName}.list`,
     description: `List ${pluralName}`,
     input: listSchema,
     output: t.Object({
-      [pluralName]: t.Array(rowSchema),
-      items: t.Optional(t.Array(rowSchema)),
+      [pluralName]: t.Array(listItemSchema),
+      items: t.Optional(t.Array(listItemSchema)),
       total: t.Number(),
       limit: t.Optional(t.Number()),
       offset: t.Optional(t.Number()),
+      page: t.Optional(t.Number()),
+      pageCount: t.Optional(t.Number()),
+      hasMore: t.Optional(t.Boolean()),
     }),
     errors: config.errors,
     execute: async ({ input = {}, ctx }) => {
       const db = ctx.db ?? service.getDb();
-      const defaultLimit =
-        typeof operations.list === "object" && operations.list.defaultLimit
-          ? operations.list.defaultLimit
-          : 50;
-      const maxLimitVal =
-        typeof operations.list === "object" && operations.list.maxLimit
-          ? operations.list.maxLimit
-          : 100;
+      const defaultLimit = listOpts.defaultLimit ?? 50;
+      const maxLimitVal = listOpts.maxLimit ?? 100;
 
-      const rawLimit = (input as any).limit;
-      const rawOffset = (input as any).offset;
-      const limit = rawLimit !== undefined && rawLimit !== null ? Math.min(Number(rawLimit), maxLimitVal) : defaultLimit;
-      const offset = rawOffset !== undefined && rawOffset !== null ? Number(rawOffset) : 0;
+      const raw = input as any;
+      const limit =
+        raw.limit !== undefined && raw.limit !== null
+          ? Math.min(Math.max(Number(raw.limit) || defaultLimit, 1), maxLimitVal)
+          : defaultLimit;
+      let offset =
+        raw.offset !== undefined && raw.offset !== null
+          ? Math.max(Number(raw.offset) || 0, 0)
+          : 0;
+      let page =
+        raw.page !== undefined && raw.page !== null
+          ? Math.max(Number(raw.page) || 1, 1)
+          : Math.floor(offset / limit) + 1;
+      if (raw.page !== undefined && raw.page !== null) {
+        offset = (page - 1) * limit;
+      } else {
+        page = Math.floor(offset / limit) + 1;
+      }
 
       const conditions: any[] = [];
 
@@ -335,31 +485,86 @@ export function defineResource<
         }
       }
 
-      // Filter query parameters
-      for (const [key, val] of Object.entries(input)) {
-        if (key === "limit" || key === "offset") continue;
-        if (val !== undefined) {
-          const col = getColumn(table, key);
-          if (col) {
-            conditions.push(eq(col, val));
-          }
+      // Exact-match filters (all non-reserved keys with a matching column).
+      for (const [key, val] of Object.entries(raw)) {
+        if (RESERVED_LIST_KEYS.has(key)) continue;
+        if (val === undefined || val === null) continue;
+        const col = getColumn(table, key);
+        if (col) {
+          conditions.push(eq(col, val));
         }
       }
 
-      let query = db.select().from(table);
-      if (conditions.length > 0) {
-        query = query.where(and(...conditions)) as any;
+      // Full-text search: OR across searchable string columns, case-insensitive.
+      const searchTerm =
+        typeof raw.search === "string" ? raw.search.trim() : "";
+      if (searchTerm) {
+        const searchCols = resolveSearchColumns(
+          table,
+          columns,
+          config.searchable ?? listOpts.searchable
+        );
+        if (searchCols.length > 0) {
+          const pattern = `%${searchTerm.toLowerCase()}%`;
+          const ors = searchCols.map((col) =>
+            like(sql`lower(${col})`, pattern)
+          );
+          conditions.push(ors.length === 1 ? ors[0] : or(...ors));
+        }
       }
 
-      const all = await query;
-      const sliced = all.slice(offset, offset + limit);
+      const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+      // Sort: ?sort=-updatedAt | updatedAt:desc | title:asc,title:desc
+      const sortable = config.sortable ?? listOpts.sortable;
+      let orderBys = parseSortParam(table, raw.sort, sortable);
+      if (orderBys.length === 0) {
+        const defSort =
+          config.defaultSort ?? listOpts.defaultSort ?? "-updatedAt";
+        orderBys = parseSortParam(table, defSort, sortable);
+      }
+      if (orderBys.length === 0) {
+        const fallback =
+          getColumn(table, "updatedAt") ??
+          getColumn(table, "updated_at") ??
+          getColumn(table, "createdAt") ??
+          getColumn(table, "created_at");
+        if (fallback) orderBys = [desc(fallback)];
+      }
+
+      // Column projection: ?select=id,slug,title
+      const projection = parseSelectParam(table, columns, raw.select);
+
+      // Total via SQL COUNT(*) with identical WHERE (no row loading).
+      const countQuery = (db as any)
+        .select({ n: sql<number>`count(*)`.mapWith(Number) })
+        .from(table);
+      const [{ n: total } = { n: 0 }] = await (where
+        ? countQuery.where(where)
+        : countQuery);
+
+      // Paginated data query with SQL-level WHERE + ORDER BY + LIMIT + OFFSET.
+      const baseSelect = projection
+        ? (db as any).select(projection).from(table)
+        : (db as any).select().from(table);
+      const filtered =
+        where !== undefined ? baseSelect.where(where) : baseSelect;
+      const ordered =
+        orderBys.length > 0 ? filtered.orderBy(...orderBys) : filtered;
+      const rows = await ordered.limit(limit).offset(offset);
+
+      const pageCount = Math.max(Math.ceil(total / limit), total > 0 ? 1 : 0);
+      const hasMore = offset + rows.length < total;
 
       return {
-        [pluralName]: sliced,
-        items: sliced,
-        total: all.length,
+        [pluralName]: rows,
+        items: rows,
+        total,
         limit,
         offset,
+        page,
+        pageCount,
+        hasMore,
       };
     },
   });
@@ -384,7 +589,11 @@ export function defineResource<
         error.NOT_FOUND(`${capitalizedName} with ID '${idVal}' not found`);
       }
 
-      const [existing] = await db.select().from(table).where(eq(idCol, idVal));
+      const [existing] = await db
+        .select()
+        .from(table)
+        .where(eq(idCol, idVal))
+        .limit(1);
       if (!existing) {
         error.NOT_FOUND(`${capitalizedName} with ID '${idVal}' not found`);
       }
@@ -424,7 +633,11 @@ export function defineResource<
         await db.update(table).set(updateData).where(eq(idCol, idVal));
       }
 
-      const [updated] = await db.select().from(table).where(eq(idCol, idVal));
+      const [updated] = await db
+        .select()
+        .from(table)
+        .where(eq(idCol, idVal))
+        .limit(1);
 
       // Hook: afterUpdate
       if (config.hooks?.afterUpdate) {
@@ -463,7 +676,11 @@ export function defineResource<
         error.NOT_FOUND(`${capitalizedName} with ID '${idVal}' not found`);
       }
 
-      const [existing] = await db.select().from(table).where(eq(idCol, idVal));
+      const [existing] = await db
+        .select()
+        .from(table)
+        .where(eq(idCol, idVal))
+        .limit(1);
       if (!existing) {
         error.NOT_FOUND(`${capitalizedName} with ID '${idVal}' not found`);
       }
