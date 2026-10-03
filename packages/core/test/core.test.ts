@@ -109,7 +109,7 @@ describe("@brick-ts/core Engine", () => {
       name: "send",
       input: t.Object({ message: t.String() }),
       output: t.Object({ delivered: t.Boolean() }),
-      execute: async ({ input, ctx }) => {
+      execute: async ({ input, ctx }: any) => {
         expect(ctx.traceId).toBe("tr_custom_123");
         return { delivered: true };
       },

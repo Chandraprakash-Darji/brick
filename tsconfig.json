@@ -9,6 +9,10 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "types": ["bun-types"]
+    "types": ["bun"],
+    "paths": {
+      "@brick-ts/core": ["./packages/core/src"],
+      "@brick-ts/cli": ["./packages/cli/src"]
+    }
   }
 }

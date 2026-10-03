@@ -1,0 +1,26 @@
+{
+  "name": "@brick-ts/cli",
+  "version": "0.1.0",
+  "description": "CLI and server engine for Brick-TS",
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "bin": {
+    "brick": "./src/bin.ts"
+  },
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "@brick-ts/core": "workspace:*",
+    "@sinclair/typebox": "^0.34.0",
+    "elysia": "^1.2.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7.0"
+  }
+}
