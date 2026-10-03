@@ -246,6 +246,8 @@ export interface ResourceConfig<TTable = any, TCtx = any> {
   searchable?: string[];
   sortable?: string[];
   defaultSort?: string;
+  /** Columns excluded from default list projection (Go pageMeta parity: content). */
+  excludeFromList?: string[];
 }
 
 export interface Resource<

@@ -1,5 +1,25 @@
 import type { TSchema } from "@sinclair/typebox";
-import { getTableColumns, eq, and, or, like, asc, desc, sql } from "drizzle-orm";
+import {
+  getTableColumns,
+  getTableName,
+  eq,
+  and,
+  or,
+  like,
+  ilike,
+  asc,
+  desc,
+  lt,
+  gt,
+  lte,
+  gte,
+  sql,
+} from "drizzle-orm";
+import {
+  ensureResourceIndexes,
+  ensureSQLiteFts,
+  buildFtsMatchQuery,
+} from "./db";
 import { t } from "./typebox";
 import { defineAction } from "./action";
 import type {
@@ -29,6 +49,7 @@ const RESERVED_LIST_KEYS = new Set([
   "select",
   "order",
   "orderBy",
+  "cursor",
 ]);
 
 function isStringColumn(col: any): boolean {
@@ -141,6 +162,83 @@ function parseSelectParam(
   return Object.keys(proj).length > 0 ? proj : undefined;
 }
 
+/** Default list exclusion: large body columns (Go pageMeta parity). */
+function defaultListProjection(
+  table: any,
+  columns: Record<string, any>,
+  exclude?: string[]
+): Record<string, any> | undefined {
+  const excluded = exclude ?? ["content"];
+  const names = new Set(excluded.map((s) => s.trim()).filter(Boolean));
+  if (names.size === 0) return undefined;
+  const hasAny = Object.keys(columns).some(
+    (k) => names.has(k) || names.has((columns[k] as any).name)
+  );
+  if (!hasAny) return undefined;
+  const proj: Record<string, any> = {};
+  for (const [key, col] of Object.entries(columns)) {
+    if (names.has(key) || names.has((col as any).name)) continue;
+    proj[key] = col;
+  }
+  return Object.keys(proj).length > 0 ? proj : undefined;
+}
+
+interface ParsedSort {
+  field: string;
+  dir: "asc" | "desc";
+}
+
+function parseSortEntries(
+  sort: string | string[] | undefined
+): ParsedSort[] {
+  const parts: string[] = Array.isArray(sort)
+    ? sort.flatMap((s) => String(s).split(","))
+    : String(sort ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+  const out: ParsedSort[] = [];
+  for (const part of parts) {
+    let field = part;
+    let dir: "asc" | "desc" | undefined;
+    if (field.startsWith("-")) {
+      field = field.slice(1);
+      dir = "desc";
+    } else if (field.startsWith("+")) {
+      field = field.slice(1);
+      dir = "asc";
+    } else if (field.includes(":")) {
+      const [f, d] = field.split(":");
+      field = f.trim();
+      dir = d.trim().toLowerCase() === "desc" ? "desc" : "asc";
+    }
+    if (!field) continue;
+    out.push({ field, dir: dir ?? "asc" });
+  }
+  return out;
+}
+
+function encodeCursor(payload: unknown): string {
+  return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+}
+
+function decodeCursor<T>(cursor: string): T | null {
+  try {
+    const json = Buffer.from(cursor, "base64url").toString("utf8");
+    return JSON.parse(json) as T;
+  } catch {
+    return null;
+  }
+}
+
+function rowValue(row: any, field: string, col: any): any {
+  if (row == null) return undefined;
+  if (field in row) return row[field];
+  const name = col?.name;
+  if (name && name in row) return row[name];
+  return undefined;
+}
+
 function columnToTypeBox(col: any, customSchema?: TSchema): TSchema {
   if (customSchema) return customSchema;
 
@@ -195,6 +293,29 @@ export function defineResource<
 
   // Register table on service
   service.registerTable(table);
+
+  // Secondary indexes (owner scope, sort, composite) + FTS sidecar for search.
+  // Best-effort; LIKE fallback covers absence.
+  try {
+    const dbForIndex =
+      (service as any).getDb?.() ?? (service as any).dbInstance;
+    if (dbForIndex) {
+      const listCfg =
+        typeof config.operations?.list === "object"
+          ? (config.operations.list as any)
+          : {};
+      const searchFields =
+        config.searchable ?? listCfg.searchable ?? ["title", "slug"];
+      ensureResourceIndexes(dbForIndex, table, {
+        ownerField,
+        sortFields: ["updated_at", "created_at"],
+        searchFields,
+      });
+      ensureSQLiteFts(dbForIndex, table, searchFields);
+    }
+  } catch {
+    // best-effort
+  }
 
   // Derive TypeBox Schemas
   // 1. Row Schema (Full table row)
@@ -281,6 +402,7 @@ export function defineResource<
     sort: t.Optional(t.String()),
     search: t.Optional(t.String()),
     select: t.Optional(t.Union([t.String(), t.Array(t.String())])),
+    cursor: t.Optional(t.String()),
   };
 
   for (const [key, col] of Object.entries(columns) as [string, any][]) {
@@ -449,18 +571,25 @@ export function defineResource<
       page: t.Optional(t.Number()),
       pageCount: t.Optional(t.Number()),
       hasMore: t.Optional(t.Boolean()),
+      nextCursor: t.Optional(t.Union([t.String(), t.Null()])),
     }),
     errors: config.errors,
     execute: async ({ input = {}, ctx }) => {
       const db = ctx.db ?? service.getDb();
       const defaultLimit = listOpts.defaultLimit ?? 50;
       const maxLimitVal = listOpts.maxLimit ?? 100;
+      const isPostgres =
+        typeof (db as any)?.execute === "function" &&
+        !(db as any)?.$client?.run;
+      const isSQLite = !isPostgres;
 
       const raw = input as any;
       const limit =
         raw.limit !== undefined && raw.limit !== null
           ? Math.min(Math.max(Number(raw.limit) || defaultLimit, 1), maxLimitVal)
           : defaultLimit;
+
+      // Offset vs keyset: cursor wins when valid; otherwise page/offset.
       let offset =
         raw.offset !== undefined && raw.offset !== null
           ? Math.max(Number(raw.offset) || 0, 0)
@@ -474,6 +603,46 @@ export function defineResource<
       } else {
         page = Math.floor(offset / limit) + 1;
       }
+
+      // Sort entries (field+dir) drive ORDER BY, cursor encode/decode, tiebreak.
+      const sortable = config.sortable ?? listOpts.sortable;
+      const requestedSort =
+        typeof raw.sort === "string" && raw.sort.trim()
+          ? raw.sort
+          : (config.defaultSort ?? listOpts.defaultSort ?? "-updatedAt");
+      let sortEntries = parseSortEntries(requestedSort).filter((e) => {
+        if (sortable && sortable.length > 0 && !sortable.includes(e.field))
+          return false;
+        return !!getColumn(table, e.field);
+      });
+      if (sortEntries.length === 0) {
+        const fallbackField =
+          (getColumn(table, "updatedAt") && "updatedAt") ||
+          (getColumn(table, "updated_at") && "updated_at") ||
+          (getColumn(table, "createdAt") && "createdAt") ||
+          (getColumn(table, "created_at") && "created_at") ||
+          null;
+        sortEntries =
+          fallbackField != null ? [{ field: fallbackField, dir: "desc" }] : [];
+      }
+      const orderBys = sortEntries.map((e) => {
+        const col = getColumn(table, e.field);
+        return e.dir === "desc" ? desc(col) : asc(col);
+      });
+      // Deterministic tiebreak on PK so keyset pages never skip/duplicate.
+      const idColForSort = getColumn(table, idField);
+      const primaryDir =
+        sortEntries.length > 0 ? sortEntries[0].dir : "desc";
+      if (idColForSort) {
+        const already =
+          sortEntries.length > 0 &&
+          getColumn(table, sortEntries[0].field) === idColForSort;
+        if (!already) {
+          orderBys.push(primaryDir === "desc" ? desc(idColForSort) : asc(idColForSort));
+        }
+      }
+      const primarySort = sortEntries.length > 0 ? sortEntries[0] : null;
+      const primaryCol = primarySort ? getColumn(table, primarySort.field) : null;
 
       const conditions: any[] = [];
 
@@ -495,45 +664,90 @@ export function defineResource<
         }
       }
 
-      // Full-text search: OR across searchable string columns, case-insensitive.
+      // Search (?search=): SQLite FTS5 MATCH via subquery, Postgres ilike
+      // (trigram GIN), LIKE lower() fallback. FTS failure falls back to LIKE.
       const searchTerm =
         typeof raw.search === "string" ? raw.search.trim() : "";
       if (searchTerm) {
-        const searchCols = resolveSearchColumns(
-          table,
-          columns,
-          config.searchable ?? listOpts.searchable
-        );
-        if (searchCols.length > 0) {
-          const pattern = `%${searchTerm.toLowerCase()}%`;
-          const ors = searchCols.map((col) =>
-            like(sql`lower(${col})`, pattern)
+        const searchFieldNames =
+          config.searchable ?? listOpts.searchable ?? ["title", "slug"];
+        let pushed = false;
+        if (isSQLite) {
+          try {
+            const ftsQuery = buildFtsMatchQuery(searchTerm);
+            if (ftsQuery) {
+              const tableName = getTableName(table as any);
+              const fts = `${tableName}_fts`;
+              const idCol = getColumn(table, idField);
+              if (idCol) {
+                conditions.push(
+                  sql`${idCol} IN (SELECT "id" FROM ${sql.raw(`"${fts.replace(/"/g, '""')}"`)} WHERE ${sql.raw(`"${fts.replace(/"/g, '""')}"`)} MATCH ${ftsQuery})`
+                );
+                pushed = true;
+              }
+            }
+          } catch {
+            pushed = false;
+          }
+        }
+        if (!pushed) {
+          const searchCols = resolveSearchColumns(
+            table,
+            columns,
+            searchFieldNames
           );
-          conditions.push(ors.length === 1 ? ors[0] : or(...ors));
+          if (searchCols.length > 0) {
+            const ors = searchCols.map((col) =>
+              isPostgres
+                ? ilike(col as any, `%${searchTerm}%`)
+                : like(sql`lower(${col})`, `%${searchTerm.toLowerCase()}%`)
+            );
+            conditions.push(ors.length === 1 ? ors[0] : or(...ors));
+          }
+        }
+      }
+
+      // Keyset cursor (?cursor=): stable deep pagination without OFFSET scan.
+      // Format: base64url([primarySortValue, idValue]) + sort string check.
+      let cursorActive = false;
+      const cursorRaw = typeof raw.cursor === "string" ? raw.cursor : "";
+      if (cursorRaw && primarySort && primaryCol && idColForSort) {
+        const decoded = decodeCursor<{
+          v?: any[];
+          s?: string;
+        }>(cursorRaw);
+        if (
+          decoded &&
+          Array.isArray(decoded.v) &&
+          decoded.v.length >= 1 &&
+          (decoded.s === undefined || decoded.s === requestedSort)
+        ) {
+          const [sortVal, idVal] = decoded.v;
+          if (sortVal !== undefined && sortVal !== null) {
+            const cmp = primarySort.dir === "desc" ? lt : gt;
+            const cmpOrEq = primarySort.dir === "desc" ? lte : gte;
+            const tie =
+              idVal !== undefined && idVal !== null
+                ? or(
+                    cmp(primaryCol, sortVal),
+                    and(cmpOrEq(primaryCol, sortVal), cmp(idColForSort, idVal))
+                  )
+                : cmp(primaryCol, sortVal);
+            conditions.push(tie);
+            cursorActive = true;
+            offset = 0;
+          }
         }
       }
 
       const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-      // Sort: ?sort=-updatedAt | updatedAt:desc | title:asc,title:desc
-      const sortable = config.sortable ?? listOpts.sortable;
-      let orderBys = parseSortParam(table, raw.sort, sortable);
-      if (orderBys.length === 0) {
-        const defSort =
-          config.defaultSort ?? listOpts.defaultSort ?? "-updatedAt";
-        orderBys = parseSortParam(table, defSort, sortable);
-      }
-      if (orderBys.length === 0) {
-        const fallback =
-          getColumn(table, "updatedAt") ??
-          getColumn(table, "updated_at") ??
-          getColumn(table, "createdAt") ??
-          getColumn(table, "created_at");
-        if (fallback) orderBys = [desc(fallback)];
-      }
-
-      // Column projection: ?select=id,slug,title
-      const projection = parseSelectParam(table, columns, raw.select);
+      // Column projection: explicit ?select= wins; else exclude body columns
+      // (Go pageMeta parity: list omits content by default).
+      const explicitProj = parseSelectParam(table, columns, raw.select);
+      const projection =
+        explicitProj ??
+        defaultListProjection(table, columns, config.excludeFromList);
 
       // Total via SQL COUNT(*) with identical WHERE (no row loading).
       const countQuery = (db as any)
@@ -544,6 +758,7 @@ export function defineResource<
         : countQuery);
 
       // Paginated data query with SQL-level WHERE + ORDER BY + LIMIT + OFFSET.
+      // Keyset path uses OFFSET 0 (position comes from the cursor predicate).
       const baseSelect = projection
         ? (db as any).select(projection).from(table)
         : (db as any).select().from(table);
@@ -551,20 +766,36 @@ export function defineResource<
         where !== undefined ? baseSelect.where(where) : baseSelect;
       const ordered =
         orderBys.length > 0 ? filtered.orderBy(...orderBys) : filtered;
-      const rows = await ordered.limit(limit).offset(offset);
+      const rows = await ordered
+        .limit(limit)
+        .offset(cursorActive ? 0 : offset);
 
       const pageCount = Math.max(Math.ceil(total / limit), total > 0 ? 1 : 0);
-      const hasMore = offset + rows.length < total;
+      const hasMore = cursorActive
+        ? rows.length === limit
+        : offset + rows.length < total;
+
+      // Next cursor from last row (primary sort value + PK tiebreak).
+      let nextCursor: string | null = null;
+      if (hasMore && rows.length > 0 && primarySort && primaryCol && idColForSort) {
+        const last = rows[rows.length - 1];
+        const sortVal = rowValue(last, primarySort.field, primaryCol);
+        const idValOut = rowValue(last, idField, idColForSort);
+        if (sortVal !== undefined && sortVal !== null) {
+          nextCursor = encodeCursor({ v: [sortVal, idValOut ?? null], s: requestedSort });
+        }
+      }
 
       return {
         [pluralName]: rows,
         items: rows,
         total,
         limit,
-        offset,
-        page,
+        offset: cursorActive ? 0 : offset,
+        page: cursorActive ? undefined : page,
         pageCount,
         hasMore,
+        nextCursor,
       };
     },
   });
