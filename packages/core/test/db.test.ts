@@ -70,7 +70,7 @@ describe("@brick-ts/core Database & Drizzle Integration", () => {
     expect(inventoryService.getDb()).toBeDefined();
 
     // Initialize table on service.db
-    inventoryService.db.run(sql`
+    inventoryService.db!.run(sql`
       CREATE TABLE IF NOT EXISTS items (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
@@ -191,7 +191,7 @@ describe("@brick-ts/core Database & Drizzle Integration", () => {
   it("should execute zero-latency local queries in sub-millisecond time", async () => {
     const perfService = defineService("perf", { database: true });
 
-    perfService.db.run(sql`
+    perfService.db!.run(sql`
       CREATE TABLE IF NOT EXISTS items (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
@@ -208,7 +208,7 @@ describe("@brick-ts/core Database & Drizzle Integration", () => {
       category: i % 2 === 0 ? "even" : "odd",
     }));
 
-    await perfService.db.insert(itemsTable).values(bulkItems);
+    await perfService.db!.insert(itemsTable).values(bulkItems);
 
     const queryPerfAction = defineAction({
       name: "queryPerf",
@@ -239,7 +239,7 @@ describe("@brick-ts/core Database & Drizzle Integration", () => {
   it("should propagate service.db across RPC service proxies", async () => {
     const warehouseService = defineService("warehouse", { database: true });
 
-    warehouseService.db.run(sql`
+    warehouseService.db!.run(sql`
       CREATE TABLE IF NOT EXISTS items (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
@@ -248,7 +248,7 @@ describe("@brick-ts/core Database & Drizzle Integration", () => {
       );
     `);
 
-    await warehouseService.db.insert(itemsTable).values({
+    await warehouseService.db!.insert(itemsTable).values({
       id: "item_rpc",
       title: "Remote Controlled Drone",
       quantity: 42,
