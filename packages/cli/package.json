@@ -1,5 +1,5 @@
 {
-  "name": "@brick-ts/cli",
+  "name": "@brick/cli",
   "version": "0.1.0",
   "description": "CLI and server engine for Brick-TS",
   "type": "module",
@@ -29,7 +29,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.build.json"
   },
   "dependencies": {
-    "@brick-ts/core": "^0.1.0",
+    "@brick/core": "^0.1.0",
     "@sinclair/typebox": "^0.34.0",
     "elysia": "^1.2.0"
   },

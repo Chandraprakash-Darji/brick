@@ -7,8 +7,8 @@
     "declarationMap": false,
     "sourceMap": false,
     "paths": {
-      "@brick-ts/core": ["../core/dist/index.d.ts"],
-      "@brick-ts/core/pg": ["../core/dist/pg.d.ts"]
+      "@brick/core": ["../core/dist/index.d.ts"],
+      "@brick/core/pg": ["../core/dist/pg.d.ts"]
     }
   },
   "include": ["src"]

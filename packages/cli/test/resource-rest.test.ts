@@ -7,7 +7,7 @@ import {
   text,
   integer,
   t,
-} from "@brick-ts/core";
+} from "@brick/core";
 import { createBrickServer } from "../src/server";
 
 const notesTable = sqliteTable("notes", {
@@ -20,8 +20,8 @@ const notesTable = sqliteTable("notes", {
   updatedAt: text("updated_at").notNull(),
 });
 
-describe("REST Route Binding for Resources (@brick-ts/cli)", () => {
-  let notesService: import("@brick-ts/core").Service;
+describe("REST Route Binding for Resources (@brick/cli)", () => {
+  let notesService: import("@brick/core").Service;
   let app: ReturnType<typeof createBrickServer>;
 
   beforeEach(() => {

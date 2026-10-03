@@ -1,6 +1,6 @@
 import { existsSync } from "fs";
 import { resolve } from "path";
-import { getGlobalRegistry } from "@brick-ts/core";
+import { getGlobalRegistry } from "@brick/core";
 import { createBrickServer } from "./server";
 
 export interface DevServerOptions {

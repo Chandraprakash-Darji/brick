@@ -11,8 +11,8 @@
     "sourceMap": true,
     "types": ["bun"],
     "paths": {
-      "@brick-ts/core": ["./packages/core/src"],
-      "@brick-ts/cli": ["./packages/cli/src"]
+      "@brick/core": ["./packages/core/src"],
+      "@brick/cli": ["./packages/cli/src"]
     }
   }
 }

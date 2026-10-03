@@ -4,10 +4,10 @@ import {
   defineAction,
   resetGlobalRegistry,
   t,
-} from "@brick-ts/core";
+} from "@brick/core";
 import { createBrickServer } from "../src/server";
 
-describe("@brick-ts/cli Server Engine", () => {
+describe("@brick/cli Server Engine", () => {
   beforeEach(() => {
     resetGlobalRegistry();
   });

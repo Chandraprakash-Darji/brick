@@ -1,8 +1,8 @@
-# Publish @brick-ts/* to the npmjs public registry.
+# Publish @brick/* to the npmjs public registry.
 #
 # Triggers:
-#   - push a tag  `core-v<version>`  (e.g. core-v0.1.0) to publish @brick-ts/core
-#   - push a tag  `cli-v<version>`   (e.g. cli-v0.1.0)  to publish @brick-ts/cli
+#   - push a tag  `core-v<version>`  (e.g. core-v0.1.0) to publish @brick/core
+#   - push a tag  `cli-v<version>`   (e.g. cli-v0.1.0)  to publish @brick/cli
 #   - manual dispatch (inputs below) for re-runs
 #
 # The tag version must match the version in the package's package.json, or
@@ -10,8 +10,8 @@
 # is a no-op (checked via `npm view`, not an error).
 #
 # Required repo secret: NPM_TOKEN — an npm access token able to publish the
-# @brick-ts scope (classic "Automation" token, or granular with read+write
-# on @brick-ts/*). Add it under Settings → Secrets → Actions.
+# @brick scope (classic "Automation" token, or granular with read+write
+# on @brick/*). Add it under Settings → Secrets → Actions.
 #
 # Each package builds to ./dist before packing (see package.json `build`
 # script); `files: ["dist"]` keeps TS source out of the tarball.

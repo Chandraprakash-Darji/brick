@@ -29,7 +29,7 @@ export const logsTable = sqliteTable("logs", {
   timestamp: integer("timestamp").notNull(),
 });
 
-describe("@brick-ts/core Database & Drizzle Integration", () => {
+describe("@brick/core Database & Drizzle Integration", () => {
   beforeEach(() => {
     resetGlobalRegistry();
   });

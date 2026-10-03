@@ -8,8 +8,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@brick-ts/core": "workspace:*",
-    "@brick-ts/cli": "workspace:*",
+    "@brick/core": "workspace:*",
+    "@brick/cli": "workspace:*",
     "@sinclair/typebox": "^0.34.0"
   },
   "devDependencies": {

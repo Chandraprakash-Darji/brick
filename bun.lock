@@ -13,8 +13,8 @@
       "name": "basic-app",
       "version": "0.1.0",
       "dependencies": {
-        "@brick-ts/cli": "workspace:*",
-        "@brick-ts/core": "workspace:*",
+        "@brick/cli": "workspace:*",
+        "@brick/core": "workspace:*",
         "@sinclair/typebox": "^0.34.0",
       },
       "devDependencies": {
@@ -23,13 +23,13 @@
       },
     },
     "packages/cli": {
-      "name": "@brick-ts/cli",
+      "name": "@brick/cli",
       "version": "0.1.0",
       "bin": {
         "brick": "./dist/bin.js",
       },
       "dependencies": {
-        "@brick-ts/core": "^0.1.0",
+        "@brick/core": "^0.1.0",
         "@sinclair/typebox": "^0.34.0",
         "elysia": "^1.2.0",
       },
@@ -40,7 +40,7 @@
       },
     },
     "packages/core": {
-      "name": "@brick-ts/core",
+      "name": "@brick/core",
       "version": "0.1.0",
       "dependencies": {
         "@sinclair/typebox": "^0.34.0",
@@ -57,9 +57,9 @@
   "packages": {
     "@borewit/text-codec": ["@borewit/text-codec@0.2.2", "", {}, "sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ=="],
 
-    "@brick-ts/cli": ["@brick-ts/cli@workspace:packages/cli"],
+    "@brick/cli": ["@brick/cli@workspace:packages/cli"],
 
-    "@brick-ts/core": ["@brick-ts/core@workspace:packages/core"],
+    "@brick/core": ["@brick/core@workspace:packages/core"],
 
     "@oxc-project/types": ["@oxc-project/types@0.152.0", "", {}, "sha512-oM/5rLBm2tPkg0iBgkH/FOeR3PCDpY19GTgAZjMFM8h9WI9VW7cLgzp6nwtarYKmovavIQZ+Fe/RKX/8C8O/Rw=="],
 

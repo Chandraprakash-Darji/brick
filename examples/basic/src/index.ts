@@ -2,7 +2,7 @@ import {
   getGlobalRegistry,
   ValidationError,
   ActionExecutionError,
-} from "@brick-ts/core";
+} from "@brick/core";
 import {
   pagesService,
   createPage,

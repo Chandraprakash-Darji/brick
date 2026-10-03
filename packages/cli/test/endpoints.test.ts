@@ -6,10 +6,10 @@ import {
   text,
   resetGlobalRegistry,
   ActionExecutionError,
-} from "@brick-ts/core";
+} from "@brick/core";
 import { createBrickServer } from "../src/server";
 
-describe("@brick-ts/cli app.endpoint()", () => {
+describe("@brick/cli app.endpoint()", () => {
   beforeEach(() => {
     resetGlobalRegistry();
   });

@@ -1,5 +1,5 @@
 {
-  "name": "@brick-ts/core",
+  "name": "@brick/core",
   "version": "0.1.0",
   "description": "Core engine primitives for the Brick-TS framework",
   "type": "module",
