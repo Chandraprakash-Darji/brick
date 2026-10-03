@@ -9,7 +9,7 @@ import {
   type Action,
   resolveSecrets,
   type SecretSource,
-} from "@brick/core";
+} from "@elregaldo/core";
 import {
   requestLoggingPlugin,
   type RequestLoggingOptions,

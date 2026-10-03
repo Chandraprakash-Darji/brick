@@ -7,7 +7,7 @@
     "examples/basic"
   ],
   "scripts": {
-    "build": "bun run --filter @brick/core build && bun run --filter @brick/cli build",
+    "build": "bun run --filter @elregaldo/core build && bun run --filter @elregaldo/cli build",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },

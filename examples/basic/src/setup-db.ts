@@ -1,4 +1,4 @@
-import { syncSchema } from "@brick/core";
+import { syncSchema } from "@elregaldo/core";
 import { pagesDb } from "./services/pages/service";
 
 // Explicit development setup command, never imported by server startup.

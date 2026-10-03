@@ -5,7 +5,7 @@ import {
   resetGlobalRegistry,
   t,
   ActionExecutionError,
-} from "@brick/core";
+} from "@elregaldo/core";
 import { createBrickServer } from "../src/server";
 
 function makeService() {
@@ -30,7 +30,7 @@ function makeService() {
   return svc;
 }
 
-describe("@brick/cli request logging & reference docs", () => {
+describe("@elregaldo/cli request logging & reference docs", () => {
   beforeEach(() => {
     resetGlobalRegistry();
   });

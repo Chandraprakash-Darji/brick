@@ -11,7 +11,7 @@ import {
   ActionExecutionError,
 } from "../src";
 
-describe("@brick/core Engine", () => {
+describe("@elregaldo/core Engine", () => {
   beforeEach(() => {
     resetGlobalRegistry();
   });

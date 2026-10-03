@@ -37,7 +37,7 @@ export interface DatabaseAdapter<TDb = any, TConfig = any> {
 /**
  * Creates a PostgreSQL Drizzle instance using postgres-js.
  * Lazily loads 'postgres' and 'drizzle-orm/postgres-js' at runtime so
- * importing `@brick/core` never requires the optional peer installed.
+ * importing `@elregaldo/core` never requires the optional peer installed.
  * Works on Bun, Node CJS, and Node ESM.
  */
 export function createPostgresDatabase<

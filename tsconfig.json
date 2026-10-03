@@ -11,8 +11,8 @@
     "sourceMap": true,
     "types": ["bun"],
     "paths": {
-      "@brick/core": ["./packages/core/src"],
-      "@brick/cli": ["./packages/cli/src"]
+      "@elregaldo/core": ["./packages/core/src"],
+      "@elregaldo/cli": ["./packages/cli/src"]
     }
   }
 }

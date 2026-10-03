@@ -4,10 +4,10 @@ import {
   defineAction,
   t,
   resetGlobalRegistry,
-} from "@brick/core";
+} from "@elregaldo/core";
 import { createBrickServer } from "../src/server";
 
-describe("@brick/cli OpenAPI & Interactive Documentation Server", () => {
+describe("@elregaldo/cli OpenAPI & Interactive Documentation Server", () => {
   beforeEach(() => {
     resetGlobalRegistry();
   });
