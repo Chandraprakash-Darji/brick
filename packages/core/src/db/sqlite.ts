@@ -1,7 +1,10 @@
-import { Database } from "bun:sqlite";
-import { drizzle, type BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import type { Database } from "bun:sqlite";
+import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+
+import { loadDriver } from "./load";
 
 export type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+
 export {
   sqliteTable,
   text,
@@ -40,10 +43,27 @@ export type BrickSQLiteDatabase<
 /**
  * Creates a zero-config SQLite database using Bun's native `bun:sqlite` engine
  * and Drizzle ORM. Defaults to an ultra-fast in-memory database (`:memory:`).
+ *
+ * Bun-only: the driver is loaded lazily so importing `@brick-ts/core` on
+ * other runtimes (e.g. Node) stays safe until this function is actually
+ * called.
  */
 export function createSQLiteDatabase<
   TSchema extends Record<string, unknown> = Record<string, unknown>
 >(config: SQLiteDatabaseConfig<TSchema> = {}): BunSQLiteDatabase<TSchema> {
+  let Database: new (path: string) => Database;
+  let drizzle: (
+    client: Database,
+    config?: { schema?: TSchema },
+  ) => BunSQLiteDatabase<TSchema>;
+  try {
+    ({ Database } = loadDriver("bun:sqlite"));
+    ({ drizzle } = loadDriver("drizzle-orm/bun-sqlite"));
+  } catch (err: any) {
+    throw new Error(
+      `[Brick-TS DB] SQLite engine requires the Bun runtime ('bun:sqlite' is unavailable here). Original error: ${err?.message ?? err}`,
+    );
+  }
   const filePath = config.filename ?? config.path ?? ":memory:";
   const client = config.client ?? new Database(filePath);
 

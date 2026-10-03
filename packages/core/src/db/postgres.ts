@@ -1,3 +1,5 @@
+import { loadDriver } from "./load";
+
 export interface PostgresDatabaseConfig<
   TSchema extends Record<string, unknown> = Record<string, unknown>
 > {
@@ -28,7 +30,9 @@ export interface DatabaseAdapter<TDb = any, TConfig = any> {
 
 /**
  * Creates a PostgreSQL Drizzle instance using postgres-js.
- * Lazily loads 'postgres' and 'drizzle-orm/postgres-js' driver at runtime.
+ * Lazily loads 'postgres' and 'drizzle-orm/postgres-js' at runtime so
+ * importing `@brick-ts/core` never requires the optional peer installed.
+ * Works on Bun, Node CJS, and Node ESM.
  */
 export function createPostgresDatabase<
   TSchema extends Record<string, unknown> = Record<string, unknown>
@@ -39,8 +43,13 @@ export function createPostgresDatabase<
     (typeof process !== "undefined" ? process.env?.DATABASE_URL : undefined);
 
   try {
-    const postgres = require("postgres");
-    const { drizzle } = require("drizzle-orm/postgres-js");
+    const postgresModule = loadDriver("postgres");
+    // CJS require returns the callable directly; ESM-interop loaders
+    // (e.g. the better-auth CLI config loader) hand back a namespace.
+    const postgres = postgresModule?.default ?? postgresModule;
+    const postgresJs = loadDriver("drizzle-orm/postgres-js");
+    const drizzle =
+      postgresJs?.drizzle ?? postgresJs?.default?.drizzle ?? postgresJs;
 
     const client = connectionUrl
       ? postgres(connectionUrl, {

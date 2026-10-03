@@ -9,11 +9,16 @@
     ".": {
       "import": "./src/index.ts",
       "types": "./src/index.ts"
+    },
+    "./pg": {
+      "import": "./src/pg.ts",
+      "types": "./src/pg.ts"
     }
   },
   "dependencies": {
     "@sinclair/typebox": "^0.34.0",
-    "drizzle-orm": "^0.39.0"
+    "drizzle-orm": "^0.39.0",
+    "postgres": "^3.4.7"
   },
   "devDependencies": {
     "@types/bun": "latest",
