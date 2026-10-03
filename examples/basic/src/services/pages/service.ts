@@ -1,19 +1,19 @@
 import {
   defineService,
-  defineAction,
-  t,
   sqliteTable,
   text,
   integer,
   eq,
   and,
-  sql,
+  t,
 } from "@brick-ts/core";
 
 export type Theme = "github-dark" | "github-light" | "dracula" | "nord";
 export type ContentType = "markdown" | "html";
+export const THEMES = ["github-dark", "github-light", "dracula", "nord"] as const;
+export const CONTENT_TYPES = ["markdown", "html"] as const;
 
-// 1. Drizzle SQLite schema for Pages (matching ../pages/server/dsl/page.resource.yaml)
+// 1. Define pure Drizzle table (The single source of truth)
 export const pagesTable = sqliteTable("pages", {
   id: text("id").primaryKey(),
   slug: text("slug").notNull().unique(),
@@ -29,37 +29,47 @@ export const pagesTable = sqliteTable("pages", {
 
 export type Page = typeof pagesTable.$inferSelect;
 
-// 2. Allowed Themes and Content Types from ../pages specification
-export const THEMES = ["github-dark", "github-light", "dracula", "nord"] as const;
-export const CONTENT_TYPES = ["markdown", "html"] as const;
-
-// 3. Define the 'pages' service with persistent SQLite backing
+// 2. Define Service with SQLite database
 export const pagesService = defineService("pages", {
   database: true,
 });
 
-// Helper to ensure tables exist
-export function initPagesDatabase() {
-  const db = pagesService.getDb();
-  if (db) {
-    db.run(sql`
-      CREATE TABLE IF NOT EXISTS pages (
-        id TEXT PRIMARY KEY,
-        slug TEXT NOT NULL UNIQUE,
-        title TEXT NOT NULL,
-        content TEXT NOT NULL,
-        content_type TEXT NOT NULL DEFAULT 'markdown',
-        is_public INTEGER NOT NULL DEFAULT 0,
-        theme TEXT NOT NULL DEFAULT 'github-dark',
-        user_id TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-    `);
-  }
-}
+// 3. Attach Resource at Service Level (Automatic CRUD & Schema Registration)
+export const pagesResource = pagesService.resource({
+  name: "page",
+  table: pagesTable,
+  ownerField: "userId",
+  operations: {
+    list: { defaultLimit: 20, maxLimit: 100 },
+    get: true,
+    create: true,
+    update: true,
+    delete: true,
+  },
+  hooks: {
+    beforeCreate: async ({ data, ctx, error }) => {
+      // Validate unique slug before writing
+      const exists = await ctx.db
+        .select()
+        .from(pagesTable)
+        .where(eq(pagesTable.slug, data.slug));
+      if (exists.length > 0) {
+        error.CONFLICT(`Slug '${data.slug}' is already taken`);
+      }
+    },
+  },
+});
 
-// TypeBox Schema Definitions
+// Export CRUD actions generated automatically by resource
+export const {
+  create: createPage,
+  get: getPage,
+  list: listPages,
+  update: updatePage,
+  delete: deletePage,
+} = pagesResource.actions;
+
+// TypeBox Page Schema for external references
 export const PageSchema = t.Object({
   id: t.String(),
   slug: t.String(),
@@ -97,126 +107,14 @@ export function extractHeadings(markdown: string) {
   return headings;
 }
 
-// -------------------------------------------------------------
-// ACTIONS (CRUD + Public Retrieval + Markdown Rendering)
-// -------------------------------------------------------------
-
-/**
- * createPage: Create a new publication page
- */
-export const createPage = defineAction({
-  name: "createPage",
-  description: "Create a new document/page in the publishing workspace",
-  input: t.Object({
-    slug: t.String({
-      minLength: 2,
-      maxLength: 100,
-      pattern: "^[a-z0-9-]+$",
-      description: "URL-friendly unique slug (lowercase letters, numbers, dashes)",
-    }),
-    title: t.String({ minLength: 1, maxLength: 200 }),
-    content: t.String({ minLength: 1 }),
-    contentType: t.Optional(
-      t.Union([t.Literal("markdown"), t.Literal("html")], { default: "markdown" })
-    ),
-    isPublic: t.Optional(t.Boolean({ default: false })),
-    theme: t.Optional(
-      t.Union(
-        [
-          t.Literal("github-dark"),
-          t.Literal("github-light"),
-          t.Literal("dracula"),
-          t.Literal("nord"),
-        ],
-        { default: "github-dark" }
-      )
-    ),
-  }),
-  output: PageSchema,
-  errors: {
-    SLUG_EXISTS: { status: 409, message: "A page with this slug already exists" },
-  },
-  execute: async ({ input, ctx, error }): Promise<Page> => {
-    initPagesDatabase();
-    const db = ctx.db ?? pagesService.getDb();
-
-    // Check slug collision
-    const existing = await db
-      .select()
-      .from(pagesTable)
-      .where(eq(pagesTable.slug, input.slug));
-
-    if (existing.length > 0) {
-      error.SLUG_EXISTS(`Slug '${input.slug}' is already taken`);
-    }
-
-    const now = new Date().toISOString();
-    const newPage: Page = {
-      id: `pg_${Math.random().toString(36).substring(2, 10)}`,
-      slug: input.slug,
-      title: input.title,
-      content: input.content,
-      contentType: input.contentType ?? "markdown",
-      isPublic: input.isPublic ?? false,
-      theme: input.theme ?? "github-dark",
-      userId: ctx.user?.id ?? null,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    await db.insert(pagesTable).values(newPage);
-    ctx.logger.info(`Page created: '${newPage.title}' (slug: /${newPage.slug})`);
-
-    return newPage;
-  },
-});
-
-/**
- * getPage: Retrieve page by internal ID
- */
-export const getPage = defineAction({
-  name: "getPage",
-  description: "Retrieve a page by its internal ID",
-  input: t.Object({
-    id: t.String(),
-  }),
-  output: PageSchema,
-  errors: {
-    NOT_FOUND: { status: 404, message: "Page not found" },
-  },
-  execute: async ({ input, ctx, error }): Promise<Page> => {
-    initPagesDatabase();
-    const db = ctx.db ?? pagesService.getDb();
-    const [page] = await db
-      .select()
-      .from(pagesTable)
-      .where(eq(pagesTable.id, input.id));
-
-    if (!page) {
-      error.NOT_FOUND(`Page with ID '${input.id}' does not exist`);
-    }
-
-    return page;
-  },
-});
-
-/**
- * getPublicPage: Fetch a published page by slug (publicly accessible, no auth required)
- */
-export const getPublicPage = defineAction({
+// 4. Custom public reader action (no auth / no owner filtering)
+export const getPublicPage = pagesService.action({
   name: "getPublicPage",
   description: "Get a published page by slug (public reading surface)",
-  input: t.Object({
-    slug: t.String(),
-  }),
-  output: PageSchema,
-  errors: {
-    NOT_FOUND: { status: 404, message: "Published page not found" },
-  },
+  path: "/api/public/pages/:slug",
+  input: t.Object({ slug: t.String() }),
   execute: async ({ input, ctx, error }): Promise<Page> => {
-    initPagesDatabase();
-    const db = ctx.db ?? pagesService.getDb();
-    const [page] = await db
+    const [page] = await ctx.db
       .select()
       .from(pagesTable)
       .where(and(eq(pagesTable.slug, input.slug), eq(pagesTable.isPublic, true)));
@@ -229,134 +127,8 @@ export const getPublicPage = defineAction({
   },
 });
 
-/**
- * listPages: List pages with filtering and search
- */
-export const listPages = defineAction({
-  name: "listPages",
-  description: "List pages with optional filtering by visibility and search query",
-  input: t.Object({
-    limit: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
-    isPublic: t.Optional(t.Boolean()),
-  }),
-  output: t.Object({
-    pages: t.Array(PageSchema),
-    total: t.Number(),
-  }),
-  execute: async ({ input, ctx }) => {
-    initPagesDatabase();
-    const db = ctx.db ?? pagesService.getDb();
-
-    let query = db.select().from(pagesTable);
-    if (input.isPublic !== undefined) {
-      query = query.where(eq(pagesTable.isPublic, input.isPublic)) as any;
-    }
-
-    const all = await query;
-    const limit = input.limit ?? 50;
-    const sliced = all.slice(0, limit);
-
-    return {
-      pages: sliced,
-      total: all.length,
-    };
-  },
-});
-
-/**
- * updatePage: Update document content, title, theme, or visibility
- */
-export const updatePage = defineAction({
-  name: "updatePage",
-  description: "Update page content, metadata, theme, or publication status",
-  input: t.Object({
-    id: t.String(),
-    title: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
-    content: t.Optional(t.String()),
-    isPublic: t.Optional(t.Boolean()),
-    theme: t.Optional(
-      t.Union([
-        t.Literal("github-dark"),
-        t.Literal("github-light"),
-        t.Literal("dracula"),
-        t.Literal("nord"),
-      ])
-    ),
-  }),
-  output: PageSchema,
-  errors: {
-    NOT_FOUND: { status: 404, message: "Page not found" },
-  },
-  execute: async ({ input, ctx, error }): Promise<Page> => {
-    initPagesDatabase();
-    const db = ctx.db ?? pagesService.getDb();
-
-    const [existing] = await db
-      .select()
-      .from(pagesTable)
-      .where(eq(pagesTable.id, input.id));
-
-    if (!existing) {
-      error.NOT_FOUND(`Page with ID '${input.id}' not found`);
-    }
-
-    const updates: Partial<Page> = {
-      updatedAt: new Date().toISOString(),
-    };
-    if (input.title !== undefined) updates.title = input.title;
-    if (input.content !== undefined) updates.content = input.content;
-    if (input.isPublic !== undefined) updates.isPublic = input.isPublic;
-    if (input.theme !== undefined) updates.theme = input.theme;
-
-    await db.update(pagesTable).set(updates).where(eq(pagesTable.id, input.id));
-
-    const [updated] = await db
-      .select()
-      .from(pagesTable)
-      .where(eq(pagesTable.id, input.id));
-
-    return updated;
-  },
-});
-
-/**
- * deletePage: Remove a page from the workspace
- */
-export const deletePage = defineAction({
-  name: "deletePage",
-  description: "Delete a page by its ID",
-  input: t.Object({
-    id: t.String(),
-  }),
-  output: t.Object({
-    success: t.Boolean(),
-    id: t.String(),
-  }),
-  errors: {
-    NOT_FOUND: { status: 404, message: "Page not found" },
-  },
-  execute: async ({ input, ctx, error }) => {
-    initPagesDatabase();
-    const db = ctx.db ?? pagesService.getDb();
-
-    const [existing] = await db
-      .select()
-      .from(pagesTable)
-      .where(eq(pagesTable.id, input.id));
-
-    if (!existing) {
-      error.NOT_FOUND(`Page with ID '${input.id}' not found`);
-    }
-
-    await db.delete(pagesTable).where(eq(pagesTable.id, input.id));
-    return { success: true, id: input.id };
-  },
-});
-
-/**
- * renderPage: Prepares a published page for reading, extracting TOC and styling
- */
-export const renderPage = defineAction({
+// 5. Custom render action with TOC extraction
+export const renderPage = pagesService.action({
   name: "renderPage",
   description: "Render markdown document with Table of Contents and theme styling",
   input: t.Object({
@@ -375,14 +147,8 @@ export const renderPage = defineAction({
       })
     ),
   }),
-  errors: {
-    NOT_FOUND: { status: 404, message: "Page not found" },
-  },
   execute: async ({ input, ctx, error }) => {
-    initPagesDatabase();
-    const db = ctx.db ?? pagesService.getDb();
-
-    const [page] = await db
+    const [page] = await ctx.db
       .select()
       .from(pagesTable)
       .where(eq(pagesTable.slug, input.slug));
@@ -402,13 +168,3 @@ export const renderPage = defineAction({
     };
   },
 });
-
-// Register actions on pagesService
-pagesService
-  .action(createPage)
-  .action(getPage)
-  .action(getPublicPage)
-  .action(listPages)
-  .action(updatePage)
-  .action(deletePage)
-  .action(renderPage);

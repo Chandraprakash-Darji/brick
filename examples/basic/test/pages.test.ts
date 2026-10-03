@@ -9,7 +9,6 @@ import {
   updatePage,
   deletePage,
   renderPage,
-  initPagesDatabase,
   pagesTable,
 } from "../src/services/pages/service";
 
@@ -17,12 +16,11 @@ describe("Pages Service E2E Tests (Mirroring ../pages)", () => {
   let app: ReturnType<typeof createBrickServer>;
 
   beforeEach(async () => {
-    initPagesDatabase();
+    app = createBrickServer({ services: [pagesService] });
     const db = pagesService.getDb();
     if (db) {
       await db.delete(pagesTable);
     }
-    app = createBrickServer({ services: [pagesService] });
   });
 
   describe("createPage", () => {
@@ -54,7 +52,7 @@ describe("Pages Service E2E Tests (Mirroring ../pages)", () => {
             content: "Some content",
           },
         })
-      ).rejects.toThrow("Validation failed for action 'createPage' input");
+      ).rejects.toThrow(/Validation failed for action '(createPage|page\.create)' input/);
     });
 
     it("should reject duplicate slug with 409 SLUG_EXISTS error", async () => {
@@ -233,7 +231,79 @@ How it works.`,
 
       const publicOnly = await listPages({ input: { isPublic: true } });
       expect(publicOnly.total).toBe(2);
-      expect(publicOnly.pages.every((p) => p.isPublic)).toBe(true);
+      expect(publicOnly.pages.every((p: any) => p.isPublic)).toBe(true);
+    });
+  });
+
+  describe("REST Route Binding (/api/page)", () => {
+    it("should create, list, get, update, and delete via standard REST HTTP methods", async () => {
+      // 1. POST /api/page (create)
+      const createRes = await app.handle(
+        new Request("http://localhost:4000/api/page", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            slug: "rest-post",
+            title: "REST Title",
+            content: "REST Body",
+            isPublic: true,
+          }),
+        })
+      );
+      expect(createRes.status).toBe(200);
+      const created = await createRes.json();
+      expect(created.id).toStartWith("pg_");
+      expect(created.slug).toBe("rest-post");
+
+      // 2. GET /api/page (list)
+      const listRes = await app.handle(
+        new Request("http://localhost:4000/api/page?limit=10")
+      );
+      expect(listRes.status).toBe(200);
+      const listData = await listRes.json();
+      expect(listData.total).toBe(1);
+      expect(listData.pages.length).toBe(1);
+
+      // 3. GET /api/page/:id (get)
+      const getRes = await app.handle(
+        new Request(`http://localhost:4000/api/page/${created.id}`)
+      );
+      expect(getRes.status).toBe(200);
+      const getData = await getRes.json();
+      expect(getData.id).toBe(created.id);
+      expect(getData.title).toBe("REST Title");
+
+      // 4. PATCH /api/page/:id (update)
+      const patchRes = await app.handle(
+        new Request(`http://localhost:4000/api/page/${created.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: "Updated via PATCH",
+          }),
+        })
+      );
+      expect(patchRes.status).toBe(200);
+      const patched = await patchRes.json();
+      expect(patched.title).toBe("Updated via PATCH");
+
+      // 5. Custom path route: GET /api/public/pages/:slug
+      const publicSlugRes = await app.handle(
+        new Request("http://localhost:4000/api/public/pages/rest-post")
+      );
+      expect(publicSlugRes.status).toBe(200);
+      const publicSlugData = await publicSlugRes.json();
+      expect(publicSlugData.slug).toBe("rest-post");
+
+      // 6. DELETE /api/page/:id (delete)
+      const deleteRes = await app.handle(
+        new Request(`http://localhost:4000/api/page/${created.id}`, {
+          method: "DELETE",
+        })
+      );
+      expect(deleteRes.status).toBe(200);
+      const deletedData = await deleteRes.json();
+      expect(deletedData.success).toBe(true);
     });
   });
 });

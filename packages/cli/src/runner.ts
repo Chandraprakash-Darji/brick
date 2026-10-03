@@ -31,8 +31,13 @@ export async function startDevServer(options: DevServerOptions = {}) {
 
   for (const svc of services) {
     console.log(`   • ${svc.name} (${svc.listActions().length} actions)`);
+    if (typeof (svc as any).listResources === "function") {
+      for (const res of (svc as any).listResources()) {
+        console.log(`     -> Resource: /api/${res.name} (REST: GET, POST, /:id: GET, PATCH, DELETE)`);
+      }
+    }
     for (const act of svc.listActions()) {
-      console.log(`     -> /api/${svc.name}/${act.name}`);
+      console.log(`     -> Action:   /api/${svc.name}/${act.name}`);
     }
   }
 

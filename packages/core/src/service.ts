@@ -9,10 +9,13 @@ import type {
   ServiceSchema,
   BaseContext,
   Logger,
+  Resource,
+  ResourceConfig,
 } from "./types";
 import { defineAction } from "./action";
 import { getGlobalRegistry } from "./registry";
-import { createDatabase } from "./db";
+import { createDatabase, syncSchema, getTableName } from "./db";
+import { defineResource } from "./resource";
 
 const defaultLogger: Logger = {
   info: (...args) => console.log("[INFO]", ...args),
@@ -28,7 +31,10 @@ export class ServiceImpl<
   readonly name: string;
   readonly options: ServiceOptions<any, TServiceContext, TDb>;
   readonly actions = new Map<string, Action<any, any, any, any>>();
+  readonly tables = new Map<string, any>();
+  readonly resources = new Map<string, Resource<any, BaseContext<TDb> & TServiceContext>>();
   private dbInstance: any = undefined;
+  private schemaSynced = false;
 
   constructor(name: string, options: ServiceOptions<any, TServiceContext, TDb> = {}) {
     this.name = name;
@@ -43,18 +49,57 @@ export class ServiceImpl<
   }
 
   get db(): TDb | undefined {
-    if (!this.dbInstance && this.options.database) {
-      const dbConfig =
-        typeof this.options.database === "object"
-          ? { ...this.options.database, name: this.name }
-          : { name: this.name };
-      this.dbInstance = createDatabase(dbConfig);
-    }
-    return this.dbInstance;
+    return this.getDb();
   }
 
   set db(value: any) {
     this.dbInstance = value;
+  }
+
+  registerTable(table: any): this {
+    try {
+      const tableName = getTableName(table);
+      this.tables.set(tableName, table);
+    } catch {
+      const fallbackName = (table as any)._?.name ?? `table_${this.tables.size + 1}`;
+      this.tables.set(fallbackName, table);
+    }
+
+    if (this.dbInstance) {
+      this.syncSchema();
+    }
+
+    return this;
+  }
+
+  resource<TTable = any>(
+    config: ResourceConfig<TTable, BaseContext<TDb> & TServiceContext>
+  ): Resource<TTable, BaseContext<TDb> & TServiceContext> {
+    const resourceInstance = defineResource(this, config);
+    this.resources.set(resourceInstance.name, resourceInstance);
+
+    if (this.dbInstance) {
+      this.syncSchema();
+    }
+
+    return resourceInstance;
+  }
+
+  getResource(name: string): Resource<any, BaseContext<TDb> & TServiceContext> | undefined {
+    return this.resources.get(name);
+  }
+
+  listResources(): Resource<any, BaseContext<TDb> & TServiceContext>[] {
+    return Array.from(this.resources.values());
+  }
+
+  syncSchema(): Promise<void> | void {
+    if (this.schemaSynced) return;
+    this.schemaSynced = true;
+    const db = this.getDb();
+    if (db && this.tables.size > 0) {
+      return syncSchema(this.tables, db);
+    }
   }
 
   action<
@@ -104,15 +149,25 @@ export class ServiceImpl<
   }
 
   listActions(): Action<any, any, any, any>[] {
-    return Array.from(this.actions.values());
+    return Array.from(new Set(this.actions.values()));
   }
 
   getDb<T = TDb>(): T | undefined {
-    return this.db as T | undefined;
+    if (!this.dbInstance && this.options.database) {
+      const dbConfig =
+        typeof this.options.database === "object"
+          ? { ...this.options.database, name: this.name }
+          : { name: this.name };
+      this.dbInstance = createDatabase(dbConfig);
+    }
+    return this.dbInstance as T | undefined;
   }
 
   setDb(db: any): void {
     this.dbInstance = db;
+    if (db && this.tables.size > 0) {
+      this.syncSchema();
+    }
   }
 
   /**
@@ -171,6 +226,11 @@ export class ServiceImpl<
         errors: act.config.errors,
         emits: act.config.emits,
         tags: act.config.tags,
+      })),
+      resources: this.listResources().map((res) => ({
+        name: res.name,
+        ownerField: res.ownerField,
+        operations: Object.keys(res.actions),
       })),
     };
   }

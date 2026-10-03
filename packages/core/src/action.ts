@@ -23,6 +23,15 @@ const defaultLogger: Logger = {
   debug: (...args) => console.debug("[DEBUG]", ...args),
 };
 
+const standardErrorDefaults: Record<string, { status: number; message: string }> = {
+  BAD_REQUEST: { status: 400, message: "Bad Request" },
+  UNAUTHORIZED: { status: 401, message: "Unauthorized" },
+  FORBIDDEN: { status: 403, message: "Forbidden" },
+  NOT_FOUND: { status: 404, message: "Not Found" },
+  CONFLICT: { status: 409, message: "Conflict" },
+  INTERNAL_SERVER_ERROR: { status: 500, message: "Internal Server Error" },
+};
+
 function createDefaultContext(partial?: any): BaseContext & any {
   const randomId = Math.random().toString(36).substring(2, 10);
   const req = partial?.request ?? new Request("http://localhost");
@@ -39,18 +48,29 @@ function createDefaultContext(partial?: any): BaseContext & any {
   };
 }
 
-function buildErrorHelpers<TErrors extends Record<string, ActionErrorDefinition>>(
+export function buildErrorHelpers<TErrors extends Record<string, ActionErrorDefinition>>(
   errorsDef?: TErrors
 ): ErrorBuilder<TErrors> {
   const helpers: Record<string, any> = {};
-  if (!errorsDef) return helpers as ErrorBuilder<TErrors>;
 
-  for (const [code, def] of Object.entries(errorsDef)) {
+  // 1. Populate standard HTTP error helpers
+  for (const [code, def] of Object.entries(standardErrorDefaults)) {
     helpers[code] = (overrideMessage?: string, details?: unknown) => {
       const message = overrideMessage || def.message;
-      const status = def.status || 400;
+      const status = def.status;
       throw new ActionExecutionError(code, message, status, details);
     };
+  }
+
+  // 2. Populate or override with user-defined action errors
+  if (errorsDef) {
+    for (const [code, def] of Object.entries(errorsDef)) {
+      helpers[code] = (overrideMessage?: string, details?: unknown) => {
+        const message = overrideMessage || def.message;
+        const status = def.status || 400;
+        throw new ActionExecutionError(code, message, status, details);
+      };
+    }
   }
 
   return helpers as ErrorBuilder<TErrors>;
@@ -110,9 +130,9 @@ export function defineAction(config: any): any {
     let fullCtx: any;
     const boundService = (actionFn as any).service;
     if (boundService && typeof boundService.resolveContext === "function") {
-      fullCtx = await boundService.resolveContext(params.ctx);
+      fullCtx = await boundService.resolveContext(params?.ctx);
     } else {
-      fullCtx = createDefaultContext(params.ctx);
+      fullCtx = createDefaultContext(params?.ctx);
     }
 
     // Auto-populate ctx.db from the bound service or global registry if not provided in call ctx
@@ -129,7 +149,7 @@ export function defineAction(config: any): any {
 
     // 1. Validate Input
     if (config.input) {
-      const inputValidation = actionFn.validateInput(params.input);
+      const inputValidation = actionFn.validateInput(params?.input);
       if (!inputValidation.success) {
         throw new ValidationError(
           `Validation failed for action '${config.name}' input` as string,
@@ -142,7 +162,7 @@ export function defineAction(config: any): any {
     if (config.authorize) {
       const allowed = await config.authorize({
         user: fullCtx.user,
-        input: params.input,
+        input: params?.input,
         ctx: fullCtx,
       });
       if (!allowed) {
@@ -156,7 +176,7 @@ export function defineAction(config: any): any {
 
     // 3. Execute implementation
     const result = await config.execute({
-      input: params.input,
+      input: params?.input,
       ctx: fullCtx,
       error: errorHelpers,
     });

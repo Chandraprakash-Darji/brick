@@ -104,9 +104,20 @@ export class ActionExecutionError extends Error {
   }
 }
 
-export type ErrorBuilder<TErrors extends Record<string, ActionErrorDefinition>> = {
-  [K in keyof TErrors]: (overrideMessage?: string, details?: unknown) => never;
-};
+export interface StandardErrorMap {
+  BAD_REQUEST: (overrideMessage?: string, details?: unknown) => never;
+  UNAUTHORIZED: (overrideMessage?: string, details?: unknown) => never;
+  FORBIDDEN: (overrideMessage?: string, details?: unknown) => never;
+  NOT_FOUND: (overrideMessage?: string, details?: unknown) => never;
+  CONFLICT: (overrideMessage?: string, details?: unknown) => never;
+  INTERNAL_SERVER_ERROR: (overrideMessage?: string, details?: unknown) => never;
+  [key: string]: ((overrideMessage?: string, details?: unknown) => never) | undefined;
+}
+
+export type ErrorBuilder<TErrors extends Record<string, ActionErrorDefinition>> =
+  StandardErrorMap & {
+    [K in keyof TErrors]: (overrideMessage?: string, details?: unknown) => never;
+  };
 
 export interface BaseActionConfig<
   TInputSchema extends TSchema | undefined = undefined,
@@ -115,6 +126,8 @@ export interface BaseActionConfig<
 > {
   name: string;
   description?: string;
+  path?: string;
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   input?: TInputSchema;
   output?: TOutputSchema;
   errors?: TErrors;
@@ -191,6 +204,62 @@ export interface Action<
   }): Promise<TOutputSchema extends TSchema ? Static<TOutputSchema> : any>;
   validateInput(input: unknown): { success: true; data: any } | { success: false; errors: ValidationErrorItem[] };
   validateOutput(output: unknown): { success: true; data: any } | { success: false; errors: ValidationErrorItem[] };
+}
+
+export interface ResourceOperationsConfig {
+  list?: boolean | { defaultLimit?: number; maxLimit?: number };
+  get?: boolean;
+  create?: boolean;
+  update?: boolean;
+  delete?: boolean;
+}
+
+export interface ResourceHooks<TData = any, TCtx = any> {
+  beforeCreate?: (params: { data: any; ctx: TCtx; error: any }) => Promise<void> | void;
+  afterCreate?: (params: { data: any; result: any; ctx: TCtx }) => Promise<void> | void;
+  beforeUpdate?: (params: { id: string | number; data: any; existing: any; ctx: TCtx; error: any }) => Promise<void> | void;
+  afterUpdate?: (params: { id: string | number; data: any; result: any; ctx: TCtx }) => Promise<void> | void;
+  beforeDelete?: (params: { id: string | number; existing: any; ctx: TCtx; error: any }) => Promise<void> | void;
+  afterDelete?: (params: { id: string | number; existing: any; ctx: TCtx }) => Promise<void> | void;
+}
+
+export interface ResourceConfig<TTable = any, TCtx = any> {
+  name: string;
+  table: TTable;
+  ownerField?: string;
+  idField?: string;
+  idPrefix?: string;
+  idGenerator?: () => string;
+  pluralName?: string;
+  operations?: ResourceOperationsConfig;
+  hooks?: ResourceHooks<any, TCtx>;
+  fields?: Record<string, TSchema>;
+  errors?: Record<string, ActionErrorDefinition>;
+}
+
+export interface Resource<
+  TTable = any,
+  TCtx extends ActionContext = ActionContext
+> {
+  readonly name: string;
+  readonly serviceName: string;
+  readonly table: TTable;
+  readonly ownerField?: string;
+  readonly idField: string;
+  readonly pluralName: string;
+  readonly config: ResourceConfig<TTable, TCtx>;
+  readonly actions: {
+    list: Action<any, any, any, TCtx>;
+    get: Action<any, any, any, TCtx>;
+    create: Action<any, any, any, TCtx>;
+    update: Action<any, any, any, TCtx>;
+    delete: Action<any, any, any, TCtx>;
+  };
+  list: Action<any, any, any, TCtx>;
+  get: Action<any, any, any, TCtx>;
+  create: Action<any, any, any, TCtx>;
+  update: Action<any, any, any, TCtx>;
+  delete: Action<any, any, any, TCtx>;
 }
 
 export interface DatabaseOptions<TSchema = any> {
@@ -286,6 +355,11 @@ export interface ServiceSchema {
   hasDatabase: boolean;
   databaseConfig?: DatabaseOptions;
   actions: ActionSchema[];
+  resources?: {
+    name: string;
+    ownerField?: string;
+    operations: string[];
+  }[];
 }
 
 export interface ArchitectureSchema {
@@ -300,6 +374,8 @@ export interface Service<
   readonly name: string;
   readonly options: ServiceOptions<any, TServiceContext, TDb>;
   readonly actions: Map<string, Action<any, any, any, any>>;
+  readonly tables: Map<string, any>;
+  readonly resources: Map<string, Resource<any, BaseContext<TDb> & TServiceContext>>;
   readonly db?: TDb;
 
   action<
@@ -326,10 +402,18 @@ export interface Service<
     config: ActionConfigWithoutAuthorize<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>
   ): Action<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>;
 
+  resource<TTable = any>(
+    config: ResourceConfig<TTable, BaseContext<TDb> & TServiceContext>
+  ): Resource<TTable, BaseContext<TDb> & TServiceContext>;
+
+  registerTable(table: any): this;
   getAction(name: string): Action<any, any, any, any> | undefined;
   listActions(): Action<any, any, any, any>[];
+  getResource(name: string): Resource<any, BaseContext<TDb> & TServiceContext> | undefined;
+  listResources(): Resource<any, BaseContext<TDb> & TServiceContext>[];
   getDb<T = TDb>(): T | undefined;
   setDb(db: any): void;
+  syncSchema(): Promise<void> | void;
   resolveContext(
     callCtx?: Partial<BaseContext<TDb> & TServiceContext>
   ): Promise<BaseContext<TDb> & TServiceContext>;
