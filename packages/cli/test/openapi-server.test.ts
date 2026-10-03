@@ -62,7 +62,7 @@ describe("@brick-ts/cli OpenAPI & Interactive Documentation Server", () => {
     const docsHtml = await docsResponse.text();
     expect(docsHtml).toContain("@scalar/api-reference");
     expect(docsHtml).toContain("data-url=\"/openapi.json\"");
-    expect(docsHtml).toContain("Pages Platform API — Interactive Documentation");
+    expect(docsHtml).toContain("Pages Platform API — API Reference");
 
     // 3. Test /swagger (Swagger UI)
     const swaggerResponse = await app.handle(new Request("http://localhost/swagger"));
