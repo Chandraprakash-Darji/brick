@@ -1,6 +1,6 @@
 {
   "name": "@elregaldo/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "CLI and server engine for Brick-TS",
   "type": "module",
   "main": "./dist/index.js",
