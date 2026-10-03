@@ -14,6 +14,12 @@ export interface PostgresDatabaseConfig<
   database?: string;
   ssl?: boolean | "require" | "allow" | "prefer" | "verify-full";
   max?: number;
+  /**
+   * Disable prepared statements (required for transaction-mode poolers such
+   * as Supabase's Supavisor on :6543, which cannot hold named prepared
+   * statements across transactions).
+   */
+  prepare?: boolean;
   /** Optional Drizzle schema for relational queries */
   schema?: TSchema;
   /** Custom schema name for Encore-style isolated schemas */
@@ -54,6 +60,7 @@ export function createPostgresDatabase<
     const client = connectionUrl
       ? postgres(connectionUrl, {
           max: config.max,
+          prepare: config.prepare,
           ssl: config.ssl,
         })
       : postgres({
@@ -63,6 +70,7 @@ export function createPostgresDatabase<
           password: config.password,
           database: config.database,
           max: config.max,
+          prepare: config.prepare,
           ssl: config.ssl,
         });
 
