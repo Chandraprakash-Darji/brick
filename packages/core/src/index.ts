@@ -22,3 +22,16 @@ export * from "./db";
 
 // Types & Errors
 export * from "./types";
+
+// Secrets & Environment Variables
+export {
+  secret,
+  SecretRef,
+  envSource,
+  resolveSecrets,
+  listSecrets,
+  overrideSecret,
+  overrideSecrets,
+  resetSecrets,
+} from "./secrets";
+export type { SecretSource, SecretOptions } from "./secrets";

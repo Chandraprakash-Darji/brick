@@ -7,6 +7,8 @@ import {
   generateOpenApiSpec,
   type BaseContext,
   type Action,
+  resolveSecrets,
+  type SecretSource,
 } from "@brick-ts/core";
 import {
   requestLoggingPlugin,
@@ -31,6 +33,7 @@ export interface CreateServerOptions {
   swaggerPath?: string;
   requestLogging?: boolean | RequestLoggingOptions; // default true
   reference?: boolean | ReferenceOptions; // default false, path "/reference"
+  secrets?: { source?: SecretSource; validate?: boolean };
 }
 
 function coerceQueryParams(query: any, schema: any): any {
@@ -154,6 +157,12 @@ export function createBrickServer(options: CreateServerOptions = {}) {
   const swaggerPath = options.swaggerPath ?? "/swagger";
 
   const app = new Elysia();
+
+  // Fail fast on missing required secrets before serving anything.
+  // No-op when no secrets are registered.
+  if (options.secrets?.validate !== false) {
+    resolveSecrets({ source: options.secrets?.source });
+  }
 
   // Diagnostics & health
   app.get("/_health", () => ({
