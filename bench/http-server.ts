@@ -15,6 +15,7 @@
  */
 import { Elysia } from "elysia";
 import { defineDatabase, syncSchema, ensureResourceIndexes, ensureSQLiteFts, type Service } from "../packages/core/src/index";
+import { compilePlans } from "../packages/cli/src/plans";
 import { createBrickServer } from "../packages/cli/src/server";
 import { benchTable } from "./lib/fixtures";
 import { seedRows } from "./lib/fixtures";
@@ -50,6 +51,7 @@ export async function startBrickServer(opts: {
   rows?: number;
   dbPath?: string;
   prefix?: string;
+  compiled?: boolean;
 }): Promise<BrickBench> {
   const { defineService, defineAction, Type } = await import("../packages/core/src/index");
   const { resetGlobalRegistry } = await import("../packages/core/src/index");
@@ -144,7 +146,9 @@ export async function startBrickServer(opts: {
     })
   );
 
+  const plans = opts.compiled ? await compilePlans([service, authService]) : undefined;
   const app = createBrickServer({
+    plans,
     services: [service, authService],
     requestLogging: false,
     docs: false,

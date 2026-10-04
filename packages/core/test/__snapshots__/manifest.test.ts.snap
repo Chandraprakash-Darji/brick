@@ -1,0 +1,133 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`BrickManifestV1 Emission (@elregaldo/core) defines service + table + resource + custom action → build() → emitManifest() → round-trip preserves semantics 1`] = `
+{
+  "services": [
+    {
+      "actions": [
+        {
+          "execution": "typescript",
+          "id": "post.create",
+          "name": "post.create",
+        },
+        {
+          "execution": "typescript",
+          "id": "post.get",
+          "name": "post.get",
+        },
+        {
+          "execution": "typescript",
+          "id": "post.list",
+          "name": "post.list",
+        },
+        {
+          "execution": "typescript",
+          "id": "post.update",
+          "name": "post.update",
+        },
+        {
+          "execution": "typescript",
+          "id": "post.delete",
+          "name": "post.delete",
+        },
+        {
+          "execution": "typescript",
+          "id": "publishPost",
+          "name": "publishPost",
+        },
+      ],
+      "id": "blog",
+      "name": "blog",
+      "resources": [
+        {
+          "id": "post",
+          "name": "post",
+          "operations": [
+            "list",
+            "get",
+            "create",
+            "update",
+            "delete",
+          ],
+          "ownerField": "authorId",
+          "searchable": [
+            "title",
+            "slug",
+          ],
+          "sortable": [
+            "title",
+            "views",
+            "createdAt",
+          ],
+          "table": "posts",
+        },
+      ],
+      "tables": [
+        {
+          "fields": [
+            {
+              "dbName": "id",
+              "name": "id",
+              "nullable": false,
+              "primaryKey": true,
+              "type": "string",
+            },
+            {
+              "dbName": "slug",
+              "name": "slug",
+              "nullable": false,
+              "primaryKey": false,
+              "type": "string",
+            },
+            {
+              "dbName": "title",
+              "name": "title",
+              "nullable": false,
+              "primaryKey": false,
+              "type": "string",
+            },
+            {
+              "dbName": "views",
+              "name": "views",
+              "nullable": false,
+              "primaryKey": false,
+              "type": "integer",
+            },
+            {
+              "dbName": "published",
+              "name": "published",
+              "nullable": false,
+              "primaryKey": false,
+              "type": "boolean",
+            },
+            {
+              "dbName": "author_id",
+              "name": "authorId",
+              "nullable": true,
+              "primaryKey": false,
+              "type": "string",
+            },
+            {
+              "dbName": "published_at",
+              "name": "publishedAt",
+              "nullable": true,
+              "primaryKey": false,
+              "type": "timestamp",
+            },
+            {
+              "dbName": "created_at",
+              "name": "createdAt",
+              "nullable": false,
+              "primaryKey": false,
+              "type": "string",
+            },
+          ],
+          "id": "posts",
+          "name": "posts",
+        },
+      ],
+    },
+  ],
+  "version": 1,
+}
+`;

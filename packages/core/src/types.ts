@@ -418,6 +418,57 @@ export interface ArchitectureSchema {
   services: ServiceSchema[];
 }
 
+// Brick Manifest V1 Types for Rust compiler & tooling
+export type ManifestFieldTypeV1 =
+  | "string"
+  | "integer"
+  | "boolean"
+  | "uuid"
+  | "timestamp";
+
+export interface ManifestFieldV1 {
+  name: string;
+  dbName: string;
+  type: ManifestFieldTypeV1;
+  nullable: boolean;
+  primaryKey: boolean;
+}
+
+export interface ManifestTableV1 {
+  id: string;
+  name: string;
+  fields: ManifestFieldV1[];
+}
+
+export interface ManifestResourceV1 {
+  id: string;
+  name: string;
+  table: string;
+  ownerField?: string;
+  searchable: string[];
+  sortable: string[];
+  operations: string[];
+}
+
+export interface ManifestActionV1 {
+  id: string;
+  name: string;
+  execution: "typescript";
+}
+
+export interface ManifestServiceV1 {
+  id: string;
+  name: string;
+  tables: ManifestTableV1[];
+  resources: ManifestResourceV1[];
+  actions: ManifestActionV1[];
+}
+
+export interface BrickManifestV1 {
+  version: 1;
+  services: ManifestServiceV1[];
+}
+
 export interface CompiledRoutePlan {
   service: Service<any, any>;
   action: Action<any, any, any, any>;
@@ -493,6 +544,8 @@ export interface Service<
     callCtx?: Partial<BaseContext<TDb> & TServiceContext>
   ): Promise<BaseContext<TDb> & TServiceContext>;
   introspect(): ServiceSchema;
+  emitManifest(): BrickManifestV1;
+  emitManifestJson(space?: number): string;
 }
 
 export interface ProxyOptions {

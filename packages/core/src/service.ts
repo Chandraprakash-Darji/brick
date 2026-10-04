@@ -12,10 +12,17 @@ import type {
   Logger,
   Resource,
   ResourceConfig,
+  BrickManifestV1,
+  ManifestServiceV1,
+  ManifestTableV1,
+  ManifestFieldV1,
+  ManifestFieldTypeV1,
+  ManifestResourceV1,
+  ManifestActionV1,
 } from "./types";
 import { defineAction } from "./action";
 import { getGlobalRegistry } from "./registry";
-import { getTableName, isDatabaseHandle, type DatabaseHandle } from "./db";
+import { getTableColumns, getTableName, isDatabaseHandle, type DatabaseHandle } from "./db";
 import { defineResource, buildResourcePlan } from "./resource";
 
 const defaultLogger: Logger = {
@@ -29,6 +36,51 @@ const DEFAULT_REQUEST = new Request("http://localhost");
 const EMPTY_SERVICES = Object.freeze({});
 const EMPTY_METADATA = Object.freeze({});
 let _ctxSeq = 0;
+
+/**
+ * Maps Drizzle column properties (dataType, columnType, mode) into a Brick Manifest V1 field type.
+ */
+export function mapColumnToManifestType(col: any): ManifestFieldTypeV1 {
+  const dataType = (col?.dataType ?? "").toLowerCase();
+  const columnType = (col?.columnType ?? "").toLowerCase();
+  const mode = (col as any)?.mode;
+
+  if (dataType === "boolean" || mode === "boolean" || columnType.includes("boolean")) {
+    return "boolean";
+  }
+
+  if (dataType === "uuid" || columnType.includes("uuid")) {
+    return "uuid";
+  }
+
+  if (
+    dataType === "date" ||
+    dataType === "timestamp" ||
+    mode === "timestamp" ||
+    mode === "timestamp_ms" ||
+    columnType.includes("timestamp") ||
+    columnType.includes("time") ||
+    columnType.includes("date")
+  ) {
+    return "timestamp";
+  }
+
+  if (
+    dataType === "number" ||
+    columnType.includes("integer") ||
+    columnType.includes("int") ||
+    columnType.includes("serial") ||
+    columnType.includes("bigint") ||
+    columnType.includes("real") ||
+    columnType.includes("numeric") ||
+    columnType.includes("float") ||
+    columnType.includes("double")
+  ) {
+    return "integer";
+  }
+
+  return "string";
+}
 
 export class ServiceImpl<
   TDb = BunSQLiteDatabase<Record<string, unknown>>,
@@ -254,6 +306,105 @@ export class ServiceImpl<
       })),
     };
   }
+
+  /**
+   * Serializes the built service into a versioned BrickManifestV1 object suitable for Rust brickc input.
+   * Resolves existing runtime registrations without including functions, TypeBox schemas, or DB handles.
+   */
+  emitManifest(): BrickManifestV1 {
+    if (!this._isBuilt) {
+      this.build();
+    }
+
+    // 1. Derive tables from service.tables via getTableColumns()
+    const tables: ManifestTableV1[] = [];
+    for (const [tableName, table] of this.tables.entries()) {
+      let cols: Record<string, any> = {};
+      try {
+        cols = getTableColumns(table);
+      } catch {
+        cols = {};
+      }
+
+      const fields: ManifestFieldV1[] = [];
+      for (const [key, col] of Object.entries(cols)) {
+        fields.push({
+          name: key,
+          dbName: col.name ?? key,
+          type: mapColumnToManifestType(col),
+          nullable: !col.notNull,
+          primaryKey: Boolean(col.primary),
+        });
+      }
+
+      tables.push({
+        id: tableName,
+        name: tableName,
+        fields,
+      });
+    }
+
+    // 2. Derive resources from service.resources[].plan
+    const resources: ManifestResourceV1[] = [];
+    for (const res of this.resources.values()) {
+      const plan = res.plan;
+      const resTable = plan?.table ?? res.config.table;
+      let tableName = "";
+      try {
+        tableName = getTableName(resTable);
+      } catch {
+        tableName = (resTable as any)?._?.name ?? "unknown";
+      }
+
+      const resObj: ManifestResourceV1 = {
+        id: res.name,
+        name: res.name,
+        table: tableName,
+        searchable: plan?.searchable?.fields ? [...plan.searchable.fields] : [],
+        sortable: plan?.sortable?.fields ? Array.from(plan.sortable.fields) : [],
+        operations: Object.keys(res.actions),
+      };
+
+      if (plan?.ownerField) {
+        resObj.ownerField = plan.ownerField;
+      }
+
+      resources.push(resObj);
+    }
+
+    // 3. Derive actions from service.actions (dedupe aliases)
+    const seenActionNames = new Set<string>();
+    const actions: ManifestActionV1[] = [];
+    for (const act of this.listActions()) {
+      if (!act.name || seenActionNames.has(act.name)) continue;
+      seenActionNames.add(act.name);
+      actions.push({
+        id: act.name,
+        name: act.name,
+        execution: "typescript",
+      });
+    }
+
+    return {
+      version: 1,
+      services: [
+        {
+          id: this.name,
+          name: this.name,
+          tables,
+          resources,
+          actions,
+        },
+      ],
+    };
+  }
+
+  /**
+   * Serializes the built service into a JSON string formatted with the specified indentation.
+   */
+  emitManifestJson(space: number = 2): string {
+    return JSON.stringify(this.emitManifest(), null, space);
+  }
 }
 
 export function defineService<
@@ -266,4 +417,42 @@ export function defineService<
   const service = new ServiceImpl<TDb, TServiceContext>(name, options);
   getGlobalRegistry().register(service as any);
   return service;
+}
+
+/**
+ * Emits a unified BrickManifestV1 from one or more services (defaults to all globally registered services).
+ */
+export function emitManifest(
+  serviceOrServices?: Service | Service[]
+): BrickManifestV1 {
+  const servicesList = serviceOrServices
+    ? Array.isArray(serviceOrServices)
+      ? serviceOrServices
+      : [serviceOrServices]
+    : getGlobalRegistry().list();
+
+  const manifestServices: ManifestServiceV1[] = [];
+
+  for (const service of servicesList) {
+    if (typeof (service as any).build === "function" && !(service as any).isBuilt) {
+      (service as any).build();
+    }
+    const manifest = service.emitManifest();
+    manifestServices.push(...manifest.services);
+  }
+
+  return {
+    version: 1,
+    services: manifestServices,
+  };
+}
+
+/**
+ * Emits a unified BrickManifestV1 as a formatted JSON string.
+ */
+export function emitManifestJson(
+  serviceOrServices?: Service | Service[],
+  space: number = 2
+): string {
+  return JSON.stringify(emitManifest(serviceOrServices), null, space);
 }

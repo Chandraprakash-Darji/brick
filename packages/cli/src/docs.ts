@@ -6,29 +6,8 @@ export interface ReferenceOptions {
   specUrl?: string;
 }
 
-/** Renders the Scalar API reference page for the given OpenAPI URL. */
-export function scalarDocsHTML(specUrl: string, title: string): string {
-  return `<!doctype html>
-<html>
-  <head>
-    <title>${title} — API Reference</title>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" type="image/svg+xml" href="https://scalar.com/favicon.svg" />
-    <style>
-      body { margin: 0; padding: 0; height: 100vh; }
-    </style>
-  </head>
-  <body>
-    <script
-      id="api-reference"
-      data-url="${specUrl}"
-      data-configuration='{"theme": "purple", "layout": "modern"}'
-      src="https://cdn.jsdelivr.net/npm/@scalar/api-reference">
-    </script>
-  </body>
-</html>`;
-}
+import { scalarDocsHTML } from "./docs-html";
+export { scalarDocsHTML } from "./docs-html";
 
 /** Standalone Elysia plugin serving GET <path> with the Scalar HTML page. */
 export function referencePlugin(opts: ReferenceOptions = {}): Elysia {
