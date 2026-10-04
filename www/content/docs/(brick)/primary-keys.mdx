@@ -1,0 +1,51 @@
+---
+title: Primary Keys
+description: ID generation and custom primary key columns
+---
+
+Resources auto-mint string ids on create. The strategy has two knobs — no autonaming framework, no templated series.
+
+## Default generation
+
+When the create payload omits the id column, the resource fills it in:
+
+1. `idGenerator()` when provided — full control, e.g. `() => randomUUID()`.
+2. Otherwise `` `${idPrefix ?? defaultPrefix}_${rand}` `` where `defaultPrefix` is `"pg"` for a resource named `page`, else the first three letters of the resource name (`deal` → `dea_xxxxxxxx`).
+
+```ts
+import { randomUUID } from "node:crypto";
+
+pagesService.resource({
+  name: "page",
+  table: pagesTable,
+  idPrefix: "pg",                    // pg_a1b2c3d4 (explicit; same as default here)
+  idGenerator: () => `pg_${randomUUID()}`, // or take over completely
+  // ...
+});
+```
+
+Column defaults (`col.default`) and `created_at` / `updated_at` timestamps are populated the same way when omitted.
+
+## Custom PK column
+
+Point the resource at a different primary-key column with `idField` (Drizzle key or DB column name):
+
+```ts
+export const ticketsTable = sqliteTable("tickets", {
+  ticketNo: text("ticket_no").primaryKey(),
+  subject: text("subject").notNull(),
+  userId: text("user_id"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+ticketsService.resource({
+  name: "ticket",
+  table: ticketsTable,
+  idField: "ticketNo",
+  idGenerator: () => `TICKET-${Date.now()}`,
+  operations: { get: true, create: true, update: true, delete: true, list: true },
+});
+```
+
+`idField` drives the get/update/delete input shape (`{ ticketNo }`), the REST `:id` binding, and the keyset-cursor tiebreak. Meaningful human-readable keys work fine — enforce the format with a `fields` TypeBox override or a `beforeCreate` uniqueness check (see [Hooks](./hooks)).

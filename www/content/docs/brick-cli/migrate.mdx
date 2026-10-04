@@ -1,0 +1,143 @@
+---
+title: Databases and schema in dev
+description: SQLite dev setup with defineDatabase and syncSchema, plus caller-owned Postgres migrations
+---
+
+There is no `brick migrate` command. Schema setup is code: `defineDatabase` declares the database, and `syncSchema` prepares SQLite schemas explicitly in dev/test. Postgres schema management is caller-owned (Drizzle migrations you run yourself).
+
+## SQLite in dev: defineDatabase
+
+Default engine is `sqlite`. `:memory:` needs no setup; a file path creates parent directories automatically (`define.ts`):
+
+```typescript
+import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { defineDatabase } from "@elregaldo/core";
+
+export const users = sqliteTable("users", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull(),
+  age: integer("age"),
+});
+
+// In-memory — fresh on every boot
+export const memDb = defineDatabase({
+  tables: { users },
+});
+
+// File-backed — parent dirs created automatically
+export const fileDb = defineDatabase({
+  tables: { users },
+  path: "./data/dev.db",
+});
+```
+
+Attach it to a service:
+
+```typescript
+import { defineService } from "@elregaldo/core";
+
+export const usersService = defineService("users", {
+  database: fileDb,
+});
+
+usersService.action({
+  name: "listUsers",
+  execute: async ({ ctx }) => ctx.db.select().from(users),
+});
+```
+
+Secrets compose too — pass a `SecretRef` for any config value and it resolves via `.require()` at first `getDb()`:
+
+```typescript
+import { defineDatabase, secret } from "@elregaldo/core";
+
+const dbPath = secret("SQLITE_PATH").default("./data/dev.db");
+
+export const db = defineDatabase({ tables: { users }, path: dbPath });
+```
+
+## syncSchema: explicit dev/test helper
+
+`syncSchema` issues `CREATE TABLE IF NOT EXISTS` DDL for SQLite. It is never called by services, resources, auth, or server startup — you call it explicitly (`packages/core/src/db/index.ts`):
+
+```typescript
+import { syncSchema } from "@elregaldo/core";
+import { usersService } from "./users/service";
+
+// Accepts a Service, Map, array, or record of tables; optional second arg is the db instance
+syncSchema(usersService);
+```
+
+Typical dev/test wiring:
+
+```typescript
+// src/index.ts (dev entry)
+import { syncSchema } from "@elregaldo/core";
+import { usersService } from "./users/service";
+
+if (process.env.NODE_ENV !== "production") {
+  syncSchema(usersService);
+}
+```
+
+```typescript
+// test setup
+import { beforeEach } from "bun:test";
+import { syncSchema } from "@elregaldo/core";
+import { usersService } from "./users/service";
+
+beforeEach(() => {
+  syncSchema(usersService);
+});
+```
+
+SQLite file hygiene for tests: point `defineDatabase` at `:memory:` or a temp file per test run so state never leaks between suites.
+
+## Postgres: caller-owned Drizzle migrations
+
+For `engine: "postgres"`, `syncSchema` is a no-op for DDL — schema management belongs to the caller with standard Drizzle migrations:
+
+```typescript
+import { defineDatabase, secret } from "@elregaldo/core";
+
+const databaseUrl = secret("DATABASE_URL");
+
+export const pgDb = defineDatabase({
+  engine: "postgres",
+  tables: { users },
+  url: databaseUrl,
+});
+```
+
+```bash
+# Drizzle's own tooling owns the migration files and applies them
+bunx drizzle-kit generate
+bunx drizzle-kit migrate
+```
+
+Deploy order: run migrations first, then boot (`brick start`). The server never applies schema changes at startup.
+
+## Boot check as a userland pattern
+
+If you want startup to refuse to boot when migrations are pending, implement it in your entry file — a `CheckMigrations`-style check is a userland pattern, not a CLI command:
+
+```typescript
+// src/index.ts
+import { sql } from "drizzle-orm";
+import { pgDb } from "./db";
+
+async function checkMigrationsApplied(): Promise<void> {
+  const db = pgDb.getDb();
+  const pending = await db.execute(
+    sql`select count(*)::int as n from __drizzle_migrations where success = false`
+  );
+  const n = (pending.rows?.[0] as any)?.n ?? 0;
+  if (n > 0) throw new Error(`${n} pending migration(s) — run migrations before boot`);
+}
+
+await checkMigrationsApplied();
+
+// ... defineService registrations follow
+```
+
+This keeps the invariant explicit — migrations run via Drizzle, the app verifies before serving — without implying a `brick migrate` command exists.

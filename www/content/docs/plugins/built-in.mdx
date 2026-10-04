@@ -1,0 +1,83 @@
+---
+title: Built-in Capabilities
+description: Request logging, docs, health, and architecture export from createBrickServer
+---
+
+These ship with `@elregaldo/cli` — no install step, just `createBrickServer()`
+options. They are framework behavior, not add-on packages.
+
+## Request logging
+
+On by default. Every route is timed and logged via the `requestLoggingPlugin`:
+
+```ts
+import { createBrickServer } from "@elregaldo/cli";
+
+const app = createBrickServer({ requestLogging: true });
+```
+
+Pass an options object to tune it, or `false` to disable.
+
+## Scalar reference + Swagger UI
+
+Interactive docs are served from the live OpenAPI spec:
+
+```ts
+const app = createBrickServer({
+  docs: true, // GET /openapi.json, /docs (Scalar), /swagger
+  reference: { path: "/reference", title: "Pages API" },
+});
+```
+
+- `GET /openapi.json` — generated OpenAPI 3.1 spec covering the action mesh
+  plus every `app.endpoint()` raw route.
+- `GET /docs` — Scalar API reference.
+- `GET /swagger` — Swagger UI.
+- `GET /reference` — opt-in second Scalar mount (used by the pages example).
+
+## Health
+
+```ts
+// Always mounted:
+GET /_health // { status: "ok", uptime, timestamp }
+```
+
+## Architecture export
+
+```ts
+GET /_brick/services // introspected services, actions, resources, ownerFields
+```
+
+Use it to verify what the mesh actually mounted, or to feed client codegen.
+
+## Secrets
+
+Declare env vars with `secret()` from `@elregaldo/core`; boot validates them
+before serving anything:
+
+```ts
+import { secret } from "@elregaldo/core";
+
+export const portSecret = secret("PORT").default("3333").transform(Number);
+export const databaseUrlSecret = secret("DATABASE_URL");
+
+const app = createBrickServer({
+  port: portSecret.require(),
+  secrets: { validate: true }, // fail fast on missing required secrets
+});
+```
+
+## MCP routes in the pages example
+
+The pages example (`examples/pages`) mounts an MCP bearer transport on the
+same app as the action mesh — plain Elysia routes plus a raw endpoint, not a
+plugin package:
+
+- `POST /mcp` — MCP JSON-RPC transport for the 11 page tools
+  (`tools/list`, `tools/call`), bearer-protected via JWT.
+- `GET /.well-known/oauth-protected-resource/mcp` — OAuth discovery metadata.
+- `GET /p/:slug` — raw HTML page viewer via `app.endpoint({ method: "GET",
+  path: "/p/:slug", service: pagesService, handler })`, with cache headers
+  set through `ctx.set.headers`.
+
+See `examples/pages/apps/api/src/mcp.ts` and `src/app.ts` for the wiring.

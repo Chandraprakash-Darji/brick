@@ -1,0 +1,105 @@
+---
+title: gen openapi
+description: Generate the OpenAPI 3.1 specification from registered services
+---
+
+```bash
+brick gen openapi [--output <file>]
+```
+
+Calls `generateOpenApiSpec()` from `@elregaldo/core` against the global registry and emits OpenAPI 3.1 JSON. With `--output` it writes the file; without it, the JSON goes to stdout.
+
+```bash
+# Print to stdout
+brick gen openapi
+
+# Write to a file
+brick gen openapi --output openapi.json
+# ✅ OpenAPI 3.1 specification written to openapi.json
+```
+
+Anything other than `openapi` errors:
+
+```bash
+brick gen foo
+# Unknown generator: foo. Available: openapi
+```
+
+## generateOpenApiSpec options
+
+The same function powers the live `GET /openapi.json` route in `createBrickServer`. Options (`packages/core/src/openapi.ts`):
+
+```typescript
+import { generateOpenApiSpec } from "@elregaldo/core";
+
+const spec = generateOpenApiSpec({
+  title: "My API",          // default "Brick-TS API Mesh"
+  version: "1.0.0",         // default "1.0.0"
+  description: "My mesh",   // default automated-spec sentence
+  prefix: "/api",           // default "/api" — prefixes every action path
+  services: undefined,      // default: getGlobalRegistry().list()
+  registry: undefined,      // alternative to services
+});
+```
+
+How paths are built:
+
+- Every action gets `POST {prefix}/{service}/{action}` with `operationId: {service}_{action}_post`.
+- Read-like actions (`get*`, `list*`, `find*`, `read*`) also get `GET` on the same path, with input properties mapped to query parameters.
+- `authorize` hooks add `security: [{ bearerAuth: [] }]` and a `bearerAuth` JWT scheme under `components.securitySchemes`.
+- Declared `errors` map to status-coded responses; `input` adds a `400` shape; every action gets `200` and `500`.
+- The live route merges raw endpoint paths: `{ ...spec.paths, ...endpointPaths(endpointDefs) }`, so `app.endpoint()` definitions appear alongside the action mesh.
+
+```typescript
+import { createBrickServer } from "@elregaldo/cli";
+
+const app = createBrickServer({
+  title: "My API",
+  version: "2.0.0",
+  prefix: "/api",
+});
+
+// GET /openapi.json now serves generateOpenApiSpec({ title, version, prefix, services })
+```
+
+## Piping to client generators
+
+Because stdout is raw JSON, pipe it straight into typed-client tooling:
+
+```bash
+# hey-api (OpenAPI TypeScript client)
+brick gen openapi | bunx @hey-api/openapi-ts --input - --output ./src/client
+
+# openapi-generator (example: TypeScript fetch client)
+brick gen openapi --output openapi.json
+bunx @openapitools/openapi-generator-cli generate \
+  -i openapi.json -g typescript-fetch -o ./src/client
+```
+
+Or generate from TypeScript without the CLI:
+
+```typescript
+import { writeFile } from "node:fs/promises";
+import { generateOpenApiSpec } from "@elregaldo/core";
+import "./src/index"; // side-effect: registers services
+
+await writeFile("openapi.json", JSON.stringify(generateOpenApiSpec(), null, 2));
+```
+
+## CI: diffing the spec
+
+Fail the build when the checked-in spec drifts from the code:
+
+```bash
+brick gen openapi --output /tmp/openapi.json
+diff openapi.json /tmp/openapi.json
+```
+
+```bash
+# example CI step
+bunx brick gen openapi --output /tmp/openapi.json
+git diff --exit-code -- openapi.json /tmp/openapi.json \
+  || (echo "OpenAPI spec is stale — run: brick gen openapi --output openapi.json" && exit 1)
+```
+
+Commit `openapi.json` next to the code that produces it, regenerate on every service/action change, and review the diff like any other contract change.

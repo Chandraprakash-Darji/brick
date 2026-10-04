@@ -1,0 +1,17 @@
+{
+  "title": "Extensions",
+  "description": "Extend brick-ts with hooks, actions, and raw endpoints",
+  "icon": "Plug",
+  "root": true,
+  "defaultOpen": true,
+  "pages": [
+    "index",
+    "---Built-in---",
+    "built-in",
+    "audit",
+    "comments",
+    "---Build Your Own---",
+    "build-plugin",
+    "best-practices"
+  ]
+}

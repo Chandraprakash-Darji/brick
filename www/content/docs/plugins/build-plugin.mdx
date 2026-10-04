@@ -1,0 +1,122 @@
+---
+title: Build an Extension
+description: Five steps from table to shared cross-service extension
+---
+
+An "extension" in brick-ts is a plain TypeScript module that wires tables,
+resources, actions, hooks, and raw routes together. No interface to
+implement, no registry to join — import it and call its setup function.
+
+## Step 1: Define the table
+
+```ts
+// extensions/reactions/schema.ts
+import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+
+export const reactions = sqliteTable("reactions", {
+  id: text("id").primaryKey(),
+  targetType: text("target_type").notNull(),
+  targetId: text("target_id").notNull(),
+  kind: text("kind").notNull().default("like"),
+  userId: text("user_id").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+```
+
+Include the table in your `defineDatabase({ tables: { reactions } })` call so
+`syncSchema()` creates it on SQLite and Postgres.
+
+## Step 2: Register a resource or actions
+
+```ts
+// extensions/reactions/index.ts
+import type { Service } from "@elregaldo/core";
+import { reactions } from "./schema";
+
+export function registerReactions(service: Service<any, any>) {
+  const resource = service.resource({
+    name: "reaction",
+    table: reactions,
+    ownerField: "userId",
+  });
+
+  service.action({
+    name: "toggleReaction",
+    input: { /* TypeBox: targetType, targetId, kind */ } as any,
+    output: { /* TypeBox: toggled boolean */ } as any,
+    path: "/api/reactions/toggle",
+    method: "POST",
+    execute: async ({ input, ctx }) => {
+      // ...insert or delete the reaction row, return { toggled: true }
+    },
+  });
+
+  return resource;
+}
+```
+
+Use a resource when you want free CRUD + list filters; use `service.action()`
+— with optional custom `path` / `method` — for domain operations.
+
+## Step 3: Attach hooks to existing resources
+
+```ts
+service.resource({
+  name: "page",
+  table: pagesTable,
+  ownerField: "userId",
+  hooks: {
+    afterDelete: async ({ id, ctx }) => {
+      // Cascade: remove reactions when their target is deleted.
+      await ctx.db.delete(reactions).where(eq(reactions.targetId, String(id)));
+    },
+  },
+});
+```
+
+Hooks receive typed `{ data, result, existing, id, ctx, error }` params.
+Call `error.CONFLICT()` / `error.FORBIDDEN()` / `error.NOT_FOUND()` inside
+`before*` hooks to abort the write with a proper status.
+
+## Step 4: Add a raw route
+
+For anything outside the JSON mesh (HTML, webhooks, streaming):
+
+```ts
+import { createBrickServer } from "@elregaldo/cli";
+
+const app = createBrickServer({ services: [service] });
+
+app.endpoint({
+  method: "GET",
+  path: "/p/:slug",
+  service,
+  summary: "Public page viewer",
+  description: "Raw HTML rendering of a published page.",
+  tags: ["public"],
+  handler: async ({ params, set, db }) => {
+    set.headers["content-type"] = "text/html; charset=utf-8";
+    // ...query db, return HTML string
+  },
+});
+```
+
+The handler gets the full `EndpointContext` (`params`, `query`, `body`,
+`headers`, `request`, `set`, `db`, `logger`, `traceId`, `requestId`) and the
+same error mapping as actions.
+
+## Step 5: Share it via the service proxy
+
+Other services call your extension's actions without HTTP:
+
+```ts
+import { createServiceProxy } from "@elregaldo/core";
+
+const pages = createServiceProxy<{ toggleReaction: (input: any) => Promise<any> }>("pages");
+
+await pages.toggleReaction({ targetType: "page", targetId: "pg_abc", kind: "like" });
+```
+
+Package the extension as a normal file or npm module exporting a
+`registerX(service)` function plus its tables — consumers import it, add the
+tables to their database, and call register.

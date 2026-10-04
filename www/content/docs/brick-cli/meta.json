@@ -1,0 +1,13 @@
+{
+  "title": "brick CLI",
+  "description": "Command-line tools",
+  "icon": "Terminal",
+  "root": true,
+  "defaultOpen": true,
+  "pages": [
+    "index",
+    "generate",
+    "migrate",
+    "schema-dump"
+  ]
+}

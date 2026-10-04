@@ -1,0 +1,25 @@
+{
+  "title": "Brick-TS Framework",
+  "description": "Core framework docs",
+  "icon": "Blocks",
+  "root": true,
+  "defaultOpen": true,
+  "pages": [
+    "---Introduction---",
+    "index",
+    "getting-started",
+    "---Core Concepts---",
+    "resources",
+    "primary-keys",
+    "child-tables",
+    "singletons",
+    "resource-lifecycle",
+    "hooks",
+    "access-control",
+    "validate-hook",
+    "---Build & Deploy---",
+    "codegen",
+    "migrations",
+    "openapi"
+  ]
+}

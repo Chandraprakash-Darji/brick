@@ -1,0 +1,70 @@
+---
+title: Hooks
+description: Lifecycle hooks for resources
+---
+
+Hooks let you run custom logic around resource writes. There are exactly **six** hooks — no `BeforeList`/`BeforeGet` interception point and no separate validate hook (input validation is handled by TypeBox schemas; see [Input/Output Validation](./validate-hook)).
+
+## The six hooks
+
+| Hook | Signature | Common use cases |
+|------|-----------|------------------|
+| `beforeCreate` | `({ data, ctx, error })` | Uniqueness checks, defaults, minting tokens |
+| `afterCreate` | `({ data, result, ctx })` | Notifications, audit logs |
+| `beforeUpdate` | `({ id, data, existing, ctx, error })` | Validate changes, prevent field mutation |
+| `afterUpdate` | `({ id, data, result, ctx })` | Cache invalidation, audit logs |
+| `beforeDelete` | `({ id, existing, ctx, error })` | Prevent deletion, guard published rows |
+| `afterDelete` | `({ id, existing, ctx, error })` | Cleanup related rows, audit logs |
+
+Only the `before*` hooks (plus `afterDelete`) receive `error`. Call an error helper to abort — it throws immediately:
+
+```ts
+pagesService.resource({
+  name: "page",
+  table: pagesTable,
+  ownerField: "userId",
+  operations: {
+    list: { defaultLimit: 20, maxLimit: 100 },
+    get: true, create: true, update: true, delete: true,
+  },
+  hooks: {
+    // Reject duplicate slugs before the INSERT
+    beforeCreate: async ({ data, ctx, error }) => {
+      const exists = await ctx.db
+        .select()
+        .from(pagesTable)
+        .where(eq(pagesTable.slug, data.slug));
+      if (exists.length > 0) {
+        error.CONFLICT(`Slug '${data.slug}' is already taken`);
+      }
+    },
+    // Audit log after the row exists
+    afterCreate: async ({ result, ctx }) => {
+      ctx.logger.info(`Page created: '${result.title}' (/${result.slug})`);
+    },
+    // Protect immutable fields on update
+    beforeUpdate: async ({ data, existing, error }) => {
+      if (data.slug !== undefined && data.slug !== existing.slug) {
+        error.BAD_REQUEST("Slug is immutable once published");
+      }
+    },
+    // Guard published rows from deletion
+    beforeDelete: async ({ existing, error }) => {
+      if (existing.isPublic) {
+        error.FORBIDDEN("Unpublish a page before deleting it");
+      }
+    },
+    afterDelete: async ({ id, ctx }) => {
+      ctx.logger.info(`Page deleted: ${id}`);
+    },
+  },
+});
+```
+
+## Rules
+
+- **Abort via `error.*`.** `error.BAD_REQUEST / UNAUTHORIZED / FORBIDDEN / NOT_FOUND / CONFLICT / INTERNAL_SERVER_ERROR(...)` (plus any custom `errors:` entries) throw `ActionExecutionError` and map to their HTTP status. Returning normally means "proceed".
+- **Mutate `data` to change the write.** `beforeCreate`/`beforeUpdate` receive the mutable insert/patch object — set defaults or normalize values there.
+- **`existing` is the current row** for update/delete hooks, loaded before the hook runs.
+- **No transaction wrapper.** The resource performs a sequential insert→select / update / delete with no transaction around hook + write, so hooks cannot rely on rollback — validate in `before*` and treat `after*` as observational.
+- **Reads have no hooks.** List/get filtering belongs in `authorize`, `ownerField` scoping, or a custom action — not in hooks.

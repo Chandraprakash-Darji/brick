@@ -1,0 +1,131 @@
+---
+title: brick CLI
+description: Dev server, production start, OpenAPI generation, and architecture export for the TypeScript CLI
+---
+
+The `brick` binary ships with `@elregaldo/cli` (compiled to `dist/bin.js`). It has exactly four commands — no codegen, no migration runner.
+
+## Installation
+
+```bash
+bun add @elregaldo/cli @elregaldo/core
+```
+
+Run via `bunx` or a package script:
+
+```bash
+bunx brick dev ./src/index.ts --port 4000
+```
+
+```json
+{
+  "scripts": {
+    "dev": "brick dev ./src/index.ts",
+    "start": "brick start ./src/index.ts",
+    "gen:openapi": "brick gen openapi --output openapi.json",
+    "info": "brick info"
+  }
+}
+```
+
+Your entry file must register services as a side effect via `defineService`:
+
+```typescript
+// src/index.ts
+import "./users/service";
+
+import { defineService } from "@elregaldo/core";
+
+export const appService = defineService("app");
+
+appService.action({
+  name: "health",
+  execute: async () => ({ ok: true }),
+});
+```
+
+## Commands
+
+| Command | Alias | What it does |
+|---------|-------|--------------|
+| `brick dev [entry] [--port <number>]` | — | Import `entry`, list services/actions/resources, start `createBrickServer` with live reload |
+| `brick start [entry]` | — | Same boot path as `dev`, intended for production |
+| `brick gen openapi [--output <file>]` | — | Print OpenAPI 3.1 JSON to stdout, or write it to `--output` |
+| `brick info` | `services` | Print `registry.exportArchitecture()` JSON to stdout |
+
+Unknown `gen` subcommands fail:
+
+```bash
+brick gen foo
+# Unknown generator: foo. Available: openapi
+```
+
+Port resolution: `--port <number>` wins, otherwise the `PORT` environment variable, otherwise `4000` (see `runner.ts`: `options.port ?? Number(process.env.PORT) || 4000`).
+
+```bash
+brick dev ./src/index.ts --port 4100
+PORT=4100 brick start ./src/index.ts
+```
+
+## Dev server output
+
+`startDevServer({ port, entry, prefix })` imports the entry file, reads the global registry, and prints what it mounted:
+
+```bash
+brick dev ./src/index.ts
+```
+
+```text
+[Brick-TS] Loading application entry: /app/src/index.ts
+
+🧱 Brick-TS Development Server
+   Registered Services: 1
+   • users (2 actions)
+     -> Action:   /api/users/getUser
+     -> Action:   /api/users/createUser
+
+⚡ API Gateway running on: http://localhost:4000
+🩺 Health check:        http://localhost:4000/_health
+🗺️ Architecture graph:  http://localhost:4000/_brick/services
+```
+
+The server itself comes from `createBrickServer`. Key options (`server.ts`):
+
+```typescript
+import { createBrickServer } from "@elregaldo/cli";
+
+const app = createBrickServer({
+  port: 4000,
+  prefix: "/api",        // default "/api"
+  title: "My API",       // default "Brick-TS API Mesh"
+  version: "1.0.0",
+  description: "My service mesh",
+  docs: true,            // default true — mounts /openapi.json, /docs, /swagger
+  openApiPath: "/openapi.json",
+  docsPath: "/docs",     // Scalar HTML
+  swaggerPath: "/swagger", // Swagger UI
+  requestLogging: true,  // default true; set false or pass { enabled: false }
+  reference: false,      // default false; set true or { path: "/reference" } for the opt-in Scalar reference plugin
+  secrets: { validate: true }, // fail-fast via resolveSecrets() unless validate === false
+});
+
+app.listen(4000);
+```
+
+Docs routes served when `docs` is enabled:
+
+- `GET /openapi.json` → `generateOpenApiSpec()` plus raw `endpointPaths()`
+- `GET /docs` → Scalar HTML page
+- `GET /swagger` → Swagger UI page
+- `GET /reference` → only when `reference` is enabled (opt-in plugin)
+
+The request-logging plugin is mounted first so every route is timed (`METHOD path → status (ms)`). Secrets resolve fail-fast at boot via `resolveSecrets()` unless `secrets.validate === false`.
+
+## When to use each
+
+- **`dev`** — local development. Pass your entry file so services register before the server lists them.
+- **`start`** — production boot with the same entry/port handling. Pair with `secrets: { validate: true }` (the default) so missing env fails fast.
+- **`gen openapi`** — generating a client or diffing the spec in CI. See [gen openapi](./generate).
+- **`info`** — exporting the service graph for dashboards or docs. See [info / architecture export](./schema-dump).
+
+There are no `migrate`, `generate`, or `schema-dump` codegen commands. Database setup in dev is covered in [Databases & schema in dev](./migrate).

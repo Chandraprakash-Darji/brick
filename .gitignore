@@ -52,3 +52,4 @@ Thumbs.db
 !.vscode/extensions.json
 .build/
 docs/
+!/www/content/docs/

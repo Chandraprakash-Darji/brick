@@ -1,0 +1,98 @@
+---
+title: Audit-Trail Pattern
+description: Record create, update, and delete events with resource hooks
+---
+
+There is no audit package to install. Attach `afterCreate`, `afterUpdate`, and
+`afterDelete` hooks to any resource and write audit rows yourself.
+
+## 1. Define the audit table
+
+```ts
+import { sqliteTable, text } from "drizzle-orm/sqlite-core";
+
+export const auditEvents = sqliteTable("audit_events", {
+  id: text("id").primaryKey(),
+  resourceType: text("resource_type").notNull(),
+  resourceId: text("resource_id").notNull(),
+  action: text("action").notNull(), // "create" | "update" | "delete"
+  actorId: text("actor_id"),
+  payload: text("payload", { mode: "json" }),
+  createdAt: text("created_at").notNull(),
+});
+```
+
+Register it with `defineDatabase({ tables: { auditEvents, ... } })` and run
+`syncSchema()` so the table exists.
+
+## 2. Attach the hooks
+
+```ts
+import { defineService } from "@elregaldo/core";
+import { auditEvents } from "./schema";
+import { pagesTable } from "./model";
+
+const service = defineService("pages", { database: appDb });
+
+service.resource({
+  name: "page",
+  table: pagesTable,
+  ownerField: "userId",
+  hooks: {
+    afterCreate: async ({ data, result, ctx }) => {
+      await ctx.db.insert(auditEvents).values({
+        id: `ae_${Math.random().toString(36).slice(2, 10)}`,
+        resourceType: "page",
+        resourceId: result.id,
+        action: "create",
+        actorId: ctx.user?.id ?? null, // actor comes from ctx.user
+        payload: data,
+        createdAt: new Date().toISOString(),
+      });
+    },
+    afterUpdate: async ({ id, data, result, ctx }) => {
+      await ctx.db.insert(auditEvents).values({
+        id: `ae_${Math.random().toString(36).slice(2, 10)}`,
+        resourceType: "page",
+        resourceId: String(id),
+        action: "update",
+        actorId: ctx.user?.id ?? null,
+        payload: { changed: data, snapshot: result },
+        createdAt: new Date().toISOString(),
+      });
+    },
+    afterDelete: async ({ id, existing, ctx }) => {
+      await ctx.db.insert(auditEvents).values({
+        id: `ae_${Math.random().toString(36).slice(2, 10)}`,
+        resourceType: "page",
+        resourceId: String(id),
+        action: "delete",
+        actorId: ctx.user?.id ?? null,
+        payload: existing,
+        createdAt: new Date().toISOString(),
+      });
+    },
+  },
+});
+```
+
+The hooks run after the row write, in the same request flow. `ctx.user` is
+injected by your service `context()` resolver (session cookie or bearer
+token); anonymous writes record `actorId: null`.
+
+## 3. Query the trail
+
+Expose the audit table as its own resource, then filter with list query
+params — no custom SQL needed:
+
+```ts
+service.resource({ name: "audit_event", table: auditEvents });
+```
+
+```http
+GET /api/audit_event?resourceType=page&resourceId=pg_abc123&sort=-createdAt
+GET /api/audit_event?action=delete&limit=50
+```
+
+Exact-match filters work on any column; `sort`, `search`, `limit`, `offset`,
+`page`, `cursor`, and `select` behave like every other resource list.

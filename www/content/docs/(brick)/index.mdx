@@ -1,0 +1,60 @@
+---
+title: Overview
+description: TypeScript resource-based CRUD framework on Elysia and Drizzle
+---
+
+Brick-TS is a TypeScript framework that gives developers **resource-based CRUD + auth out of the box**, built on [Elysia](https://elysiajs.com/), [Drizzle ORM](https://orm.drizzle.team/), and [Better Auth](https://www.better-auth.com/).
+
+```ts
+import { defineService, defineDatabase } from "@elregaldo/core";
+import { createBrickServer } from "@elregaldo/cli";
+import { pagesTable } from "./services/pages/service";
+
+export const pagesDb = defineDatabase({
+  path: "./data/pages.db",
+  tables: { pagesTable },
+});
+
+export const pagesService = defineService("pages", { database: pagesDb });
+
+pagesService.resource({
+  name: "page",
+  table: pagesTable,
+  ownerField: "userId",
+  operations: {
+    list: { defaultLimit: 20, maxLimit: 100 },
+    get: true,
+    create: true,
+    update: true,
+    delete: true,
+  },
+});
+
+const app = createBrickServer({ port: 4000, services: [pagesService] });
+app.listen(4000);
+```
+
+Starts on `:4000` — health check at `/_health`, live OpenAPI at `/openapi.json`, Scalar docs at `/docs`, Swagger UI at `/swagger`, architecture introspection at `/_brick/services`.
+
+## Why Brick-TS
+
+- **Zero boilerplate CRUD** — declare a resource, get list/get/create/update/delete with filtering, sorting, pagination, search, and keyset cursors
+- **Auth-ready context** — a per-request `context` resolver (typically Better Auth session loading) injects `user`/`session` for every action
+- **Type-safe end to end** — Drizzle tables are the single source of truth; TypeBox input/output schemas validate at runtime and infer static types
+- **No codegen step** — no DSL, no emitted files; `Static<typeof schema>` and `$inferSelect`/`$inferInsert` give you types directly
+- **Schema stays caller-owned** — `syncSchema()` is an explicit dev/test helper for SQLite; Postgres schema is managed by your own migrations
+
+## Modules
+
+| Package | Contents |
+|---------|----------|
+| `@elregaldo/core` | `defineService`, `defineAction`, `defineResource`, `defineDatabase`, `generateOpenApiSpec`, `secret`/`resolveSecrets`, `createServiceProxy`, TypeBox `t` |
+| `@elregaldo/cli` | `createBrickServer` (Elysia app), raw `app.endpoint()`, `/openapi.json`, `/docs`, `/swagger`, `/_health`, `/_brick/services` |
+| `examples/basic` | Canonical `pages` service (`examples/basic/src/services/pages/service.ts`) — table, resource, hooks, custom actions |
+| `examples/pages` | Full app with the Better Auth context-resolver pattern (`apps/api/src/services/pages/page/service.ts`) |
+
+## Next steps
+
+- [Getting Started](./getting-started) — install and boot your first service
+- [Resources](./resources) — declare tables and resources
+- [Resource Lifecycle](./resource-lifecycle) — how a request flows through the mesh

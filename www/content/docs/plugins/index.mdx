@@ -1,0 +1,48 @@
+---
+title: Extensions
+description: Extension points in brick-ts — hooks, actions, raw endpoints, and service proxies
+---
+
+brick-ts has no plugin interface and no `app.Use()`. You extend a service by
+composing the primitives below — all TypeScript, in your own service files.
+
+## Extension points
+
+| Extension point | API | Use it for |
+|-----------------|-----|------------|
+| Resource hooks | `beforeCreate` / `afterCreate` / `beforeUpdate` / `afterUpdate` / `beforeDelete` / `afterDelete` on `service.resource()` | Audit trails, slug validation, denormalized counters |
+| Custom actions | `service.action()` with optional `path` / `method` | Domain operations that are not CRUD (publish, render, invite) |
+| Raw endpoints | `app.endpoint({ method, path, handler, service, database, summary, description, tags })` | HTML pages, webhooks, MCP transports — anything outside the JSON action mesh |
+| Service proxy | `createServiceProxy()` | Call another service's actions with typed dispatch |
+| Built-in capabilities | `createBrickServer()` options | Request logging, Scalar / Swagger docs, OpenAPI, health, architecture export |
+
+## Endpoint context
+
+Raw endpoint handlers receive an `EndpointContext`:
+
+```ts
+interface EndpointContext {
+  params: Record<string, string>;
+  query: Record<string, string | undefined>;
+  body: unknown;
+  headers: Record<string, string>;
+  request: Request;
+  set: { status?: number; headers: Record<string, string> };
+  db: any; // Drizzle db from `service` (or first service with one)
+  logger: { info: (...a: any[]) => void; warn: (...a: any[]) => void; error: (...a: any[]) => void; debug: (...a: any[]) => void };
+  traceId: string;
+  requestId: string;
+}
+```
+
+Errors map the same way as the action mesh: throwing `ValidationError` or
+`ActionExecutionError` (or any error with a numeric `status`) sets the HTTP
+status; anything else becomes a 500.
+
+## Where to go next
+
+- [Built-in capabilities](./built-in) — what `createBrickServer()` gives you for free.
+- [Audit-trail pattern](./audit) — `afterCreate` / `afterUpdate` / `afterDelete` hooks writing audit rows.
+- [Comments pattern](./comments) — a comments table + resource with author checks.
+- [Build an extension](./build-plugin) — five steps from table to shared extension.
+- [Best practices](./best-practices) — scoping, errors, idempotency, testing.

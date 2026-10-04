@@ -1,0 +1,82 @@
+---
+title: Comments Pattern
+description: Threaded comments with a table, a resource, and author checks
+---
+
+There is no comments package to install. Model comments as an application
+table, expose it as a resource, and gate edits on the author.
+
+## 1. Define the comments table
+
+Threading is just a `parent_id` column on your own schema — top-level
+comments store `null`, replies store the parent comment id:
+
+```ts
+import { sqliteTable, text } from "drizzle-orm/sqlite-core";
+
+export const comments = sqliteTable("comments", {
+  id: text("id").primaryKey(),
+  targetType: text("target_type").notNull(), // e.g. "page"
+  targetId: text("target_id").notNull(),
+  parentId: text("parent_id"), // null = top-level, else reply-to id
+  body: text("body").notNull(),
+  authorId: text("author_id").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+```
+
+## 2. Expose it as a resource
+
+```ts
+service.resource({
+  name: "comment",
+  table: comments,
+  ownerField: "authorId",
+  hooks: {
+    beforeCreate: async ({ data, ctx, error }) => {
+      if (!ctx.user?.id) error.UNAUTHORIZED("Sign in to comment");
+      data.authorId = ctx.user.id;
+    },
+  },
+});
+```
+
+`ownerField: "authorId"` scopes list/get/update/delete to the caller's rows
+at the SQL level.
+
+## 3. Author-only edits
+
+Ownership scoping already blocks cross-user reads, but be explicit for
+writes with an `authorize` check comparing the author to the actor:
+
+```ts
+const authorOnly = async ({ ctx }: any) => {
+  const existing = await ctx.db.query.comments.findFirst({
+    where: (c: any, { eq }: any) => eq(c.id, ctx.params?.id ?? ctx.input?.id),
+  });
+  return !!ctx.user?.id && existing?.authorId === ctx.user.id;
+};
+
+service.action({
+  name: "comment.updateByAuthor",
+  authorize: authorOnly,
+  execute: async ({ input, ctx }) => {
+    // ...apply patch, touch updatedAt
+  },
+});
+```
+
+## 4. Routes
+
+The resource CRUD plus per-target listing covers the surface:
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/comment?targetType=page&targetId=:id` | List comments on a target |
+| `POST` | `/api/comment` | Create a comment (`targetType`, `targetId`, `body`, optional `parentId`) |
+| `PATCH` | `/api/comment/:id` | Edit a comment (author only) |
+| `DELETE` | `/api/comment/:id` | Delete a comment (author only) |
+
+Replies are `POST /api/comment` with `parentId` set; fetch a thread with
+`GET /api/comment?parentId=:id` or filter client-side on the list response.

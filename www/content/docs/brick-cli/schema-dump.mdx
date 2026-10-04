@@ -1,0 +1,132 @@
+---
+title: info and architecture export
+description: Export the service graph via brick info and the _brick/services route
+---
+
+```bash
+brick info
+# alias:
+brick services
+```
+
+Prints `registry.exportArchitecture()` as JSON — the full service graph: services, actions, resources, and database metadata. No values, no secrets, just shape.
+
+## ArchitectureSchema shape
+
+`exportArchitecture()` (`packages/core/src/registry.ts`) returns:
+
+```typescript
+interface ArchitectureSchema {
+  version: string;          // currently "1.0.0"
+  services: ServiceSchema[];
+}
+
+interface ServiceSchema {
+  name: string;
+  options: Omit<ServiceOptions, "database"> & {
+    database?: { name?: string; engine: "sqlite" | "postgres"; tables: string[] };
+  };
+  hasDatabase: boolean;
+  databaseConfig?: { name?: string; engine: "sqlite" | "postgres"; tables: string[] };
+  actions: ActionSchema[];
+  resources?: { name: string; ownerField?: string; operations: string[] }[];
+}
+
+interface ActionSchema {
+  name: string;
+  serviceName?: string;
+  description?: string;
+  inputSchema?: unknown;
+  outputSchema?: unknown;
+  hasAuthorize: boolean;
+  errors?: Record<string, ActionErrorDefinition>;
+  emits?: string[];
+  tags?: string[];
+}
+```
+
+Example output:
+
+```bash
+brick info
+```
+
+```json
+{
+  "version": "1.0.0",
+  "services": [
+    {
+      "name": "users",
+      "hasDatabase": true,
+      "databaseConfig": { "engine": "sqlite", "tables": ["users"] },
+      "actions": [
+        { "name": "getUser", "hasAuthorize": false },
+        { "name": "deleteUser", "hasAuthorize": true }
+      ],
+      "resources": [
+        { "name": "users", "operations": ["list", "create", "get", "update", "delete"] }
+      ]
+    }
+  ]
+}
+```
+
+Note: `brick info` reads the default global registry without importing your entry file, so in a bare checkout it prints `{ "version": "1.0.0", "services": [] }`. To export your app's graph from TypeScript, import the entry first:
+
+```typescript
+import "./src/index"; // side-effect: registers services via defineService
+import { getGlobalRegistry } from "@elregaldo/core";
+
+console.log(JSON.stringify(getGlobalRegistry().exportArchitecture(), null, 2));
+```
+
+## Live route: GET /_brick/services
+
+Every server built with `createBrickServer` exposes the same export at runtime:
+
+```typescript
+import { createBrickServer } from "@elregaldo/cli";
+
+const app = createBrickServer({ port: 4000 });
+app.listen(4000);
+// GET http://localhost:4000/_brick/services → ArchitectureSchema JSON
+```
+
+```bash
+curl http://localhost:4000/_brick/services | bun -e 'console.log(JSON.stringify(JSON.parse(await new Response(Bun.stdin.stream()).json()), null, 2))'
+```
+
+Related diagnostic route: `GET /_health` returns `{ status: "ok", uptime, timestamp }`.
+
+## listSecrets metadata (values never exposed)
+
+`listSecrets()` exposes secret metadata for introspection — names, whether a default exists, whether a value would resolve — never the values:
+
+```typescript
+import { listSecrets } from "@elregaldo/core";
+
+console.log(listSecrets());
+// [{ name: "DATABASE_URL", hasDefault: false, isSet: true }]
+```
+
+At boot, `createBrickServer` fail-fasts via `resolveSecrets()` (unless `secrets.validate === false`), throwing a single error listing all missing required secrets.
+
+## How dashboards consume it
+
+- **Service catalog**: poll `GET /_brick/services` (or check in `brick info` output) to render services → actions → resources without scraping OpenAPI paths.
+- **Auth audit**: filter `actions` by `hasAuthorize` to find unguarded actions.
+- **Database inventory**: read `databaseConfig` per service to list engines and tables.
+- **Secrets readiness**: combine `listSecrets()` with the boot-time `resolveSecrets()` error to show which required env vars are missing — displaying `isSet`, never values.
+
+```typescript
+// Example: nightly inventory snapshot
+import { writeFile } from "node:fs/promises";
+import { getGlobalRegistry, listSecrets } from "@elregaldo/core";
+import "./src/index";
+
+const architecture = getGlobalRegistry().exportArchitecture();
+await writeFile(
+  "inventory.json",
+  JSON.stringify({ architecture, secrets: listSecrets() }, null, 2)
+);
+```

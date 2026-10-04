@@ -1,0 +1,69 @@
+---
+title: Relations Without Child Tables
+description: Manual two-query patterns instead of nested writes
+---
+
+Brick-TS has **no child-table primitive**: no nested inline rows in parent responses, no replace-set write-through (matched-by-PK updated, missing deleted) on the parent's create/update endpoints. Each resource owns exactly one table. Related rows are modeled as their own resources and joined with explicit queries.
+
+## The pattern: two resources, two queries
+
+```ts
+export const commentsTable = sqliteTable("comments", {
+  id: text("id").primaryKey(),
+  pageId: text("page_id").notNull(),
+  body: text("body").notNull(),
+  userId: text("user_id"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const commentsResource = pagesService.resource({
+  name: "comment",
+  table: commentsTable,
+  ownerField: "userId",
+  operations: {
+    list: { defaultLimit: 20, maxLimit: 100 },
+    get: true, create: true, update: true, delete: true,
+  },
+});
+
+// Parent + children in one action: two sequential Drizzle queries
+import { eq, t } from "@elregaldo/core";
+import { PageSchema } from "./service"; // $inferSelect-based TypeBox schema
+
+export const CommentSchema = t.Object({
+  id: t.String(),
+  pageId: t.String(),
+  body: t.String(),
+  createdAt: t.String(),
+  updatedAt: t.String(),
+});
+
+export const getPageWithComments = pagesService.action({
+  name: "getPageWithComments",
+  input: t.Object({ id: t.String() }),
+  output: t.Object({
+    page: PageSchema,
+    comments: t.Array(CommentSchema),
+  }),
+  execute: async ({ input, ctx, error }) => {
+    const [page] = await ctx.db
+      .select()
+      .from(pagesTable)
+      .where(eq(pagesTable.id, input.id))
+      .limit(1);
+    if (!page) error.NOT_FOUND(`Page '${input.id}' not found`);
+    const comments = await ctx.db
+      .select()
+      .from(commentsTable)
+      .where(eq(commentsTable.pageId, input.id));
+    return { page, comments };
+  },
+});
+```
+
+Writes stay separate too: create the parent with `page.create`, then create each child with `comment.create` (passing `pageId`). If the two writes must be atomic, wrap them in a Drizzle transaction on `ctx.db` inside a single custom action — the framework performs no implicit cascading, and `afterDelete` cleanup (deleting orphaned children) is a manual hook you write yourself.
+
+## Listing children of a parent
+
+The list action's exact-match filters already cover the common case — `GET /api/comment?pageId=pg_abc123` filters comments by column with no extra code. Combine with `?sort`, `?limit`, and `?cursor` as usual (see [Resource Lifecycle](./resource-lifecycle)).

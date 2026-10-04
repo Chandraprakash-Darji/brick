@@ -1,0 +1,77 @@
+---
+title: Input and Output Validation
+description: Validating actions with TypeBox schemas and error helpers
+---
+
+There is **no `Validate` hook** in Brick-TS. Validation lives in the action's TypeBox `input` / `output` schemas plus the `error` helpers available in every `execute` and `before*` hook. This page documents that pattern (the filename is kept for routing stability).
+
+## Declaring schemas
+
+```ts
+import { defineAction, t } from "@elregaldo/core";
+
+export const renderPage = pagesService.action({
+  name: "renderPage",
+  description: "Render markdown document with Table of Contents",
+  input: t.Object({
+    slug: t.String({ minLength: 2, maxLength: 100, pattern: "^[a-z0-9-]+$" }),
+  }),
+  output: t.Object({
+    slug: t.String(),
+    title: t.String(),
+    content: t.String(),
+    theme: t.String(),
+    toc: t.Array(
+      t.Object({ level: t.Number(), id: t.String(), text: t.String() })
+    ),
+  }),
+  execute: async ({ input, ctx, error }) => {
+    const [page] = await ctx.db
+      .select()
+      .from(pagesTable)
+      .where(eq(pagesTable.slug, input.slug));
+    if (!page) {
+      error.NOT_FOUND(`Page '${input.slug}' not found`);
+    }
+    return { slug: page.slug, title: page.title, content: page.content, theme: page.theme, toc: [] };
+  },
+});
+```
+
+`t` is TypeBox's `Type` builder re-exported from `@elregaldo/core`. Resource CRUD schemas are derived from the Drizzle table automatically; use the resource `fields` option for per-column overrides (e.g. a slug pattern) instead of a hook.
+
+## When validation runs
+
+1. **Input first.** `input` is validated before `authorize` and before `execute`. Failure throws `ValidationError` → HTTP `400` with per-field `errors: [{ path, message }]`.
+2. **Business rules in `execute` / `before*`.** Cross-row checks (uniqueness, state transitions) use the `error` helpers — they throw immediately.
+3. **Output last.** `output` is validated after `execute` returns. Failure throws `ValidationError` with status `500` — it means the implementation broke its contract, not that the caller sent bad data.
+
+## Error helpers
+
+Every `execute` and every `before*` hook receives `error`. These standard helpers always exist:
+
+| Helper | Status |
+|--------|--------|
+| `error.BAD_REQUEST(msg?, details?)` | 400 |
+| `error.UNAUTHORIZED(msg?, details?)` | 401 |
+| `error.FORBIDDEN(msg?, details?)` | 403 |
+| `error.NOT_FOUND(msg?, details?)` | 404 |
+| `error.CONFLICT(msg?, details?)` | 409 |
+| `error.INTERNAL_SERVER_ERROR(msg?, details?)` | 500 |
+
+Declare custom codes per action (or per resource via `errors:`) and they become helpers too:
+
+```ts
+export const createWithSlug = defineAction({
+  name: "createWithSlug",
+  input: t.Object({ slug: t.String(), title: t.String() }),
+  errors: { SLUG_TAKEN: { status: 409, message: "Slug already taken" } },
+  execute: async ({ input, ctx, error }) => {
+    const exists = await findBySlug(ctx.db, input.slug);
+    if (exists) error.SLUG_TAKEN(`Slug '${input.slug}' is already taken`);
+    // ...
+  },
+});
+```
+
+Call actions directly with `action.execute({ input, ctx })` or the shorthand `action.run(input, ctx)` — both run the full validate → authorize → execute → validate pipeline. `action.validateInput()` / `action.validateOutput()` are also available for manual checks.

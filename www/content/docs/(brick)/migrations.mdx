@@ -1,0 +1,62 @@
+---
+title: Schema Management
+description: Creating tables in dev and owning Postgres schema yourself
+---
+
+Brick-TS never touches schema at boot. Tables are declared with Drizzle (`sqliteTable` / `pgTable`); how they get created depends on the engine.
+
+## SQLite: explicit syncSchema for dev and test
+
+```ts
+import { defineDatabase, syncSchema } from "@elregaldo/core";
+import { pagesTable } from "./services/pages/service";
+
+export const pagesDb = defineDatabase({
+  path: "./data/pages.db",
+  tables: { pagesTable },
+});
+
+// dev/test setup only — call it explicitly, never at server boot
+await syncSchema({ pagesTable }, pagesDb.getDb());
+```
+
+Rules:
+
+- `syncSchema` accepts a service, a `Map`, an array, or a record of tables plus a db instance.
+- It emits `CREATE TABLE IF NOT EXISTS` from the Drizzle definitions — idempotent and safe to re-run.
+- It is **not** a migration runner: no diffs, no alters, no destructive-change detection. Changing a table shape in dev means recreating the file or altering it yourself.
+- Never call it from service constructors, resource setup, `resolveContext`, or `createBrickServer` startup.
+
+## Postgres: schema is caller-owned
+
+```ts
+export const appDb = defineDatabase({
+  engine: "postgres",
+  tables: { pagesTable },
+  url: process.env.DATABASE_URL,
+});
+```
+
+For Postgres, `syncSchema` is effectively a no-op — create and evolve tables with Drizzle Kit migrations (`drizzle-kit generate` / `drizzle-kit migrate`) or your own SQL migration tooling, applied as a deliberate pre-runtime step. The server connects to an existing schema and assumes it matches the declared tables.
+
+## Connection options
+
+SQLite (`defineDatabase({ tables })` — engine defaults to `"sqlite"`, Bun-only):
+
+| Option | Meaning |
+|--------|---------|
+| `path` / `filename` | File path (parent dirs created automatically) or `:memory:` (default) |
+| `wal` | WAL journal mode for file DBs (default `true`) |
+| `foreignKeys` | `PRAGMA foreign_keys = ON` (default `true`) |
+| `client` | Existing `bun:sqlite` `Database` instance |
+
+Postgres (`defineDatabase({ engine: "postgres", tables, ... })`):
+
+| Option | Meaning |
+|--------|---------|
+| `url` / `connectionString` | Full connection string (or `DATABASE_URL` env) |
+| `host` / `port` / `user` / `password` / `database` | Piecewise connection config |
+| `ssl` / `max` / `prepare` | Driver tuning (`prepare: false` for transaction-mode poolers) |
+| `schemaName` | Isolated schema filter |
+
+Any option also accepts a `secret("NAME")` ref, resolved via `resolveSecrets()` at `createBrickServer` startup — missing required secrets fail fast before serving.

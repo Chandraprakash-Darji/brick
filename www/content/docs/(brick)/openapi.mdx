@@ -1,0 +1,45 @@
+---
+title: OpenAPI
+description: Live OpenAPI 3.1 spec served by the running server
+---
+
+Brick-TS serves its OpenAPI 3.1 spec **live** from the running server — there is no offline emission step and no static spec file to check in.
+
+## Generating the spec in code
+
+```ts
+import { generateOpenApiSpec } from "@elregaldo/core";
+
+const spec = generateOpenApiSpec({
+  title: "Pages API",
+  version: "1.0.0",
+  description: "Public pages service",
+  prefix: "/api",
+  services: [pagesService], // defaults to every registered service
+});
+```
+
+Options: `title` (default `"Brick-TS API Mesh"`), `version` (`"1.0.0"`), `description`, `prefix` (`"/api"`), `services`, `registry`. Each action becomes `POST /api/{service}/{action}`; read-like actions (`get*`, `list*`, `find*`, `read*`) also get a `GET` variant with query parameters derived from the input schema. Actions with `authorize` advertise `bearerAuth`; per-action `errors:` entries become named response schemas.
+
+## Served paths
+
+`createBrickServer` wires these automatically (all paths configurable via options):
+
+| Path | Content |
+|------|---------|
+| `GET /openapi.json` | The generated spec (raw endpoints merged in) |
+| `GET /docs` | Scalar API reference (HTML) |
+| `GET /swagger` | Swagger UI (HTML) |
+| `GET /_brick/services` | Architecture JSON (`exportArchitecture()`) |
+
+```ts
+const app = createBrickServer({
+  services: [pagesService],
+  title: "Pages API",
+  version: "1.0.0",
+  // openApiPath: "/openapi.json", docsPath: "/docs", swaggerPath: "/swagger",
+  // docs: true, reference: false, // optional /reference page
+});
+```
+
+Need a static snapshot for SDK generation? Fetch `/openapi.json` from a running instance in CI and save the result — the generator itself always runs against live service registrations.

@@ -1,0 +1,104 @@
+---
+title: Getting Started
+description: Install and create your first Brick-TS app
+---
+
+## Prerequisites
+
+- [Bun](https://bun.sh/) 1.0+
+- No database server needed for local dev (SQLite is Bun-native, `:memory:` by default)
+
+## Install
+
+```bash
+bun add @elregaldo/core @elregaldo/cli
+```
+
+## Define the table, database, service, and resource
+
+`examples/basic/src/services/pages/service.ts` is the canonical example:
+
+```ts
+import {
+  defineService,
+  defineDatabase,
+  sqliteTable,
+  text,
+  integer,
+  eq,
+  t,
+} from "@elregaldo/core";
+
+// 1. Pure Drizzle table — the single source of truth
+export const pagesTable = sqliteTable("pages", {
+  id: text("id").primaryKey(),
+  slug: text("slug").notNull().unique(),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  userId: text("user_id"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+// 2. SQLite database (Bun-only). Omit path for :memory:.
+export const pagesDb = defineDatabase({
+  path: "./data/pages.db",
+  tables: { pagesTable },
+});
+
+// 3. Service + resource (automatic CRUD + schema registration)
+export const pagesService = defineService("pages", { database: pagesDb });
+
+export const pagesResource = pagesService.resource({
+  name: "page",
+  table: pagesTable,
+  ownerField: "userId",
+  operations: {
+    list: { defaultLimit: 20, maxLimit: 100 },
+    get: true,
+    create: true,
+    update: true,
+    delete: true,
+  },
+  hooks: {
+    beforeCreate: async ({ data, ctx, error }) => {
+      const exists = await ctx.db
+        .select()
+        .from(pagesTable)
+        .where(eq(pagesTable.slug, data.slug));
+      if (exists.length > 0) {
+        error.CONFLICT(`Slug '${data.slug}' is already taken`);
+      }
+    },
+  },
+});
+```
+
+## Serve it
+
+```ts
+import { createBrickServer } from "@elregaldo/cli";
+import { pagesService } from "./services/pages/service";
+
+const app = createBrickServer({ port: 4000, services: [pagesService] });
+app.listen(4000);
+console.log("Brick-TS on http://localhost:4000");
+```
+
+```bash
+bun run src/index.ts
+```
+
+## Verify
+
+| URL | What |
+|-----|------|
+| `http://localhost:4000/_health` | `{ status: "ok", uptime, timestamp }` |
+| `http://localhost:4000/_brick/services` | Live architecture introspection |
+| `http://localhost:4000/openapi.json` | Generated OpenAPI 3.1 spec |
+| `http://localhost:4000/docs` | Scalar API reference |
+| `http://localhost:4000/swagger` | Swagger UI |
+| `GET http://localhost:4000/api/page` | List pages |
+| `POST http://localhost:4000/api/page` | Create a page |
+
+Postgres instead of SQLite? Pass `engine: "postgres"` with `tables` and a `url` — see [Schema Management](./migrations). Need a signed-in user on every CRUD op? See [Access Control](./access-control) for the context-resolver + `authorize` pattern.

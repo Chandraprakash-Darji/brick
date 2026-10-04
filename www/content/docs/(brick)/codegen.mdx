@@ -1,0 +1,51 @@
+---
+title: Type Inference Without Codegen
+description: Static types from schemas and tables with no build step
+---
+
+Brick-TS has **no codegen step**: no DSL files, no emitted `gen/` directory, no `just generate`. Types flow directly from the TypeBox schemas and Drizzle tables you already wrote.
+
+## Schema types
+
+```ts
+import type { Static } from "@elregaldo/core";
+import { t } from "@elregaldo/core";
+
+const CreatePageInput = t.Object({
+  slug: t.String(),
+  title: t.String(),
+});
+
+type CreatePageInput = Static<typeof CreatePageInput>;
+// { slug: string; title: string }
+```
+
+Action inputs/outputs infer the same way — `action.execute` is typed from its `input`/`output` schemas, and `ctx.user` narrows to non-null inside `execute` when the action declares `authorize`.
+
+## Row types
+
+```ts
+import { pagesTable } from "./services/pages/service";
+
+export type Page = typeof pagesTable.$inferSelect;
+export type NewPage = typeof pagesTable.$inferInsert;
+```
+
+`$inferSelect` is the row shape (what `get` returns); `$inferInsert` is the writable shape (what `beforeCreate`'s `data` looks like). Resource hooks are generic over these, so `existing`/`result`/`data` are typed rows without any extra declarations.
+
+## Runtime introspection instead of emitted metadata
+
+Instead of generated registry files, services describe themselves at runtime:
+
+```ts
+// One service
+pagesService.introspect();
+// { name, options, hasDatabase, databaseConfig, actions: [...], resources: [...] }
+
+// Every registered service (served live at GET /_brick/services)
+import { getGlobalRegistry } from "@elregaldo/core";
+getGlobalRegistry().exportArchitecture();
+// { version: "1.0.0", services: [...] }
+```
+
+`generateOpenApiSpec` consumes the same introspection data to build the live OpenAPI document — see [OpenAPI](./openapi). If you need a static snapshot (docs, SDK generation), fetch `/openapi.json` or `/_brick/services` from a running server.
