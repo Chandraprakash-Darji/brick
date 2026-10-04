@@ -24,6 +24,7 @@ import type {
   Action,
   Resource,
   ResourceConfig,
+  ResourcePlan,
   Service,
   ActionContext,
 } from "./types";
@@ -273,6 +274,205 @@ function columnToTypeBox(col: any, customSchema?: TSchema): TSchema {
   return t.Any();
 }
 
+/**
+ * Precomputes and freezes an immutable execution plan for a resource at registration or service.build().
+ * Per-request execution paths do O(1) ID lookups against this plan.
+ */
+export function buildResourcePlan<TTable = any>(
+  service: Service<any, any>,
+  config: ResourceConfig<TTable, any>
+): ResourcePlan<TTable> {
+  const resourceName = config.name;
+  const pluralName = config.pluralName ?? `${resourceName}s`;
+  const idField = config.idField ?? "id";
+  const ownerField = config.ownerField;
+  const table = config.table;
+  const columns = getTableColumns(table as any);
+
+  const columnMap = new Map<string, any>();
+  for (const [key, col] of Object.entries(columns) as [string, any][]) {
+    columnMap.set(key, col);
+    if (col.name && col.name !== key) {
+      columnMap.set(col.name, col);
+    }
+    if ((table as any)[key]) {
+      columnMap.set(key, (table as any)[key]);
+    }
+  }
+
+  const idCol = columnMap.get(idField) ?? (table as any)[idField] ?? (table as any).id;
+  const ownerCol = ownerField ? columnMap.get(ownerField) : undefined;
+  const ownerColName = ownerCol?.name ?? ownerField;
+
+  const defaultColumns: Array<{ key: string; default: any }> = [];
+  let createdAtKey: string | null = null;
+  let updatedAtKey: string | null = null;
+
+  for (const [key, col] of Object.entries(columns) as [string, any][]) {
+    if (col.hasDefault && col.default !== undefined) {
+      defaultColumns.push({ key, default: col.default });
+    }
+    const colName = col.name;
+    if (colName === "created_at" || key === "createdAt") {
+      createdAtKey = key;
+    }
+    if (colName === "updated_at" || key === "updatedAt") {
+      updatedAtKey = key;
+    }
+  }
+
+  const operations = config.operations ?? {};
+  const listOpts = typeof operations.list === "object" ? operations.list : {};
+  const searchFieldNames = config.searchable ?? listOpts.searchable ?? ["title", "slug"];
+  const searchCols = resolveSearchColumns(table, columns, searchFieldNames);
+
+  const sortableArr = config.sortable ?? listOpts.sortable ?? [];
+  const sortableFields = new Set<string>(sortableArr);
+  const defaultSort = config.defaultSort ?? listOpts.defaultSort ?? "-updatedAt";
+  const defaultSortEntries = parseSortEntries(defaultSort).filter((e) => {
+    if (sortableFields.size > 0 && !sortableFields.has(e.field)) return false;
+    return columnMap.has(e.field);
+  });
+
+  const fallbackField =
+    (columnMap.has("updatedAt") && "updatedAt") ||
+    (columnMap.has("updated_at") && "updated_at") ||
+    (columnMap.has("createdAt") && "createdAt") ||
+    (columnMap.has("created_at") && "created_at") ||
+    null;
+  const fallbackEntries: Array<{ field: string; dir: "asc" | "desc" }> =
+    fallbackField != null ? [{ field: fallbackField, dir: "desc" }] : [];
+
+  const defaultProjection = defaultListProjection(table, columns, config.excludeFromList);
+
+  const plan: ResourcePlan<TTable> = {
+    resourceName,
+    pluralName,
+    table,
+    idField,
+    idCol,
+    ownerField,
+    ownerCol,
+    ownerColName,
+    columnMap,
+    columns,
+    defaultColumns: Object.freeze(defaultColumns),
+    timestampColumns: Object.freeze({
+      createdAtKey,
+      updatedAtKey,
+    }),
+    searchable: Object.freeze({
+      fields: searchFieldNames,
+      columns: searchCols,
+    }),
+    sortable: Object.freeze({
+      fields: sortableFields,
+      defaultSort,
+      defaultSortEntries: Object.freeze(defaultSortEntries),
+      fallbackEntries: Object.freeze(fallbackEntries),
+      tiebreakCol: idCol,
+    }),
+    projections: Object.freeze({
+      defaultProjection,
+    }),
+    routeTargets: Object.freeze({
+      listPath: `/${resourceName}`,
+      itemPath: `/${resourceName}/:id`,
+    }),
+  };
+
+  return Object.freeze(plan);
+}
+
+// Prepared Statement Cache per database instance
+interface ResourceDbCache {
+  getById?: any;
+  deleteById?: any;
+  listCache: Map<string, { select: any; count: any }>;
+}
+
+const dbCaches = new WeakMap<any, Map<string, ResourceDbCache>>();
+
+function getResourceDbCache(db: any, resourceName: string): ResourceDbCache {
+  let resMap = dbCaches.get(db);
+  if (!resMap) {
+    resMap = new Map();
+    dbCaches.set(db, resMap);
+  }
+  let cache = resMap.get(resourceName);
+  if (!cache) {
+    cache = {
+      listCache: new Map(),
+    };
+    resMap.set(resourceName, cache);
+  }
+  return cache;
+}
+
+async function executeGet(db: any, plan: ResourcePlan, idVal: any): Promise<any> {
+  if (typeof db?.select === "function" && plan.idCol) {
+    const cache = getResourceDbCache(db, plan.resourceName);
+    if (cache.getById === undefined) {
+      try {
+        cache.getById = db
+          .select()
+          .from(plan.table)
+          .where(eq(plan.idCol, sql.placeholder("id")))
+          .limit(1)
+          .prepare();
+      } catch {
+        cache.getById = null;
+      }
+    }
+
+    if (cache.getById) {
+      try {
+        if (typeof cache.getById.get === "function") {
+          return await cache.getById.get({ id: idVal });
+        }
+        const rows = await cache.getById.execute({ id: idVal });
+        return rows[0];
+      } catch {
+        // Fallback to dynamic on error
+      }
+    }
+  }
+
+  // Fallback to dynamic Drizzle
+  const [row] = await db
+    .select()
+    .from(plan.table)
+    .where(eq(plan.idCol, idVal))
+    .limit(1);
+  return row;
+}
+
+async function executeDelete(db: any, plan: ResourcePlan, idVal: any): Promise<any> {
+  if (typeof db?.delete === "function" && plan.idCol) {
+    const cache = getResourceDbCache(db, plan.resourceName);
+    if (cache.deleteById === undefined) {
+      try {
+        cache.deleteById = db
+          .delete(plan.table)
+          .where(eq(plan.idCol, sql.placeholder("id")))
+          .prepare();
+      } catch {
+        cache.deleteById = null;
+      }
+    }
+
+    if (cache.deleteById) {
+      try {
+        return await cache.deleteById.execute({ id: idVal });
+      } catch {
+        // Fallback to dynamic on error
+      }
+    }
+  }
+
+  return await db.delete(plan.table).where(eq(plan.idCol, idVal));
+}
+
 export function defineResource<
   TTable = any,
   TCtx extends ActionContext = ActionContext
@@ -288,6 +488,9 @@ export function defineResource<
   const table = config.table;
   const columns = getTableColumns(table as any);
   const fieldsOverride = config.fields ?? {};
+
+  // Build immutable execution plan
+  const plan = buildResourcePlan(service, config);
 
   // Register table on service
   service.registerTable(table);
@@ -421,23 +624,21 @@ export function defineResource<
         }
       }
 
-      // Populate column defaults if not provided
-      for (const [key, col] of Object.entries(columns) as [string, any][]) {
-        if (data[key] === undefined && col.hasDefault && col.default !== undefined) {
-          data[key] = col.default;
+      // Populate column defaults from precomputed plan
+      for (let i = 0; i < plan.defaultColumns.length; i++) {
+        const item = plan.defaultColumns[i];
+        if (data[item.key] === undefined) {
+          data[item.key] = item.default;
         }
       }
 
-      // Auto-generate timestamps
+      // Auto-generate timestamps from precomputed keys
       const now = new Date().toISOString();
-      for (const [key, col] of Object.entries(columns) as [string, any][]) {
-        const colName = col.name;
-        if (colName === "created_at" || key === "createdAt") {
-          if (data[key] === undefined) data[key] = now;
-        }
-        if (colName === "updated_at" || key === "updatedAt") {
-          if (data[key] === undefined) data[key] = now;
-        }
+      if (plan.timestampColumns.createdAtKey && data[plan.timestampColumns.createdAtKey] === undefined) {
+        data[plan.timestampColumns.createdAtKey] = now;
+      }
+      if (plan.timestampColumns.updatedAtKey && data[plan.timestampColumns.updatedAtKey] === undefined) {
+        data[plan.timestampColumns.updatedAtKey] = now;
       }
 
       // Ownership injection: inject ctx.user.id
@@ -458,14 +659,9 @@ export function defineResource<
       await db.insert(table).values(data);
 
       const idVal = data[idField];
-      const idCol = getColumn(table, idField);
       let createdRow: any = data;
-      if (idCol) {
-        const [row] = await db
-          .select()
-          .from(table)
-          .where(eq(idCol, idVal))
-          .limit(1);
+      if (plan.idCol) {
+        const row = await executeGet(db, plan, idVal);
         if (row) createdRow = row;
       }
 
@@ -497,25 +693,19 @@ export function defineResource<
     execute: async ({ input, ctx, error }) => {
       const db = ctx.db ?? service.getDb();
       const idVal = input[idField] ?? input.id;
-      const idCol = getColumn(table, idField);
 
-      if (!idCol) {
+      if (!plan.idCol) {
         error.NOT_FOUND(`${capitalizedName} with ID '${idVal}' does not exist`);
       }
 
-      const [row] = await db
-        .select()
-        .from(table)
-        .where(eq(idCol, idVal))
-        .limit(1);
+      const row = await executeGet(db, plan, idVal);
       if (!row) {
         error.NOT_FOUND(`${capitalizedName} with ID '${idVal}' does not exist`);
       }
 
       // Ownership verification
       if (ownerField && ctx.user?.id) {
-        const ownerColName = getColumn(table, ownerField)?.name ?? ownerField;
-        const rowOwner = row[ownerField] ?? row[ownerColName];
+        const rowOwner = row[ownerField] ?? row[plan.ownerColName!];
         if (rowOwner && rowOwner !== ctx.user.id) {
           error.FORBIDDEN(`Access denied to ${resourceName}`);
         }
@@ -526,8 +716,6 @@ export function defineResource<
   });
 
   // 3. List Action
-  // List items use a partial row schema so ?select=id,slug projections pass
-  // output validation while full rows still validate (all fields optional).
   const listItemProperties: Record<string, TSchema> = {};
   for (const [key, prop] of Object.entries(rowProperties)) {
     listItemProperties[key] = t.Optional(prop);
@@ -564,7 +752,6 @@ export function defineResource<
           ? Math.min(Math.max(Number(raw.limit) || defaultLimit, 1), maxLimitVal)
           : defaultLimit;
 
-      // Offset vs keyset: cursor wins when valid; otherwise page/offset.
       let offset =
         raw.offset !== undefined && raw.offset !== null
           ? Math.max(Number(raw.offset) || 0, 0)
@@ -579,98 +766,86 @@ export function defineResource<
         page = Math.floor(offset / limit) + 1;
       }
 
-      // Sort entries (field+dir) drive ORDER BY, cursor encode/decode, tiebreak.
-      const sortable = config.sortable ?? listOpts.sortable;
+      // Fast sort resolution using precomputed plan
       const requestedSort =
         typeof raw.sort === "string" && raw.sort.trim()
           ? raw.sort
-          : (config.defaultSort ?? listOpts.defaultSort ?? "-updatedAt");
-      let sortEntries = parseSortEntries(requestedSort).filter((e) => {
-        if (sortable && sortable.length > 0 && !sortable.includes(e.field))
-          return false;
-        return !!getColumn(table, e.field);
-      });
-      if (sortEntries.length === 0) {
-        const fallbackField =
-          (getColumn(table, "updatedAt") && "updatedAt") ||
-          (getColumn(table, "updated_at") && "updated_at") ||
-          (getColumn(table, "createdAt") && "createdAt") ||
-          (getColumn(table, "created_at") && "created_at") ||
-          null;
-        sortEntries =
-          fallbackField != null ? [{ field: fallbackField, dir: "desc" }] : [];
+          : plan.sortable.defaultSort;
+
+      let sortEntries: Array<{ field: string; dir: "asc" | "desc" }>;
+      if (requestedSort === plan.sortable.defaultSort) {
+        sortEntries = plan.sortable.defaultSortEntries as any;
+      } else {
+        sortEntries = parseSortEntries(requestedSort).filter((e) => {
+          if (plan.sortable.fields.size > 0 && !plan.sortable.fields.has(e.field)) return false;
+          return plan.columnMap.has(e.field);
+        });
       }
+
+      if (sortEntries.length === 0) {
+        sortEntries = plan.sortable.fallbackEntries as any;
+      }
+
       const orderBys = sortEntries.map((e) => {
-        const col = getColumn(table, e.field);
+        const col = plan.columnMap.get(e.field);
         return e.dir === "desc" ? desc(col) : asc(col);
       });
-      // Deterministic tiebreak on PK so keyset pages never skip/duplicate.
-      const idColForSort = getColumn(table, idField);
-      const primaryDir =
-        sortEntries.length > 0 ? sortEntries[0].dir : "desc";
+
+      const idColForSort = plan.sortable.tiebreakCol;
+      const primaryDir = sortEntries.length > 0 ? sortEntries[0].dir : "desc";
       if (idColForSort) {
         const already =
           sortEntries.length > 0 &&
-          getColumn(table, sortEntries[0].field) === idColForSort;
+          plan.columnMap.get(sortEntries[0].field) === idColForSort;
         if (!already) {
           orderBys.push(primaryDir === "desc" ? desc(idColForSort) : asc(idColForSort));
         }
       }
       const primarySort = sortEntries.length > 0 ? sortEntries[0] : null;
-      const primaryCol = primarySort ? getColumn(table, primarySort.field) : null;
+      const primaryCol = primarySort ? plan.columnMap.get(primarySort.field) : null;
 
       const conditions: any[] = [];
+      const exactFilters: Array<{ key: string; col: any; val: any }> = [];
 
       // Ownership scoping: WHERE ownerField = ctx.user.id
-      if (ownerField && ctx.user?.id) {
-        const ownerCol = getColumn(table, ownerField);
-        if (ownerCol) {
-          conditions.push(eq(ownerCol, ctx.user.id));
-        }
+      const isOwnerScoped = Boolean(ownerField && ctx.user?.id && plan.ownerCol);
+      if (isOwnerScoped) {
+        conditions.push(eq(plan.ownerCol, ctx.user.id));
       }
 
-      // Exact-match filters (all non-reserved keys with a matching column).
+      // Exact-match filters (O(1) ID lookups on precomputed columnMap)
       for (const [key, val] of Object.entries(raw)) {
         if (RESERVED_LIST_KEYS.has(key)) continue;
         if (val === undefined || val === null) continue;
-        const col = getColumn(table, key);
+        const col = plan.columnMap.get(key);
         if (col) {
           conditions.push(eq(col, val));
+          exactFilters.push({ key, col, val });
         }
       }
 
-      // Search (?search=): SQLite FTS5 MATCH via subquery, Postgres ilike
-      // (trigram GIN), LIKE lower() fallback. FTS failure falls back to LIKE.
+      // Search (?search=)
       const searchTerm =
         typeof raw.search === "string" ? raw.search.trim() : "";
       if (searchTerm) {
-        const searchFieldNames =
-          config.searchable ?? listOpts.searchable ?? ["title", "slug"];
         let pushed = false;
         if (isSQLite) {
           try {
             const ftsQuery = buildFtsMatchQuery(searchTerm);
-            if (ftsQuery) {
+            if (ftsQuery && plan.idCol) {
               const tableName = getTableName(table as any);
               const fts = `${tableName}_fts`;
-              const idCol = getColumn(table, idField);
-              if (idCol) {
-                conditions.push(
-                  sql`${idCol} IN (SELECT "id" FROM ${sql.raw(`"${fts.replace(/"/g, '""')}"`)} WHERE ${sql.raw(`"${fts.replace(/"/g, '""')}"`)} MATCH ${ftsQuery})`
-                );
-                pushed = true;
-              }
+              conditions.push(
+                sql`${plan.idCol} IN (SELECT "id" FROM ${sql.raw(`"${fts.replace(/"/g, '""')}"`)} WHERE ${sql.raw(`"${fts.replace(/"/g, '""')}"`)} MATCH ${ftsQuery})`
+              );
+              pushed = true;
             }
           } catch {
             pushed = false;
           }
         }
         if (!pushed) {
-          const searchCols = resolveSearchColumns(
-            table,
-            columns,
-            searchFieldNames
-          );
+          const searchCols = plan.searchable.columns;
           if (searchCols.length > 0) {
             const ors = searchCols.map((col) =>
               isPostgres
@@ -682,8 +857,7 @@ export function defineResource<
         }
       }
 
-      // Keyset cursor (?cursor=): stable deep pagination without OFFSET scan.
-      // Format: base64url([primarySortValue, idValue]) + sort string check.
+      // Keyset cursor (?cursor=)
       let cursorActive = false;
       const cursorRaw = typeof raw.cursor === "string" ? raw.cursor : "";
       if (cursorRaw && primarySort && primaryCol && idColForSort) {
@@ -715,45 +889,120 @@ export function defineResource<
         }
       }
 
-      const where = conditions.length > 0 ? and(...conditions) : undefined;
+      // Column projection: explicit ?select= wins; else precomputed default projection
+      const explicitProj = raw.select ? parseSelectParam(table, columns, raw.select) : undefined;
+      const projection = explicitProj ?? plan.projections.defaultProjection;
 
-      // Column projection: explicit ?select= wins; else exclude body columns
-      // (Go pageMeta parity: list omits content by default).
-      const explicitProj = parseSelectParam(table, columns, raw.select);
-      const projection =
-        explicitProj ??
-        defaultListProjection(table, columns, config.excludeFromList);
+      let total: number;
+      let rows: any[];
 
-      // Total via SQL COUNT(*) with identical WHERE (no row loading).
-      const countQuery = (db as any)
-        .select({ n: sql<number>`count(*)`.mapWith(Number) })
-        .from(table);
-      const [{ n: total } = { n: 0 }] = await (where
-        ? countQuery.where(where)
-        : countQuery);
+      // Prepared query caching fast path for standard list queries
+      const canPrepare =
+        !cursorActive &&
+        !searchTerm &&
+        typeof db?.select === "function";
 
-      // Paginated data query with SQL-level WHERE + ORDER BY + LIMIT + OFFSET.
-      // Keyset path uses OFFSET 0 (position comes from the cursor predicate).
-      const baseSelect = projection
-        ? (db as any).select(projection).from(table)
-        : (db as any).select().from(table);
-      const filtered =
-        where !== undefined ? baseSelect.where(where) : baseSelect;
-      const ordered =
-        orderBys.length > 0 ? filtered.orderBy(...orderBys) : filtered;
-      const rows = await ordered
-        .limit(limit)
-        .offset(cursorActive ? 0 : offset);
+      let usedPrepared = false;
+      if (canPrepare) {
+        const cache = getResourceDbCache(db, plan.resourceName);
+        const filterKey = exactFilters.map((f) => f.key).sort().join(",");
+        const sortKey = requestedSort;
+        const projKey = raw.select ? String(raw.select) : "default";
+        const shapeKey = `${filterKey}|${isOwnerScoped ? "1" : "0"}|${sortKey}|${projKey}`;
 
-      const pageCount = Math.max(Math.ceil(total / limit), total > 0 ? 1 : 0);
+        let preparedPair = cache.listCache.get(shapeKey);
+        if (!preparedPair) {
+          try {
+            const prepWhereParts: any[] = [];
+            if (isOwnerScoped) {
+              prepWhereParts.push(eq(plan.ownerCol, sql.placeholder("__ownerId")));
+            }
+            for (let i = 0; i < exactFilters.length; i++) {
+              prepWhereParts.push(eq(exactFilters[i].col, sql.placeholder(`__f_${exactFilters[i].key}`)));
+            }
+            const prepWhere =
+              prepWhereParts.length === 1
+                ? prepWhereParts[0]
+                : prepWhereParts.length > 1
+                ? and(...prepWhereParts)
+                : undefined;
+
+            let sQuery = projection
+              ? db.select(projection).from(table)
+              : db.select().from(table);
+            if (prepWhere) sQuery = sQuery.where(prepWhere);
+            if (orderBys.length > 0) sQuery = sQuery.orderBy(...orderBys);
+            sQuery = sQuery.limit(sql.placeholder("__limit")).offset(sql.placeholder("__offset"));
+            const preparedSelect = sQuery.prepare();
+
+            let cQuery = db
+              .select({ n: sql<number>`count(*)`.mapWith(Number) })
+              .from(table);
+            if (prepWhere) cQuery = cQuery.where(prepWhere);
+            const preparedCount = cQuery.prepare();
+
+            preparedPair = { select: preparedSelect, count: preparedCount };
+            if (cache.listCache.size < 64) {
+              cache.listCache.set(shapeKey, preparedPair);
+            }
+          } catch {
+            preparedPair = undefined;
+          }
+        }
+
+        if (preparedPair) {
+          try {
+            const execParams: Record<string, any> = {
+              __limit: limit,
+              __offset: offset,
+            };
+            if (isOwnerScoped) {
+              execParams.__ownerId = ctx.user.id;
+            }
+            for (let i = 0; i < exactFilters.length; i++) {
+              execParams[`__f_${exactFilters[i].key}`] = exactFilters[i].val;
+            }
+
+            const countRes = await preparedPair.count.execute(execParams);
+            total = countRes[0]?.n ?? 0;
+            rows = await preparedPair.select.execute(execParams);
+            usedPrepared = true;
+          } catch {
+            usedPrepared = false;
+          }
+        }
+      }
+
+      if (!usedPrepared) {
+        const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+        // Total via SQL COUNT(*) with identical WHERE
+        const countQuery = (db as any)
+          .select({ n: sql<number>`count(*)`.mapWith(Number) })
+          .from(table);
+        const [{ n: totalCount } = { n: 0 }] = await (where
+          ? countQuery.where(where)
+          : countQuery);
+        total = totalCount;
+
+        // Paginated data query
+        const baseSelect = projection
+          ? (db as any).select(projection).from(table)
+          : (db as any).select().from(table);
+        const filtered = where !== undefined ? baseSelect.where(where) : baseSelect;
+        const ordered = orderBys.length > 0 ? filtered.orderBy(...orderBys) : filtered;
+        rows = await ordered.limit(limit).offset(cursorActive ? 0 : offset);
+      }
+
+      const pageCount = Math.max(Math.ceil(total! / limit), total! > 0 ? 1 : 0);
       const hasMore = cursorActive
-        ? rows.length === limit
-        : offset + rows.length < total;
+        ? rows!.length === limit
+        : offset + rows!.length < total!;
 
-      // Next cursor from last row (primary sort value + PK tiebreak).
+      // Next cursor from last row
       let nextCursor: string | null = null;
-      if (hasMore && rows.length > 0 && primarySort && primaryCol && idColForSort) {
-        const last = rows[rows.length - 1];
+      if (hasMore && rows!.length > 0 && primarySort && primaryCol && idColForSort) {
+        const last = rows![rows!.length - 1];
         const sortVal = rowValue(last, primarySort.field, primaryCol);
         const idValOut = rowValue(last, idField, idColForSort);
         if (sortVal !== undefined && sortVal !== null) {
@@ -762,9 +1011,9 @@ export function defineResource<
       }
 
       return {
-        [pluralName]: rows,
-        items: rows,
-        total,
+        [pluralName]: rows!,
+        items: rows!,
+        total: total!,
         limit,
         offset: cursorActive ? 0 : offset,
         page: cursorActive ? undefined : page,
@@ -789,25 +1038,19 @@ export function defineResource<
     execute: async ({ input, ctx, error }) => {
       const db = ctx.db ?? service.getDb();
       const idVal = input[idField] ?? input.id;
-      const idCol = getColumn(table, idField);
 
-      if (!idCol) {
+      if (!plan.idCol) {
         error.NOT_FOUND(`${capitalizedName} with ID '${idVal}' not found`);
       }
 
-      const [existing] = await db
-        .select()
-        .from(table)
-        .where(eq(idCol, idVal))
-        .limit(1);
+      const existing = await executeGet(db, plan, idVal);
       if (!existing) {
         error.NOT_FOUND(`${capitalizedName} with ID '${idVal}' not found`);
       }
 
       // Ownership verification
       if (ownerField && ctx.user?.id) {
-        const ownerColName = getColumn(table, ownerField)?.name ?? ownerField;
-        const rowOwner = existing[ownerField] ?? existing[ownerColName];
+        const rowOwner = existing[ownerField] ?? existing[plan.ownerColName!];
         if (rowOwner && rowOwner !== ctx.user.id) {
           error.FORBIDDEN(`Access denied to update ${resourceName}`);
         }
@@ -815,13 +1058,9 @@ export function defineResource<
 
       const { id: _ignoreId, [idField]: _ignoreIdField, ...updateData }: any = input;
 
-      // Update timestamp
-      const now = new Date().toISOString();
-      for (const [key, col] of Object.entries(columns) as [string, any][]) {
-        const colName = col.name;
-        if (colName === "updated_at" || key === "updatedAt") {
-          updateData[key] = now;
-        }
+      // Update timestamp using precomputed key
+      if (plan.timestampColumns.updatedAtKey) {
+        updateData[plan.timestampColumns.updatedAtKey] = new Date().toISOString();
       }
 
       // Hook: beforeUpdate
@@ -836,14 +1075,10 @@ export function defineResource<
       }
 
       if (Object.keys(updateData).length > 0) {
-        await db.update(table).set(updateData).where(eq(idCol, idVal));
+        await db.update(table).set(updateData).where(eq(plan.idCol, idVal));
       }
 
-      const [updated] = await db
-        .select()
-        .from(table)
-        .where(eq(idCol, idVal))
-        .limit(1);
+      const updated = await executeGet(db, plan, idVal);
 
       // Hook: afterUpdate
       if (config.hooks?.afterUpdate) {
@@ -876,25 +1111,19 @@ export function defineResource<
     execute: async ({ input, ctx, error }) => {
       const db = ctx.db ?? service.getDb();
       const idVal = input[idField] ?? input.id;
-      const idCol = getColumn(table, idField);
 
-      if (!idCol) {
+      if (!plan.idCol) {
         error.NOT_FOUND(`${capitalizedName} with ID '${idVal}' not found`);
       }
 
-      const [existing] = await db
-        .select()
-        .from(table)
-        .where(eq(idCol, idVal))
-        .limit(1);
+      const existing = await executeGet(db, plan, idVal);
       if (!existing) {
         error.NOT_FOUND(`${capitalizedName} with ID '${idVal}' not found`);
       }
 
       // Ownership verification
       if (ownerField && ctx.user?.id) {
-        const ownerColName = getColumn(table, ownerField)?.name ?? ownerField;
-        const rowOwner = existing[ownerField] ?? existing[ownerColName];
+        const rowOwner = existing[ownerField] ?? existing[plan.ownerColName!];
         if (rowOwner && rowOwner !== ctx.user.id) {
           error.FORBIDDEN(`Access denied to delete ${resourceName}`);
         }
@@ -910,7 +1139,7 @@ export function defineResource<
         });
       }
 
-      await db.delete(table).where(eq(idCol, idVal));
+      await executeDelete(db, plan, idVal);
 
       // Hook: afterDelete
       if (config.hooks?.afterDelete) {
@@ -956,6 +1185,7 @@ export function defineResource<
     idField,
     pluralName,
     config,
+    plan,
     actions: {
       list: listAction as Action<any, any, any, TCtx>,
       get: getAction as Action<any, any, any, TCtx>,

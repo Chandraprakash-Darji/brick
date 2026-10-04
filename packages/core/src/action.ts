@@ -23,6 +23,9 @@ const defaultLogger: Logger = {
   debug: (...args) => console.debug("[DEBUG]", ...args),
 };
 
+const DEFAULT_REQUEST = new Request("http://localhost");
+let _defaultCtxSeq = 0;
+
 const standardErrorDefaults: Record<string, { status: number; message: string }> = {
   BAD_REQUEST: { status: 400, message: "Bad Request" },
   UNAUTHORIZED: { status: 401, message: "Unauthorized" },
@@ -33,18 +36,20 @@ const standardErrorDefaults: Record<string, { status: number; message: string }>
 };
 
 function createDefaultContext(partial?: any): BaseContext & any {
-  const randomId = Math.random().toString(36).substring(2, 10);
-  const req = partial?.request ?? new Request("http://localhost");
+  if (partial?._resolved) return partial;
+  const seq = (++_defaultCtxSeq).toString(36);
+  const req = partial?.request ?? DEFAULT_REQUEST;
   return {
     request: req,
-    traceId: partial?.traceId || `tr_${randomId}`,
-    requestId: partial?.requestId || `req_${randomId}`,
+    traceId: partial?.traceId || `tr_${seq}`,
+    requestId: partial?.requestId || `req_${seq}`,
     db: partial?.db,
     user: partial?.user,
     logger: partial?.logger || defaultLogger,
     services: partial?.services || {},
     metadata: partial?.metadata || {},
     ...partial,
+    _resolved: true,
   };
 }
 
@@ -110,6 +115,7 @@ export function defineAction(config: any): any {
   });
 
   actionFn.config = config;
+  actionFn.errorHelpers = errorHelpers;
 
   actionFn.validateInput = (input: unknown) => {
     return validateWithSchema(config.input, input);
@@ -128,11 +134,15 @@ export function defineAction(config: any): any {
     ctx?: any;
   }) => {
     let fullCtx: any;
-    const boundService = (actionFn as any).service;
-    if (boundService && typeof boundService.resolveContext === "function") {
-      fullCtx = await boundService.resolveContext(params?.ctx);
+    if (params?.ctx?._resolved) {
+      fullCtx = params.ctx;
     } else {
-      fullCtx = createDefaultContext(params?.ctx);
+      const boundService = (actionFn as any).service;
+      if (boundService && typeof boundService.resolveContext === "function") {
+        fullCtx = await boundService.resolveContext(params?.ctx);
+      } else {
+        fullCtx = createDefaultContext(params?.ctx);
+      }
     }
 
     // Auto-populate ctx.db from the bound service or global registry if not provided in call ctx

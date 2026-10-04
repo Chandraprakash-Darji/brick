@@ -1,7 +1,7 @@
 // Core Primitives
 export { defineService, ServiceImpl } from "./service";
-export { defineAction } from "./action";
-export { defineResource } from "./resource";
+export { defineAction, buildErrorHelpers } from "./action";
+export { defineResource, buildResourcePlan } from "./resource";
 export { createServiceProxy } from "./rpc";
 export {
   ServiceRegistry,

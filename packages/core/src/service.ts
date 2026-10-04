@@ -16,7 +16,7 @@ import type {
 import { defineAction } from "./action";
 import { getGlobalRegistry } from "./registry";
 import { getTableName, isDatabaseHandle, type DatabaseHandle } from "./db";
-import { defineResource } from "./resource";
+import { defineResource, buildResourcePlan } from "./resource";
 
 const defaultLogger: Logger = {
   info: (...args) => console.log("[INFO]", ...args),
@@ -24,6 +24,11 @@ const defaultLogger: Logger = {
   error: (...args) => console.error("[ERROR]", ...args),
   debug: (...args) => console.debug("[DEBUG]", ...args),
 };
+
+const DEFAULT_REQUEST = new Request("http://localhost");
+const EMPTY_SERVICES = Object.freeze({});
+const EMPTY_METADATA = Object.freeze({});
+let _ctxSeq = 0;
 
 export class ServiceImpl<
   TDb = BunSQLiteDatabase<Record<string, unknown>>,
@@ -35,6 +40,7 @@ export class ServiceImpl<
   readonly tables = new Map<string, any>();
   readonly resources = new Map<string, Resource<any, BaseContext<TDb> & TServiceContext>>();
   private database?: DatabaseHandle<TDb>;
+  private _isBuilt = false;
 
   constructor(name: string, options: ServiceOptions<TServiceContext, TDb> = {}) {
     this.name = name;
@@ -47,6 +53,26 @@ export class ServiceImpl<
 
   get db(): TDb | undefined {
     return this.getDb();
+  }
+
+  get isBuilt(): boolean {
+    return this._isBuilt;
+  }
+
+  /**
+   * Precomputes and freezes execution plans for all registered resources and route targets once.
+   * Per-request paths perform O(1) lookups against these immutable plans.
+   */
+  build(): this {
+    if (this._isBuilt) return this;
+    for (const resource of this.resources.values()) {
+      if (!(resource as any).plan) {
+        (resource as any).plan = buildResourcePlan(this, resource.config);
+      }
+      Object.freeze((resource as any).plan);
+    }
+    this._isBuilt = true;
+    return this;
   }
 
   registerTable(table: any): this {
@@ -141,30 +167,56 @@ export class ServiceImpl<
    * Resolves the complete service execution context once per incoming request.
    * Merges framework BaseContext with the service's custom context hook.
    */
-  async resolveContext(
+  resolveContext(
     callCtx?: Partial<BaseContext<TDb> & TServiceContext>
   ): Promise<BaseContext<TDb> & TServiceContext> {
     if ((callCtx as any)?._resolved) {
-      return callCtx as BaseContext<TDb> & TServiceContext;
+      return Promise.resolve(callCtx as BaseContext<TDb> & TServiceContext);
+    }
+    return this._resolveContextSlow(callCtx);
+  }
+
+  private async _resolveContextSlow(
+    callCtx?: Partial<BaseContext<TDb> & TServiceContext>
+  ): Promise<BaseContext<TDb> & TServiceContext> {
+    const seq = ++_ctxSeq;
+    const req = callCtx?.request ?? DEFAULT_REQUEST;
+    const db = callCtx?.db ?? (this.getDb() as TDb);
+    const logger = callCtx?.logger ?? defaultLogger;
+    const traceId = callCtx?.traceId ?? `tr_${seq.toString(36)}`;
+    const requestId = callCtx?.requestId ?? `req_${seq.toString(36)}`;
+    const services = callCtx?.services ?? EMPTY_SERVICES;
+    const metadata = callCtx?.metadata ?? EMPTY_METADATA;
+
+    if (!this.options.context) {
+      const finalCtx: any = {
+        request: req,
+        db,
+        logger,
+        traceId,
+        requestId,
+        services,
+        metadata,
+        _resolved: true,
+      };
+      if (callCtx) {
+        Object.assign(finalCtx, callCtx, { _resolved: true });
+      }
+      return finalCtx;
     }
 
-    const randomId = Math.random().toString(36).substring(2, 10);
-    const fullBaseCtx: BaseContext<TDb> = {
-      request: callCtx?.request ?? new Request("http://localhost"),
-      db: callCtx?.db ?? (this.getDb() as TDb),
-      logger: callCtx?.logger ?? defaultLogger,
-      traceId: callCtx?.traceId ?? `tr_${randomId}`,
-      requestId: callCtx?.requestId ?? `req_${randomId}`,
-      services: callCtx?.services ?? {},
-      metadata: callCtx?.metadata ?? {},
+    const fullBaseCtx: any = {
+      request: req,
+      db,
+      logger,
+      traceId,
+      requestId,
+      services,
+      metadata,
     };
 
-    let resolvedExtra: any = {};
-    if (this.options.context) {
-      resolvedExtra = await this.options.context(fullBaseCtx);
-    }
-
-    const finalCtx = {
+    const resolvedExtra = await this.options.context(fullBaseCtx);
+    const finalCtx: any = {
       ...fullBaseCtx,
       ...resolvedExtra,
       ...callCtx,

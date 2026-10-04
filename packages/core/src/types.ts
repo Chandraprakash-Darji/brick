@@ -204,8 +204,13 @@ export interface Action<
     input?: TInputSchema extends TSchema ? Static<TInputSchema> : any;
     ctx?: Partial<TContext>;
   }): Promise<TOutputSchema extends TSchema ? Static<TOutputSchema> : any>;
+  executeResolved?(params: {
+    input?: TInputSchema extends TSchema ? Static<TInputSchema> : any;
+    ctx: TContext;
+  }): Promise<TOutputSchema extends TSchema ? Static<TOutputSchema> : any>;
   validateInput(input: unknown): { success: true; data: any } | { success: false; errors: ValidationErrorItem[] };
   validateOutput(output: unknown): { success: true; data: any } | { success: false; errors: ValidationErrorItem[] };
+  errorHelpers?: ErrorBuilder<TErrors>;
 }
 
 export interface ResourceOperationsConfig {
@@ -264,6 +269,42 @@ export interface ResourceConfig<
   excludeFromList?: string[];
 }
 
+export interface ResourcePlan<TTable = any> {
+  readonly resourceName: string;
+  readonly pluralName: string;
+  readonly table: TTable;
+  readonly idField: string;
+  readonly idCol: any;
+  readonly ownerField?: string;
+  readonly ownerCol?: any;
+  readonly ownerColName?: string;
+  readonly columnMap: Map<string, any>;
+  readonly columns: Record<string, any>;
+  readonly defaultColumns: ReadonlyArray<{ key: string; default: any }>;
+  readonly timestampColumns: {
+    readonly createdAtKey: string | null;
+    readonly updatedAtKey: string | null;
+  };
+  readonly searchable: {
+    readonly fields?: string[];
+    readonly columns: any[];
+  };
+  readonly sortable: {
+    readonly fields: Set<string>;
+    readonly defaultSort: string;
+    readonly defaultSortEntries: ReadonlyArray<{ field: string; dir: "asc" | "desc" }>;
+    readonly fallbackEntries: ReadonlyArray<{ field: string; dir: "asc" | "desc" }>;
+    readonly tiebreakCol: any;
+  };
+  readonly projections: {
+    readonly defaultProjection?: Record<string, any>;
+  };
+  readonly routeTargets: {
+    readonly listPath: string;
+    readonly itemPath: string;
+  };
+}
+
 export interface Resource<
   TTable = any,
   TCtx extends ActionContext = ActionContext
@@ -275,6 +316,7 @@ export interface Resource<
   readonly idField: string;
   readonly pluralName: string;
   readonly config: ResourceConfig<TTable, TCtx>;
+  readonly plan?: ResourcePlan<TTable>;
   readonly actions: {
     list: Action<any, any, any, TCtx>;
     get: Action<any, any, any, TCtx>;
@@ -376,6 +418,28 @@ export interface ArchitectureSchema {
   services: ServiceSchema[];
 }
 
+export interface CompiledRoutePlan {
+  service: Service<any, any>;
+  action: Action<any, any, any, any>;
+  actionName: string;
+  serviceName: string;
+  routePath: string;
+  method?: string;
+  isGetLike: boolean;
+  hasInput: boolean;
+  hasContextHook: boolean;
+  contextHook?: (baseCtx: any) => Promise<any> | any;
+  hasAuthorize: boolean;
+  authorize?: (params: any) => boolean | Promise<boolean>;
+  execute: (params: any) => Promise<any> | any;
+  inputChecker?: { Check: (val: any) => boolean; Errors: (val: any) => Iterable<any> };
+  outputChecker?: { Check: (val: any) => boolean; Errors: (val: any) => Iterable<any> };
+  coercions?: Array<{ key: string; isNumber: boolean; isBoolean: boolean }>;
+  logger: Logger;
+  errorBuilder: any;
+  cachedDb: any;
+}
+
 export interface Service<
   TDb = BunSQLiteDatabase<Record<string, unknown>>,
   TServiceContext extends Record<string, any> = Record<string, any>
@@ -386,6 +450,9 @@ export interface Service<
   readonly tables: Map<string, any>;
   readonly resources: Map<string, Resource<any, BaseContext<TDb> & TServiceContext>>;
   readonly db?: TDb;
+  readonly isBuilt?: boolean;
+
+  build(): this;
 
   action<
     TIn extends TSchema | undefined = undefined,
