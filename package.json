@@ -10,10 +10,21 @@
     "build": "bun run --filter @elregaldo/core build && bun run --filter @elregaldo/cli build",
     "release": "bun scripts/release.ts",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "bench": "bun bench/run-all.ts",
+    "bench:smoke": "bun bench/run-all.ts --smoke",
+    "bench:micro": "bun bench/micro.ts",
+    "bench:http": "bun bench/http.ts",
+    "bench:batch": "bun bench/batch.ts",
+    "bench:startup": "bun bench/startup.ts",
+    "bench:prepared": "bun bench/prepared.ts",
+    "bench:postgres": "bun bench/postgres.ts",
+    "bench:typecheck": "tsc --noEmit -p bench/tsconfig.json",
+    "bench:test": "bun test bench/lab.test.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "elysia": "^1.2.0",
     "typescript": "^5.7.0"
   }
 }

@@ -1,0 +1,7 @@
+// Worker smoke probe, not a parallel-throughput benchmark.
+self.onmessage = (event: MessageEvent<number>) => {
+  let sum = 0;
+  for (let i = 0; i < event.data; i++) sum += i;
+  self.postMessage(sum);
+};
+export {};

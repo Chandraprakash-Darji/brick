@@ -6,6 +6,7 @@
       "name": "brick-ts-monorepo",
       "devDependencies": {
         "@types/bun": "latest",
+        "elysia": "^1.2.0",
         "typescript": "^5.7.0",
       },
     },
