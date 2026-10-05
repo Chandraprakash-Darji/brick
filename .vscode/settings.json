@@ -1,3 +1,3 @@
 {
-    "rust-analyzer.linkedProjects": ["native/brick-span/Cargo.toml"]
+    "rust-analyzer.linkedProjects": ["native/brick-span/Cargo.toml", "native/brick-expr/Cargo.toml"]
 }

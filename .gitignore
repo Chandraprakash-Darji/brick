@@ -57,4 +57,5 @@ Thumbs.db
 docs/
 !/www/content/docs/
 /native/brick-span/target
+/native/brick-expr/target
 
