@@ -5,6 +5,7 @@ const VALID: &str = r#"{
     "services": [
         {
             "name": "deals",
+            "tables": [],
             "actions": [
                 { "name": "createDeal", "hasAuthorize": true }
             ],
