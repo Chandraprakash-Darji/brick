@@ -56,3 +56,5 @@ Thumbs.db
 .build/
 docs/
 !/www/content/docs/
+/native/brick-span/target
+
