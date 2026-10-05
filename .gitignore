@@ -59,3 +59,4 @@ docs/
 /native/brick-span/target
 /native/brick-expr/target
 /native/brick-manifest/target
+pnpm-lock.yaml
