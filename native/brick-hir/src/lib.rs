@@ -39,7 +39,7 @@ pub fn lower(manifest: &brick_manifest::Manifest) -> Result<Hir, HirError> {
 
         let parsed_resource = &srv.resources;
 
-        for (index, rse) in parsed_resource.iter().enumerate() {
+        for rse in parsed_resource.iter() {
             // check if already exist
             if hir
                 .resources
@@ -76,11 +76,12 @@ pub fn lower(manifest: &brick_manifest::Manifest) -> Result<Hir, HirError> {
                 .unwrap();
 
             hir.resources.push(ResourceHir {
-                id: ResourceId(index as u32),
+                id: ResourceId(hir.resources.len() as u32),
                 name: rse.name.clone(),
                 service: service_id,
                 owner_field: owner_field_id.map(|f| f.id),
                 primary_key: primary_key_feild_id.id,
+                operations: rse.operations.clone(),
             });
 
             if rse.operations.len() == 0 {

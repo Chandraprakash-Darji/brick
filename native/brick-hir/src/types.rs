@@ -1,20 +1,25 @@
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub struct ServiceId(pub u32);
+#[derive(Clone, PartialEq, Copy, Debug)]
 pub struct ResourceId(pub u32);
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FieldId(pub u32);
+#[derive(Clone, PartialEq, Copy, Debug)]
 pub struct ActionId(pub u32);
 
 pub struct ServiceHir {
     pub id: ServiceId,
     pub name: String,
 }
+
+#[derive(Debug)]
 pub struct ResourceHir {
     pub id: ResourceId,
     pub service: ServiceId,
     pub name: String,
     pub primary_key: FieldId,
     pub owner_field: Option<FieldId>,
+    pub operations: Vec<String>,
 }
 pub struct ActionHir {
     pub id: ActionId,

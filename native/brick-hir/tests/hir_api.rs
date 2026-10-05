@@ -156,3 +156,32 @@ fn rejects_multiple_primary_keys() {
     .unwrap();
     assert!(matches!(lower(&m), Err(HirError::MoreThenOnePrimaryKey(_))));
 }
+
+//   pub operations: Vec<String> (cloned from rse.operations in lower)
+
+#[test]
+fn preserves_operations() {
+    let m = decode(&svc(
+        r#"[{"name":"r","table":"t","operations":["list","get"]}]"#,
+        "[]",
+        TABLE_T,
+    ))
+    .unwrap();
+    let hir = lower(&m).unwrap();
+    assert_eq!(
+        hir.resources[0].operations,
+        vec!["list".to_string(), "get".to_string()]
+    );
+}
+
+#[test]
+fn preserves_single_operation() {
+    let m = decode(&svc(
+        r#"[{"name":"r","table":"t","operations":["get"]}]"#,
+        "[]",
+        TABLE_T,
+    ))
+    .unwrap();
+    let hir = lower(&m).unwrap();
+    assert_eq!(hir.resources[0].operations, vec!["get".to_string()]);
+}
