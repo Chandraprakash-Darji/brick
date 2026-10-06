@@ -2,7 +2,7 @@
 pub struct ServiceId(pub u32);
 #[derive(Clone, PartialEq, Copy, Debug)]
 pub struct ResourceId(pub u32);
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FieldId(pub u32);
 #[derive(Clone, PartialEq, Copy, Debug)]
 pub struct ActionId(pub u32);

@@ -61,4 +61,5 @@ docs/
 /native/brick-hir/target
 /native/brick-router/target
 /native/brick-manifest/target
+/native/brick-resource/target
 pnpm-lock.yaml

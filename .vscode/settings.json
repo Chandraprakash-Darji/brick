@@ -1,6 +1,7 @@
 {
     "rust-analyzer.linkedProjects": [
         "native/brick-span/Cargo.toml",
+        "native/brick-resource/Cargo.toml",
         "native/brick-manifest/Cargo.toml",
         "native/brick-hir/Cargo.toml",
         "native/brick-router/Cargo.toml",
