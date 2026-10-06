@@ -17,5 +17,3 @@ export {
   registerReferenceRoute,
   type ReferenceOptions,
 } from "./docs";
-
-export { compilePlans, loadPlans, type CompiledPlans } from "./plans";

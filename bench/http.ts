@@ -47,13 +47,13 @@ async function main() {
   console.log(`starting servers (floor :${BENCH_PORTS.floor}, elysia :${BENCH_PORTS.elysia}, brick :${BENCH_PORTS.brick})…`);
   const floor = startFloorServer(BENCH_PORTS.floor);
   const elysia = await startElysiaServer(BENCH_PORTS.elysia);
-  const brick = await startBrickServer({ port: BENCH_PORTS.brick, rows: baseRows, compiled: args["compiled"] === true });
+  const brick = await startBrickServer({ port: BENCH_PORTS.brick, rows: baseRows });
 
   let fileBench: any = null;
   try {
   if (!noFile && !smoke) {
     const tmp = `${process.env["TMPDIR"] ?? "/tmp"}/brick-bench-${Date.now()}.sqlite`;
-    fileBench = await startBrickServer({ port: BENCH_PORTS.brickFile, rows: 2000, dbPath: tmp, compiled: args["compiled"] === true });
+    fileBench = await startBrickServer({ port: BENCH_PORTS.brickFile, rows: 2000, dbPath: tmp });
     console.log(`file-backed sqlite (WAL) on :${BENCH_PORTS.brickFile} rows=2000`);
   }
 
@@ -286,7 +286,7 @@ async function main() {
     benchmark: "http-matrix", db: pgUrl ? "postgres" : "sqlite-memory", dataset_rows: baseRows,
   });
   const path = await writeJson(`http-${stamp()}.json`, {
-    manifest, compiled: args["compiled"] === true, requests, concurrencies, results, skipped, countLeg, plans, externalTools: tools,
+    manifest, requests, concurrencies, results, skipped, countLeg, plans, externalTools: tools,
   });
 
   console.log(`\nwrote ${path} (${results.length} runs, ${skipped.length} skipped)`);

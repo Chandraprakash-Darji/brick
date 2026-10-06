@@ -1,13 +1,7 @@
 // Core Primitives
-export {
-  defineService,
-  ServiceImpl,
-  mapColumnToManifestType,
-  emitManifest,
-  emitManifestJson,
-} from "./service";
+export { defineService, ServiceImpl } from "./service";
 export { defineAction, buildErrorHelpers } from "./action";
-export { defineResource, buildResourcePlan, installCompiledResourceGet, isNativeResourceReadAction, isNativeResourceAction } from "./resource";
+export { defineResource, buildResourcePlan } from "./resource";
 export { createServiceProxy } from "./rpc";
 export {
   ServiceRegistry,

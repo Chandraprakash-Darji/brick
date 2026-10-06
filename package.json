@@ -17,17 +17,10 @@
     "bench:http": "bun bench/http.ts",
     "bench:batch": "bun bench/batch.ts",
     "bench:startup": "bun bench/startup.ts",
-    "build:compiler": "cargo build --release --manifest-path native/brickc/Cargo.toml",
-    "bench:compiled": "bun bench/compiled.ts",
-    "bench:fixed-json": "bun bench/fixed-json.ts",
-    "bench:native": "bun bench/native.ts",
-    "build:native-http": "bun scripts/build-native-http.ts",
-    "build:native-bench": "cargo build --release --manifest-path native/brick-http/Cargo.toml",
     "bench:prepared": "bun bench/prepared.ts",
     "bench:postgres": "bun bench/postgres.ts",
     "bench:typecheck": "tsc --noEmit -p bench/tsconfig.json",
-    "bench:test": "bun test bench/lab.test.ts",
-    "build:native-bridge": "bun scripts/build-native-http.ts --bridge-only"
+    "bench:test": "bun test bench/lab.test.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",

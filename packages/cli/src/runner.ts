@@ -1,22 +1,12 @@
-import { startInProcessHttp } from "./native-bridge";
-import { startNativeHttp } from "./native";
-import { compilePlans, loadPlans } from "./plans";
 import { existsSync } from "fs";
 import { resolve } from "path";
 import { getGlobalRegistry } from "@elregaldo/core";
-import { createNativeWorker } from "./native-worker";
+import { createBrickServer } from "./server";
 
 export interface DevServerOptions {
   port?: number;
   entry?: string;
   prefix?: string;
-  plans?: "compile" | "load";
-  plansPath?: string;
-  compiler?: string;
-  runtime?: "bun" | "rust";
-  nativeExecutable?: string;
-  nativeBridge?: "inprocess" | "http";
-  nativeAddon?: string;
 }
 
 export async function startDevServer(options: DevServerOptions = {}) {
@@ -29,7 +19,7 @@ export async function startDevServer(options: DevServerOptions = {}) {
       console.log(`[Brick-TS] Loading application entry: ${resolvedEntry}`);
       await import(resolvedEntry);
     } else {
-      throw new Error(`[Brick-TS] Specified entry not found: ${resolvedEntry}`);
+      console.warn(`[Brick-TS] Specified entry not found: ${resolvedEntry}`);
     }
   }
 
@@ -51,23 +41,12 @@ export async function startDevServer(options: DevServerOptions = {}) {
     }
   }
 
-  const plansPath = options.plansPath ?? ".brick/plans.json";
-  const plans = options.plans === "compile"
-    ? await compilePlans(services, { compiler: options.compiler, output: plansPath, native: options.runtime === "rust" })
-    : options.plans === "load" ? await loadPlans(plansPath) : undefined;
+  const app = createBrickServer({
+    port,
+    prefix: options.prefix,
+  });
 
-  const serverOptions = { services, plans, port, prefix: options.prefix };
-  let app;
-  if (options.runtime === "rust") {
-    if (!plans) throw new Error("Native HTTP requires compiled plans");
-    app = createNativeWorker(serverOptions);
-    if (options.nativeBridge === "http") await startNativeHttp(app, services, plans, { port, prefix: options.prefix, executable: options.nativeExecutable });
-    else await startInProcessHttp(app, services, plans, { port, prefix: options.prefix, addon: options.nativeAddon });
-  } else {
-    const { createBrickServer } = await import("./server");
-    app = createBrickServer(serverOptions);
-    app.listen(port);
-  }
+  app.listen(port);
 
   console.log(`\n⚡ API Gateway running on: http://localhost:${port}`);
   console.log(`🩺 Health check:        http://localhost:${port}/_health`);

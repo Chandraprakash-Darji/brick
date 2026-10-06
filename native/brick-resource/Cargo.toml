@@ -1,9 +1,0 @@
-[package]
-name = "brick-resource"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-brick-hir = { path = "../brick-hir" }
-brick-manifest = { path = "../brick-manifest" }
-thiserror = "2"
