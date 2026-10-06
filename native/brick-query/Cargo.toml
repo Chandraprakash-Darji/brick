@@ -1,0 +1,12 @@
+[package]
+name = "brick-query"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+brick-resource = { path = "../brick-resource" }
+thiserror = "2"
+
+[dev-dependencies]
+brick-hir = { path = "../brick-hir" }
+brick-manifest = { path = "../brick-manifest" }
