@@ -18,15 +18,15 @@ export default defineConfig({
       },
     }),
     react(),
-    // please see https://tanstack.com/start/latest/docs/framework/react/guide/hosting#nitro for guides on hosting
     nitro({
       preset: 'vercel',
+      // @ts-expect-error nitro runtime trace configuration
+      externals: {
+        inline: ['tslib'],
+      },
     }),
   ],
   resolve: {
     tsconfigPaths: true,
-    alias: {
-      tslib: 'tslib/tslib.es6.js',
-    },
   },
 });

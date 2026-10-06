@@ -1,354 +1,236 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { cva } from "class-variance-authority";
-import { ServerCodeBlock } from "fumadocs-ui/components/codeblock.rsc";
-import { HomeLayout } from "fumadocs-ui/layouts/home";
-import {
-  BlocksIcon,
-  Code2Icon,
-  DatabaseIcon,
-  FileJsonIcon,
-  PlugIcon,
-  ShieldCheckIcon,
-  TerminalIcon,
-} from "lucide-react";
+import { Link, createFileRoute } from "@tanstack/react-router"
+import { ArrowRightIcon } from "lucide-react"
+import * as React from "react"
 
-import { cn } from "@/lib/cn";
-import { baseOptions, links } from "@/lib/layout.shared";
+import { InstallCommand } from "@/components/install-command"
+import { buttonVariants } from "@/components/ui/button"
+import { site } from "@/lib/site"
+import { cn } from "@/lib/utils"
 
 export const Route = createFileRoute("/")({
   component: Home,
-});
+})
 
-const headingVariants = cva("font-medium tracking-tight", {
-  variants: {
-    variant: {
-      h2: "text-3xl lg:text-4xl",
-      h3: "text-xl lg:text-2xl",
-    },
-  },
-});
+const stats = [
+  { value: "~38", unit: "ns", label: "Monomorphic dispatch" },
+  { value: "~28", unit: "k req/s", label: "HTTP throughput" },
+  { value: "~34", unit: "MB", label: "Idle memory (RSS)" },
+  { value: "0", unit: "%", label: "CPU at idle" },
+]
 
-const buttonVariants = cva(
-  "inline-flex justify-center px-5 py-3 rounded-full font-medium tracking-tight transition-colors",
+const features = [
   {
-    defaultVariants: {
-      variant: "primary",
-    },
-    variants: {
-      variant: {
-        primary:
-          "bg-fd-primary text-fd-primary-foreground hover:bg-fd-primary/90",
-        secondary:
-          "border bg-fd-secondary text-fd-secondary-foreground hover:bg-fd-accent",
-      },
-    },
+    title: "Monomorphic Dispatch",
+    text: "Zero-overhead direct action routing with monomorphic call sites in dev and single-process monolithic deployment.",
+    link: "/benchmarks#micro",
   },
-);
-
-const cardVariants = cva(
-  "rounded-2xl text-sm p-6 border bg-fd-card shadow-sm",
   {
-    variants: {
-      defaultVariants: {},
-      variant: {
-        code: "bg-fd-card border p-0 overflow-hidden",
-        secondary: "bg-fd-secondary/50 border-fd-secondary",
-      },
-    },
+    title: "AOT Routing & Streaming",
+    text: "Elysia Ahead-Of-Time compiled route graph with bounded backpressure streaming and zero-copy JSON buffers.",
+    link: "/benchmarks#http",
   },
-);
-
-function Home() {
-  return (
-    <HomeLayout {...baseOptions()} links={links}>
-      <main className="text-fd-foreground pt-4 pb-6 md:pb-12">
-        {/* Hero */}
-        <div className="relative mx-auto flex w-full max-w-[1400px] flex-col items-center px-4 py-16 text-center md:px-12 md:py-24">
-          <p className="border-fd-primary/30 text-fd-primary rounded-full border px-4 py-1.5 text-xs font-medium">
-            TypeScript-first resource + action framework
-          </p>
-          <h1 className="mt-8 mb-6 text-4xl leading-tight font-medium tracking-tight md:text-5xl xl:text-6xl">
-            Build your backend
-            <br />
-            in <span className="text-fd-primary">minutes</span>, not weeks.
-          </h1>
-          <p className="text-fd-muted-foreground mb-8 max-w-xl text-base md:text-lg">
-            Define services, actions, and resources in TypeScript. Typed CRUD
-            + OpenAPI on Elysia + Drizzle.
-          </p>
-          <div className="flex flex-row items-center justify-center gap-4">
-            <Link
-              to="/docs/$"
-              params={{ _splat: "" }}
-              className={cn(buttonVariants())}
-            >
-              Get Started
-            </Link>
-            <a
-              href="https://github.com/Chandraprakash-Darji/brick"
-              target="_blank"
-              rel="noreferrer noopener"
-              className={cn(buttonVariants({ variant: "secondary" }))}
-            >
-              GitHub
-            </a>
-          </div>
-        </div>
-
-        {/* Quick start code block */}
-        <div className="bg-fd-card relative mx-auto mb-16 w-full max-w-[800px] overflow-hidden rounded-2xl border shadow-lg md:mb-24">
-          <div className="text-fd-muted-foreground flex flex-row items-center gap-2 border-b p-3">
-            <TerminalIcon className="size-4" />
-            <span className="text-xs font-medium">Terminal</span>
-            <div className="ms-auto size-2 rounded-full bg-red-400" />
-            <div className="size-2 rounded-full bg-yellow-400" />
-            <div className="me-2 size-2 rounded-full bg-green-400" />
-          </div>
-          <div className="p-6 font-mono text-sm">
-            <p className="text-fd-muted-foreground">
-              $ bun add @elregaldo/core @elregaldo/cli
-            </p>
-            <p className="text-fd-muted-foreground">
-              $ brick dev --port 4000
-            </p>
-            <p className="text-fd-foreground mt-4">
-              brick-ts server listening on :4000
-            </p>
-            <p className="text-fd-muted-foreground">
-              {"  "}Health: http://localhost:4000/_health
-            </p>
-            <p className="text-fd-muted-foreground">
-              {"  "}OpenAPI: http://localhost:4000/openapi.json
-            </p>
-            <p className="text-fd-muted-foreground">
-              {"  "}Scalar Docs: http://localhost:4000/docs
-            </p>
-          </div>
-        </div>
-
-        {/* Features grid */}
-        <div className="mx-auto w-full max-w-[1400px] px-4 md:px-12">
-          <h2
-            className={cn(
-              headingVariants({
-                className: "mb-12 text-center",
-                variant: "h2",
-              }),
-            )}
-          >
-            Everything you need
-          </h2>
-
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-            <FeatureCard
-              icon={<BlocksIcon className="size-5" />}
-              title="Resource CRUD"
-              description="Define a resource once — get List, Get, Create, Update, Delete with filtering, sorting, pagination, and owner scoping automatically."
-            />
-            <FeatureCard
-              icon={<ShieldCheckIcon className="size-5" />}
-              title="Actions + TypeBox"
-              description="Typed actions with TypeBox input/output schemas, authorize guards, and structured errors validated at runtime."
-            />
-            <FeatureCard
-              icon={<Code2Icon className="size-5" />}
-              title="Services + context"
-              description="Group actions and resources in services with per-request context resolvers for session, user, and database handles."
-            />
-            <FeatureCard
-              icon={<DatabaseIcon className="size-5" />}
-              title="SQLite + Postgres via Drizzle"
-              description="One Drizzle table definition runs on SQLite locally and Postgres in production, with syncSchema for dev databases."
-            />
-            <FeatureCard
-              icon={<FileJsonIcon className="size-5" />}
-              title="Live OpenAPI"
-              description="OpenAPI 3.1 spec generated from the live action mesh. Scalar docs, Swagger UI, and typed clients stay in sync."
-            />
-            <FeatureCard
-              icon={<PlugIcon className="size-5" />}
-              title="Raw endpoints + MCP"
-              description="Drop to app.endpoint() for HTML, webhooks, or MCP transports with mesh-consistent error mapping and service DB access."
-            />
-          </div>
-        </div>
-
-        {/* Service definition example */}
-        <div className="mx-auto mt-24 w-full max-w-[1400px] px-4 md:px-12">
-          <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-            <div className="flex flex-col justify-center">
-              <h3
-                className={cn(
-                  headingVariants({ className: "mb-4", variant: "h3" }),
-                )}
-              >
-                Define, serve, ship.
-              </h3>
-              <p className="text-fd-muted-foreground mb-6">
-                Define the database once, attach a service with context, and
-                register a resource — typed CRUD, validation, and OpenAPI come
-                from the definitions.
-              </p>
-              <ul className="text-fd-muted-foreground list-inside list-disc space-y-2 text-sm">
-                <li>TypeBox schemas inferred from Drizzle tables</li>
-                <li>ownerField scoping applied at the SQL level</li>
-                <li>Resource hooks for validation and side effects</li>
-                <li>List with pagination, sorting, search, and filters</li>
-              </ul>
-            </div>
-            <div className={cn(cardVariants({ variant: "code" }))}>
-              <div className="text-fd-muted-foreground border-b px-4 py-2 text-xs font-medium">
-                services/pages/service.ts
-              </div>
-              <ServerCodeBlock
-                lang="ts"
-                codeblock={{ className: "border-0" }}
-                code={`import { defineDatabase, defineService } from "@elregaldo/core";
-import { pagesTable } from "./model";
-
-export const appDb = defineDatabase({
-  engine: "sqlite",
-  name: "pages",
-  tables: { pagesTable },
-});
-
-export const pagesService = defineService("pages", {
-  database: appDb,
-  context: async ({ request }) => ({ user: null, session: null }),
-});
-
-export const pagesResource = pagesService.resource({
-  name: "page",
-  table: pagesTable,
-  ownerField: "userId",
-  operations: { list: { defaultLimit: 20, maxLimit: 100 } },
-});`}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Action + endpoint example */}
-        <div className="mx-auto mt-24 w-full max-w-[1400px] px-4 md:px-12">
-          <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-            <div
-              className={cn(
-                cardVariants({ variant: "code" }),
-                "max-lg:row-start-2",
-              )}
-            >
-              <div className="text-fd-muted-foreground border-b px-4 py-2 text-xs font-medium">
-                server.ts
-              </div>
-              <ServerCodeBlock
-                lang="ts"
-                codeblock={{ className: "border-0" }}
-                code={`import { createBrickServer } from "@elregaldo/cli";
-
-const app = createBrickServer({ services: [pagesService] });
-
-pagesService.action({
-  name: "publish",
-  path: "/api/pages/publish",
-  method: "POST",
-  execute: async ({ input, ctx }) => ({ published: true }),
-});
-
-app.endpoint({
-  method: "GET",
-  path: "/p/:slug",
-  service: pagesService,
-  summary: "Public page viewer",
-  handler: async ({ params, set, db }) => {
-    set.headers["content-type"] = "text/html; charset=utf-8";
-    return renderPage(params.slug);
+  {
+    title: "Logical Monolith",
+    text: "Single repository with shared schemas, full TypeScript type safety, and instant jump-to-definition across services.",
+    link: "/benchmarks#prepared",
   },
-});`}
-              />
-            </div>
-            <div className="flex flex-col justify-center">
-              <h3
-                className={cn(
-                  headingVariants({ className: "mb-4", variant: "h3" }),
-                )}
-              >
-                Zero boilerplate CRUD.
-              </h3>
-              <p className="text-fd-muted-foreground mb-6">
-                Each resource gets full CRUD routes with owner scoping via
-                ownerField and per-action authorize guards. Hooks run before
-                or after writes for validation and side effects.
-              </p>
-              <ul className="text-fd-muted-foreground list-inside list-disc space-y-2 text-sm">
-                <li>List with pagination, sorting, full-text search</li>
-                <li>Get by ID with ownership checks</li>
-                <li>
-                  Create with owner injection from ctx.user
-                </li>
-                <li>
-                  Update with partial patches and timestamp handling
-                </li>
-                <li>Delete with ownership checks and hooks</li>
-              </ul>
-            </div>
-          </div>
-        </div>
+  {
+    title: "Physical Microservices",
+    text: "Deploy individual services or domain modules as isolated microservice containers with zero code restructuring.",
+    link: "/benchmarks#batch",
+  },
+  {
+    title: "Better Auth & Drizzle",
+    text: "First-class integration with Better Auth session security and Drizzle ORM pre-compiled query caching.",
+    link: "/benchmarks#startup",
+  },
+  {
+    title: "Continuous Benchmarking",
+    text: "Every commit measured across macOS, Linux, and Windows runners for latency, memory, and allocations.",
+    link: "/benchmarks",
+  },
+]
 
-        {/* Bottom CTA */}
-        <div className="mx-auto mt-24 mb-12 w-full max-w-[1400px] px-4 text-center md:px-12">
-          <div className="bg-fd-card rounded-2xl border p-12 shadow-sm">
-            <h2
-              className={cn(
-                headingVariants({
-                  className: "mb-4",
-                  variant: "h2",
-                }),
-              )}
-            >
-              Ready to build?
-            </h2>
-            <p className="text-fd-muted-foreground mx-auto mb-8 max-w-md">
-              brick-ts brings typed actions + auto CRUD to TypeScript. Start
-              with the pages example and make it your own.
-            </p>
-            <div className="flex flex-row items-center justify-center gap-4">
-              <Link
-                to="/docs/$"
-                params={{ _splat: "getting-started" }}
-                className={cn(buttonVariants())}
-              >
-                Read the docs
-              </Link>
-              <a
-                href="https://github.com/Chandraprakash-Darji/brick"
-                target="_blank"
-                rel="noreferrer noopener"
-                className={cn(buttonVariants({ variant: "secondary" }))}
-              >
-                Star on GitHub
-              </a>
-            </div>
-          </div>
-        </div>
-      </main>
-    </HomeLayout>
-  );
+const kinds = [
+  { id: "monolith", label: "Logical Monolith" },
+  { id: "microservice", label: "Physical Microservice" },
+] as const
+
+type Kind = (typeof kinds)[number]["id"]
+
+const codeSamples = {
+  monolith: {
+    serviceFile: "src/services/users.ts",
+    serviceCode: `import { defineAction } from "@brick/core"
+import { z } from "zod"
+
+export const getUser = defineAction({
+  input: z.object({ id: z.string() }),
+  async handler({ input, ctx }) {
+    return ctx.db.users.findById(input.id)
+  },
+})
+
+// Direct in-process invocation: ~38ns, zero HTTP overhead
+const user = await getUser({ id: "usr_42" })`,
+    sideFile: "src/main.ts",
+    sideDesc: "./brick generates type-safe clients directly from actions, with full inference and zero runtime wrappers.",
+    sideCode: `import { createClient } from "@brick/client"
+import type { AppRouter } from "./server"
+
+const client = createClient<AppRouter>({
+  baseUrl: "https://api.brick.dev",
+})
+
+// Fully typed client response with end-to-end schema validation
+const user = await client.getUser({ id: "usr_42" })
+console.log(user.name, user.role)`,
+  },
+  microservice: {
+    serviceFile: "src/server.ts",
+    serviceCode: `import { createServer } from "@brick/server"
+import { getUser } from "./services/users"
+
+// Physical deployment: Elysia AOT compilation & Better Auth
+const app = createServer({
+  actions: [getUser],
+  auth: { provider: "better-auth" },
+  database: { dialect: "sqlite", wal: true },
+})
+
+app.listen(3000, () => {
+  console.log("Service listening at http://localhost:3000")
+})`,
+    sideFile: "Terminal",
+    sideDesc: "Run individual microservices or composite monoliths using the same source code.",
+    sideCode: `$ bun create brick-app my-service
+$ cd my-service
+$ bun run dev
+[brick] compiled 14 actions in 12ms
+[brick] server listening on http://localhost:3000`,
+  },
 }
 
-function FeatureCard({
-  icon,
-  title,
-  description,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-}) {
+function Home() {
+  const [kind, setKind] = React.useState<Kind>("monolith")
+  const activeCode = codeSamples[kind]
+
   return (
-    <div className="bg-fd-card rounded-2xl border p-6 shadow-sm">
-      <div className="text-fd-primary mb-4">{icon}</div>
-      <h3 className="mb-2 font-medium">{title}</h3>
-      <p className="text-fd-muted-foreground text-sm">{description}</p>
-    </div>
-  );
+    <main>
+      <section className="px-4 py-20 sm:px-10 md:py-28">
+        <a
+          href={`${site.repo}/releases`}
+          target="_blank"
+          rel="noreferrer"
+          className="label inline-flex items-center gap-2 hover:text-foreground"
+        >
+          <span className="size-1.5 rounded-full bg-gopher" />v{site.version} · macOS, Linux, Windows · Bun 1.2
+        </a>
+        <h1 className="mt-6 text-4xl leading-[1.05] font-semibold tracking-[-0.04em] sm:text-5xl md:text-6xl">
+          High-throughput platform.
+          <span className="block text-muted-foreground">Logical monolith, physical microservices.</span>
+        </h1>
+        <p className="mt-6 max-w-xl text-lg leading-8 text-muted-foreground">
+          Build TypeScript services as a single codebase with monomorphic dispatch in dev, split into independent microservices with AOT routing, Better Auth, and Drizzle ORM in production.
+        </p>
+        <div className="mt-10 flex flex-wrap items-center gap-3">
+          <InstallCommand command="bun create brick-app my-app" />
+          <Link to="/benchmarks" className={buttonVariants({ size: "lg", className: "h-11 px-5" })}>
+            View benchmarks <ArrowRightIcon className="ml-1 size-4" />
+          </Link>
+        </div>
+      </section>
+
+      <dl className="grid grid-cols-2 gap-px border-t bg-border md:grid-cols-4">
+        {stats.map((stat) => (
+          <div key={stat.label} className="flex flex-col-reverse justify-end gap-2 bg-background px-4 py-6 sm:px-10 sm:py-8">
+            <dt className="label">{stat.label}</dt>
+            <dd className="text-3xl font-semibold tracking-tight tabular-nums sm:text-4xl">
+              {stat.value}
+              <span className="ml-1 text-base font-normal text-muted-foreground">{stat.unit}</span>
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      <div className="border-t bg-code">
+        <div role="tablist" aria-label="Kind of deployment" className="flex border-b">
+          {kinds.map((k) => (
+            <button
+              key={k.id}
+              type="button"
+              role="tab"
+              id={`tab-${k.id}`}
+              aria-selected={kind === k.id}
+              aria-controls="code-panel"
+              onClick={() => setKind(k.id)}
+              className={cn(
+                "label -mb-px border-r border-b border-b-transparent px-4 py-3 transition-colors hover:text-foreground sm:px-6 cursor-pointer",
+                kind === k.id && "border-b-gopher bg-background text-foreground"
+              )}
+            >
+              {k.label}
+            </button>
+          ))}
+        </div>
+        <div role="tabpanel" id="code-panel" aria-labelledby={`tab-${kind}`} className="grid lg:grid-cols-[1.3fr_1fr] lg:divide-x">
+          <figure className="min-w-0">
+            <figcaption className="label border-b px-4 py-3 sm:px-6">{activeCode.serviceFile}</figcaption>
+            <div className="shiki overflow-x-auto px-4 py-5 sm:px-6">
+              <pre className="font-mono text-[13px] leading-[1.7] text-foreground">
+                <code>{activeCode.serviceCode}</code>
+              </pre>
+            </div>
+          </figure>
+          {kind === "monolith" ? (
+            <figure className="flex min-w-0 flex-col border-t lg:border-t-0">
+              <figcaption className="label border-b px-4 py-3 sm:px-6">{activeCode.sideFile}</figcaption>
+              <div className="overflow-x-auto px-4 py-5 sm:px-6">
+                <pre className="font-mono text-[13px] leading-[1.7] text-foreground">
+                  <code>{activeCode.sideCode}</code>
+                </pre>
+              </div>
+              <p className="mt-auto border-t px-4 py-4 text-sm leading-6 text-muted-foreground sm:px-6">
+                {activeCode.sideDesc}
+              </p>
+            </figure>
+          ) : (
+            <div className="flex min-w-0 flex-col border-t lg:border-t-0">
+              <p className="label border-b px-4 py-3 sm:px-6">Zero-Refactor Deployment</p>
+              <div className="space-y-4 px-4 py-5 text-sm leading-6 text-muted-foreground sm:px-6">
+                <p>
+                  Deploy services either together in one binary or distributed across cloud instances. Brick handles
+                  AOT routing, RPC deserialization, and authentication boundaries automatically.
+                </p>
+                <p>Cold boots in under 15ms with full route graph compilation and instant health checks.</p>
+              </div>
+              <figure className="mt-auto border-t">
+                <figcaption className="label border-b px-4 py-3 sm:px-6">Start a project</figcaption>
+                <pre className="overflow-x-auto px-4 py-4 font-mono text-[13px] leading-[1.7] sm:px-6">
+                  <span className="text-gopher-ink select-none">$ </span>
+                  {"bun create brick-app my-app\n"}
+                  <span className="text-gopher-ink select-none">$ </span>
+                  {"cd my-app && bun run dev"}
+                </pre>
+              </figure>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <ul className="grid gap-px border-t bg-border sm:grid-cols-2">
+        {features.map((feature) => (
+          <li key={feature.title} className="bg-background">
+            <Link to={feature.link} className="group flex h-full flex-col px-4 py-8 transition-colors hover:bg-code sm:px-10">
+              <h2 className="flex items-center justify-between font-semibold tracking-tight">
+                {feature.title}
+                <ArrowRightIcon className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
+              </h2>
+              <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">{feature.text}</p>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </main>
+  )
 }
