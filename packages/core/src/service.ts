@@ -92,6 +92,7 @@ export class ServiceImpl<
   ): Resource<TTable, BaseContext<TDb> & TServiceContext> {
     const resourceInstance = defineResource(this, config);
     this.resources.set(resourceInstance.name, resourceInstance);
+    getGlobalRegistry().touch();
 
     return resourceInstance;
   }
@@ -139,6 +140,7 @@ export class ServiceImpl<
     actionInstance.serviceName = this.name;
     (actionInstance as any).service = this;
     this.actions.set(actionInstance.name, actionInstance);
+    getGlobalRegistry().touch();
 
     if (isActionFunction) {
       return this;
@@ -161,6 +163,7 @@ export class ServiceImpl<
   setDb(database: DatabaseHandle<TDb>): void {
     if (!isDatabaseHandle(database)) throw new Error("Use defineDatabase() to set a service database");
     this.database = database;
+    getGlobalRegistry().touch();
   }
 
   /**

@@ -97,3 +97,41 @@ wrk -t8 -c256 -d120s -R10000 --latency http://127.0.0.1:3456/_health
 Run dedicated Linux x86_64 measurements with pinned Bun/kernel/CPU, an isolated
 generator, repeated runs and alternated A/B order. macOS local results are
 exploratory, not release performance claims.
+
+## TypeScript compiler comparison
+
+Compare the specialized handlers against the general action handler with an
+external loader and separate server processes:
+
+```sh
+bun run bench:compiler --oha /path/to/oha --requests 50000 --rounds 5
+# Focus on database operations:
+bun run bench:compiler --oha /path/to/oha --cases crud --requests 50000 --rounds 5
+```
+
+Both targets run Elysia with identical action definitions, responses, tracing,
+validation and auth rules; access logging is off. Cases cover synchronous and
+async fixed JSON, validated JSON, context/auth, SQLite resource GET/list/create/
+PATCH/PUT/DELETE, health, architecture, OpenAPI, docs, Swagger and Scalar reference.
+
+SQLite uses an in-memory database, two-column rows, 100 seeded rows and a 20-row
+list page. Resource context supplies a silent logger in both targets. Fixtures
+reset outside timed loads; creates and deletes verify row counts and updates
+verify persisted values. DELETE seeds one row per request and uses the parent
+Bun loader with unique URLs because oha samples body/URL files randomly. Compare
+DELETE only against its paired baseline, not other rows; its CPU/RSS fields
+measure the loader, not the separate server. All other cases use external oha.
+Responses match before load (health uptime/timestamps vary). Every load checks
+all status codes and transport errors. Results include median RPS and p99 over
+rotated/reversed trials and are written under `bench/results/`.
+
+These measurements do not establish PostgreSQL throughput, durability costs,
+complex schemas or production capacity.
+
+Latest expanded run: [all-route report, 7 October 2026](results/REPORT-compiler-all-routes-20261007.md),
+with 8 million measured requests over five rounds. Metadata gains are large;
+CRUD gains are modest/mixed, including a DELETE regression.
+
+The prepared-write extension has a newer [paired CRUD report](results/REPORT-compiler-prepared-writes-20261007.md)
+with 3 million measured requests. It includes safe INSERT/UPDATE RETURNING and
+schema-version probes; PostgreSQL writes retain the original path.

@@ -1,6 +1,11 @@
-import type { Service, ServiceSchema, ArchitectureSchema } from "./types";
+import type { Service,  ArchitectureSchema } from "./types";
 
 export class ServiceRegistry {
+  private _revision = 0;
+  /** Definition revision for invalidating serialized architecture snapshots. */
+  get revision(): number { return this._revision; }
+  touch(): void { this._revision++; }
+
   private services = new Map<string, Service>();
 
   register(service: Service): void {
@@ -8,6 +13,7 @@ export class ServiceRegistry {
       console.warn(`[Brick-TS] Service '${service.name}' is already registered. Overwriting.`);
     }
     this.services.set(service.name, service);
+    this.touch();
   }
 
   get(name: string): Service | undefined {
@@ -24,6 +30,7 @@ export class ServiceRegistry {
 
   clear(): void {
     this.services.clear();
+    this.touch();
   }
 
   exportArchitecture(): ArchitectureSchema {

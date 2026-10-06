@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { startDevServer } from "./runner";
+import { buildApplication } from "./build";
 import { getGlobalRegistry, generateOpenApiSpec } from "@elregaldo/core";
 
 const args = process.argv.slice(2);
@@ -14,6 +15,25 @@ async function main() {
       const port = portArgIdx !== -1 ? Number(args[portArgIdx + 1]) : 4000;
 
       await startDevServer({ entry, port });
+      break;
+    }
+
+    case "build": {
+      const entry = args[1] && !args[1].startsWith("-") ? args[1] : undefined;
+      if (!entry) throw new Error("Usage: brick build <definitions.ts> [--outdir <directory>] [--prefix <path>] [--port <number>]");
+      const value = (flag: string) => {
+        const index = args.indexOf(flag);
+        if (index === -1) return undefined;
+        if (!args[index + 1] || args[index + 1]!.startsWith("--")) throw new Error(`Missing value for ${flag}`);
+        return args[index + 1];
+      };
+      const port = value("--port");
+      const result = await buildApplication({ entry, outdir: value("--outdir"), prefix: value("--prefix"),
+        port: port === undefined ? undefined : Number(port), requestLogging: !args.includes("--no-request-logging") });
+      for (const warning of result.ir.diagnostics) console.warn(`[Brick compiler] ${warning}`);
+      console.log(`Compiled ${result.ir.services.length} services / ${result.ir.routes.length} routes`);
+      console.log(`IR: ${result.outdir}/brick-ir.json`);
+      console.log(`Run: bun ${result.entry}`);
       break;
     }
 
@@ -53,6 +73,7 @@ async function main() {
 Usage:
   brick dev [entry] [--port <number>]    Start development server with live reload
   brick start [entry]                   Start production server
+  brick build <entry> [--outdir <dir>]  Compile definitions into a Bun server
   brick gen openapi [--output <file>]    Generate OpenAPI 3.1 JSON specification
   brick info                            Export architecture JSON schema
 `);

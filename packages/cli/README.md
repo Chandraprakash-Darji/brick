@@ -24,3 +24,19 @@ brick info
 ```
 
 Source: <https://github.com/brick-org/brick>.
+
+## Compiler
+
+The server compiles specialized JavaScript handlers for all resource CRUD and
+custom actions at startup, pre-renders documentation, and caches OpenAPI and
+architecture JSON with definition/endpoint invalidation. Health retains live
+uptime and timestamps. Build a
+definitions module into a runnable Bun server with:
+
+```sh
+brick build src/definitions.ts --outdir dist/brick
+bun dist/brick/server.js
+```
+
+See [the compilation plan and artifact contract](COMPILER.md) for implemented
+stages, limitations and the next optimizations.

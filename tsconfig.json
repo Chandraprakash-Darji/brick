@@ -9,10 +9,13 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "types": ["bun"],
+    "types": [
+      "bun"
+    ],
     "paths": {
       "@elregaldo/core": ["./packages/core/src"],
-      "@elregaldo/cli": ["./packages/cli/src"]
+      "@elregaldo/cli": ["./packages/cli/src"],
+      "@elregaldo/cli/compiler": ["./packages/cli/src/compiler.ts"]
     }
   }
 }

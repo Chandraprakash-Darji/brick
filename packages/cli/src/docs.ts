@@ -50,3 +50,42 @@ export function registerReferenceRoute(
 ): Elysia {
   return app.use(referencePlugin(opts)) as Elysia;
 }
+
+/** Renders the Swagger UI page. */
+export function swaggerDocsHTML(specUrl: string, title: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>${title} — Swagger UI</title>
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
+    <style>
+      html { box-sizing: border-box; overflow: -moz-scrollbars-vertical; overflow-y: scroll; }
+      *, *:before, *:after { box-sizing: inherit; }
+      body { margin:0; background: #fafafa; }
+    </style>
+  </head>
+  <body>
+    <div id="swagger-ui"></div>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js" charset="UTF-8"></script>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-standalone-preset.js" charset="UTF-8"></script>
+    <script>
+    window.onload = function() {
+      SwaggerUIBundle({
+        url: "${specUrl}",
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIStandalonePreset
+        ],
+        plugins: [
+          SwaggerUIBundle.plugins.DownloadUrl
+        ],
+        layout: "StandaloneLayout"
+      });
+    };
+    </script>
+  </body>
+</html>`;
+}

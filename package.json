@@ -20,7 +20,8 @@
     "bench:prepared": "bun bench/prepared.ts",
     "bench:postgres": "bun bench/postgres.ts",
     "bench:typecheck": "tsc --noEmit -p bench/tsconfig.json",
-    "bench:test": "bun test bench/lab.test.ts"
+    "bench:test": "bun test bench/lab.test.ts",
+    "bench:compiler": "bun bench/compiler.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
