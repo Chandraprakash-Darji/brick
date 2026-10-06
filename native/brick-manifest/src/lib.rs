@@ -20,6 +20,7 @@ pub struct ServiceManifest {
 #[serde(rename_all = "camelCase")]
 pub struct ActionManifest {
     pub name: String,
+    #[serde(default)]
     pub has_authorize: bool,
 }
 #[derive(Deserialize, Debug)]

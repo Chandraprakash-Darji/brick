@@ -7,12 +7,13 @@ pub struct FieldId(pub u32);
 #[derive(Clone, PartialEq, Copy, Debug)]
 pub struct ActionId(pub u32);
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct ServiceHir {
     pub id: ServiceId,
     pub name: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResourceHir {
     pub id: ResourceId,
     pub service: ServiceId,
@@ -21,22 +22,28 @@ pub struct ResourceHir {
     pub owner_field: Option<FieldId>,
     pub operations: Vec<String>,
 }
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct ActionHir {
     pub id: ActionId,
     pub service: ServiceId,
     pub name: String,
 }
-#[derive(Clone)]
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct FieldHir {
     pub id: FieldId,
     pub name: String,
 }
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Hir {
     pub services: Vec<ServiceHir>,
     pub resources: Vec<ResourceHir>,
     pub actions: Vec<ActionHir>,
     pub fields: Vec<FieldHir>,
 }
+
 #[derive(Debug, thiserror::Error)]
 pub enum HirError {
     #[error("Resource {0}, is duplicate")]

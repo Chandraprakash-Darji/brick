@@ -4,9 +4,12 @@
         "native/brick-resource/Cargo.toml",
         "native/brick-manifest/Cargo.toml",
         "native/brick-hir/Cargo.toml",
+        "native/brick-http/Cargo.toml",
+        "native/brickc/Cargo.toml",
         "native/brick-router/Cargo.toml",
         "native/brick-expr/Cargo.toml",
-        "native/brick-query/Cargo.toml"
+        "native/brick-query/Cargo.toml",
+        "native/brickc/Cargo.toml"
     ],
     "npm.packageManager": "bun"
 }

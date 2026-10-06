@@ -44,7 +44,7 @@ pub fn lower(manifest: &brick_manifest::Manifest) -> Result<Hir, HirError> {
             if hir
                 .resources
                 .iter()
-                .find(|val| val.name == rse.name)
+                .find(|val| val.name == rse.name && val.service == service_id)
                 .is_some()
             {
                 return Err(DuplicateResource(rse.name.clone()));
@@ -58,7 +58,10 @@ pub fn lower(manifest: &brick_manifest::Manifest) -> Result<Hir, HirError> {
             if srv.tables.len() == 0 {
                 return Err(TablesMisingInService(srv.name.clone()));
             };
-            let table_name = &rse.table.clone().unwrap();
+            let table_name = rse
+                .table
+                .as_ref()
+                .ok_or_else(|| TablesMisingInService(srv.name.clone()))?;
 
             // check if table name exist in the service tables
             if !srv.tables.iter().any(|t| &t.name == table_name) {
@@ -133,12 +136,12 @@ fn process_fields(hir: &mut Hir, m: &Manifest) {
 }
 
 fn process_actions(hir: &mut Hir, service: &ServiceManifest) -> Result<(), HirError> {
-    let mut action_index: u32 = 0;
+    let mut action_index: u32 = hir.actions.len() as u32;
+    let service_id = get_service(hir, service.name.clone()).unwrap().id;
     for action in &service.actions {
-        let a = hir
-            .actions
-            .iter()
-            .find(|action_exit| action_exit.name == action.name);
+        let a = hir.actions.iter().find(|action_exit| {
+            action_exit.name == action.name && action_exit.service == service_id
+        });
 
         if a.is_some() {
             return Err(DuplicateAction(action.name.clone()));

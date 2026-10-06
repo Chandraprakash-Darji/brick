@@ -384,6 +384,19 @@ export function buildResourcePlan<TTable = any>(
   return Object.freeze(plan);
 }
 
+const nativeResourceDefinitions = new WeakMap<object, { execute: unknown; schema: string }>();
+function resourceSchema(action: Action<any, any, any, any>): string {
+  return JSON.stringify({ input: action.config.input, output: action.config.output, errors: action.config.errors });
+}
+/** Native execution may only replace unchanged generated resource actions. */
+export function isNativeResourceAction(action: Action<any, any, any, any>): boolean {
+  const original = nativeResourceDefinitions.get(action);
+  return !!original && original.execute === action.config.execute && original.schema === resourceSchema(action);
+}
+
+/** Compatibility name for the original read-only adapter. */
+export const isNativeResourceReadAction = isNativeResourceAction;
+
 // Prepared Statement Cache per database instance
 interface ResourceDbCache {
   getById?: any;
@@ -409,7 +422,21 @@ function getResourceDbCache(db: any, resourceName: string): ResourceDbCache {
   return cache;
 }
 
+const compiledGetExecutors = new WeakMap<ResourcePlan, WeakMap<object, (id: any) => any>>();
+
+/** Install a startup-prepared lookup without replacing action policy or hooks. */
+export function installCompiledResourceGet(plan: ResourcePlan, db: object, get: (id: any) => any): void {
+  let executors = compiledGetExecutors.get(plan);
+  if (!executors) {
+    executors = new WeakMap();
+    compiledGetExecutors.set(plan, executors);
+  }
+  executors.set(db, get);
+}
+
 async function executeGet(db: any, plan: ResourcePlan, idVal: any): Promise<any> {
+  const compiled = compiledGetExecutors.get(plan)?.get(db);
+  if (compiled) return compiled(idVal);
   if (typeof db?.select === "function" && plan.idCol) {
     const cache = getResourceDbCache(db, plan.resourceName);
     if (cache.getById === undefined) {
@@ -1175,6 +1202,10 @@ export function defineResource<
   if (operations.delete !== false) {
     service.action(deleteAction);
     service.actions.set(`delete${capitalizedName}`, deleteAction);
+  }
+
+  for (const action of [getAction, listAction, createAction, updateAction, deleteAction]) {
+    nativeResourceDefinitions.set(action, { execute: action.config.execute, schema: resourceSchema(action) });
   }
 
   const resource: Resource<TTable, TCtx> = {
