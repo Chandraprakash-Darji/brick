@@ -1,4 +1,4 @@
-import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router';
+import { createRootRoute, HeadContent, Outlet, Scripts, useLocation } from '@tanstack/react-router';
 import * as React from 'react';
 import appCss from '@/styles/app.css?url';
 import { RootProvider } from 'fumadocs-ui/provider/tanstack';
@@ -41,6 +41,7 @@ export const Route = createRootRoute({
 });
 
 function RootComponent() {
+  const pathname = useLocation({ select: (location) => location.pathname });
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -48,7 +49,7 @@ function RootComponent() {
       </head>
       <body className="flex min-h-screen flex-col bg-background text-foreground antialiased">
         <RootProvider>
-          <div className="brick-site flex min-h-svh flex-col">
+          <div className={`brick-site flex min-h-svh flex-col${pathname.startsWith("/docs") ? " brick-docs-site" : ""}`}>
             <SiteHeader />
             <div className="frame flex flex-1 flex-col">
               <Outlet />

@@ -65,8 +65,8 @@ const clientLoader = browserCollections.docs.createClientLoader({
   ) {
     return (
       <DocsPage toc={toc}>
-        <DocsTitle>{frontmatter.title}</DocsTitle>
-        <DocsDescription>{frontmatter.description}</DocsDescription>
+        <DocsTitle className="docs-title">{frontmatter.title}</DocsTitle>
+        <DocsDescription className="docs-description">{frontmatter.description}</DocsDescription>
         <div className="-mt-4 flex flex-row items-center gap-2 border-b pb-6">
           <MarkdownCopyButton markdownUrl={markdownUrl} />
           <ViewOptionsPopover
@@ -88,14 +88,14 @@ function Page() {
   );
 
   return (
-    <DocsLayout {...baseOptions()} tree={pageTree}>
+    <DocsLayout {...baseOptions()} nav={{ title: "Documentation", url: "/docs" }} themeSwitch={{ enabled: false }} tree={pageTree}>
       <AISearch>
         <AISearchPanel />
         <AISearchTrigger
           position="float"
           className={cn(
             buttonVariants({
-              className: "text-fd-muted-foreground rounded-2xl",
+              className: "text-fd-muted-foreground rounded-none",
               variant: "secondary",
             }),
           )}

@@ -1,4 +1,4 @@
-import { Link, createFileRoute } from "@tanstack/react-router"
+import { createFileRoute } from "@tanstack/react-router"
 import { ArrowDownIcon, ArrowUpIcon, ChevronDownIcon, InfoIcon, TableOfContentsIcon } from "lucide-react"
 import * as React from "react"
 
@@ -115,8 +115,8 @@ function Benchmarks() {
   const sections = load.state === "ready" ? sectionsOf(load.data, view) : []
 
   return (
-    <main className="flex-1">
-      <section className="border-b px-4 pt-16 pb-12 sm:px-10 md:pt-20">
+    <main className="benchmark-page flex-1">
+      <section className="benchmark-intro border-b">
         <p className="label">Benchmarks</p>
         <h1 className="mt-5 text-3xl leading-[1.1] font-semibold tracking-[-0.035em] sm:text-4xl">Brick performance, measured.</h1>
         <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground">
@@ -148,7 +148,7 @@ function Benchmarks() {
         </p>
       </section>
 
-      <div className="z-30 flex flex-wrap items-center gap-x-7 gap-y-3 border-b bg-background/85 px-4 py-3 backdrop-blur-xl sm:px-10 lg:sticky lg:top-14">
+      <div className="benchmark-controls z-30 flex flex-wrap items-center gap-x-7 gap-y-3 border-b bg-background/85 px-4 py-3 backdrop-blur-xl sm:px-10 lg:sticky lg:top-[82px]">
         <Segmented label="Platform" options={platforms} value={view.os} onChange={(os) => update({ os })} />
         <Segmented label="Metric" options={metrics} value={view.metric} onChange={(metric) => update({ metric })} />
         <Segmented
@@ -394,7 +394,7 @@ function Results({
             table ? (
               <ResultsTable pkg={group.pkg} rows={rows} unit={u} commits={data.commits} runners={runners} from={from} />
             ) : (
-              <div className="-mr-px -mb-px grid border-t sm:grid-cols-2 lg:grid-cols-3">
+              <div className="benchmark-chart-grid grid sm:grid-cols-2 lg:grid-cols-3">
                 {rows.map(({ name, values }) => {
                   const trend = trendOf(values, u, runners, from)
                   const doc = docs[`${group.pkg}/${name.split("/")[0]}`] ?? appDocs[`${group.pkg}/${name}`]
@@ -404,7 +404,7 @@ function Results({
                       key={name}
                       id={anchorOf(group.pkg, name)}
                       tabIndex={-1}
-                      className="flex min-w-0 flex-col gap-4 border-r border-b px-4 py-5 outline-none sm:px-6 lg:scroll-mt-4"
+                      className="benchmark-chart flex min-w-0 flex-col gap-4 outline-none"
                     >
                       <header className="flex items-start justify-between gap-4">
                         <div className="min-w-0">
@@ -459,8 +459,8 @@ function GroupSection({ group, unit, children }: { group: Group; unit: string; c
   const [table, setTable] = React.useState(false)
   const id = `group-${anchorOf(group.pkg, "")}`
   return (
-    <section aria-labelledby={id} className="border-b">
-      <div className="flex flex-wrap items-end justify-between gap-4 px-4 pt-12 pb-6 sm:px-10">
+    <section aria-labelledby={id} className="benchmark-group border-b">
+      <div className="benchmark-group-heading flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-2xl">
           <h2 id={id} className="flex items-center gap-1.5 text-xl font-semibold tracking-tight">
             {group.title}
@@ -621,7 +621,7 @@ function Segmented<T extends string | number | boolean>({
   return (
     <div className="flex items-center gap-3">
       {!hideLabel && <span className="label">{label}</span>}
-      <div role="radiogroup" aria-label={label} className="inline-flex rounded-lg border p-0.5">
+      <div role="radiogroup" aria-label={label} className="benchmark-segmented inline-flex border p-0.5">
         {options.map((o) => (
           <button
             key={String(o.id)}
@@ -630,7 +630,7 @@ function Segmented<T extends string | number | boolean>({
             aria-checked={o.id === value}
             onClick={() => onChange(o.id)}
             className={cn(
-              "h-7 rounded-md px-2.5 text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+              "h-7 px-2.5 text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
               o.id === value ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground"
             )}
           >

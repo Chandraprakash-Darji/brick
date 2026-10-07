@@ -511,12 +511,67 @@ html > body[data-scroll-locked] {
   .home-footer-bottom > span:nth-child(2) { display: none; }
 }
 
-
-/* Shared header dimensions. */
+/* Documentation and measurements share the landing page's visual language. */
 .brick-site { --site-header-height: 82px; }
 .brick-site > header { height: var(--site-header-height); }
 .brick-site > header nav a[data-current] { color: var(--foreground); }
-@media (max-width: 639px) { .brick-site { --site-header-height: 116px; } }
+.benchmark-intro { padding: 80px 0 48px; }
+.benchmark-intro h1 { max-width: 850px; font-size: clamp(36px, 4.5vw, 60px); font-weight: 500; line-height: 1.04; letter-spacing: -.05em; text-transform: uppercase; }
+.benchmark-intro > p:not(.label) { font-size: 14px; }
+.benchmark-intro a { text-decoration-color: var(--border); }
+.benchmark-controls { padding: 20px 0; background: var(--background); top: var(--site-header-height); backdrop-filter: none; }
+.benchmark-controls > button { border-radius: 0; font-family: var(--font-mono); font-size: 11px; }
+.benchmark-segmented { border-color: var(--border); }
+.benchmark-segmented button { font-family: var(--font-mono); font-size: 11px; }
+.benchmark-segmented button[aria-checked="true"] { background: var(--foreground); color: var(--background); }
+.benchmark-group { padding-bottom: 48px; }
+.benchmark-group-heading { padding: 56px 0 28px; }
+.benchmark-group-heading h2 { font-size: 28px; font-weight: 500; letter-spacing: -.035em; }
+.benchmark-chart-grid { gap: 16px; }
+.benchmark-chart { padding: 24px; background: var(--code); scroll-margin-top: calc(var(--site-header-height) + 100px); }
+.benchmark-chart svg { width: 100%; }
+.benchmark-chart header > div > div { font-weight: 500; }
+.benchmark-chart .stroke-gopher-ink { stroke: var(--foreground); }
+.benchmark-chart .fill-gopher-ink { fill: var(--foreground); }
+.benchmark-chart .bg-gopher-ink { background: var(--foreground); }
+.benchmark-group tr[id] { scroll-margin-top: calc(var(--site-header-height) + 100px); }
+.brick-docs-site > .frame:has(#nd-docs-layout) { border-top: 1px solid var(--border); }
+.brick-docs-site #nd-docs-layout {
+  --fd-banner-height: var(--site-header-height);
+  --fd-docs-height: calc(100dvh - var(--site-header-height));
+  --fd-layout-width: 1280px;
+}
+.brick-docs-site #nd-sidebar { background: var(--background); font-size: 13px; }
+.brick-docs-site #nd-sidebar a[href="/docs"] { font-family: var(--font-mono); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; }
+.brick-docs-site #nd-sidebar a[data-active="true"] { background: var(--code); color: var(--foreground); }
+.brick-docs-site #nd-sidebar [data-search-full] { border-radius: 0; background: var(--code); }
+.brick-docs-site #nd-page { padding-top: 48px; padding-bottom: 64px; }
+.brick-docs-site .docs-title { font-size: clamp(30px, 3vw, 44px); font-weight: 500; line-height: 1.12; letter-spacing: -.045em; }
+.brick-docs-site .docs-description { font-size: 15px; line-height: 1.7; }
+.brick-docs-site .prose { font-size: 14px; line-height: 1.8; }
+.brick-docs-site .prose h2 { font-size: 25px; font-weight: 500; letter-spacing: -.025em; }
+.brick-docs-site .prose h3 { font-weight: 500; }
+.brick-docs-site .prose figure { border-radius: 0; box-shadow: none; }
+.brick-docs-site #nd-toc { font-size: 12px; }
+.brick-docs-site #toc-title { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+.brick-docs-site #nd-subnav { background: var(--background); font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; }
+@media (max-width: 1023px) {
+  .benchmark-intro { padding-top: 56px; }
+  .benchmark-controls { gap: 16px 24px; }
+  .benchmark-chart { padding: 20px; }
+}
+@media (max-width: 639px) {
+  .brick-site { --site-header-height: 116px; }
+  .benchmark-intro { padding: 40px 0 32px; }
+  .benchmark-intro h1 { font-size: 36px; }
+  .benchmark-controls { padding-block: 16px; }
+  .benchmark-controls > div { flex-wrap: wrap; gap: 8px; }
+  .benchmark-group { padding-bottom: 32px; }
+  .benchmark-group-heading { padding: 36px 0 20px; }
+  .benchmark-group-heading h2 { font-size: 24px; }
+  .benchmark-chart-grid { gap: 12px; }
+  .brick-docs-site #nd-page { padding: 28px 8px 40px; }
+}
 
 /* Generated Brick mark preserves transparency across both site themes. */
 .brick-logo { display: block; object-fit: contain; }
