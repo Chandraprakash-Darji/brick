@@ -12,12 +12,12 @@ bun add @brickkit/core @brickkit/cli
 To release new versions from a clean, up-to-date `main` checkout:
 
 ```sh
-bun run release both patch
+bun run release patch
 ```
 
 The release script bumps versions, builds and tests the packages, then pushes
-`core-v<version>` and `cli-v<version>` tags. GitHub Actions publishes the packages
-to npm and creates a GitHub release after each successful publish. The
+`v<version>`, with core and CLI sharing the same version. GitHub Actions publishes
+both packages to npm, then creates one GitHub release with notes grouped by package. The
 **Publish to npm** workflow also supports manual dispatch and a dry-run option.
 
 For token-free publishing, configure a trusted publisher in each npm package's

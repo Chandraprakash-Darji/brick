@@ -1,13 +1,8 @@
 # Publish @brickkit/* to the npmjs public registry.
 #
-# Triggers:
-#   - push a tag  `core-v<version>`  (e.g. core-v0.1.0) to publish @brickkit/core
-#   - push a tag  `cli-v<version>`   (e.g. cli-v0.1.0)  to publish @brickkit/cli
-#   - manual dispatch (inputs below) for re-runs
-#
-# The tag version must match the version in the package's package.json, or
-# the job fails before publishing. Re-pushing an already-published version
-# is a no-op (checked via `npm view`, not an error).
+# Push v<version> to publish both packages and create one combined release.
+# Package versions must match each other and the tag. Manual dispatch also
+# supports verifying the release without publishing via dry_run.
 #
 # Configure npm trusted publishing for Chandraprakash-Darji/brick + publish-npm.yml.
 # For the initial publish, NPM_TOKEN can be a granular token with write
@@ -21,23 +16,13 @@ name: Publish to npm
 on:
   push:
     tags:
-      - "core-v*"
-      - "cli-v*"
+      - "v*"
   pull_request:
     paths:
       - "packages/**"
       - ".github/workflows/publish-npm.yml"
   workflow_dispatch:
     inputs:
-      package:
-        description: "Package to publish"
-        required: true
-        default: "both"
-        type: choice
-        options:
-          - both
-          - core
-          - cli
       dry_run:
         description: "Pack without publishing"
         required: false
@@ -65,32 +50,13 @@ jobs:
       - run: npm pack --dry-run
         working-directory: packages/cli
 
-  resolve: # PR validation never publishes; tags/dispatch always continue.
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set.outputs.matrix }}
-    steps:
-      - id: set
-        run: |
-          ref="${GITHUB_REF_NAME}"
-          input="${{ inputs.package }}"
-          if [[ "$ref" == core-v* ]]; then pkgs='["core"]';
-          elif [[ "$ref" == cli-v* ]]; then pkgs='["cli"]';
-          elif [[ "$input" == "core" ]]; then pkgs='["core"]';
-          elif [[ "$input" == "cli" ]]; then pkgs='["cli"]';
-          else pkgs='["core", "cli"]'; fi
-          echo "matrix={\"pkg\":$pkgs}" >> "$GITHUB_OUTPUT"
-
   publish:
-    needs: resolve
-    permissions:
-      contents: write # Create the GitHub release after npm publishing succeeds
-      id-token: write
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(needs.resolve.outputs.matrix) }}
+      matrix:
+        pkg: [core, cli]
     steps:
       - uses: actions/checkout@v4
 
@@ -124,8 +90,14 @@ jobs:
           version="$(node -p "require('./package.json').version")"
           echo "name=$name" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          core_version="$(node -p "require('../core/package.json').version")"
+          cli_version="$(node -p "require('../cli/package.json').version")"
+          if [[ "$core_version" != "$cli_version" ]]; then
+            echo "::error::core and cli versions must match"
+            exit 1
+          fi
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            expected="${GITHUB_REF_NAME#*-v}"
+            expected="${GITHUB_REF_NAME#v}"
             if [[ "$version" != "$expected" ]]; then
               echo "::error::tag ${GITHUB_REF_NAME} does not match package.json version $version"
               exit 1
@@ -150,16 +122,27 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --access public
 
-      - name: Create GitHub release
-        if: inputs.dry_run != true
+  release:
+    needs: publish
+    if: inputs.dry_run != true
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Create combined GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          PACKAGE_NAME: ${{ steps.meta.outputs.name }}
-          PACKAGE_VERSION: ${{ steps.meta.outputs.version }}
-          PACKAGE_KIND: ${{ matrix.pkg }}
         run: |
-          tag="${PACKAGE_KIND}-v${PACKAGE_VERSION}"
+          version="$(node -p "require('./packages/core/package.json').version")"
+          tag="v${version}"
           if ! gh release view "$tag" >/dev/null 2>&1; then
+            bun scripts/release-notes.ts > /tmp/brick-release-notes.md
             gh release create "$tag" --target "$GITHUB_SHA" \
-              --title "$PACKAGE_NAME v$PACKAGE_VERSION" --generate-notes
+              --title "$tag" --notes-file /tmp/brick-release-notes.md --latest
           fi

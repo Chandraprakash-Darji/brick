@@ -2,12 +2,8 @@
 // One-command release: bump version(s) -> commit -> tag -> push ->
 // npm publish and GitHub release via the publish-npm.yml workflow.
 //
-//   bun run release <core|cli|both> [patch|minor|major] [--dry-run]
-//
-// Examples:
-//   bun run release both            # patch-bump core+cli, release both
-//   bun run release cli minor       # minor-bump cli only
-//   bun run release core patch --dry-run   # print what would happen
+//   bun run release [patch|minor|major] [--dry-run]
+// Both packages use the same version and ship under one v<version> tag.
 //
 // Prerequisites (checked up front):
 //   - clean tracked tree, on main, in sync with origin/main
@@ -23,7 +19,7 @@ import { join } from "node:path";
 const ROOT = join(import.meta.dir, "..");
 const DRY = process.argv.includes("--dry-run");
 const args = process.argv.slice(2).filter((a) => a !== "--dry-run");
-const [target = "both", bump = "patch"] = args;
+const [bump = "patch"] = args;
 
 const CORE_PKG = join(ROOT, "packages/core/package.json");
 const CLI_PKG = join(ROOT, "packages/cli/package.json");
@@ -64,7 +60,8 @@ function bumpVersion(v: string, kind: string): string {
   return `${major}.${minor}.${patch}`;
 }
 
-if (!["core", "cli", "both"].includes(target)) fail(`target must be core|cli|both, got "${target}"`);
+if (args.length > 1 || !["patch", "minor", "major"].includes(bump))
+  fail("usage: bun run release [patch|minor|major] [--dry-run]");
 
 // --- preconditions ---
 const dirty = execFileSync("git", ["status", "--porcelain"], { cwd: ROOT, encoding: "utf-8" })
@@ -84,61 +81,36 @@ try {
 // --- compute new versions ---
 const coreJson = readJson(CORE_PKG);
 const cliJson = readJson(CLI_PKG);
-const releases: Array<{ pkg: string; file: string; name: string; from: string; to: string; tag: string }> = [];
-
-if (target === "core" || target === "both") {
-  const to = bumpVersion(coreJson.version, bump);
-  releases.push({ pkg: "core", file: CORE_PKG, name: "@brickkit/core", from: coreJson.version, to, tag: `core-v${to}` });
-}
-if (target === "cli" || target === "both") {
-  // In both-mode cli always gets at least a patch, so the release picks
-  // up the (possibly moved) core floor even when cli code didn't change.
-  const to = bumpVersion(cliJson.version, target === "cli" ? bump : "patch");
-  releases.push({ pkg: "cli", file: CLI_PKG, name: "@brickkit/cli", from: cliJson.version, to, tag: `cli-v${to}` });
-}
-
-// keep cli's core floor in sync when core moves (patch bumps already satisfy ^x.y.z)
-const coreRel = releases.find((r) => r.pkg === "core");
-if (coreRel) {
-  const want = `^${coreRel.to}`;
-  if (cliJson.dependencies["@brickkit/core"] !== want) {
-    if (!DRY) {
-      cliJson.dependencies["@brickkit/core"] = want;
-      writeJson(CLI_PKG, cliJson);
-    }
-    console.log(`  @brickkit/cli dependency floor -> ${want}`);
-  }
-}
-
-// abort if any target tag already exists on origin (re-push would be a no-op publish)
-for (const r of releases) {
-  const exists = DRY ? "" : execFileSync("git", ["ls-remote", "origin", r.tag], { cwd: ROOT, encoding: "utf-8" }).trim();
-  if (exists) fail(`tag ${r.tag} already exists on origin`);
-}
+if (coreJson.version !== cliJson.version) fail("core and cli versions must match");
+const version = bumpVersion(coreJson.version, bump);
+const tag = `v${version}`;
+const releases = [
+  { file: CORE_PKG, data: coreJson },
+  { file: CLI_PKG, data: cliJson },
+];
+cliJson.dependencies["@brickkit/core"] = `^${version}`;
+const exists = execFileSync("git", ["ls-remote", "origin", `refs/tags/${tag}`], { cwd: ROOT, encoding: "utf-8" }).trim();
+if (exists) fail(`tag ${tag} already exists on origin`);
 
 console.log("releasing:");
-for (const r of releases) console.log(`  ${r.name}  ${r.from} -> ${r.to}  (tag ${r.tag})`);
+for (const r of releases) console.log(`  ${r.data.name}  ${r.data.version} -> ${version}  (tag ${tag})`);
 if (DRY) { console.log("dry-run only — no changes made"); process.exit(0); }
 
 // --- apply, verify, ship ---
 for (const r of releases) {
-  const data = readJson(r.file);
-  data.version = r.to;
-  writeJson(r.file, data);
+  r.data.version = version;
+  writeJson(r.file, r.data);
 }
 sh(["bun", "install"]);
 sh(["bun", "run", "build"]);
 sh(["bun", "test", "packages/core", "packages/cli"]);
 
-const msg = `chore(release): ${releases.map((r) => `${r.name} v${r.to}`).join(", ")}`;
+const msg = `chore(release): ${tag}`;
 sh(["git", "add", "packages/core/package.json", "packages/cli/package.json", "bun.lock"]);
 sh(["git", "commit", "-m", msg]);
-for (const r of releases) sh(["git", "tag", r.tag]);
-sh(["git", "push", "origin", "main"]);
-sh(["git", "push", "origin", ...releases.map((r) => r.tag)]);
-for (const r of releases) {
-  console.log(`  queued ${r.name} v${r.to}; GitHub Actions creates the release after publishing`);
-}
+sh(["git", "tag", tag]);
+sh(["git", "push", "--atomic", "origin", "main", tag]);
+console.log(`  queued ${tag}; GitHub Actions publishes both packages, then creates one release`);
 
 console.log("\nshipped. The publish workflow now publishes via OIDC:");
 console.log("  https://github.com/Chandraprakash-Darji/brick/actions/workflows/publish-npm.yml");
