@@ -5,28 +5,25 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { buttonVariants } from "@/components/ui/button"
 import { site } from "@/lib/site"
 
-const navLink = "text-muted-foreground transition-colors hover:text-foreground data-current:text-foreground"
+const navLink = "text-muted-foreground transition-colors hover:text-foreground data-current:text-gopher-ink data-current:font-medium"
 
 export function SiteHeader() {
   const pathname = useLocation({ select: (l) => l.pathname })
   return (
-    <header className="frame sticky top-0 z-40 flex h-14 items-center gap-6 border-b bg-background/80 px-4 backdrop-blur-xl sm:px-6">
+    <header className="frame sticky top-0 z-40 flex flex-wrap items-center gap-x-8 gap-y-3 border-b bg-background/95 py-5 backdrop-blur-xl">
       <Link to="/">
         <Wordmark />
       </Link>
-      <nav className="hidden items-center gap-5 text-sm sm:flex">
+      <nav className="order-3 flex w-full items-center gap-6 text-sm sm:order-none sm:w-auto">
         <Link to="/" className={navLink} data-current={pathname === "/" || undefined}>
           Home
         </Link>
         <Link to="/benchmarks" className={navLink} data-current={pathname.startsWith("/benchmarks") || undefined}>
           Benchmarks
         </Link>
-        <a href={`${site.repo}/tree/main/bench`} target="_blank" rel="noreferrer" className={navLink}>
-          Bench Lab
-        </a>
-        <a href={`${site.repo}/tree/main/docs`} target="_blank" rel="noreferrer" className={navLink}>
+        <Link to="/docs/$" params={{ _splat: "" }} className={navLink} data-current={pathname.startsWith("/docs") || undefined}>
           Docs
-        </a>
+        </Link>
         <a href={`${site.repo}/tree/main/examples`} target="_blank" rel="noreferrer" className={navLink}>
           Examples
         </a>

@@ -7,6 +7,7 @@ export interface BenchmarkData {
   runners: Record<string, (Runner | null)[]>
   /** By OS, package, benchmark and unit: the value at each commit, or null. */
   series: Record<string, Record<string, Record<string, Record<string, (number | null)[]>>>>
+  notes?: Record<string, ({ measuredAt: string; count: number; suiteCounts?: Record<string, number>; skipped: string[]; failures: string[] } | null)[]>
 }
 
 export interface Commit {
@@ -18,13 +19,13 @@ export interface Commit {
 export interface Runner {
   arch: string
   cpu: string
-  go: string
+  runtime: string
+  dirty?: boolean
 }
 
-/** Where the page reads the results: defaults to local /data/benchmarks-latest.json */
-export const dataUrl: string =
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_BENCHMARKS_URL) ||
-  "/data/benchmarks-latest.json"
+/** Production fetches the data branch directly; dev uses the real local snapshot. */
+export const dataUrl: string = import.meta.env.VITE_BENCHMARKS_URL ||
+  (import.meta.env.DEV ? "/data/benchmarks-latest.json" : "https://raw.githubusercontent.com/brick-org/brick/benchmarks/latest.json")
 
 export const workflowUrl = `${site.repo}/actions/workflows/bench.yml`
 
@@ -35,146 +36,87 @@ export async function getBenchmarkDocs(): Promise<Record<string, string>> {
 export const platforms = [
   { id: "darwin", label: "macOS" },
   { id: "linux", label: "Linux" },
-  { id: "windows", label: "Windows" },
+  { id: "win32", label: "Windows" },
 ] as const
 
 export type Platform = (typeof platforms)[number]["id"]
 
 export const metrics = [
-  { id: "time", unit: "ns/op", label: "Time", text: "time per operation" },
-  { id: "memory", unit: "B/op", label: "Memory", text: "memory allocated per operation" },
-  { id: "allocs", unit: "allocs/op", label: "Allocations", text: "allocations per operation" },
+  { id: "time", unit: "ns/op", label: "Time", text: "duration" },
+  { id: "throughput", unit: "ops/s", label: "Throughput", text: "operations per second" },
+  { id: "memory", unit: "B/op", label: "Memory", text: "measured memory" },
 ] as const
 
 export type Metric = (typeof metrics)[number]["id"]
-
 export const ranges = [50, 100, 300] as const
 
 export interface Group {
   pkg: string
   title: string
   text: string
-  unit?: string
+  units?: Partial<Record<Metric, string>>
   unitText?: string
   info?: { terms: [string, string][]; note?: string }
 }
 
 export const groups: Group[] = [
   {
+    pkg: "compiler",
+    title: "Brick Routes",
+    text: "Action and resource CRUD routes using compiled execution. Time shows median p99; throughput shows median requests per second.",
+    units: { time: "ms", throughput: "req/s" },
+    info: {
+      terms: [["resource-*", "SQLite resource routes"], ["p99", "99th percentile request latency"]],
+      note: "External oha, concurrency 16, 50,000 requests per case, six rounds in CI. DELETE uses unique URLs with the Bun loader.",
+    },
+  },
+  { pkg: "footprint", title: "Cold Startup & Idle CPU", text: "Cold process launch to listening and server CPU time while idle for five seconds, measured in fresh child processes.", units: { time: "ms", throughput: "ms", memory: "ms" } },
+  { pkg: "bundle", title: "Server Bundle Size", text: "Minified runnable showcase HTTP server with dependencies bundled for Bun; built-in Bun modules stay external. Raw and gzip sizes.", units: { time: "B", throughput: "B", memory: "B" } },
+  {
     pkg: "micro",
     title: "Micro-benchmarks",
-    text: "Context creation, direct vs proxy action dispatch, Zod input validation, JSON serialization, and resource pagination.",
-    info: {
-      terms: [
-        ["dispatch.direct", "Zero-overhead monomorphic dispatch path"],
-        ["dispatch.proxy", "Typed proxy with validation and error interceptors"],
-        ["json.serialize", "Pre-compiled high-throughput JSON encoder"],
-      ],
-      note: "Measured using Bun high-resolution nanosecond timers over 100,000 iterations per scenario.",
-    },
+    text: "Context creation, TypeBox validation, action dispatch, input assembly, cursor encoding, resource parsing and JSON serialization. Memory is net live heap change per operation, not allocated bytes.",
   },
   {
     pkg: "http",
     title: "HTTP Throughput & Latency",
-    text: "Elysia AOT routing vs native Bun server, SQLite CRUD, stream pipelining, and synthetic latency.",
+    text: "Bun and Elysia floors, Brick framework layers, SQLite CRUD, payloads, streams and synthetic RTT. Time is p99 unless a percentile or SQL duration is named; memory is combined server and load-generator RSS.",
+    units: { time: "ms", throughput: "req/s", memory: "B" },
     info: {
-      terms: [
-        ["http.get.json", "Fixed payload baseline measuring pure HTTP parsing and serialization"],
-        ["http.sqlite.crud", "Round-trip transaction including index lookup and write-ahead log write"],
-        ["http.stream.10mb", "Bounded memory backpressure stream pipeline"],
-      ],
-      note: "Closed-loop benchmark on loopback TCP with concurrency c=64.",
+      terms: [["req/s", "Successful requests per second (goodput)"], ["p99", "99th percentile request latency"], ["c=N", "Concurrent requests in the closed-loop loader"]],
+      note: "Same-process server and generator. CPU/RSS include both. Shared GitHub runners are exploratory measurements, not production capacity or dedicated-hardware gates.",
     },
   },
-  {
-    pkg: "prepared",
-    title: "Drizzle ORM & Prepared SQL",
-    text: "Dynamic Drizzle ORM query compilation vs pre-compiled prepared queries vs raw SQLite driver.",
-    info: {
-      terms: [
-        ["dynamic", "Query AST constructed and parameterized on every call"],
-        ["prepared", "Pre-compiled SQL statement cached across calls"],
-        ["raw", "Direct zero-overhead C driver binding"],
-      ],
-    },
-  },
-  {
-    pkg: "batch",
-    title: "Batch & Background Compute",
-    text: "1M row validation, bounded JSONL streaming, chunked bulk writes, and Worker thread compute.",
-  },
-  {
-    pkg: "startup",
-    title: "Cold Boot & First Request",
-    text: "Repeated in-process build, route compilation, and first-request timing across 10, 100, and 1000 actions.",
-    unit: "ms",
-    unitText: "milliseconds",
-  },
-  {
-    pkg: "memory",
-    title: "Idle Memory Footprint",
-    text: "Resident Set Size (RSS) and heap footprint after initialization and garbage collection.",
-    unit: "B",
-    unitText: "bytes",
-    info: {
-      terms: [
-        ["macOS", "Physical footprint, as Activity Monitor reports it."],
-        ["Linux", "Proportional set size (PSS) and dirty pages."],
-        ["Windows", "Private working set."],
-      ],
-      note: "Measured 6 seconds after initialization with zero active HTTP requests.",
-    },
-  },
+  { pkg: "prepared", title: "Drizzle & Prepared SQL", text: "SQLite get, list, insert, update and delete using dynamic Drizzle, prepared Drizzle and raw SQL." },
+  { pkg: "batch", title: "Batch Processing", text: "Validation, JSONL streaming, bulk writes, CPU and I/O transforms and worker tasks. Duration is elapsed time per record." },
+  { pkg: "startup", title: "Startup & First Request", text: "Build, listen and first-request medians for 10, 100 and 1,000 actions. RSS includes the application process after startup.", units: { time: "ms", throughput: "ms", memory: "B" } },
+  { pkg: "postgres", title: "PostgreSQL CRUD", text: "Disposable PostgreSQL CRUD benchmark on the Linux runner. Time is p99 unless a percentile is named; throughput is successful requests per second.", units: { time: "ms", throughput: "req/s", memory: "B" } },
 ]
 
-export const appDocs: Record<string, string> = {
-  "micro/context.empty": "Context object creation and dependency injection container initialization.",
-  "micro/action.call.sync": "Direct in-memory synchronous action dispatch without HTTP wrapper overhead.",
-  "micro/action.call.async": "Asynchronous action invocation with microtask event-loop resolution.",
-  "micro/action.validate.zod": "Schema validation and parsing for 20-field typed input objects.",
-  "micro/dispatch.direct": "Zero-overhead direct action routing with monomorphic call sites.",
-  "micro/dispatch.proxy": "Typed proxy dispatch with runtime signature reflection and error boundary.",
-  "micro/json.serialize.fast": "AOT optimized JSON serialization compared to standard JSON.stringify.",
-  "micro/resource.list.1k": "In-memory cursor slicing and projection for 1,000 entity rows.",
-
-  "http/http.get.json": "AOT route handler returning small static JSON payload over loopback TCP.",
-  "http/http.post.echo": "POST payload parsing, body validation, and echo response serialization.",
-  "http/http.sqlite.crud": "Single HTTP request executing SQLite index lookup, update, and commit.",
-  "http/http.sqlite.list100": "Paged SQLite query returning 100 hydrated objects with relations.",
-  "http/http.stream.10mb": "Bounded 64KB chunk streaming through Elysia transform pipeline.",
-  "http/http.wal.flush": "Disk-backed WAL sync latency under concurrent simulated write pressure.",
-
-  "prepared/drizzle.get.dynamic": "Dynamic Drizzle query builder compiling AST on every invocation.",
-  "prepared/drizzle.get.prepared": "Pre-compiled Drizzle prepared query with parameterized placeholders.",
-  "prepared/sql.get.raw": "Direct bun:sqlite prepared statement with zero-copy row reader.",
-  "prepared/drizzle.insert.dynamic": "Dynamic INSERT statement generation and execution.",
-  "prepared/drizzle.insert.prepared": "Prepared parameterized batch INSERT statement execution.",
-  "prepared/sql.insert.raw": "Raw C-binding SQLite driver batch INSERT statement.",
-
-  "batch/batch.validate.1m": "Synchronous validation throughput over 1,000,000 input records.",
-  "batch/batch.jsonl.parse": "Streaming parser reading 100MB JSONL in bounded 4MB chunks.",
-  "batch/batch.bulk.write": "Transaction batch committing 10,000 rows into indexed tables.",
-  "batch/batch.worker.compute": "Thread-pool message serialization and Worker CPU task execution.",
-
-  "startup/startup.10actions": "Full platform boot, schema registration, and first request (10 actions).",
-  "startup/startup.100actions": "Full platform boot, schema registration, and first request (100 actions).",
-  "startup/startup.1000actions": "Full platform boot, schema registration, and first request (1000 actions).",
-
-  "memory/rss.idle": "Resident Set Size (RSS) 10 seconds after server initialization.",
-  "memory/heap.idle": "Allocated JSC heap memory after quiescent garbage collection.",
-}
+export const appDocs: Record<string, string> = {}
 
 export const reading: NonNullable<Group["info"]> = {
   terms: [
-    ["▲ ▼", "A commit that moved a result beyond its noise: worse, better."],
-    ["Card", "The last value, against the first ones shown."],
-    ["Gray", "Timings on other CPUs: runners get one of several, so timings compare only on the same one."],
+    ["Throughput", "Higher is better; time and memory are lower-is-better"],
+    ["Card", "The latest value compared with the first values shown on the same CPU"],
+    ["Gray", "Runs on other CPUs, excluded from the displayed comparison"],
   ],
+  note: "CI uses six rounds. Local snapshots and partial or failed runs are labeled. Raw suite artifacts are retained in the workflow; compact history is published to the benchmarks branch.",
+}
+
+export function isWorse(change: number, unit: string) {
+  return unit === "req/s" || unit === "ops/s" ? change < 0 : change > 0
+}
+
+export function metricOf(unit: string): Metric | undefined {
+  if (unit === "ns/op" || unit === "ms") return "time"
+  if (unit === "req/s" || unit === "ops/s") return "throughput"
+  if (unit === "B/op" || unit === "B") return "memory"
 }
 
 export function unitLabel(unit: string) {
-  const metric = metrics.find((m) => m.unit === unit)
-  return metric ? metric.label.toLowerCase() : unit === "bytes" ? "size" : unit === "B" ? "idle" : unit
+  const metric = metrics.find((m) => m.id === metricOf(unit))
+  return metric ? metric.label.toLowerCase() : unit
 }
 
 function minChange(unit: string) {
@@ -196,7 +138,7 @@ function noiseOf(values: number[], unit: string) {
 }
 
 function ratio(after: number, before: number) {
-  return before > 0 ? after / before - 1 : after === 0 ? 0 : Infinity
+  return before !== 0 ? (after - before) / Math.abs(before) : after === 0 ? 0 : Infinity
 }
 
 export interface Step {
@@ -207,7 +149,6 @@ export interface Step {
 }
 
 export function findSteps(values: (number | null)[], unit: string, runners: (Runner | null)[]): Step[] {
-  if (unit !== "ns/op") return stepsOf(values, unit)
   const cpus = new Set(runners.flatMap((r) => (r ? [r.cpu] : [])))
   return [...cpus].flatMap((cpu) => stepsOf(onCPU(values, runners, cpu), unit)).sort((a, b) => a.index - b.index)
 }
@@ -270,7 +211,7 @@ export function trendOf(values: (number | null)[], unit: string, runners: (Runne
   if (index < 0) return undefined
   const latest = values[index]!
   const nonNull = (v: number | null): v is number => v != null
-  const like = unit === "ns/op" ? onCPU(values, runners, runners[index]?.cpu) : values
+  const like = onCPU(values, runners, runners[index]?.cpu)
   const noise = noiseOf(like.slice(0, index).filter(nonNull).slice(-20), unit)
   const shown = like.slice(from, index).filter(nonNull)
   const steps = findSteps(values, unit, runners).filter((s) => s.index >= from)

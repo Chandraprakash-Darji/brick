@@ -3,7 +3,7 @@ title: brick CLI
 description: Dev server, production start, OpenAPI generation, and architecture export for the TypeScript CLI
 ---
 
-The `brick` binary ships with `@elregaldo/cli` (compiled to `dist/bin.js`). It has exactly four commands — no codegen, no migration runner.
+The `brick` binary ships with `@elregaldo/cli` (compiled to `dist/bin.js`). It provides development, production, build, OpenAPI export, and architecture inspection commands. Database migrations stay in your application workflow.
 
 ## Installation
 
@@ -50,6 +50,7 @@ appService.action({
 |---------|-------|--------------|
 | `brick dev [entry] [--port <number>]` | — | Import `entry`, list services/actions/resources, start `createBrickServer` with live reload |
 | `brick start [entry]` | — | Same boot path as `dev`, intended for production |
+| `brick build <entry> [--outdir <directory>]` | — | Compile registered definitions into route handlers, Brick IR and a bundled Bun server |
 | `brick gen openapi [--output <file>]` | — | Print OpenAPI 3.1 JSON to stdout, or write it to `--output` |
 | `brick info` | `services` | Print `registry.exportArchitecture()` JSON to stdout |
 
@@ -125,7 +126,8 @@ The request-logging plugin is mounted first so every route is timed (`METHOD pat
 
 - **`dev`** — local development. Pass your entry file so services register before the server lists them.
 - **`start`** — production boot with the same entry/port handling. Pair with `secrets: { validate: true }` (the default) so missing env fails fast.
-- **`gen openapi`** — generating a client or diffing the spec in CI. See [gen openapi](./generate).
-- **`info`** — exporting the service graph for dashboards or docs. See [info / architecture export](./schema-dump).
+- **`build`** — compile a definitions module without starting a listening server. See [Compile an Application](/docs/brick-cli/build).
+- **`gen openapi`** — generating a client or diffing the spec in CI. See [gen openapi](/docs/brick-cli/generate).
+- **`info`** — exporting the service graph for dashboards or docs. See [info / architecture export](/docs/brick-cli/schema-dump).
 
-There are no `migrate`, `generate`, or `schema-dump` codegen commands. Database setup in dev is covered in [Databases & schema in dev](./migrate).
+There are no `migrate`, `generate`, or `schema-dump` codegen commands. Database setup in dev is covered in [Databases & schema in dev](/docs/brick-cli/migrate).

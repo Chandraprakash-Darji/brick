@@ -79,12 +79,12 @@ export const {
 | `table` | Drizzle table (`sqliteTable` / `pgTable`). Its columns derive the row, create, update, get, delete, and list schemas |
 | `ownerField` | Drizzle-key column holding the owner's user id. Enables owner scoping on list and ownership checks on get/update/delete |
 | `idField` | PK column key (default `"id"`) |
-| `idPrefix` / `idGenerator` | ID minting for creates (default `pg_<rand>` for a `page` resource) — see [Primary Keys](./primary-keys) |
+| `idPrefix` / `idGenerator` | ID minting for creates (default `pg_<rand>` for a `page` resource) — see [Primary Keys](/docs/primary-keys) |
 | `pluralName` | Override the derived plural used in list responses |
 | `operations` | `list` (`{ defaultLimit, maxLimit, searchable, sortable, defaultSort }` or boolean), `get`/`create`/`update`/`delete` booleans |
-| `hooks` | `beforeCreate`, `afterCreate`, `beforeUpdate`, `afterUpdate`, `beforeDelete`, `afterDelete` — see [Hooks](./hooks) |
+| `hooks` | `beforeCreate`, `afterCreate`, `beforeUpdate`, `afterUpdate`, `beforeDelete`, `afterDelete` — see [Hooks](/docs/hooks) |
 | `fields` | Per-column TypeBox overrides keyed by Drizzle key or DB column name |
-| `searchable` / `sortable` / `defaultSort` | Search and sort behavior for list — see [Resource Lifecycle](./resource-lifecycle) |
+| `searchable` / `sortable` / `defaultSort` | Search and sort behavior for list — see [Resource Lifecycle](/docs/resource-lifecycle) |
 | `excludeFromList` | Columns excluded from the default list projection (default `["content"]`) |
 | `errors` | Extra named error definitions merged into every CRUD action |
 

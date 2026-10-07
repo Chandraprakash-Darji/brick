@@ -1,0 +1,130 @@
+name: Benchmarks
+
+# Adapted from https://github.com/egoist/mygo/blob/main/.github/workflows/bench.yml
+# Jobs measure the commit, then a
+# separate job merges compact measurements onto the benchmarks data branch.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit, branch, or tag to measure (the workflow commit by default)
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: macOS, os: macos-latest, platform: darwin }
+          - { name: Linux, os: ubuntu-latest, platform: linux }
+          - { name: Windows, os: windows-latest, platform: win32 }
+    defaults:
+      run:
+        shell: bash
+    services:
+      postgres:
+        # Service containers are supported on Linux; the other two lanes
+        # record PostgreSQL as skipped and measure every remaining suite.
+        image: ${{ matrix.platform == 'linux' && 'postgres:17' || '' }}
+        env:
+          POSTGRES_USER: brick
+          POSTGRES_PASSWORD: brick
+          POSTGRES_DB: brick_bench
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - name: Install pinned external HTTP loader
+        run: |
+          mkdir -p .build/bench-tools
+          case "$RUNNER_OS" in
+            Linux) asset=oha-linux-amd64; executable=.build/bench-tools/oha ;;
+            macOS)
+              if [ "$(uname -m)" = arm64 ]; then asset=oha-macos-arm64; else asset=oha-macos-amd64; fi
+              executable=.build/bench-tools/oha ;;
+            Windows) asset=oha-windows-amd64.exe; executable=.build/bench-tools/oha.exe ;;
+          esac
+          curl -fL --retry 3 "https://github.com/hatoo/oha/releases/download/v1.16.0/$asset" -o "$executable"
+          chmod +x "$executable"
+          echo "BENCH_OHA=$executable" >> "$GITHUB_ENV"
+      - name: Measure all suites, six rounds
+        env:
+          BENCH_DATABASE_URL: ${{ matrix.platform == 'linux' && 'postgres://brick:brick@127.0.0.1:5432/brick_bench' || '' }}
+        run: bun bench/ci.ts run --rounds 6 --out "bench/results/snapshot-${{ matrix.platform }}.json"
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: bench-${{ matrix.platform }}
+          path: bench/results/snapshot-${{ matrix.platform }}.json
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: raw-${{ matrix.platform }}
+          path: bench/results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  publish:
+    name: Publish benchmark history
+    needs: bench
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bench-*
+          path: ${{ runner.temp }}/results
+          merge-multiple: true
+      - name: Merge results and push the data branch
+        run: |
+          shopt -s nullglob
+          results=("$RUNNER_TEMP"/results/*.json)
+          if [ ${#results[@]} -eq 0 ]; then
+            echo "::error::No benchmark snapshots to publish"
+            exit 1
+          fi
+          sha=$(jq -r .sha "${results[0]}")
+          data="$RUNNER_TEMP/benchmark-data"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          for attempt in 1 2 3 4 5; do
+            git worktree remove --force "$data" 2>/dev/null || true
+            git branch -D benchmarks 2>/dev/null || true
+            if git fetch --depth 1 origin benchmarks; then
+              git worktree add --detach "$data" FETCH_HEAD
+            else
+              git worktree add --detach "$data"
+              git -C "$data" switch --orphan benchmarks
+            fi
+            bun bench/ci.ts merge "$data" "${results[@]}"
+            git -C "$data" add -A
+            if git -C "$data" diff --cached --quiet; then exit 0; fi
+            git -C "$data" commit -m "Benchmarks of ${sha:0:7} [skip ci]"
+            if git -C "$data" push origin HEAD:refs/heads/benchmarks; then exit 0; fi
+            sleep $((attempt * 5))
+          done
+          exit 1

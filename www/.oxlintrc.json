@@ -19,7 +19,7 @@
         "cva",
         "cn"
       ]
-    }
+    },
   },
   "ignorePatterns": [
     "node_modules/",

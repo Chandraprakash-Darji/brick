@@ -1,0 +1,7 @@
+{
+  "name": "brick-extensions-example",
+  "private": true,
+  "type": "module",
+  "scripts": { "demo": "bun src/main.ts", "serve": "bun src/server.ts" },
+  "dependencies": { "@elregaldo/core": "workspace:*", "@elregaldo/cli": "workspace:*" }
+}

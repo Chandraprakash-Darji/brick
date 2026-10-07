@@ -4,7 +4,9 @@
   "private": true,
   "workspaces": [
     "packages/*",
-    "examples/basic"
+    "examples/basic",
+    "examples/showcase",
+    "examples/extensions"
   ],
   "scripts": {
     "build": "bun run --filter @elregaldo/core build && bun run --filter @elregaldo/cli build",

@@ -1,0 +1,50 @@
+---
+title: Compile an Application
+description: Emit route handlers, inspectable Brick IR and a bundled Bun server
+---
+
+`brick build` takes a TypeScript module that registers services without starting
+a listening server. It analyzes the definitions, emits route handlers, and bundles
+them together with your callbacks into a Bun server.
+
+## Try the runnable example
+
+From the repository root:
+
+```sh
+bun packages/cli/src/bin.ts build examples/showcase/src/services/users.ts --outdir .build/showcase-compiled --port 3017
+bun .build/showcase-compiled/server.js
+```
+
+In another terminal:
+
+```sh
+curl 'http://localhost:3017/api/users/getUser?id=usr_42'
+```
+
+The bundled example returns the seeded user from its actual action definition.
+In an installed application, invoke the same command through `bunx brick build`.
+
+## Inspect the output
+
+| File | Purpose |
+| --- | --- |
+| `brick-ir.json` | Analyzed services, route plans and compiler diagnostics |
+| `routes.js` | Generated handler factories bound to the registered services |
+| `server.js` | Runnable bundled Bun server |
+| `server.js.map` | Source map for the bundled server |
+
+The compiler prepares routing and execution plans. Custom action callbacks remain
+JavaScript in the Bun runtime; compiling an application does not translate its
+business logic into native machine code.
+
+## Options
+
+- `--outdir <directory>`: output directory; defaults to `dist/brick`.
+- `--prefix <path>`: route prefix override.
+- `--port <number>`: default listening port; defaults to 4000.
+- `--no-request-logging`: disable request logging in the generated server.
+
+The generated server accepts a `PORT` environment override. Rebuild when
+application definitions change. Database setup and migrations remain the
+application's responsibility.

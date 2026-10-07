@@ -19,6 +19,39 @@ Results are written to ignored `bench/results/`: per-suite JSON, raw HTTP
 latency samples, manifests, query plans, aggregate JSON and Markdown reports.
 Keep artifacts outside git when comparing commits.
 
+## Continuous results
+
+`.github/workflows/bench.yml` measures every push to `main`, including docs and
+website changes. It runs the full default micro, prepared, batch, startup,
+footprint and HTTP suites six times on macOS, Linux and Windows, and the compiled
+route benchmark with six rounds. Linux also runs PostgreSQL against an ephemeral
+PostgreSQL 17 service; other platforms record it as skipped. The opt-in
+`--large` and `--c1k` workloads remain manual.
+
+Compact measurements are merged into daily history files on the `benchmarks`
+branch. `latest.json` retains the latest 300 commits. The website fetches that
+file in the browser, so new results appear without a website rebuild. Raw
+suite artifacts remain attached to the workflow for 14 days. Failed and
+skipped cases are recorded, and missing values remain null.
+
+To run the same pipeline locally:
+
+```sh
+bun bench/ci.ts run --out .build/benchmark-snapshot.json --oha /path/to/oha
+bun bench/ci.ts merge .build/benchmark-history .build/benchmark-snapshot.json
+```
+
+The local website snapshot can be refreshed from a measured lab artifact:
+
+```sh
+bun bench/ci.ts import www/public/data/benchmarks-latest.json bench/results/compiler-TIMESTAMP.json
+```
+
+This retains the original commit, runtime, machine and working-tree flag;
+it does not attribute uncommitted measurements to a later commit. Development
+uses the local snapshot; production reads the data branch. Set
+`VITE_BENCHMARKS_URL` to override either source.
+
 | Suite | Coverage |
 | --- | --- |
 | `micro.ts` | Context, action invocation, validation/errors, HTTP query/body assembly, 0/5/20-field coercion, direct/lookup/proxy dispatch, cursor codec, resource list execution, JSON serialization, OpenAPI and server construction |
@@ -135,3 +168,22 @@ CRUD gains are modest/mixed, including a DELETE regression.
 The prepared-write extension has a newer [paired CRUD report](results/REPORT-compiler-prepared-writes-20261007.md)
 with 3 million measured requests. It includes safe INSERT/UPDATE RETURNING and
 schema-version probes; PostgreSQL writes retain the original path.
+
+### Runtime footprint and compiled routes
+
+CI also runs `bun bench/footprint.ts`: five fresh child server processes per round,
+measuring process launch to listening and server-only user + system CPU time over
+five idle seconds after the first request. The bundle measurement builds
+`examples/showcase/src/server.ts` with `Bun.build`, minified for Bun with dependencies
+bundled (Bun built-ins stay external); both raw and gzip bytes are published.
+These numbers describe this minimal server fixture, not every possible application.
+The existing startup suite continues to measure build/listen/first-request times
+for 10, 100 and 1,000 actions.
+
+`bench/compiler.ts` now benchmarks compiled execution only and publishes names
+such as `resource-get` and `resource-create`. `--compare` is an optional local
+comparison against the old generic path; generic results are excluded from the
+website history. The homepage shows fixed-JSON action throughput, cold startup,
+idle CPU time, and the server bundle size.
+
+Published route benchmarks cover custom actions and database CRUD. Health, architecture, OpenAPI and documentation responses are excluded from both future runs and published history.

@@ -1,0 +1,13 @@
+{
+  "name": "brick-showcase",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "call": "bun src/main.ts",
+    "serve": "bun src/server.ts"
+  },
+  "dependencies": {
+    "@elregaldo/core": "workspace:*",
+    "@elregaldo/cli": "workspace:*"
+  }
+}

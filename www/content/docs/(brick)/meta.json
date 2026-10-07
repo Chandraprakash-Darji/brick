@@ -20,6 +20,7 @@
     "---Build & Deploy---",
     "codegen",
     "migrations",
-    "openapi"
+    "openapi",
+    "benchmarking"
   ]
 }

@@ -19,7 +19,7 @@ import { readdir } from "node:fs/promises";
 import { parseArgs, argStr } from "./lib/stats";
 import { collectManifest, checkGates, deltaPct, writeJson, stamp, resultsDir } from "./lib/manifest";
 
-const SUITES = ["micro", "prepared", "batch", "startup", "http", "postgres"] as const;
+const SUITES = ["micro", "prepared", "batch", "startup", "footprint", "http", "postgres"] as const;
 
 async function runSuite(suite: string, passthrough: string[]): Promise<void> {
   console.log(`\n############ suite: ${suite} ############`);

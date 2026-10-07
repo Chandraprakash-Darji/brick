@@ -6,6 +6,7 @@
   "defaultOpen": true,
   "pages": [
     "index",
+    "build",
     "generate",
     "migrate",
     "schema-dump"

@@ -32,6 +32,8 @@ import {
   reading,
   trendOf,
   unitLabel,
+  isWorse,
+  metricOf,
   workflowUrl,
   type BenchmarkData,
   type Group,
@@ -47,7 +49,7 @@ import { cn } from "@/lib/utils"
 
 const title = "Benchmarks · Brick"
 const description =
-  "Brick's benchmarks on macOS, Linux and Windows, measured on every push to main: micro-benchmarks, HTTP throughput, prepared SQL statements, batch compute, startup timing, and idle memory."
+  "Brick benchmarks measured on every push to main: validation, HTTP throughput and latency, prepared SQL, batch processing, startup, idle CPU, bundle size, and compiled routes."
 
 export const Route = createFileRoute("/benchmarks")({
   loader: () => getBenchmarkDocs(),
@@ -71,7 +73,7 @@ interface View {
   range: number
 }
 
-const defaultView: View = { os: "darwin", metric: "time", range: 100 }
+const defaultView: View = { os: "darwin", metric: "throughput", range: 100 }
 
 function viewOf(search: string): View {
   const q = new URLSearchParams(search)
@@ -89,7 +91,7 @@ function Benchmarks() {
   React.useEffect(() => {
     setView(viewOf(window.location.search))
     const controller = new AbortController()
-    fetch(dataUrl, { signal: controller.signal })
+    fetch(dataUrl, { signal: controller.signal, cache: "no-store" })
       .then(async (res) => {
         if (res.status === 404) return setLoad({ state: "missing" })
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
@@ -116,9 +118,9 @@ function Benchmarks() {
     <main className="flex-1">
       <section className="border-b px-4 pt-16 pb-12 sm:px-10 md:pt-20">
         <p className="label">Benchmarks</p>
-        <h1 className="mt-5 text-3xl leading-[1.1] font-semibold tracking-[-0.035em] sm:text-4xl">Every push, measured.</h1>
+        <h1 className="mt-5 text-3xl leading-[1.1] font-semibold tracking-[-0.035em] sm:text-4xl">Brick performance, measured.</h1>
         <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground">
-          Every push to main runs on GitHub&apos;s macOS, Linux and Windows runners. Each point is a commit, the median of six runs: lower is better.
+          Every push to main measures Brick on macOS, Linux and Windows. Each point shows real benchmark results for a commit. Higher throughput is better; lower duration and memory are better.
         </p>
         <p className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
           <Info
@@ -197,7 +199,7 @@ function sectionsOf(data: BenchmarkData, view: View): Section[] {
   const known = new Set(groups.map((g) => g.pkg))
   const shown: Group[] = [...groups, ...Object.keys(series).filter((pkg) => !known.has(pkg)).map((pkg) => ({ pkg, title: pkg, text: "" }))]
   return shown.flatMap((group) => {
-    const u = group.unit ?? unit
+    const u = group.units?.[view.metric] ?? unit
     const rows = Object.entries(series[group.pkg] ?? {})
       .filter(([, units]) => units[u]?.some((v) => v != null))
       .map(([name, units]) => ({ name, values: units[u]! }))
@@ -296,6 +298,7 @@ function Results({
   while (last >= 0 && !runners[last]) last--
   const latest = data.commits[last]
   const runner = runners[last]
+  const note = data.notes?.[view.os]?.[last]
 
   const byCommit = new Map<number, Moved[]>()
   for (const [pkg, benchmarks] of Object.entries(series)) {
@@ -304,7 +307,7 @@ function Results({
         for (const step of findSteps(values, unit, runners)) {
           if (step.index < from) continue
           const moved = byCommit.get(step.index) ?? []
-          moved.push({ pkg, name, unit, metric: metrics.find((m) => m.unit === unit), step })
+          moved.push({ pkg, name, unit, metric: metrics.find((m) => m.id === metricOf(unit)), step })
           byCommit.set(step.index, moved)
         }
       }
@@ -312,7 +315,7 @@ function Results({
   }
   const moving = [...byCommit].sort(([a], [b]) => b - a)
   for (const [, moved] of moving) {
-    moved.sort((a, b) => Number(b.step.change > 0) - Number(a.step.change > 0) || Math.abs(b.step.change) - Math.abs(a.step.change))
+    moved.sort((a, b) => Number(isWorse(b.step.change, b.unit)) - Number(isWorse(a.step.change, a.unit)) || Math.abs(b.step.change) - Math.abs(a.step.change))
   }
 
   const jump = (pkg: string, name: string, metric?: Metric) => {
@@ -331,8 +334,11 @@ function Results({
               <span className="font-medium group-hover:underline group-hover:underline-offset-4">{latest.message}</span>
             </a>
             <p className="mt-2 text-sm text-muted-foreground">
-              {formatDate(latest.date, true)} · {runner.cpu} · {runner.go}
+              {formatDate(latest.date, true)} · {runner.cpu} · {runner.runtime}{runner.dirty && " · local working tree"}
             </p>
+            {note && <p className="mt-2 text-xs text-muted-foreground">Measured {formatDate(note.measuredAt, true)} · {note.count} rounds</p>}
+            {!!note?.failures.length && <p className="mt-2 text-sm text-worse">Partial run: {note.failures.join("; ")}</p>}
+            {!!note?.skipped.length && <details className="mt-3 text-xs text-muted-foreground"><summary className="cursor-pointer">{note.skipped.length} skipped measurements</summary><ul className="mt-2 space-y-1">{note.skipped.map(item => <li key={item}>{item}</li>)}</ul></details>}
           </div>
           <div className="min-w-0 border-t px-4 py-8 sm:px-10 md:border-t-0">
             <p className="label">Moved in the last {commits.length} commits</p>
@@ -356,7 +362,7 @@ function Results({
                               title={`${formatValue(m.step.before, m.unit)} → ${formatValue(m.step.after, m.unit)}`}
                               className="inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-sm transition-colors hover:bg-muted"
                             >
-                              <Change change={m.step.change} significant />
+                              <Change change={m.step.change} significant unit={m.unit} />
                               <span className="font-mono text-[13px]">{displayName(m.pkg, m.name)}</span>
                               <span className="text-muted-foreground">{unitLabel(m.unit)}</span>
                             </button>
@@ -379,6 +385,8 @@ function Results({
           </div>
         </section>
       )}
+
+      {!sections.length && <Message>No {metrics.find(metric => metric.id === view.metric)?.label.toLowerCase()} measurements for this platform yet.</Message>}
 
       {sections.map(({ group, unit: u, rows }) => (
         <GroupSection key={group.pkg} group={group} unit={u}>
@@ -414,6 +422,7 @@ function Results({
                             <div className="text-lg leading-6 font-semibold tracking-tight">{formatValue(trend.latest, u)}</div>
                             <Change
                               change={trend.change}
+                              unit={u}
                               significant={trend.significant}
                               title={rangeHint(trend, u, commits[0]?.date)}
                               className="text-xs"
@@ -554,13 +563,13 @@ function ResultsTable({
                 <td className={cn(td, "text-right font-medium")}>{trend ? formatValue(trend.latest, unit) : "—"}</td>
                 <td className={cn(td, "text-right text-muted-foreground")}>{trend?.start !== undefined ? formatValue(trend.start, unit) : "—"}</td>
                 <td className={cn(td, "text-right")}>
-                  {trend ? <Change change={trend.change} significant={trend.significant} title={rangeHint(trend, unit, commits[from]?.date)} /> : "—"}
+                  {trend ? <Change unit={unit} change={trend.change} significant={trend.significant} title={rangeHint(trend, unit, commits[from]?.date)} /> : "—"}
                 </td>
                 <td className={td}>
                   <span className="flex gap-4">
                     {trend?.steps.map((s) => (
                       <a key={s.index} href={commitUrl(commits[s.index]!.sha)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 hover:underline">
-                        <Change change={s.change} significant />
+                        <Change unit={unit} change={s.change} significant />
                         <span className="font-mono text-[13px] text-muted-foreground">{commits[s.index]!.sha.slice(0, 7)}</span>
                       </a>
                     ))}
@@ -575,7 +584,7 @@ function ResultsTable({
   )
 }
 
-function Change({ change, significant, title, className }: { change?: number; significant: boolean; title?: string; className?: string }) {
+function Change({ change, significant, title, className, unit }: { change?: number; significant: boolean; title?: string; className?: string; unit: string }) {
   if (change === undefined) return <span className={cn("text-muted-foreground", className)}>new</span>
   const text = formatChange(change)
   if (!significant) {
@@ -585,8 +594,8 @@ function Change({ change, significant, title, className }: { change?: number; si
       </span>
     )
   }
-  const worse = change > 0
-  const Icon = worse ? ArrowUpIcon : ArrowDownIcon
+  const worse = isWorse(change, unit)
+  const Icon = change > 0 ? ArrowUpIcon : ArrowDownIcon
   return (
     <span className={cn("inline-flex items-center gap-0.5 font-medium tabular-nums", worse ? "text-worse" : "text-better", className)} title={title}>
       <Icon className="size-3.5" aria-hidden />

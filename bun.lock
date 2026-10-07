@@ -23,6 +23,20 @@
         "typescript": "^5.7.0",
       },
     },
+    "examples/extensions": {
+      "name": "brick-extensions-example",
+      "dependencies": {
+        "@elregaldo/cli": "workspace:*",
+        "@elregaldo/core": "workspace:*",
+      },
+    },
+    "examples/showcase": {
+      "name": "brick-showcase",
+      "dependencies": {
+        "@elregaldo/cli": "workspace:*",
+        "@elregaldo/core": "workspace:*",
+      },
+    },
     "packages/cli": {
       "name": "@elregaldo/cli",
       "version": "0.1.2",
@@ -30,7 +44,7 @@
         "brick": "dist/bin.js",
       },
       "dependencies": {
-        "@elregaldo/core": "^0.1.0",
+        "@elregaldo/core": "^0.1.2",
         "@sinclair/typebox": "^0.34.0",
         "elysia": "^1.2.0",
       },
@@ -159,6 +173,10 @@
     "@yuku-toolchain/types": ["@yuku-toolchain/types@0.10.2", "", {}, "sha512-sSeo4SSSToiS+sSD+bwn/s94EEcaLJ7tG5LCp8gFYC1G5VzxzX7fqB6m9RU1yMD8KTpu6zdU/I1NlQf8hVBJ9Q=="],
 
     "basic-app": ["basic-app@workspace:examples/basic"],
+
+    "brick-extensions-example": ["brick-extensions-example@workspace:examples/extensions"],
+
+    "brick-showcase": ["brick-showcase@workspace:examples/showcase"],
 
     "bun-types": ["bun-types@1.4.2", "", { "dependencies": { "@types/node": "*" } }, "sha512-bxV1FgK7yBIzjRe5zBozIM4Bem11ZJcCXSrjWRG3YWLt8yFDePu4cLjpebO8OvPeIE9trbyPF4fuj3Cia4Fj3w=="],
 

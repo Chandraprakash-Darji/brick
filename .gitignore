@@ -56,3 +56,4 @@ Thumbs.db
 .build/
 docs/
 !/www/content/docs/
+!/www/src/routes/docs/

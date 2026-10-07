@@ -64,15 +64,15 @@ export const getPublicPage = pagesService.action({
 });
 ```
 
-- **Raw endpoints** — `app.endpoint({ method, path, handler, service })` for anything outside the JSON mesh (see [Single-Row Patterns](./singletons)).
+- **Raw endpoints** — `app.endpoint({ method, path, handler, service })` for anything outside the JSON mesh (see [Single-Row Patterns](/docs/singletons)).
 - **Diagnostics** — `GET /_health`, `GET /_brick/services`.
 - **Docs** — `GET /openapi.json`, `GET /docs` (Scalar), `GET /swagger`.
 
 ## Stage details
 
 1. **Elysia coerce.** `createBrickServer` coerces query strings to the input schema's `number`/`integer`/`boolean` types, then merges route params, JSON body, and query into one `input` object.
-2. **Input validation.** `defineAction` validates `input` against the action's TypeBox schema before anything else runs. Resource create/update/get/delete/list schemas are derived from the Drizzle table (see [Resources](./resources)); custom constraints come from `fields` overrides or your own `input: t.Object(...)` on custom actions.
-3. **Context resolution.** `service.resolveContext()` builds the `BaseContext` (`request`, `db`, `logger`, `traceId`, `requestId`, `services`, `metadata`) and awaits your `context` resolver once per request. The canonical pattern loads the Better Auth session and returns `{ user, session }` — see [Access Control](./access-control).
+2. **Input validation.** `defineAction` validates `input` against the action's TypeBox schema before anything else runs. Resource create/update/get/delete/list schemas are derived from the Drizzle table (see [Resources](/docs/resources)); custom constraints come from `fields` overrides or your own `input: t.Object(...)` on custom actions.
+3. **Context resolution.** `service.resolveContext()` builds the `BaseContext` (`request`, `db`, `logger`, `traceId`, `requestId`, `services`, `metadata`) and awaits your `context` resolver once per request. The canonical pattern loads the Better Auth session and returns `{ user, session }` — see [Access Control](/docs/access-control).
 4. **Authorization.** If the action declares `authorize({ user, input, ctx })`, a falsy result throws `ActionExecutionError("UNAUTHORIZED", …, 403)`. Generated CRUD actions carry no `authorize` by default — attach your own (the pages example late-binds a `requireSignedIn` guard onto every generated action).
 5. **Hooks + owner checks.** `beforeCreate`/`beforeUpdate`/`beforeDelete` run before the write; get/update/delete also verify `ownerField` ownership when `ctx.user.id` is present. Hooks abort by calling an `error.*` helper, which throws immediately.
 6. **Drizzle op.** The write itself is a plain Drizzle call (`insert().values()`, `update().set()`, `delete()`), followed by a re-select for create/update. There is no transaction wrapping hook + write — design hooks accordingly.

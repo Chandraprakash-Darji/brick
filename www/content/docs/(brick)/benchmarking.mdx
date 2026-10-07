@@ -1,0 +1,53 @@
+---
+title: Continuous Benchmarking
+description: How Brick measures performance on every push to main
+---
+
+Brick runs its benchmark workflow on every push to `main`, including website
+and documentation changes. The workflow measures macOS, Linux and Windows and
+publishes per-commit results to the repository's `benchmarks` branch.
+
+## What is measured
+
+- **Actions and resource CRUD:** compiled HTTP throughput and p99 latency.
+- **Startup:** build, listen and first-request timing for 10, 100 and 1,000 actions,
+  plus cold process launch to listening for a minimal server.
+- **Idle CPU:** server-only user and system CPU time over five idle seconds.
+- **Bundle size:** raw and gzip bytes for the minified showcase HTTP server,
+  including bundled dependencies and excluding Bun built-ins.
+- **Runtime operations:** context creation, validation, dispatch, prepared SQL,
+  and batch processing.
+- **PostgreSQL:** CRUD against a disposable database on the Linux runner.
+
+CI runs six rounds and publishes median measurements. The HTTP route suite uses
+an external load generator; DELETE uses the Bun loader to supply unique URLs.
+Health, architecture export and documentation responses are excluded from the
+published route benchmarks.
+
+## Read the results
+
+[Open the benchmark charts](/benchmarks) to compare throughput, time and memory
+across commits and platforms. Runner details, skipped measurements and failures
+appear alongside the results. Compare measurements from the same CPU and fixture;
+shared CI runners are useful for trends, rather than production capacity estimates.
+
+The homepage's throughput figure represents a fixed JSON action. Its startup,
+idle CPU and bundle measurements describe a minimal server. These are different
+fixtures, and database-backed routes have their own results in the charts.
+
+## Run locally
+
+From the repository root:
+
+```sh
+bun run bench:smoke
+bun bench/ci.ts run --smoke --rounds 1 --oha /path/to/oha --out .build/benchmark-snapshot.json
+```
+
+The CI runner needs the external `oha` loader. Omit `--smoke` and use `--rounds 6`
+for a full measurement. Raw results are written to `bench/results/`; the workflow
+retains raw artifacts and publishes compact history separately.
+
+See the repository's
+[benchmark README](https://github.com/brick-org/brick/blob/main/bench/README.md)
+for loader setup, suite options and measurement limitations.

@@ -1,6 +1,6 @@
 import * as React from "react"
 
-import { commitUrl, formatChange, formatDate, formatValue, median, shortCPU, type Commit, type Runner, type Step } from "@/lib/benchmarks"
+import { isWorse, commitUrl, formatChange, formatDate, formatValue, median, shortCPU, type Commit, type Runner, type Step } from "@/lib/benchmarks"
 import { cn } from "@/lib/utils"
 
 const height = 112
@@ -50,7 +50,7 @@ export function TrendChart({
   const base = height - bottom
 
   // A line a CPU for timings, the last commit's drawn over the others'.
-  const byCPU = unit === "ns/op"
+  const byCPU = true
   const cpuOf = (i: number) => (byCPU ? (runners[i]?.cpu ?? "") : "")
   const cpu = present.length ? cpuOf(present.at(-1)!) : ""
   const lines = new Map<string, number[]>()
@@ -124,7 +124,7 @@ export function TrendChart({
           <Line points={lines.get(cpu)!} d={path(lines.get(cpu)!)} x={x} y={(i) => y(values[i]!)} className="stroke-gopher-ink" dot="fill-gopher-ink" width={2} />
         )}
         {steps.map((st) =>
-          values[st.index] == null ? null : <Mark key={st.index} cx={x(st.index)} cy={y(values[st.index]!)} worse={st.change > 0} />
+          values[st.index] == null ? null : <Mark key={st.index} cx={x(st.index)} cy={y(values[st.index]!)} worse={isWorse(st.change, unit)} />
         )}
         {present.length > 0 && h == null && <Dot cx={x(present.at(-1)!)} cy={y(values[present.at(-1)!]!)} />}
         {h != null && (
@@ -164,8 +164,8 @@ export function TrendChart({
             {runner && ` · ${runner.cpu}`}
           </div>
           {moved && (
-            <div className={cn("font-medium", moved.change > 0 ? "text-worse" : "text-better")}>
-              {moved.change > 0 ? "▲" : "▼"} {formatChange(moved.change)}: {formatValue(moved.before, unit)} before, {formatValue(moved.after, unit)} after
+            <div className={cn("font-medium", isWorse(moved.change, unit) ? "text-worse" : "text-better")}>
+              {isWorse(moved.change, unit) ? "▲" : "▼"} {formatChange(moved.change)}: {formatValue(moved.before, unit)} before, {formatValue(moved.after, unit)} after
             </div>
           )}
         </div>

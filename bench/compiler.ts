@@ -37,7 +37,7 @@ if (args.server) {
     })();
     return { rows: count };
   };
-  const app = createBrickServer({ services: [service, secure, store], compiler: args.server === "compiled", reference: true, requestLogging: false });
+  const app = createBrickServer({ services: [service, secure, store], compiler: args.server === "compiled", docs: false, requestLogging: false });
   // Fixture management is outside every timed load. Never expose these routes in an application.
   app.post("/__bench/reset", ({ body }: any) => reset(body.count, body.deletion));
   app.get("/__bench/state", () => ({ rows: client.query("SELECT COUNT(*) AS count FROM compiler_items").get(),
@@ -66,12 +66,6 @@ if (args.server) {
     { name: "resource-put", path: "/api/item/seed-0", method: "PUT", body: '{"title":"Changed"}', resource: true },
     // DELETE needs unique URLs: use the Bun loader because oha samples URL/body files randomly.
     { name: "resource-delete", path: "/api/item/delete-0", method: "DELETE", resource: true, deletion: true },
-    { name: "health", path: "/_health", method: "GET" },
-    { name: "architecture", path: "/_brick/services", method: "GET" },
-    { name: "openapi", path: "/openapi.json", method: "GET" },
-    { name: "docs", path: "/docs", method: "GET" },
-    { name: "swagger", path: "/swagger", method: "GET" },
-    { name: "reference", path: "/reference", method: "GET" },
   ];
   const selection = argStr(args, "cases", "all");
   const cases = selection === "crud" ? allCases.filter(test => test.resource) : allCases;
@@ -114,7 +108,7 @@ if (args.server) {
     return result;
   }
   try {
-    for (const mode of ["generic", "compiled"]) {
+    for (const mode of (args.compare ? ["generic", "compiled"] : ["compiled"])) {
       const child = Bun.spawn([process.execPath, import.meta.path, "--server", mode], { stdout: "pipe", stderr: "inherit" });
       const server = { mode, port: 0, process: child };
       servers.push(server);
@@ -133,7 +127,7 @@ if (args.server) {
         responses.push(await response.text());
         await load(server.port, test, Math.min(requests, 10000));
       }
-      if (test.name !== "health" && responses[0] !== responses[1]) throw new Error(`Mismatched ${test.name} benchmark responses`);
+      if (responses.length > 1 && responses[0] !== responses[1]) throw new Error(`Mismatched ${test.name} benchmark responses`);
     }
     const variants = cases.flatMap(test => servers.map(server => ({ test, server })));
     const results: { round: number; name: string; rps: number; p99_ms: number; oha: any }[] = [];
@@ -143,13 +137,13 @@ if (args.server) {
       if (round % 2) order.reverse();
       for (const { test, server } of order) {
         const raw = await load(server.port, test, requests);
-        const row = { round, name: `${test.name}.${server.mode}`, rps: raw.summary.requestsPerSec, p99_ms: raw.latencyPercentiles.p99 * 1000, oha: raw };
+        const row = { round, name: args.compare ? `${test.name}.${server.mode}` : test.name, rps: raw.summary.requestsPerSec, p99_ms: raw.latencyPercentiles.p99 * 1000, oha: raw };
         results.push(row);
         console.log(`${round + 1}/${rounds} ${row.name}: ${Math.round(row.rps).toLocaleString()} RPS, p99 ${row.p99_ms.toFixed(3)} ms`);
       }
     }
     const summary = Object.fromEntries(variants.map(({ test, server }) => {
-      const name = `${test.name}.${server.mode}`, rows = results.filter(row => row.name === name);
+      const name = args.compare ? `${test.name}.${server.mode}` : test.name, rows = results.filter(row => row.name === name);
       return [name, { median_rps: median(rows.map(row => row.rps)), median_p99_ms: median(rows.map(row => row.p99_ms)) }];
     }));
     await mkdir(resolve(import.meta.dir, "results"), { recursive: true });

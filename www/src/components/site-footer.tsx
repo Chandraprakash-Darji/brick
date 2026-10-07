@@ -3,23 +3,21 @@ import { site } from "@/lib/site"
 
 export function SiteFooter() {
   return (
-    <footer className="frame label flex flex-wrap items-center justify-between gap-4 border-t px-4 py-6 sm:px-6">
+    <footer className="frame label flex flex-wrap items-center justify-between gap-6 border-t py-10">
       <span>
         Brick v{site.version} ·{" "}
         <a href={`${site.repo}/blob/main/LICENSE`} target="_blank" rel="noreferrer" className="hover:text-foreground">
           MIT License
         </a>
       </span>
-      <nav className="flex gap-6">
+      <nav className="flex flex-wrap gap-6">
         <Link to="/" className="hover:text-foreground">
           Home
         </Link>
         <Link to="/benchmarks" className="hover:text-foreground">
           Benchmarks
         </Link>
-        <a href={`${site.repo}/tree/main/bench`} target="_blank" rel="noreferrer" className="hover:text-foreground">
-          Bench Lab
-        </a>
+        <Link to="/docs/$" params={{ _splat: "" }} className="hover:text-foreground">Docs</Link>
         <a href={`${site.repo}/releases`} target="_blank" rel="noreferrer" className="hover:text-foreground">
           Releases
         </a>
