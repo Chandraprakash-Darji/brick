@@ -44,7 +44,7 @@ export type BrickSQLiteDatabase<
  * Creates a zero-config SQLite database using Bun's native `bun:sqlite` engine
  * and Drizzle ORM. Defaults to an ultra-fast in-memory database (`:memory:`).
  *
- * Bun-only: the driver is loaded lazily so importing `@elregaldo/core` on
+ * Bun-only: the driver is loaded lazily so importing `@brickkit/core` on
  * other runtimes (e.g. Node) stays safe until this function is actually
  * called.
  */

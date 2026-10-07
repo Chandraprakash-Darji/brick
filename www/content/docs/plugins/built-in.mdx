@@ -3,7 +3,7 @@ title: Built-in Capabilities
 description: Request logging, docs, health, and architecture export from createBrickServer
 ---
 
-These ship with `@elregaldo/cli` — no install step, just `createBrickServer()`
+These ship with `@brickkit/cli` — no install step, just `createBrickServer()`
 options. They are framework behavior, not add-on packages.
 
 ## Request logging
@@ -11,7 +11,7 @@ options. They are framework behavior, not add-on packages.
 On by default. Every route is timed and logged via the `requestLoggingPlugin`:
 
 ```ts
-import { createBrickServer } from "@elregaldo/cli";
+import { createBrickServer } from "@brickkit/cli";
 
 const app = createBrickServer({ requestLogging: true });
 ```
@@ -52,11 +52,11 @@ Use it to verify what the mesh actually mounted, or to feed client codegen.
 
 ## Secrets
 
-Declare env vars with `secret()` from `@elregaldo/core`; boot validates them
+Declare env vars with `secret()` from `@brickkit/core`; boot validates them
 before serving anything:
 
 ```ts
-import { secret } from "@elregaldo/core";
+import { secret } from "@brickkit/core";
 
 export const portSecret = secret("PORT").default("3333").transform(Number);
 export const databaseUrlSecret = secret("DATABASE_URL");

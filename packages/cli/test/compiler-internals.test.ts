@@ -1,5 +1,5 @@
 import { beforeEach, expect, it } from "bun:test";
-import { defineService, getGlobalRegistry, resetGlobalRegistry } from "@elregaldo/core";
+import { defineService, getGlobalRegistry, resetGlobalRegistry } from "@brickkit/core";
 import { createBrickServer } from "../src/server";
 
 beforeEach(resetGlobalRegistry);

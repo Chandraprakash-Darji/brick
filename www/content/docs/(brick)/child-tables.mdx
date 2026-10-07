@@ -28,7 +28,7 @@ export const commentsResource = pagesService.resource({
 });
 
 // Parent + children in one action: two sequential Drizzle queries
-import { eq, t } from "@elregaldo/core";
+import { eq, t } from "@brickkit/core";
 import { PageSchema } from "./service"; // $inferSelect-based TypeBox schema
 
 export const CommentSchema = t.Object({

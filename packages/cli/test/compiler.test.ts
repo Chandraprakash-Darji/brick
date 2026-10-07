@@ -2,7 +2,7 @@ import { beforeEach, expect, it } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { defineService, resetGlobalRegistry, t } from "@elregaldo/core";
+import { defineService, resetGlobalRegistry, t } from "@brickkit/core";
 import { compileBrickApplication, emitCompiledApplication } from "../src/compiler";
 import { createBrickServer } from "../src/server";
 

@@ -8,8 +8,8 @@ Brick-TS has **no codegen step**: no DSL files, no emitted `gen/` directory, no 
 ## Schema types
 
 ```ts
-import type { Static } from "@elregaldo/core";
-import { t } from "@elregaldo/core";
+import type { Static } from "@brickkit/core";
+import { t } from "@brickkit/core";
 
 const CreatePageInput = t.Object({
   slug: t.String(),
@@ -43,7 +43,7 @@ pagesService.introspect();
 // { name, options, hasDatabase, databaseConfig, actions: [...], resources: [...] }
 
 // Every registered service (served live at GET /_brick/services)
-import { getGlobalRegistry } from "@elregaldo/core";
+import { getGlobalRegistry } from "@brickkit/core";
 getGlobalRegistry().exportArchitecture();
 // { version: "1.0.0", services: [...] }
 ```

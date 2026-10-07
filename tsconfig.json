@@ -13,9 +13,9 @@
       "bun"
     ],
     "paths": {
-      "@elregaldo/core": ["./packages/core/src"],
-      "@elregaldo/cli": ["./packages/cli/src"],
-      "@elregaldo/cli/compiler": ["./packages/cli/src/compiler.ts"]
+      "@brickkit/core": ["./packages/core/src"],
+      "@brickkit/cli": ["./packages/cli/src"],
+      "@brickkit/cli/compiler": ["./packages/cli/src/compiler.ts"]
     }
   }
 }

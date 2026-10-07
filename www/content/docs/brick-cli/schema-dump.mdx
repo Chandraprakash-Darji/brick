@@ -75,7 +75,7 @@ Note: `brick info` reads the default global registry without importing your entr
 
 ```typescript
 import "./src/index"; // side-effect: registers services via defineService
-import { getGlobalRegistry } from "@elregaldo/core";
+import { getGlobalRegistry } from "@brickkit/core";
 
 console.log(JSON.stringify(getGlobalRegistry().exportArchitecture(), null, 2));
 ```
@@ -85,7 +85,7 @@ console.log(JSON.stringify(getGlobalRegistry().exportArchitecture(), null, 2));
 Every server built with `createBrickServer` exposes the same export at runtime:
 
 ```typescript
-import { createBrickServer } from "@elregaldo/cli";
+import { createBrickServer } from "@brickkit/cli";
 
 const app = createBrickServer({ port: 4000 });
 app.listen(4000);
@@ -103,7 +103,7 @@ Related diagnostic route: `GET /_health` returns `{ status: "ok", uptime, timest
 `listSecrets()` exposes secret metadata for introspection — names, whether a default exists, whether a value would resolve — never the values:
 
 ```typescript
-import { listSecrets } from "@elregaldo/core";
+import { listSecrets } from "@brickkit/core";
 
 console.log(listSecrets());
 // [{ name: "DATABASE_URL", hasDefault: false, isSet: true }]
@@ -121,7 +121,7 @@ At boot, `createBrickServer` fail-fasts via `resolveSecrets()` (unless `secrets.
 ```typescript
 // Example: nightly inventory snapshot
 import { writeFile } from "node:fs/promises";
-import { getGlobalRegistry, listSecrets } from "@elregaldo/core";
+import { getGlobalRegistry, listSecrets } from "@brickkit/core";
 import "./src/index";
 
 const architecture = getGlobalRegistry().exportArchitecture();

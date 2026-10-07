@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, rename, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { getGlobalRegistry } from "@elregaldo/core";
+import { getGlobalRegistry } from "@brickkit/core";
 import { compileBrickApplication, emitCompiledApplication } from "./compiler";
 
 export interface BuildApplicationOptions {
@@ -30,8 +30,8 @@ export async function buildApplication(options: BuildApplicationOptions) {
   try {
     await Bun.write(join(staging, "routes.js"), emitCompiledApplication(compilation.ir));
     const source = `import ${JSON.stringify(entry)};
-import { createBrickServer } from "@elregaldo/cli";
-import { getGlobalRegistry } from "@elregaldo/core";
+import { createBrickServer } from "@brickkit/cli";
+import { getGlobalRegistry } from "@brickkit/core";
 import { bind } from "./routes.js";
 const services = getGlobalRegistry().list();
 export const app = createBrickServer({ services, compilation: bind(services), requestLogging: ${options.requestLogging ?? true} });

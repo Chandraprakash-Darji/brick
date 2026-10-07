@@ -1,5 +1,5 @@
 import { type Service, type Action, type Logger, type CompiledRoutePlan,
-  ValidationError, ActionExecutionError, getCompiledCheck, buildErrorHelpers } from "@elregaldo/core";
+  ValidationError, ActionExecutionError, getCompiledCheck, buildErrorHelpers } from "@brickkit/core";
 
 let _srvSeq = 0;
 const EMPTY_SERVICES = Object.freeze({});

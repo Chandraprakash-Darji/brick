@@ -1,7 +1,7 @@
 import { defineConfig } from "tsdown";
 
 // Publish bundle: ESM for Node 18+ and bundler consumers (Vite/Nitro).
-// @elregaldo/core and all node_modules stay external; only this package's
+// @brickkit/core and all node_modules stay external; only this package's
 // source is bundled. Entries mirror package.json "exports" plus the bin.
 export default defineConfig({
   dts: true,

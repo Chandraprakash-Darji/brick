@@ -1,4 +1,4 @@
-import { eq, sql, t, type BunSQLiteDatabase, type Service } from "@elregaldo/core";
+import { eq, sql, t, type BunSQLiteDatabase, type Service } from "@brickkit/core";
 import { commentsTable } from "./schema";
 
 export { commentsTable } from "./schema";

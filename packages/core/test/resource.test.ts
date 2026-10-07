@@ -20,7 +20,7 @@ const articlesTable = sqliteTable("articles", {
   updatedAt: text("updated_at").notNull(),
 });
 
-describe("Service-Level Resources & User-Owned Schema (@elregaldo/core)", () => {
+describe("Service-Level Resources & User-Owned Schema (@brickkit/core)", () => {
   let articlesService: import("../src").Service;
   let articlesResource: any;
 

@@ -113,7 +113,7 @@ function Home() {
             Explore the source <ArrowRightIcon className="size-3.5" />
           </a>
         </div>
-        <InstallCommand className="home-install" command="bun add @elregaldo/core @elregaldo/cli" />
+        <InstallCommand className="home-install" command="bun add @brickkit/core @brickkit/cli" />
         <a href="#definitions" className="hero-scroll">DEFINE / COMPILE / RUN <span>↓</span></a>
       </section>
 

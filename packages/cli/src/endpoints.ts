@@ -1,6 +1,6 @@
 import type { Elysia } from "elysia";
-import type { Service, DatabaseHandle } from "@elregaldo/core";
-import { ActionExecutionError, ValidationError } from "@elregaldo/core";
+import type { Service, DatabaseHandle } from "@brickkit/core";
+import { ActionExecutionError, ValidationError } from "@brickkit/core";
 
 export type EndpointMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 

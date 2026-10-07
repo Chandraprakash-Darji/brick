@@ -1,4 +1,4 @@
-import { createBrickServer } from "@elregaldo/cli";
+import { createBrickServer } from "@brickkit/cli";
 import { usersService } from "./services/users";
 
 const app = createBrickServer({ services: [usersService] });

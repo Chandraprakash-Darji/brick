@@ -1,5 +1,5 @@
 // Postgres schema builders, re-exported from the framework's own drizzle-orm
-// copy. Import tables from `@elregaldo/core/pg` (never `drizzle-orm/pg-core`
+// copy. Import tables from `@brickkit/core/pg` (never `drizzle-orm/pg-core`
 // directly): table objects must be created by the same module instance the
 // framework runtime uses, otherwise brand-symbol identity breaks.
 //

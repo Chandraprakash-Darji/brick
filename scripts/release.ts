@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 // One-command release: bump version(s) -> commit -> tag -> push ->
-// GitHub release. The publish-npm.yml workflow then publishes to npm
-// via OIDC trusted publishing (no tokens).
+// npm publish and GitHub release via the publish-npm.yml workflow.
 //
 //   bun run release <core|cli|both> [patch|minor|major] [--dry-run]
 //
@@ -89,25 +88,25 @@ const releases: Array<{ pkg: string; file: string; name: string; from: string; t
 
 if (target === "core" || target === "both") {
   const to = bumpVersion(coreJson.version, bump);
-  releases.push({ pkg: "core", file: CORE_PKG, name: "@elregaldo/core", from: coreJson.version, to, tag: `core-v${to}` });
+  releases.push({ pkg: "core", file: CORE_PKG, name: "@brickkit/core", from: coreJson.version, to, tag: `core-v${to}` });
 }
 if (target === "cli" || target === "both") {
   // In both-mode cli always gets at least a patch, so the release picks
   // up the (possibly moved) core floor even when cli code didn't change.
   const to = bumpVersion(cliJson.version, target === "cli" ? bump : "patch");
-  releases.push({ pkg: "cli", file: CLI_PKG, name: "@elregaldo/cli", from: cliJson.version, to, tag: `cli-v${to}` });
+  releases.push({ pkg: "cli", file: CLI_PKG, name: "@brickkit/cli", from: cliJson.version, to, tag: `cli-v${to}` });
 }
 
 // keep cli's core floor in sync when core moves (patch bumps already satisfy ^x.y.z)
 const coreRel = releases.find((r) => r.pkg === "core");
 if (coreRel) {
   const want = `^${coreRel.to}`;
-  if (cliJson.dependencies["@elregaldo/core"] !== want) {
+  if (cliJson.dependencies["@brickkit/core"] !== want) {
     if (!DRY) {
-      cliJson.dependencies["@elregaldo/core"] = want;
+      cliJson.dependencies["@brickkit/core"] = want;
       writeJson(CLI_PKG, cliJson);
     }
-    console.log(`  @elregaldo/cli dependency floor -> ${want}`);
+    console.log(`  @brickkit/cli dependency floor -> ${want}`);
   }
 }
 
@@ -138,12 +137,9 @@ for (const r of releases) sh(["git", "tag", r.tag]);
 sh(["git", "push", "origin", "main"]);
 sh(["git", "push", "origin", ...releases.map((r) => r.tag)]);
 for (const r of releases) {
-  sh(["gh", "release", "create", r.tag, "--title", `${r.name} v${r.to}`, "--generate-notes"]);
+  console.log(`  queued ${r.name} v${r.to}; GitHub Actions creates the release after publishing`);
 }
 
 console.log("\nshipped. The publish workflow now publishes via OIDC:");
 console.log("  https://github.com/brick-org/brick/actions/workflows/publish-npm.yml");
-console.log("Requires npm trusted-publisher entries (one-time, browser) or the run 404s.");
-if (coreRel) {
-  console.log("Note: examples/pages pins @elregaldo/* from the registry — `bun install` there after publish.");
-}
+console.log("Requires npm trusted-publisher entries or an NPM_TOKEN secret with publish access.");

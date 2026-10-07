@@ -8,8 +8,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@elregaldo/core": "workspace:*",
-    "@elregaldo/cli": "workspace:*",
+    "@brickkit/core": "workspace:*",
+    "@brickkit/cli": "workspace:*",
     "@sinclair/typebox": "^0.34.0"
   },
   "devDependencies": {

@@ -3,5 +3,5 @@
   "private": true,
   "type": "module",
   "scripts": { "demo": "bun src/main.ts", "serve": "bun src/server.ts" },
-  "dependencies": { "@elregaldo/core": "workspace:*", "@elregaldo/cli": "workspace:*" }
+  "dependencies": { "@brickkit/core": "workspace:*", "@brickkit/cli": "workspace:*" }
 }

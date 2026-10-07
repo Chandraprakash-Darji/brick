@@ -1,4 +1,4 @@
-import { defineService, t } from "@elregaldo/core";
+import { defineService, t } from "@brickkit/core";
 
 const users = new Map([["usr_42", { id: "usr_42", name: "Ada" }]]);
 export const usersService = defineService("users");

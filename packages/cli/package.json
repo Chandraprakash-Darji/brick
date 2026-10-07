@@ -1,6 +1,6 @@
 {
-  "name": "@elregaldo/cli",
-  "version": "0.1.2",
+  "name": "@brickkit/cli",
+  "version": "0.1.3",
   "description": "CLI and server engine for Brick-TS",
   "type": "module",
   "main": "./dist/index.js",
@@ -19,6 +19,9 @@
       "types": "./dist/compiler.d.ts"
     }
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "dist"
   ],
@@ -33,7 +36,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.build.json"
   },
   "dependencies": {
-    "@elregaldo/core": "^0.1.2",
+    "@brickkit/core": "^0.1.3",
     "@sinclair/typebox": "^0.34.0",
     "elysia": "^1.2.0"
   },

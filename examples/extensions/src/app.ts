@@ -1,5 +1,5 @@
-import { defineDatabase, defineService, syncSchema } from "@elregaldo/core";
-import { createBrickServer } from "@elregaldo/cli";
+import { defineDatabase, defineService, syncSchema } from "@brickkit/core";
+import { createBrickServer } from "@brickkit/cli";
 import { commentsTable, registerComments } from "./extensions/comments";
 
 const database = defineDatabase({ tables: { comments: commentsTable } });

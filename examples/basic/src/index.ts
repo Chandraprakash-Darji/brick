@@ -2,7 +2,7 @@ import {
   getGlobalRegistry,
   ValidationError,
   ActionExecutionError,
-} from "@elregaldo/core";
+} from "@brickkit/core";
 import {
   pagesService,
   createPage,

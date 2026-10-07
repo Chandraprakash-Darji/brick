@@ -1,4 +1,4 @@
-import { type Service, prepareResourceReads, prepareResourceWrites } from "@elregaldo/core";
+import { type Service, prepareResourceReads, prepareResourceWrites } from "@brickkit/core";
 import { compileRoutePlan, executeCompiledRoute } from "./action-handler";
 import { analyzeApplication, freezeIR, type BrickIR, type RouteIR } from "./compiler/ir";
 import { emitHandlerFactory } from "./compiler/emit";

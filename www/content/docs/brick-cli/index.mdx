@@ -3,12 +3,12 @@ title: brick CLI
 description: Dev server, production start, OpenAPI generation, and architecture export for the TypeScript CLI
 ---
 
-The `brick` binary ships with `@elregaldo/cli` (compiled to `dist/bin.js`). It provides development, production, build, OpenAPI export, and architecture inspection commands. Database migrations stay in your application workflow.
+The `brick` binary ships with `@brickkit/cli` (compiled to `dist/bin.js`). It provides development, production, build, OpenAPI export, and architecture inspection commands. Database migrations stay in your application workflow.
 
 ## Installation
 
 ```bash
-bun add @elregaldo/cli @elregaldo/core
+bun add @brickkit/cli @brickkit/core
 ```
 
 Run via `bunx` or a package script:
@@ -34,7 +34,7 @@ Your entry file must register services as a side effect via `defineService`:
 // src/index.ts
 import "./users/service";
 
-import { defineService } from "@elregaldo/core";
+import { defineService } from "@brickkit/core";
 
 export const appService = defineService("app");
 
@@ -93,7 +93,7 @@ brick dev ./src/index.ts
 The server itself comes from `createBrickServer`. Key options (`server.ts`):
 
 ```typescript
-import { createBrickServer } from "@elregaldo/cli";
+import { createBrickServer } from "@brickkit/cli";
 
 const app = createBrickServer({
   port: 4000,

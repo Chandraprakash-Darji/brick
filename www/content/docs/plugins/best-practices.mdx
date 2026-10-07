@@ -66,7 +66,7 @@ Follow the project convention: no DB mocks. Spin up a real database,
 `syncSchema()` your tables, and exercise actions end to end:
 
 ```ts
-import { defineDatabase, syncSchema } from "@elregaldo/core";
+import { defineDatabase, syncSchema } from "@brickkit/core";
 
 const db = defineDatabase({ engine: "sqlite", tables: { pagesTable } });
 await syncSchema(db);

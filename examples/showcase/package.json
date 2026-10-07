@@ -7,7 +7,7 @@
     "serve": "bun src/server.ts"
   },
   "dependencies": {
-    "@elregaldo/core": "workspace:*",
-    "@elregaldo/cli": "workspace:*"
+    "@brickkit/core": "workspace:*",
+    "@brickkit/cli": "workspace:*"
   }
 }

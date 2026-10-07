@@ -8,7 +8,7 @@ Brick-TS never touches schema at boot. Tables are declared with Drizzle (`sqlite
 ## SQLite: explicit syncSchema for dev and test
 
 ```ts
-import { defineDatabase, syncSchema } from "@elregaldo/core";
+import { defineDatabase, syncSchema } from "@brickkit/core";
 import { pagesTable } from "./services/pages/service";
 
 export const pagesDb = defineDatabase({

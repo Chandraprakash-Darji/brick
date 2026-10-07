@@ -8,7 +8,7 @@ There is **no `Validate` hook** in Brick-TS. Validation lives in the action's Ty
 ## Declaring schemas
 
 ```ts
-import { defineAction, t } from "@elregaldo/core";
+import { defineAction, t } from "@brickkit/core";
 
 export const renderPage = pagesService.action({
   name: "renderPage",
@@ -38,7 +38,7 @@ export const renderPage = pagesService.action({
 });
 ```
 
-`t` is TypeBox's `Type` builder re-exported from `@elregaldo/core`. Resource CRUD schemas are derived from the Drizzle table automatically; use the resource `fields` option for per-column overrides (e.g. a slug pattern) instead of a hook.
+`t` is TypeBox's `Type` builder re-exported from `@brickkit/core`. Resource CRUD schemas are derived from the Drizzle table automatically; use the resource `fields` option for per-column overrides (e.g. a slug pattern) instead of a hook.
 
 ## When validation runs
 

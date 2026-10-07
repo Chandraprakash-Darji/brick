@@ -7,7 +7,7 @@ description: Generate the OpenAPI 3.1 specification from registered services
 brick gen openapi [--output <file>]
 ```
 
-Calls `generateOpenApiSpec()` from `@elregaldo/core` against the global registry and emits OpenAPI 3.1 JSON. With `--output` it writes the file; without it, the JSON goes to stdout.
+Calls `generateOpenApiSpec()` from `@brickkit/core` against the global registry and emits OpenAPI 3.1 JSON. With `--output` it writes the file; without it, the JSON goes to stdout.
 
 ```bash
 # Print to stdout
@@ -30,7 +30,7 @@ brick gen foo
 The same function powers the live `GET /openapi.json` route in `createBrickServer`. Options (`packages/core/src/openapi.ts`):
 
 ```typescript
-import { generateOpenApiSpec } from "@elregaldo/core";
+import { generateOpenApiSpec } from "@brickkit/core";
 
 const spec = generateOpenApiSpec({
   title: "My API",          // default "Brick-TS API Mesh"
@@ -51,7 +51,7 @@ How paths are built:
 - The live route merges raw endpoint paths: `{ ...spec.paths, ...endpointPaths(endpointDefs) }`, so `app.endpoint()` definitions appear alongside the action mesh.
 
 ```typescript
-import { createBrickServer } from "@elregaldo/cli";
+import { createBrickServer } from "@brickkit/cli";
 
 const app = createBrickServer({
   title: "My API",
@@ -80,7 +80,7 @@ Or generate from TypeScript without the CLI:
 
 ```typescript
 import { writeFile } from "node:fs/promises";
-import { generateOpenApiSpec } from "@elregaldo/core";
+import { generateOpenApiSpec } from "@brickkit/core";
 import "./src/index"; // side-effect: registers services
 
 await writeFile("openapi.json", JSON.stringify(generateOpenApiSpec(), null, 2));

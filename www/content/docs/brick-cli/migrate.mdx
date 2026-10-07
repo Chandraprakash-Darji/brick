@@ -11,7 +11,7 @@ Default engine is `sqlite`. `:memory:` needs no setup; a file path creates paren
 
 ```typescript
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
-import { defineDatabase } from "@elregaldo/core";
+import { defineDatabase } from "@brickkit/core";
 
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(),
@@ -34,7 +34,7 @@ export const fileDb = defineDatabase({
 Attach it to a service:
 
 ```typescript
-import { defineService } from "@elregaldo/core";
+import { defineService } from "@brickkit/core";
 
 export const usersService = defineService("users", {
   database: fileDb,
@@ -49,7 +49,7 @@ usersService.action({
 Secrets compose too — pass a `SecretRef` for any config value and it resolves via `.require()` at first `getDb()`:
 
 ```typescript
-import { defineDatabase, secret } from "@elregaldo/core";
+import { defineDatabase, secret } from "@brickkit/core";
 
 const dbPath = secret("SQLITE_PATH").default("./data/dev.db");
 
@@ -61,7 +61,7 @@ export const db = defineDatabase({ tables: { users }, path: dbPath });
 `syncSchema` issues `CREATE TABLE IF NOT EXISTS` DDL for SQLite. It is never called by services, resources, auth, or server startup — you call it explicitly (`packages/core/src/db/index.ts`):
 
 ```typescript
-import { syncSchema } from "@elregaldo/core";
+import { syncSchema } from "@brickkit/core";
 import { usersService } from "./users/service";
 
 // Accepts a Service, Map, array, or record of tables; optional second arg is the db instance
@@ -72,7 +72,7 @@ Typical dev/test wiring:
 
 ```typescript
 // src/index.ts (dev entry)
-import { syncSchema } from "@elregaldo/core";
+import { syncSchema } from "@brickkit/core";
 import { usersService } from "./users/service";
 
 if (process.env.NODE_ENV !== "production") {
@@ -83,7 +83,7 @@ if (process.env.NODE_ENV !== "production") {
 ```typescript
 // test setup
 import { beforeEach } from "bun:test";
-import { syncSchema } from "@elregaldo/core";
+import { syncSchema } from "@brickkit/core";
 import { usersService } from "./users/service";
 
 beforeEach(() => {
@@ -98,7 +98,7 @@ SQLite file hygiene for tests: point `defineDatabase` at `:memory:` or a temp fi
 For `engine: "postgres"`, `syncSchema` is a no-op for DDL — schema management belongs to the caller with standard Drizzle migrations:
 
 ```typescript
-import { defineDatabase, secret } from "@elregaldo/core";
+import { defineDatabase, secret } from "@brickkit/core";
 
 const databaseUrl = secret("DATABASE_URL");
 

@@ -12,7 +12,7 @@ Brick-TS access control is two mechanisms: per-action `authorize` hooks plus `ow
 The service `context` resolver runs once per request and supplies `user`/`session` to every action. The `examples/pages` app loads it from Better Auth:
 
 ```ts
-import { defineService } from "@elregaldo/core";
+import { defineService } from "@brickkit/core";
 import { getAuth } from "../../../auth";
 import { appDb } from "../../../db";
 
@@ -35,7 +35,7 @@ export const pagesService = defineService("pages", {
 Custom actions declare `authorize` inline — it receives `{ user, input, ctx }` and returns a boolean (or promise). Falsy → `403`:
 
 ```ts
-import { defineAction, eq, t } from "@elregaldo/core";
+import { defineAction, eq, t } from "@brickkit/core";
 
 export const publishPage = defineAction({
   name: "publishPage",

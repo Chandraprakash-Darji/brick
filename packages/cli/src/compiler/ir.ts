@@ -1,4 +1,4 @@
-import { type Service, type Action, describeResourceReads, type ResourceReadQueries } from "@elregaldo/core";
+import { type Service, type Action, describeResourceReads, type ResourceReadQueries } from "@brickkit/core";
 
 export type RouteMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export interface RouteIR {

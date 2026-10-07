@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { startDevServer } from "./runner";
 import { buildApplication } from "./build";
-import { getGlobalRegistry, generateOpenApiSpec } from "@elregaldo/core";
+import { getGlobalRegistry, generateOpenApiSpec } from "@brickkit/core";
 
 const args = process.argv.slice(2);
 const command = args[0] || "dev";

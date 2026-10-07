@@ -3,7 +3,7 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-export function InstallCommand({ command = "bun add @elregaldo/core @elregaldo/cli", className }: { command?: string; className?: string }) {
+export function InstallCommand({ command = "bun add @brickkit/core @brickkit/cli", className }: { command?: string; className?: string }) {
   const [copied, setCopied] = React.useState(false)
   return (
     <button

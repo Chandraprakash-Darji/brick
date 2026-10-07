@@ -51,7 +51,7 @@ Benchmark throughput and p99 together before making performance claims.
 Startup compilation is enabled by default:
 
 ```ts
-import { createBrickServer } from '@elregaldo/cli';
+import { createBrickServer } from '@brickkit/cli';
 const app = createBrickServer({ services: [pagesService] });
 app.listen(4000);
 ```
@@ -74,7 +74,7 @@ The output directory contains:
 - `routes.js`: generated ES-module handler factories and the IR binder.
 - `server.js` / `server.js.map`: runnable bundle, including application callbacks.
 
-`routes.js` uses `@elregaldo/cli/compiler` when used independently. `server.js`
+`routes.js` uses `@brickkit/cli/compiler` when used independently. `server.js`
 bundles these handlers and their imports; the source definitions are not needed
 at deployment. File-backed databases, assets and environment variables used by
 application code remain deployment requirements.
@@ -92,7 +92,7 @@ and startup; mismatches fail with a rebuild instruction.
 import {
   compileBrickApplication,
   emitCompiledApplication,
-} from '@elregaldo/cli/compiler';
+} from '@brickkit/cli/compiler';
 
 const compilation = compileBrickApplication({ services: [pagesService], prefix: '/api' });
 console.log(compilation.ir);

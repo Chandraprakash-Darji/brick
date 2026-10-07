@@ -6,7 +6,7 @@ import {
   generateOpenApiSpec,
   resolveSecrets,
   type SecretSource,
-} from "@elregaldo/core";
+} from "@brickkit/core";
 import {
   requestLoggingPlugin,
   type RequestLoggingOptions,

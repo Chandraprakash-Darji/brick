@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import { createBrickServer } from "@elregaldo/cli";
-import { defineDatabase, syncSchema } from "@elregaldo/core";
+import { createBrickServer } from "@brickkit/cli";
+import { defineDatabase, syncSchema } from "@brickkit/core";
 import {
   pagesService,
   createPage,

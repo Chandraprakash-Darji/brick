@@ -1,4 +1,4 @@
-import { ValidationError, ActionExecutionError, type CompiledRoutePlan } from "@elregaldo/core";
+import { ValidationError, ActionExecutionError, type CompiledRoutePlan } from "@brickkit/core";
 
 export type CompiledHandler = (context: any) => unknown | Promise<unknown>;
 export type HandlerFactory = (binding: CompiledRoutePlan, runtime: typeof compilerRuntime) => CompiledHandler;

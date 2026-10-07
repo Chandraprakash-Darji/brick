@@ -1,4 +1,4 @@
-import { defineService, t, defineDatabase, syncSchema, sqliteTable, text } from "@elregaldo/core";
+import { defineService, t, defineDatabase, syncSchema, sqliteTable, text } from "@brickkit/core";
 const service = defineService("built", { context: ctx => ({ user: ctx.request.headers.get("x-user") ? { id: "alice" } : null }) });
 service.action({ name: "getPage", path: "/api/public/pages/:slug", input: t.Object({ slug: t.String({ minLength: 2 }) }),
   output: t.Object({ slug: t.String() }), authorize: ({ user }) => Boolean(user), execute: async ({ input }) => input });

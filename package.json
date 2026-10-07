@@ -9,7 +9,7 @@
     "examples/extensions"
   ],
   "scripts": {
-    "build": "bun run --filter @elregaldo/core build && bun run --filter @elregaldo/cli build",
+    "build": "bun run --filter @brickkit/core build && bun run --filter @brickkit/cli build",
     "release": "bun scripts/release.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",

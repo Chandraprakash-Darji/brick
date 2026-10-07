@@ -7,7 +7,7 @@ import {
   eq,
   and,
   t,
-} from "@elregaldo/core";
+} from "@brickkit/core";
 
 export type Theme = "github-dark" | "github-light" | "dracula" | "nord";
 export type ContentType = "markdown" | "html";

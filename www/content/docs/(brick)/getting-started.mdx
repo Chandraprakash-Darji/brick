@@ -11,7 +11,7 @@ description: Install and create your first Brick-TS app
 ## Install
 
 ```bash
-bun add @elregaldo/core @elregaldo/cli
+bun add @brickkit/core @brickkit/cli
 ```
 
 ## Define the table, database, service, and resource
@@ -27,7 +27,7 @@ import {
   integer,
   eq,
   t,
-} from "@elregaldo/core";
+} from "@brickkit/core";
 
 // 1. Pure Drizzle table — the single source of truth
 export const pagesTable = sqliteTable("pages", {
@@ -77,7 +77,7 @@ export const pagesResource = pagesService.resource({
 ## Serve it
 
 ```ts
-import { createBrickServer } from "@elregaldo/cli";
+import { createBrickServer } from "@brickkit/cli";
 import { pagesService } from "./services/pages/service";
 
 const app = createBrickServer({ port: 4000, services: [pagesService] });

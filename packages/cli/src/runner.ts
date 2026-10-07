@@ -1,6 +1,6 @@
 import { existsSync } from "fs";
 import { resolve } from "path";
-import { getGlobalRegistry } from "@elregaldo/core";
+import { getGlobalRegistry } from "@brickkit/core";
 import { createBrickServer } from "./server";
 
 export interface DevServerOptions {

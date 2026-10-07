@@ -1,4 +1,4 @@
-import { sqliteTable, text } from "@elregaldo/core";
+import { sqliteTable, text } from "@brickkit/core";
 
 export const commentsTable = sqliteTable("comments", {
   id: text("id").primaryKey(),

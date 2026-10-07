@@ -1,5 +1,5 @@
 import { beforeEach, expect, it } from "bun:test";
-import { defineDatabase, defineService, resetGlobalRegistry, syncSchema, sqliteTable, text, integer, t, sql } from "@elregaldo/core";
+import { defineDatabase, defineService, resetGlobalRegistry, syncSchema, sqliteTable, text, integer, t, sql } from "@brickkit/core";
 import { createBrickServer } from "../src/server";
 
 beforeEach(resetGlobalRegistry);

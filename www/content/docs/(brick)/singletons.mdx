@@ -8,7 +8,7 @@ Brick-TS has **no singleton primitive**: no one-row-per-table declaration, no na
 ## The pattern: regular table + get-or-default action
 
 ```ts
-import { eq, t } from "@elregaldo/core";
+import { eq, t } from "@brickkit/core";
 export const settingsTable = sqliteTable("settings", {
   id: text("id").primaryKey(),
   key: text("key").notNull().unique(),
