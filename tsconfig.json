@@ -12,6 +12,7 @@
     "types": ["bun"],
     "paths": {
       "@brickkit/core": ["./packages/core/src"],
+      "@brickkit/core/*": ["./packages/core/src/*"],
       "@brickkit/cli": ["./packages/cli/src"],
       "@brickkit/cli/compiler": ["./packages/cli/src/compiler.ts"]
     }

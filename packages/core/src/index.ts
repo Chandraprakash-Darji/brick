@@ -10,6 +10,27 @@ export {
   type ResourceReadQueries,
 } from "./resource";
 export { createServiceProxy } from "./rpc";
+
+// Typed HTTP Client (also importable as `@brickkit/core/client` for frontends)
+export {
+  createBrickClient,
+  defineAppContract,
+  BrickTransportError,
+  BrickServerError,
+  isBrickTransportError,
+  isBrickServerError,
+} from "./client";
+export type {
+  BrickClient,
+  BrickClientOptions,
+  BrickCallOptions,
+  BrickActionCaller,
+  BrickResourceClient,
+  InferActionInput,
+  InferActionOutput,
+  InferActionErrorCodes,
+  InferActionFailure,
+} from "./client";
 export {
   ServiceRegistry,
   getGlobalRegistry,

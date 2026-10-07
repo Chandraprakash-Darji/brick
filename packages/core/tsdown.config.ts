@@ -7,7 +7,7 @@ export default defineConfig({
   dts: true,
   fixedExtension: false,
   hash: false,
-  entry: ["src/index.ts", "src/pg.ts"],
+  entry: ["src/index.ts", "src/client.ts", "src/pg.ts"],
   format: ["esm"],
   outDir: "dist",
   platform: "node",

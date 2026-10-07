@@ -1,0 +1,121 @@
+---
+title: Typed Client
+description: Eden-style end-to-end typed HTTP client inferred from your contract
+---
+
+The typed client lets a frontend call your API with full autocomplete and compile-time payload checking — no `/openapi.json` export, no `@hey-api/openapi-ts` codegen step. The frontend imports only the contract **type**, so no backend implementation ever lands in the frontend bundle.
+
+## Define the contract once (backend)
+
+Assemble your actions, resources, and services into one contract object. Each `service.action(...)` call preserves its input/output/error literal types, which is what makes the client precise:
+
+```ts
+// server.ts
+import { defineAppContract } from "@brickkit/core/client";
+import { brickFromContract } from "@brickkit/cli";
+
+export const listPages = pagesService.action({
+  name: "page.list",
+  input: t.Object({ limit: t.Optional(t.Number()) }),
+  output: t.Object({ pages: t.Array(PageSchema), total: t.Number() }),
+  execute: async ({ input, ctx }) => {
+    /* ... */
+  },
+});
+
+export const contract = defineAppContract({
+  page: { list: listPages, create: createPage },
+  billing: { charge: chargeAction },
+  notes: notesResource, // resources and whole services work too
+});
+export type AppServer = typeof contract;
+
+// The server derives from the same object: services are declared once.
+export const app = brickFromContract(contract, { port: 4000 });
+```
+
+`brickFromContract(contract, options)` accepts everything `brick()` does except `services`, which it resolves through the registry from each action's bound `serviceName`. Every action in the contract must be bound to a service (define it via `service.action(...)`) — unbound actions, unknown services, and empty contracts throw errors naming the culprit.
+
+## Call it (frontend)
+
+```ts
+// frontend — `import type` is erased at build: zero backend code bundled
+import { createBrickClient } from "@brickkit/core/client";
+import type { AppServer } from "./server";
+
+const api = createBrickClient<AppServer>({ baseUrl: "http://localhost:4000" });
+
+const pages = await api.page.list({ limit: 10, sort: "-createdAt" });
+const created = await api.page.create({ title: "Hello", content: "World" });
+```
+
+Wrong payloads fail at compile time (`title: 123`, missing required fields, unknown namespaces), and `pages`/`created` are typed from the action output schemas.
+
+### Routing
+
+The client path maps onto the same routes the server compiler mounts:
+
+| Client call                        | HTTP request                                |
+| ---------------------------------- | ------------------------------------------- |
+| `api.page.list(input)`             | `GET /api/page?...` (query)                 |
+| `api.page.create(input)`           | `POST /api/page` (JSON body)                |
+| `api.page.get({ id })`             | `GET /api/page/:id` (rest as query)         |
+| `api.page.update({ id, ...rest })` | `PATCH /api/page/:id` (JSON body of `rest`) |
+| `api.page.delete({ id })`          | `DELETE /api/page/:id`                      |
+| `api.billing.charge(input)`        | `POST /api/billing/charge` (JSON body)      |
+
+Two resolution modes:
+
+- **Key convention (default, type-only safe).** Contract keys must match backend names: the leading segment equals the service name, and the segment above a resource operation equals the resource name.
+- **Exact mode.** Pass the runtime contract — `createBrickClient<AppServer>({ baseUrl, contract })` — and routing uses each action's bound `serviceName`/`name` and each resource's `name`, so keys become purely organizational. Use this when backend and frontend share a runtime (monorepo, same-process tests).
+
+### Errors
+
+One throw-based convention, mirroring local `action.execute` semantics (promises can't encode thrown types, so declared codes surface on the error object, not in the return type):
+
+```ts
+import {
+  ActionExecutionError,
+  ValidationError,
+  BrickTransportError,
+  BrickServerError,
+} from "@brickkit/core/client";
+
+try {
+  await api.page.create(input);
+} catch (err) {
+  if (err instanceof ActionExecutionError) {
+    err.code; // "SLUG_EXISTS" | "CONFLICT" | "NOT_FOUND" | ...
+  } else if (err instanceof ValidationError) {
+    err.errors; // [{ path, message }] — same shape as local execution
+  } else if (err instanceof BrickServerError) {
+    err.status; // unexpected 5xx outside the declared contract
+  } else if (err instanceof BrickTransportError) {
+    err.status; // network failure or contract-external 4xx
+  } else if (err instanceof DOMException && err.name === "AbortError") {
+    // cancellation propagates unwrapped
+  }
+}
+```
+
+`InferActionErrorCodes<typeof createPage>` gives the declared code union for a single action when you need it in a type position.
+
+### Options
+
+```ts
+const api = createBrickClient<AppServer>({
+  baseUrl: "http://localhost:4000",
+  prefix: "/v1", // must match brick({ prefix })
+  headers: () => ({ authorization: `Bearer ${getToken()}` }), // re-evaluated per call
+  timeoutMs: 5000, // implemented with AbortSignal.timeout
+  fetch: customFetch, // override (tests route into app.handle)
+});
+
+// Per call:
+await api.page.list(
+  { limit: 10 },
+  { signal, headers: { "x-trace-id": "tr_1" } },
+);
+```
+
+Related: [Getting Started](/docs/getting-started) for the service/resource setup, [OpenAPI](/docs/openapi) for the spec/ docs endpoints (still available when you need raw REST or third-party SDKs).
