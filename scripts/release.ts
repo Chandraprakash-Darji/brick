@@ -12,7 +12,7 @@
 // Prerequisites (checked up front):
 //   - clean tracked tree, on main, in sync with origin/main
 //   - target tag(s) don't already exist on origin
-//   - `gh` authenticated (for release creation)
+//   - `gh` authenticated (for GitHub access)
 //   - npm trust mappings configured per package (one-time, browser):
 //     npmjs.com package Settings -> Trusted Publisher -> brick-org/brick
 

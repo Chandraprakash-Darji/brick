@@ -1,17 +1,17 @@
-# Publish @elregaldo/* to the npmjs public registry.
+# Publish @brickkit/* to the npmjs public registry.
 #
 # Triggers:
-#   - push a tag  `core-v<version>`  (e.g. core-v0.1.0) to publish @elregaldo/core
-#   - push a tag  `cli-v<version>`   (e.g. cli-v0.1.0)  to publish @elregaldo/cli
+#   - push a tag  `core-v<version>`  (e.g. core-v0.1.0) to publish @brickkit/core
+#   - push a tag  `cli-v<version>`   (e.g. cli-v0.1.0)  to publish @brickkit/cli
 #   - manual dispatch (inputs below) for re-runs
 #
 # The tag version must match the version in the package's package.json, or
 # the job fails before publishing. Re-pushing an already-published version
 # is a no-op (checked via `npm view`, not an error).
 #
-# Required repo secret: NPM_TOKEN — an npm access token able to publish the
-# @brick scope (classic "Automation" token, or granular with read+write
-# on @elregaldo/*). Add it under Settings → Secrets → Actions.
+# Configure npm trusted publishing for brick-org/brick + publish-npm.yml.
+# For the initial publish, NPM_TOKEN can be a granular token with write
+# access to @brickkit and permission to publish without interactive 2FA.
 #
 # Each package builds to ./dist before packing (see package.json `build`
 # script); `files: ["dist"]` keeps TS source out of the tarball.
@@ -58,7 +58,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bun install
+      - run: bun install --frozen-lockfile
       - run: bun run build
       - run: npm pack --dry-run
         working-directory: packages/core
@@ -84,6 +84,9 @@ jobs:
 
   publish:
     needs: resolve
+    permissions:
+      contents: write # Create the GitHub release after npm publishing succeeds
+      id-token: write
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -100,12 +103,18 @@ jobs:
           node-version: 24
           registry-url: "https://registry.npmjs.org"
 
-      - run: bun install
+      - run: bun install --frozen-lockfile
         working-directory: .
+
+      - name: Ensure npm supports trusted publishing
+        run: npm install --global npm@11
 
       - name: Build core first (cli typechecks against core dist)
         run: bun run build
         working-directory: .
+
+      - name: Test packages
+        run: bun test packages/core packages/cli
 
       - name: Resolve name and version
         id: meta
@@ -137,4 +146,20 @@ jobs:
       - name: Publish to npm
         if: steps.published.outputs.skip != 'true' && inputs.dry_run != true
         working-directory: packages/${{ matrix.pkg }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --access public
+
+      - name: Create GitHub release
+        if: inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE_NAME: ${{ steps.meta.outputs.name }}
+          PACKAGE_VERSION: ${{ steps.meta.outputs.version }}
+          PACKAGE_KIND: ${{ matrix.pkg }}
+        run: |
+          tag="${PACKAGE_KIND}-v${PACKAGE_VERSION}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "$GITHUB_SHA" \
+              --title "$PACKAGE_NAME v$PACKAGE_VERSION" --generate-notes
+          fi
