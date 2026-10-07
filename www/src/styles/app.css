@@ -206,3 +206,7 @@ html > body[data-scroll-locked] {
 .brick-stat { border-color: oklch(1 0 0 / 15%); }
 .brick-feature { transition: border-color 180ms, background-color 180ms; }
 .brick-feature:hover { border-color: var(--gopher-ink); background: var(--code); }
+
+/* Generated Brick mark preserves transparency across both site themes. */
+.brick-logo { display: block; object-fit: contain; }
+.dark .brick-logo { filter: brightness(0) invert(1); }

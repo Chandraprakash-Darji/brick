@@ -32,7 +32,10 @@ export const Route = createRootRoute({
         content: site.description,
       },
     ],
-    links: [{ rel: 'stylesheet', href: appCss }],
+    links: [
+      { rel: 'stylesheet', href: appCss },
+      { rel: 'icon', type: 'image/svg+xml', href: '/brand/logo.svg' },
+    ],
   }),
   component: RootComponent,
 });
