@@ -70,7 +70,10 @@ async function run(argv: string[]) {
   await mkdir(dirname(resolve(out)), { recursive: true });
   await Bun.write(out, JSON.stringify(snapshot, null, 2) + "\n");
   console.log(`Measured ${[...measuredSuites].join(", ")}; wrote ${out}`);
-  if (failures.length) process.exitCode = 1;
+  if (failures.length) {
+    console.error(`Benchmark failures:\n${failures.join("\n")}`);
+    process.exitCode = 1;
+  }
 }
 
 /** Import one measured local artifact, retaining its original revision and dirty flag. */

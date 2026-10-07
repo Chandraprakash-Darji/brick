@@ -70,6 +70,8 @@ jobs:
         with:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
+      - name: Validate benchmark harness
+        run: bun run bench:typecheck && bun test bench
       - name: Install pinned external HTTP loader
         run: |
           mkdir -p .build/bench-tools

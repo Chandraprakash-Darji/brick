@@ -109,7 +109,7 @@ export async function seedRows(db: any, n: number, opts: { prefix?: string } = {
     for (let i = base; i < end; i++) {
       rows.push({
         id: `${prefix}_${i}`,
-        slug: `${prefix}-slug-${i}`,
+        slug: `${prefix.replaceAll("_", "-")}-slug-${i}`,
         title: `Benchmark title ${i}`,
         content: `Benchmark content body for row ${i}.`,
         status: i % 2 === 0 ? "published" : "draft",

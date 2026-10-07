@@ -3,6 +3,7 @@ import { runLoad } from "./lib/load";
 import { percentile, summarize } from "./lib/stats";
 import { checkGates } from "./lib/manifest";
 import { startBrickServer } from "./http-server";
+import { seedRows } from "./lib/fixtures";
 
 describe("benchmark lab", () => {
   test("percentiles and empty samples", () => {
@@ -44,6 +45,18 @@ describe("benchmark lab", () => {
       const list = await fetch(base + "/api/item?search=Benchmark&limit=20");
       expect(list.status).toBe(200);
       expect((await list.json() as { items: unknown[] }).items.length).toBe(20);
+    } finally { await bench.stop(); }
+  });
+  test("scaling fixtures pass resource output validation", async () => {
+    const bench = await startBrickServer({ port: 0, rows: 0 });
+    try {
+      await seedRows(bench.db, 25, { prefix: "scale100000_98000" });
+      const response = await fetch(`http://127.0.0.1:${bench.app.server.port}/api/item?limit=20`);
+      expect(response.status).toBe(200);
+      const body = await response.json() as { items: { id: string; slug: string }[]; total: number };
+      expect(body.total).toBe(25);
+      expect(body.items).toHaveLength(20);
+      expect(body.items.every(item => item.id.startsWith("scale100000_98000_") && /^[a-z0-9-]+$/.test(item.slug))).toBe(true);
     } finally { await bench.stop(); }
   });
 });
