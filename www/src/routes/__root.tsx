@@ -48,7 +48,7 @@ function RootComponent() {
       </head>
       <body className="flex min-h-screen flex-col bg-background text-foreground antialiased">
         <RootProvider>
-          <div className="flex min-h-svh flex-col">
+          <div className="brick-site flex min-h-svh flex-col">
             <SiteHeader />
             <div className="frame flex flex-1 flex-col">
               <Outlet />

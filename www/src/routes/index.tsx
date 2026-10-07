@@ -2,8 +2,8 @@ import { Link, createFileRoute } from "@tanstack/react-router"
 import { ArrowRightIcon } from "lucide-react"
 import * as React from "react"
 
+import { LogoMark } from "@/components/logo"
 import { InstallCommand } from "@/components/install-command"
-import { buttonVariants } from "@/components/ui/button"
 import { site } from "@/lib/site"
 import { cn } from "@/lib/utils"
 import { SourceCode } from "@/components/source-code"
@@ -12,7 +12,6 @@ import usersSource from "../../../examples/showcase/src/services/users.ts?raw"
 import mainSource from "../../../examples/showcase/src/main.ts?raw"
 import serverSource from "../../../examples/showcase/src/server.ts?raw"
 import { dataUrl, lastValue, type BenchmarkData } from "@/lib/benchmarks"
-import localBenchmarks from "../../public/data/benchmarks-latest.json"
 
 export const Route = createFileRoute("/")({
   component: Home,
@@ -79,7 +78,7 @@ const codeSamples = {
 function Home() {
   const [kind, setKind] = React.useState<Kind>("monolith")
   const activeCode = codeSamples[kind]
-  const [benchmarks, setBenchmarks] = React.useState<BenchmarkData>(localBenchmarks as BenchmarkData)
+  const [benchmarks, setBenchmarks] = React.useState<BenchmarkData>()
   React.useEffect(() => {
     const controller = new AbortController()
     fetch(dataUrl, { signal: controller.signal, cache: "no-store" }).then(async response => {
@@ -87,7 +86,7 @@ function Home() {
     }).catch(() => {})
     return () => controller.abort()
   }, [])
-  const measured = benchmarks.series.darwin ?? benchmarks.series.linux ?? {}
+  const measured = benchmarks?.series.darwin ?? benchmarks?.series.linux ?? {}
   const value = (suite: string, name: string, unit: string) => lastValue(measured[suite]?.[name]?.[unit] ?? [])
   const stats = [
     { label: "HTTP throughput", value: value("compiler", "sync", "req/s"), unit: "req/s" },
@@ -97,77 +96,35 @@ function Home() {
   ]
 
   return (
-    <main>
-      <section className="grid grid-cols-1 gap-12 py-16 md:py-24 lg:grid-cols-[1.4fr_1fr] lg:items-center">
-        <div className="min-w-0">
-          <p className="label flex items-center gap-3"><span className="size-2 bg-gopher" /> TypeScript in. Backend out.</p>
-          <h1 className="mt-7 text-5xl leading-[0.98] font-semibold tracking-[-0.055em] sm:text-6xl xl:text-7xl">
-            Build with types.<br />
-            <span className="text-gopher-ink">Ship with speed.</span>
-          </h1>
-          <p className="mt-7 max-w-lg text-lg leading-8 text-muted-foreground">
-            Your actions, resources, and rules. Brick compiles them into a backend ready to run on Bun.
-            One codebase, from direct calls to HTTP services.
-          </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Link to="/docs/$" params={{ _splat: "getting-started" }} className={buttonVariants({ size: "lg", className: "h-12 rounded-none px-6" })}>
-              Start building <ArrowRightIcon className="ml-3 size-4" />
-            </Link>
-            <Link to="/benchmarks" className="inline-flex h-12 items-center gap-3 px-3 text-sm font-medium hover:text-gopher-ink">
-              See the numbers <ArrowRightIcon className="size-4" />
-            </Link>
-          </div>
-          <InstallCommand className="mt-6 rounded-none" command="bun add @elregaldo/core @elregaldo/cli" />
-          <a href={`${site.repo}/releases`} target="_blank" rel="noreferrer" className="label mt-5 block hover:text-foreground">
-            v{site.version} / Open source / Built for Bun
+    <main id="top" className="brick-landing">
+      <section className="brick-hero">
+        <a href={`${site.repo}/releases`} target="_blank" rel="noreferrer" className="hero-release">
+          <span /> BRICK v{site.version} <span className="hero-release-divider">/</span> OPEN SOURCE
+        </a>
+        <LogoMark className="hero-symbol" />
+        <h1>Build your backend.<br />Keep your TypeScript.</h1>
+        <p className="hero-caption">Small definitions. Production execution.</p>
+        <p className="hero-description">Your actions, resources, and rules.<br className="hidden sm:block" /> Compiled into a backend ready to run on Bun.</p>
+        <div className="hero-actions">
+          <Link to="/docs/$" params={{ _splat: "getting-started" }} className="home-button home-button-primary">
+            Start building <ArrowRightIcon className="size-3.5" />
+          </Link>
+          <a href={site.repo} target="_blank" rel="noreferrer" className="home-button home-button-secondary">
+            Explore the source <ArrowRightIcon className="size-3.5" />
           </a>
         </div>
-        <div className="brick-stack min-w-0" aria-label="Brick compiles TypeScript definitions into execution plans that run on Bun">
-          <div className="brick-layer mr-8">
-            <span className="font-mono text-[10px] tracking-widest text-muted-foreground">01 / DEFINE</span>
-            <p className="mt-2 text-xl font-semibold tracking-tight">TypeScript definitions</p>
-            <p className="mt-1 text-sm text-muted-foreground">Actions. Resources. Your rules.</p>
-          </div>
-          <div className="brick-layer">
-            <span className="font-mono text-[10px] tracking-widest">02 / COMPILE</span>
-            <p className="mt-2 text-xl font-semibold tracking-tight">Resolved execution plans</p>
-            <p className="mt-1 text-sm">Routing, validation, and database queries.</p>
-          </div>
-          <div className="brick-layer">
-            <span className="font-mono text-[10px] tracking-widest text-muted-foreground">03 / RUN</span>
-            <p className="mt-2 text-xl font-semibold tracking-tight">Your backend, on Bun</p>
-            <p className="mt-1 text-sm text-muted-foreground">Direct calls or HTTP. Same definitions.</p>
-          </div>
-          <p className="label mt-8 text-center">Less work on every request.</p>
-        </div>
+        <InstallCommand className="home-install" command="bun add @elregaldo/core @elregaldo/cli" />
+        <a href="#definitions" className="hero-scroll">DEFINE / COMPILE / RUN <span>↓</span></a>
       </section>
 
-      <section className="brick-stats py-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="label">01 / Measured, not guessed</p>
-          <Link to="/benchmarks" className="font-mono text-[11px] text-[#f3ab78] hover:underline">Explore benchmarks ↗</Link>
-        </div>
-        <dl className="mt-6 grid grid-cols-2 gap-y-6 md:grid-cols-4">
-          {stats.map((stat, i) => (
-            <div key={stat.label} className={cn("brick-stat min-w-0 border-l px-4", i === 0 && "border-l-0 pl-0")}>
-              <dt className="label">{stat.label}</dt>
-              <dd className="mt-3 text-3xl font-medium tracking-tight tabular-nums sm:text-4xl">
-                {(stat.value === undefined ? undefined : stat.unit === "KiB" ? stat.value / 1024 : stat.value)?.toLocaleString("en-US", { maximumFractionDigits: stat.unit === "req/s" ? 0 : 1 }) ?? "—"}
-                <span className="mt-1 block font-mono text-xs font-normal text-[#c6beb5]">{stat.unit}</span>
-              </dd>
-            </div>
-          ))}
-        </dl>
-        <p className="mt-6 text-xs text-[#c6beb5]">Fixed JSON action throughput · minimal server startup and idle CPU · minified server bundle. Full methodology in benchmarks.</p>
-      </section>
-
-      <div className="flex flex-wrap items-end justify-between gap-4 pb-6 pt-14">
-        <div><p className="label">02 / The developer surface</p><h2 className="mt-3 text-3xl font-semibold tracking-tight">Small definitions. Real backends.</h2></div>
-        <p className="max-w-xs text-sm leading-6 text-muted-foreground">These are the actual runnable files in our repository.</p>
+      <div id="definitions" className="home-section-heading">
+        <div><p className="label">01 / THE DEVELOPER SURFACE</p><h2>One codebase.<br />Two ways to run.</h2></div>
+        <p className="section-description">Start with direct calls. Expose HTTP when you need it. The same typed definitions power both.</p>
       </div>
 
-      <div className="border bg-code">
-        <div role="tablist" aria-label="Kind of deployment" className="flex border-b">
+      <div className="brick-workbench">
+        <div className="workbench-toolbar"><span className="window-controls" aria-hidden="true"><i /><i /><i /></span><span>BRICK / APPLICATION WORKBENCH</span><span className="workbench-status"><i /> READY TO RUN</span></div>
+        <div role="tablist" aria-label="Kind of deployment" className="workbench-tabs">
           {kinds.map((k) => (
             <button
               key={k.id}
@@ -178,8 +135,8 @@ function Home() {
               aria-controls="code-panel"
               onClick={() => setKind(k.id)}
               className={cn(
-                "label -mb-px border-r border-b border-b-transparent px-4 py-3 transition-colors hover:text-foreground sm:px-6 cursor-pointer",
-                kind === k.id && "border-b-gopher bg-background text-foreground"
+                "workbench-tab",
+                kind === k.id && "workbench-tab-active"
               )}
             >
               {k.label}
@@ -220,17 +177,43 @@ function Home() {
         </div>
       </div>
 
-      <div className="pb-6 pt-14"><p className="label">03 / Built to fit together</p><h2 className="mt-3 text-3xl font-semibold tracking-tight">The pieces your backend needs.</h2></div>
-      <ul className="grid gap-4 pb-16 sm:grid-cols-2 lg:grid-cols-3">
+      <section className="brick-stats py-8">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="label">02 / Measured, not guessed</p>
+          <Link to="/benchmarks" className="capability-link">Explore benchmarks ↗</Link>
+        </div>
+        <dl className="mt-6 grid grid-cols-2 gap-y-6 md:grid-cols-4">
+          {stats.map((stat, i) => (
+            <div key={stat.label} className={cn("brick-stat min-w-0 border-l px-4", i === 0 && "border-l-0 pl-0")}>
+              <dt className="label">{stat.label}</dt>
+              <dd className="mt-3 text-3xl font-medium tracking-tight tabular-nums sm:text-4xl">
+                {(stat.value === undefined ? undefined : stat.unit === "KiB" ? stat.value / 1024 : stat.value)?.toLocaleString("en-US", { maximumFractionDigits: stat.unit === "req/s" ? 0 : 1 }) ?? "—"}
+                <span className="mt-1 block font-mono text-xs font-normal text-muted-foreground">{stat.unit}</span>
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <p className="mt-6 text-xs text-muted-foreground">Fixed JSON action throughput · minimal server startup and idle CPU · minified server bundle. Full methodology in benchmarks.</p>
+      </section>
+
+      <div id="platform" className="home-section-heading home-platform-heading"><div><p className="label">03 / BUILT TO FIT TOGETHER</p><h2>A foundation for<br />what comes next.</h2></div><p className="section-description">A focused set of primitives, built on the TypeScript tools you already know.</p></div>
+      <ul className="home-feature-grid">
         {features.map((feature, i) => (
-          <li key={feature.title} className="brick-feature border bg-card">
-            <Link to={feature.link} className="group flex h-full flex-col p-6">
-              <span className="mb-8 font-mono text-xs text-gopher-ink">/{String(i + 1).padStart(2, "0")}</span>
+          <li key={feature.title} className="brick-feature">
+            <Link to={feature.link} className="group flex h-full flex-col">
+              <div className="feature-visual" aria-hidden="true" data-variant={i}>
+                <span className="visual-index">BRICK / 0{i + 1}</span>
+                {i === 5 ? <div className="visual-bars">{[32, 54, 45, 70, 61, 88, 78, 100].map((height, j) => <i key={j} style={{ height: `${height}%` }} />)}</div> :
+                  <div className="visual-flow"><span>{["ACTION", "ROUTE", "SERVICE", "HTTP", "SESSION"][i]}</span><b>↓</b><span>{["EXECUTE", "HANDLER", "ACTION", "SERVICE", "POLICY"][i]}</span></div>}
+                <span className="visual-caption">{["TYPE-SAFE EXECUTION", "COMPILED AHEAD OF TIME", "DIRECT IN-PROCESS CALLS", "SAME ACTION. NEW INTERFACE.", "YOUR IDENTITY. YOUR RULES.", "MEASURED ON EVERY PUSH"][i]}</span>
+              </div>
+              <div className="feature-copy">
               <h3 className="flex items-center justify-between font-semibold tracking-tight">
                 {feature.title}
                 <ArrowRightIcon className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
               </h3>
               <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">{feature.text}</p>
+              </div>
             </Link>
           </li>
         ))}

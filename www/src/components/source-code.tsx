@@ -11,6 +11,6 @@ export function SourceCode({ code, lang = "ts" }: { code: string; lang?: string 
       .then(result => { if (active) setHtml(result) })
     return () => { active = false }
   }, [code, lang])
-  return html ? <div className="home-code" dangerouslySetInnerHTML={{ __html: html }} /> :
+  return html ? <div className="home-code not-fumadocs-codeblock" dangerouslySetInnerHTML={{ __html: html }} /> :
     <pre className="font-mono text-[13px] leading-[1.7] text-foreground"><code>{code}</code></pre>
 }
