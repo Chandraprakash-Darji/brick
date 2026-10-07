@@ -43,3 +43,5 @@ const app = brick({
 ```
 
 Need a static snapshot for SDK generation? Fetch `/openapi.json` from a running instance in CI and save the result — the generator itself always runs against live service registrations.
+
+First-party frontends usually don't need the spec at all: the [Typed Client](/docs/typed-client) infers inputs, outputs, and error codes straight from your TypeScript contract with no codegen step.

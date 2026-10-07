@@ -17,6 +17,7 @@
     "hooks",
     "access-control",
     "validate-hook",
+    "typed-client",
     "---Build & Deploy---",
     "codegen",
     "migrations",

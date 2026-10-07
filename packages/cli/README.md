@@ -15,6 +15,27 @@ const app = brick({ title: "Pages API", version: "1.0.0" });
 app.listen(3333);
 ```
 
+Prefer a single source of truth? Define the client contract once and derive
+the server from it — no separate `services` list:
+
+```ts
+import { brickFromContract } from "@brickkit/cli";
+import { defineAppContract } from "@brickkit/core/client";
+
+export const contract = defineAppContract({
+  page: pagesResource,
+  billing: { charge: chargeAction },
+});
+export type AppServer = typeof contract;
+
+const app = brickFromContract(contract);
+```
+
+Frontends then call it fully typed via `createBrickClient<AppServer>()`
+(`@brickkit/core/client`, type-only import). See
+`www/content/docs/(brick)/typed-client.mdx` for routing, error handling, and
+options.
+
 The `brick` binary ships in this package for local dev and inspection:
 
 ```sh
