@@ -162,8 +162,7 @@ export async function externalTools(): Promise<Record<string, boolean>> {
   const out: Record<string, boolean> = {};
   for (const t of ["oha", "wrk", "hyperfine", "perf"]) {
     try {
-      const p = Bun.spawnSync(["which", t]);
-      out[t] = p.exitCode === 0;
+      out[t] = Bun.which(t) !== null;
     } catch {
       out[t] = false;
     }

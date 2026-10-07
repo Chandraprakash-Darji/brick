@@ -13,8 +13,11 @@ const root = resolve(import.meta.dir, "..");
 
 async function run(argv: string[]) {
   const args = parseArgs(argv);
-  const count = argInt(args, "rounds", 6);
-  if (!Number.isInteger(count) || count < 1) throw new Error("rounds must be a positive integer");
+  const count = argInt(args, "rounds", 3);
+  const requests = argInt(args, "requests", args.smoke ? 200 : 500);
+  const compilerRequests = argInt(args, "compiler-requests", args.smoke ? 300 : 10000);
+  if (![count, requests, compilerRequests].every(value => Number.isInteger(value) && value > 0))
+    throw new Error("rounds, requests and compiler-requests must be positive integers");
   const out = argStr(args, "out", "");
   if (!out) throw new Error("--out is required");
   const manifest = collectManifest({ benchmark: "ci", db: "sqlite-memory" });
@@ -47,6 +50,7 @@ async function run(argv: string[]) {
     console.log(`Benchmark round ${round + 1}/${count}`);
     for (const suite of suites) {
       const flags = args.smoke ? ["--smoke"] : [];
+      if (suite === "http" || suite === "postgres") flags.push("--requests", String(requests));
       // Reads only a disposable job database; URLs never go into command output.
       if (suite === "postgres" && process.env.BENCH_DATABASE_URL) flags.push("--pg");
       await measure(suite, flags);
@@ -54,7 +58,7 @@ async function run(argv: string[]) {
   }
   // The paired compiler harness already computes its own round medians.
   await measure("compiler", ["--oha", argStr(args, "oha", process.env.BENCH_OHA ?? "oha"), "--rounds", String(count),
-    "--requests", args.smoke ? "300" : "50000"]);
+    "--requests", String(compilerRequests)]);
 
   const git = (format: string) => execFileSync("git", ["log", "-1", `--format=${format}`], { cwd: root, encoding: "utf8" }).trim();
   const snapshot: Snapshot = {
@@ -90,6 +94,6 @@ if (import.meta.main) {
     if (command === "run") await run(args);
     else if (command === "merge" && args.length >= 2) await merge(args[0]!, args.slice(1));
     else if (command === "import" && args.length === 2) await importLocal(args[0]!, args[1]!);
-    else throw new Error("Usage: bun bench/ci.ts run --out file [--rounds 6] [--oha path] [--smoke]\n       bun bench/ci.ts merge <data directory> <snapshots...>");
+    else throw new Error("Usage: bun bench/ci.ts run --out file [--rounds 3] [--requests 500] [--compiler-requests 10000] [--oha path] [--smoke]\n       bun bench/ci.ts merge <data directory> <snapshots...>");
   } catch (error) { console.error(error); process.exitCode = 1; }
 }

@@ -15,6 +15,7 @@
  * Discipline: Linux x86_64 is the hard gate (dedicated, pinned); macOS is a
  * second lane — gates are report-only unless --enforce-gates is passed.
  */
+import { resolve } from "node:path";
 import { readdir } from "node:fs/promises";
 import { parseArgs, argStr } from "./lib/stats";
 import { collectManifest, checkGates, deltaPct, writeJson, stamp, resultsDir } from "./lib/manifest";
@@ -23,8 +24,8 @@ const SUITES = ["micro", "prepared", "batch", "startup", "footprint", "http", "p
 
 async function runSuite(suite: string, passthrough: string[]): Promise<void> {
   console.log(`\n############ suite: ${suite} ############`);
-  const proc = Bun.spawn(["bun", `bench/${suite}.ts`, ...passthrough], {
-    cwd: new URL("../", import.meta.url).pathname,
+  const proc = Bun.spawn([process.execPath, `bench/${suite}.ts`, ...passthrough], {
+    cwd: resolve(import.meta.dir, ".."),
     stdout: "inherit",
     stderr: "inherit",
   });

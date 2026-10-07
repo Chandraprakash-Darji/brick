@@ -21,12 +21,19 @@ Keep artifacts outside git when comparing commits.
 
 ## Continuous results
 
-`.github/workflows/bench.yml` measures every push to `main`, including docs and
-website changes. It runs the full default micro, prepared, batch, startup,
-footprint and HTTP suites six times on macOS, Linux and Windows, and the compiled
-route benchmark with six rounds. Linux also runs PostgreSQL against an ephemeral
-PostgreSQL 17 service; other platforms record it as skipped. The opt-in
-`--large` and `--c1k` workloads remain manual.
+`.github/workflows/bench.yml` measures changes to packages, benchmarks, example
+applications, dependencies and TypeScript configuration on `main`. Markdown,
+website and release-only changes do not trigger it. A newer push cancels the
+previous run; manual runs have their own concurrency group.
+
+Routine runs use three rounds, 500 requests per HTTP case and 10,000 requests per
+compiled-route case on macOS, Linux and Windows. They retain every suite,
+dataset size and concurrency level, including the file-backed SQLite and 100K-row
+scaling cases. Linux also measures PostgreSQL against an ephemeral PostgreSQL 17
+service; other platforms record it as skipped. Select **full** in manual workflow
+dispatch for six rounds, 2,000 HTTP requests and 50,000 compiled-route requests.
+Shorter samples give noisier tail latency estimates; use full runs for performance
+investigations. The opt-in `--large` and `--c1k` workloads remain local/manual.
 
 Compact measurements are merged into daily history files on the `benchmarks`
 branch. `latest.json` retains the latest 300 commits. The website fetches that
@@ -38,6 +45,8 @@ To run the same pipeline locally:
 
 ```sh
 bun bench/ci.ts run --out .build/benchmark-snapshot.json --oha /path/to/oha
+# Full measurement budget:
+bun bench/ci.ts run --rounds 6 --requests 2000 --compiler-requests 50000 --out .build/full-snapshot.json --oha /path/to/oha
 bun bench/ci.ts merge .build/benchmark-history .build/benchmark-snapshot.json
 ```
 

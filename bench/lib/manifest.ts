@@ -3,6 +3,7 @@ import { cpus, arch, platform, release, totalmem } from "node:os";
 import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 export interface BenchManifest {
   brick_commit: string;
@@ -135,7 +136,7 @@ export function checkGates(input: {
 }
 
 export function resultsDir(): string {
-  return new URL("../../bench/results/", import.meta.url).pathname;
+  return fileURLToPath(new URL("../../bench/results/", import.meta.url));
 }
 
 export function stamp(): string {

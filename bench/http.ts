@@ -12,6 +12,8 @@
  *     [--concurrency 1,16,64,256] [--rows 5000] [--rows100k] [--large]
  *     [--pg <url>] [--no-file] [--c1k]
  */
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { eq, sql } from "../packages/core/src/index";
 import { benchTable } from "./lib/fixtures";
 import { seedRows, explainPlan } from "./lib/fixtures";
@@ -52,7 +54,7 @@ async function main() {
   let fileBench: any = null;
   try {
   if (!noFile && !smoke) {
-    const tmp = `${process.env["TMPDIR"] ?? "/tmp"}/brick-bench-${Date.now()}.sqlite`;
+    const tmp = join(tmpdir(), `brick-bench-${Date.now()}.sqlite`);
     fileBench = await startBrickServer({ port: BENCH_PORTS.brickFile, rows: 2000, dbPath: tmp });
     console.log(`file-backed sqlite (WAL) on :${BENCH_PORTS.brickFile} rows=2000`);
   }

@@ -6,11 +6,31 @@ name: Benchmarks
 on:
   push:
     branches: [main]
+    paths:
+      - "packages/**"
+      - "!packages/**/*.md"
+      - "bench/**"
+      - "!bench/**/*.md"
+      - "examples/**"
+      - "!examples/**/*.md"
+      - "package.json"
+      - "bun.lock"
+      - "tsconfig.json"
+      - ".github/workflows/bench.yml"
   workflow_dispatch:
     inputs:
+      profile:
+        description: Benchmark sample budget (both profiles cover all suites)
+        type: choice
+        default: quick
+        options: [quick, full]
       ref:
         description: Commit, branch, or tag to measure (the workflow commit by default)
         required: false
+
+concurrency:
+  group: benchmarks-${{ github.event_name }}-${{ inputs.ref || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -19,7 +39,7 @@ jobs:
   bench:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 120
+    timeout-minutes: ${{ inputs.profile == 'full' && 120 || 30 }}
     strategy:
       fail-fast: false
       matrix:
@@ -63,10 +83,17 @@ jobs:
           curl -fL --retry 3 "https://github.com/hatoo/oha/releases/download/v1.16.0/$asset" -o "$executable"
           chmod +x "$executable"
           echo "BENCH_OHA=$executable" >> "$GITHUB_ENV"
-      - name: Measure all suites, six rounds
+      - name: Measure all suites
         env:
+          BENCH_PROFILE: ${{ inputs.profile || 'quick' }}
           BENCH_DATABASE_URL: ${{ matrix.platform == 'linux' && 'postgres://brick:brick@127.0.0.1:5432/brick_bench' || '' }}
-        run: bun bench/ci.ts run --rounds 6 --out "bench/results/snapshot-${{ matrix.platform }}.json"
+        run: |
+          if [[ "$BENCH_PROFILE" == full ]]; then
+            flags=(--rounds 6 --requests 2000 --compiler-requests 50000)
+          else
+            flags=(--rounds 3 --requests 500 --compiler-requests 10000)
+          fi
+          bun bench/ci.ts run "${flags[@]}" --out "bench/results/snapshot-${{ matrix.platform }}.json"
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
