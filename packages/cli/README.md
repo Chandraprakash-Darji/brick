@@ -23,7 +23,7 @@ brick gen openapi --output openapi.json
 brick info
 ```
 
-Source: <https://github.com/brick-org/brick>.
+Source: <https://github.com/Chandraprakash-Darji/brick>.
 
 ## Compiler
 

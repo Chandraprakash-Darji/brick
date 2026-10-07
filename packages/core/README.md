@@ -25,4 +25,4 @@ export const db = defineDatabase({
 ```
 
 Bun-only APIs are lazy-loaded, so the package imports cleanly under
-strict Node ESM too. Source: <https://github.com/brick-org/brick>.
+strict Node ESM too. Source: <https://github.com/Chandraprakash-Darji/brick>.
