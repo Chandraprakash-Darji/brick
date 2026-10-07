@@ -25,7 +25,7 @@ Rules:
 - `syncSchema` accepts a service, a `Map`, an array, or a record of tables plus a db instance.
 - It emits `CREATE TABLE IF NOT EXISTS` from the Drizzle definitions — idempotent and safe to re-run.
 - It is **not** a migration runner: no diffs, no alters, no destructive-change detection. Changing a table shape in dev means recreating the file or altering it yourself.
-- Never call it from service constructors, resource setup, `resolveContext`, or `createBrickServer` startup.
+- Never call it from service constructors, resource setup, `resolveContext`, or `brick` startup.
 
 ## Postgres: schema is caller-owned
 
@@ -59,4 +59,4 @@ Postgres (`defineDatabase({ engine: "postgres", tables, ... })`):
 | `ssl` / `max` / `prepare` | Driver tuning (`prepare: false` for transaction-mode poolers) |
 | `schemaName` | Isolated schema filter |
 
-Any option also accepts a `secret("NAME")` ref, resolved via `resolveSecrets()` at `createBrickServer` startup — missing required secrets fail fast before serving.
+Any option also accepts a `secret("NAME")` ref, resolved via `resolveSecrets()` at `brick` startup — missing required secrets fail fast before serving.

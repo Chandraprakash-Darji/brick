@@ -5,7 +5,7 @@ import {
   resetGlobalRegistry,
   t,
 } from "@brickkit/core";
-import { createBrickServer } from "../src/server";
+import { brick } from "../src/index";
 
 describe("@brickkit/cli Server Engine", () => {
   beforeEach(() => {
@@ -58,7 +58,7 @@ describe("@brickkit/cli Server Engine", () => {
     dealsService.action(createDeal);
     dealsService.action(listDeals);
 
-    const app = createBrickServer({ services: [dealsService] });
+    const app = brick({ services: [dealsService] });
 
     // 1. Health check
     const healthRes = await app.handle(new Request("http://localhost:4000/_health"));

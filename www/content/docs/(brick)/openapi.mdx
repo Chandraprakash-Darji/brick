@@ -23,7 +23,7 @@ Options: `title` (default `"Brick-TS API Mesh"`), `version` (`"1.0.0"`), `descri
 
 ## Served paths
 
-`createBrickServer` wires these automatically (all paths configurable via options):
+`brick` wires these automatically (all paths configurable via options):
 
 | Path | Content |
 |------|---------|
@@ -33,7 +33,7 @@ Options: `title` (default `"Brick-TS API Mesh"`), `version` (`"1.0.0"`), `descri
 | `GET /_brick/services` | Architecture JSON (`exportArchitecture()`) |
 
 ```ts
-const app = createBrickServer({
+const app = brick({
   services: [pagesService],
   title: "Pages API",
   version: "1.0.0",

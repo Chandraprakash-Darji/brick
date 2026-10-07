@@ -48,7 +48,10 @@ export interface CreateServerOptions {
 
 export { compileRoutePlan, executeCompiledRoute, createActionHandler } from "./action-handler";
 
-export function createBrickServer(options: CreateServerOptions = {}): BrickApp {
+/** @deprecated Use brick() instead. */
+export const createBrickServer = brick;
+
+export function brick(options: CreateServerOptions = {}): BrickApp {
   const prefix = options.prefix ?? options.compilation?.ir.prefix ?? "/api";
   const title = options.title ?? "Brick-TS API Mesh";
   const version = options.version ?? "1.0.0";

@@ -1,4 +1,4 @@
-export { createBrickServer, type CreateServerOptions } from "./server";
+export { brick, createBrickServer, type CreateServerOptions } from "./server";
 export {
   type BrickApp,
   type EndpointContext,

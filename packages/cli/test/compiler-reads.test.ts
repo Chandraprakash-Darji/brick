@@ -1,6 +1,6 @@
 import { beforeEach, expect, it } from "bun:test";
 import { defineDatabase, defineService, resetGlobalRegistry, syncSchema, sqliteTable, text, integer, eq } from "@brickkit/core";
-import { createBrickServer } from "../src/server";
+import { brick } from "../src/server";
 import { compileBrickApplication } from "../src/compiler";
 
 beforeEach(resetGlobalRegistry);
@@ -33,7 +33,7 @@ it("compiles GET/list/count SQL before requests and preserves mapping, owner sco
     expect(compilation.ir.reads[0]!.get).toContain('"row_id"');
     expect(compilation.ir.reads[0]!.ownerList).toContain('"owner_id"');
     expect(compilation.ir.reads[0]!.count).toContain("count(*)");
-    const app = createBrickServer({ services: [service], compilation, requestLogging: false });
+    const app = brick({ services: [service], compilation, requestLogging: false });
     let builds = 0;
     const original = db.select.bind(db);
     (db as any).select = (...args: any[]) => { builds++; return original(...args as []); };
@@ -70,8 +70,8 @@ it("compiles GET/list/count SQL before requests and preserves mapping, owner sco
 it("matches the general query path for pagination, projection, filters, custom sorting and cursors", async () => {
   const candidate = fixture("candidate"), baseline = fixture("baseline");
   try {
-    const app = createBrickServer({ services: [candidate.service], requestLogging: false });
-    const generic = createBrickServer({ services: [baseline.service], requestLogging: false, compiler: false });
+    const app = brick({ services: [candidate.service], requestLogging: false });
+    const generic = brick({ services: [baseline.service], requestLogging: false, compiler: false });
     const paths = ["/api/item?limit=2", "/api/item?limit=2&page=2", "/api/item?limit=1&offset=2", "/api/item?limit=2&sort=-title",
       "/api/item?limit=2&published=true", "/api/item?limit=2&select=id,title", "/api/item?limit=2&sort=invalid", "/api/item?limit=2&search=Alpha", "/api/item?limit=99", "/api/item/a", "/api/item/b"];
     for (const path of paths) {
@@ -95,7 +95,7 @@ it("separates read caches for identically named resources on a shared database",
     db.insert(a).values({ id: "same", title: "A" }).run(); db.insert(b).values({ id: "same", title: "B" }).run();
     const one = defineService("one", { database }), two = defineService("two", { database });
     one.resource({ name: "item", table: a, defaultSort: "id" }); two.resource({ name: "item", table: b, defaultSort: "id" });
-    const app = createBrickServer({ services: [one, two], requestLogging: false });
+    const app = brick({ services: [one, two], requestLogging: false });
     for (const [service, title] of [["one", "A"], ["two", "B"]]) {
       const response = await app.handle(new Request(`http://localhost/api/${service}/item.get`, { method: "POST", headers: { "content-type": "application/json" }, body: '{"id":"same"}' }));
       expect((await response.json()).title).toBe(title);
@@ -125,7 +125,7 @@ it("specializes every CRUD method while preserving hooks, ownership, errors and 
     const compilation = compileBrickApplication({ services: [service], mode: compiler ? "specialized" : "generic" });
     expect(compilation.ir.routes.filter(route => route.kind === "resource").map(route => route.method).sort())
       .toEqual(["GET", "GET", "POST", "PATCH", "PUT", "DELETE"].sort());
-    return { app: createBrickServer({ services: [service], compilation, compiler, requestLogging: false }), db, hooks };
+    return { app: brick({ services: [service], compilation, compiler, requestLogging: false }), db, hooks };
   }
   const a = setup("compiled_crud", true), b = setup("generic_crud", false);
   const commands = [

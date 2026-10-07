@@ -51,8 +51,8 @@ Benchmark throughput and p99 together before making performance claims.
 Startup compilation is enabled by default:
 
 ```ts
-import { createBrickServer } from '@brickkit/cli';
-const app = createBrickServer({ services: [pagesService] });
+import { brick } from '@brickkit/cli';
+const app = brick({ services: [pagesService] });
 app.listen(4000);
 ```
 
@@ -105,7 +105,7 @@ the original schemas, preserving TypeBox symbols, formats and validator behavior
 TypeBox validator compilation still happens once at startup; pre-emitting
 validator code is a separate future optimization.
 
-For comparison or rollback, `createBrickServer({ compiler: false })` uses the
+For comparison or rollback, `brick({ compiler: false })` uses the
 original general action handler. Raw `app.endpoint()` handlers remain on their
 existing adapter. Direct/RPC action calls retain their core execution path.
 

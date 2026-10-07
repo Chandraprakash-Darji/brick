@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /** Paired compiler/general-handler comparison. External oha; server processes stay separate. */
 import { defineService, resetGlobalRegistry, t, defineDatabase, syncSchema, sqliteTable, text } from "../packages/core/src";
-import { createBrickServer } from "../packages/cli/src/server";
+import { brick } from "../packages/cli/src/server";
 import { argInt, argStr, median, parseArgs } from "./lib/stats";
 import { runLoad } from "./lib/load";
 import { collectManifest } from "./lib/manifest";
@@ -37,7 +37,7 @@ if (args.server) {
     })();
     return { rows: count };
   };
-  const app = createBrickServer({ services: [service, secure, store], compiler: args.server === "compiled", docs: false, requestLogging: false });
+  const app = brick({ services: [service, secure, store], compiler: args.server === "compiled", docs: false, requestLogging: false });
   // Fixture management is outside every timed load. Never expose these routes in an application.
   app.post("/__bench/reset", ({ body }: any) => reset(body.count, body.deletion));
   app.get("/__bench/state", () => ({ rows: client.query("SELECT COUNT(*) AS count FROM compiler_items").get(),

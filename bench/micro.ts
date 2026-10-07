@@ -21,7 +21,7 @@ import {
   validateWithSchema,
   Type,
 } from "../packages/core/src/index";
-import { createBrickServer } from "../packages/cli/src/server";
+import { brick } from "../packages/cli/src/server";
 import { parseArgs, argStr, fmtNs } from "./lib/stats";
 import { collectManifest, writeJson, stamp } from "./lib/manifest";
 import {
@@ -173,7 +173,7 @@ function main(): Promise<{ results: MicroResult[]; path: string }> {
     {
       const { service } = makeBenchFixture("micro-http");
       service.action({ name: "getInput", input: Type.Object({ slug: Type.String(), count: Type.Number() }), execute: ({ input }) => input });
-      const app = createBrickServer({ services: [service], requestLogging: false, docs: false });
+      const app = brick({ services: [service], requestLogging: false, docs: false });
       const getReq = () =>
         new Request(`http://localhost/api/${service.name}/getInput?slug=abc&count=3`, { method: "GET" });
       const postReq = () =>
@@ -284,7 +284,7 @@ function main(): Promise<{ results: MicroResult[]; path: string }> {
         await run(
           "server-init",
           `${count}-actions`,
-          () => createBrickServer({ services: [svc], requestLogging: false, docs: false }),
+          () => brick({ services: [svc], requestLogging: false, docs: false }),
           count >= 100 ? 20 : 50
         );
       }

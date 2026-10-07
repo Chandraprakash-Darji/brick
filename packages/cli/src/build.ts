@@ -30,11 +30,11 @@ export async function buildApplication(options: BuildApplicationOptions) {
   try {
     await Bun.write(join(staging, "routes.js"), emitCompiledApplication(compilation.ir));
     const source = `import ${JSON.stringify(entry)};
-import { createBrickServer } from "@brickkit/cli";
+import { brick } from "@brickkit/cli";
 import { getGlobalRegistry } from "@brickkit/core";
 import { bind } from "./routes.js";
 const services = getGlobalRegistry().list();
-export const app = createBrickServer({ services, compilation: bind(services), requestLogging: ${options.requestLogging ?? true} });
+export const app = brick({ services, compilation: bind(services), requestLogging: ${options.requestLogging ?? true} });
 if (import.meta.main) {
   const port = Number(process.env.PORT ?? ${port});
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error("Invalid PORT");

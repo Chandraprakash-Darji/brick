@@ -5,7 +5,7 @@ import {
   t,
   resetGlobalRegistry,
 } from "@brickkit/core";
-import { createBrickServer } from "../src/server";
+import { brick } from "../src/server";
 
 describe("@brickkit/cli OpenAPI & Interactive Documentation Server", () => {
   beforeEach(() => {
@@ -35,7 +35,7 @@ describe("@brickkit/cli OpenAPI & Interactive Documentation Server", () => {
 
     pagesService.action(createPage);
 
-    const app = createBrickServer({
+    const app = brick({
       title: "Pages Platform API",
       version: "2.5.0",
       services: [pagesService],
@@ -74,7 +74,7 @@ describe("@brickkit/cli OpenAPI & Interactive Documentation Server", () => {
 
   it("should allow disabling documentation via docs: false", async () => {
     const s = defineService("empty");
-    const app = createBrickServer({
+    const app = brick({
       docs: false,
       services: [s],
     });

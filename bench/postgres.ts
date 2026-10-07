@@ -2,7 +2,7 @@
 /** Optional PostgreSQL lane. Uses only a uniquely named benchmark table. */
 import { defineDatabase, defineService, eq, sql } from "../packages/core/src/index";
 import { pgTable, text } from "../packages/core/src/pg";
-import { createBrickServer } from "../packages/cli/src/server";
+import { brick } from "../packages/cli/src/server";
 import { runLoad } from "./lib/load";
 import { parseArgs, argInt, argList, argStr } from "./lib/stats";
 import { collectManifest, stamp, writeJson } from "./lib/manifest";
@@ -21,7 +21,7 @@ async function main() {
   const database = defineDatabase({ engine: "postgres", url, tables: [table], max: 16 });
   const db = database.getDb();
   const client = (db as any).$client;
-  let app: ReturnType<typeof createBrickServer> | undefined;
+  let app: ReturnType<typeof brick> | undefined;
   let created = false;
   try {
     await client.unsafe(`CREATE TABLE "${name}" (id text PRIMARY KEY, title text NOT NULL)`);
@@ -30,7 +30,7 @@ async function main() {
     await client.unsafe(`INSERT INTO "${name}" SELECT 'seed_' || i, 'Benchmark ' || i FROM generate_series(0, $1::integer - 1) i`, [rows]);
     const service = defineService(name, { database, context: () => ({ logger: { info() {}, warn() {}, error() {}, debug() {} } }) });
     service.resource({ name: "item", table, defaultSort: "id" });
-    app = createBrickServer({ services: [service], docs: false, requestLogging: false });
+    app = brick({ services: [service], docs: false, requestLogging: false });
     app.listen(0);
     const base = `http://127.0.0.1:${app.server!.port}/api/item`;
     const results = [];

@@ -52,7 +52,7 @@ Enforce "one row per key" with a `UNIQUE` column (as above) plus a `beforeCreate
 For `GET /settings/:key` style routes, register a raw endpoint outside the action mesh:
 
 ```ts
-const app = createBrickServer({ services: [settingsService] });
+const app = brick({ services: [settingsService] });
 
 app.endpoint({
   method: "GET",

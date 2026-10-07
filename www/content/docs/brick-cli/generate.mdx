@@ -27,7 +27,7 @@ brick gen foo
 
 ## generateOpenApiSpec options
 
-The same function powers the live `GET /openapi.json` route in `createBrickServer`. Options (`packages/core/src/openapi.ts`):
+The same function powers the live `GET /openapi.json` route in `brick`. Options (`packages/core/src/openapi.ts`):
 
 ```typescript
 import { generateOpenApiSpec } from "@brickkit/core";
@@ -51,9 +51,9 @@ How paths are built:
 - The live route merges raw endpoint paths: `{ ...spec.paths, ...endpointPaths(endpointDefs) }`, so `app.endpoint()` definitions appear alongside the action mesh.
 
 ```typescript
-import { createBrickServer } from "@brickkit/cli";
+import { brick } from "@brickkit/cli";
 
-const app = createBrickServer({
+const app = brick({
   title: "My API",
   version: "2.0.0",
   prefix: "/api",

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /** Cold process startup, idle CPU and runnable server bundle footprint. */
 import { gzipSync } from "node:zlib";
-import { createBrickServer } from "../packages/cli/src/server";
+import { brick } from "../packages/cli/src/server";
 import { defineService } from "../packages/core/src";
 import { collectManifest, writeJson, stamp } from "./lib/manifest";
 import { median, parseArgs } from "./lib/stats";
@@ -10,7 +10,7 @@ const args = parseArgs(process.argv.slice(2));
 if (args.child) {
   const service = defineService("footprint");
   service.action({ name: "ping", execute: () => ({ ok: true }) });
-  const app = createBrickServer({ services: [service], requestLogging: false, docs: false });
+  const app = brick({ services: [service], requestLogging: false, docs: false });
   app.listen(0);
   console.log(JSON.stringify({ port: app.server!.port }));
   // Warm the first request, then measure this server process alone while idle.

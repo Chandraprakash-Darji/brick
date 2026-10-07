@@ -8,7 +8,7 @@ import {
   integer,
   t,
 } from "@brickkit/core";
-import { createBrickServer } from "../src/server";
+import { brick } from "../src/server";
 
 const notesTable = sqliteTable("notes", {
   id: text("id").primaryKey(),
@@ -22,7 +22,7 @@ const notesTable = sqliteTable("notes", {
 
 describe("REST Route Binding for Resources (@brickkit/cli)", () => {
   let notesService: import("@brickkit/core").Service;
-  let app: ReturnType<typeof createBrickServer>;
+  let app: ReturnType<typeof brick>;
 
   beforeEach(() => {
     const database = defineDatabase({ tables: [notesTable] });
@@ -54,7 +54,7 @@ describe("REST Route Binding for Resources (@brickkit/cli)", () => {
       },
     });
 
-    app = createBrickServer({ services: [notesService] });
+    app = brick({ services: [notesService] });
   });
 
   it("should mount /api/note (POST, GET) and /api/note/:id (GET, PATCH, DELETE)", async () => {

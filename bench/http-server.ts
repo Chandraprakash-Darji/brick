@@ -15,7 +15,7 @@
  */
 import { Elysia } from "elysia";
 import { defineDatabase, syncSchema, ensureResourceIndexes, ensureSQLiteFts, type Service } from "../packages/core/src/index";
-import { createBrickServer } from "../packages/cli/src/server";
+import { brick } from "../packages/cli/src/server";
 import { benchTable } from "./lib/fixtures";
 import { seedRows } from "./lib/fixtures";
 import { parseArgs, argInt, argStr } from "./lib/stats";
@@ -144,7 +144,7 @@ export async function startBrickServer(opts: {
     })
   );
 
-  const app = createBrickServer({
+  const app = brick({
     services: [service, authService],
     requestLogging: false,
     docs: false,

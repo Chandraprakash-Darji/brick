@@ -6,7 +6,7 @@ import {
   t,
   ActionExecutionError,
 } from "@brickkit/core";
-import { createBrickServer } from "../src/server";
+import { brick } from "../src/server";
 
 function makeService() {
   const svc = defineService("items");
@@ -37,7 +37,7 @@ describe("@brickkit/cli request logging & reference docs", () => {
 
   it("keeps normal GET at 200 and logs `METHOD path → status`", async () => {
     const lines: string[] = [];
-    const app = createBrickServer({
+    const app = brick({
       services: [makeService()],
       requestLogging: { logger: (msg) => lines.push(msg) },
     });
@@ -53,7 +53,7 @@ describe("@brickkit/cli request logging & reference docs", () => {
 
   it("preserves mapped error responses while logging them", async () => {
     const lines: string[] = [];
-    const app = createBrickServer({
+    const app = brick({
       services: [makeService()],
       requestLogging: { logger: (msg) => lines.push(msg) },
     });
@@ -78,7 +78,7 @@ describe("@brickkit/cli request logging & reference docs", () => {
 
   it("logs framework errors (404) without changing the response", async () => {
     const lines: string[] = [];
-    const app = createBrickServer({
+    const app = brick({
       services: [makeService()],
       requestLogging: { logger: (msg) => lines.push(msg) },
     });
@@ -91,7 +91,7 @@ describe("@brickkit/cli request logging & reference docs", () => {
   });
 
   it("serves Scalar HTML on GET /reference when enabled", async () => {
-    const app = createBrickServer({
+    const app = brick({
       services: [],
       requestLogging: false,
       reference: { path: "/reference", title: "Test API" },
@@ -107,7 +107,7 @@ describe("@brickkit/cli request logging & reference docs", () => {
   });
 
   it("defaults reference specUrl to a custom openApiPath", async () => {
-    const app = createBrickServer({
+    const app = brick({
       services: [],
       requestLogging: false,
       openApiPath: "/spec.json",
@@ -121,7 +121,7 @@ describe("@brickkit/cli request logging & reference docs", () => {
   });
 
   it("returns 404 for /reference when disabled (default)", async () => {
-    const app = createBrickServer({
+    const app = brick({
       services: [],
       requestLogging: false,
     });
@@ -137,7 +137,7 @@ describe("@brickkit/cli request logging & reference docs", () => {
       calls.push(args.map(String).join(" "));
     };
     try {
-      const app = createBrickServer({
+      const app = brick({
         services: [makeService()],
         requestLogging: false,
       });
@@ -153,7 +153,7 @@ describe("@brickkit/cli request logging & reference docs", () => {
 
   it("emits nothing when requestLogging is disabled via options object", async () => {
     const lines: string[] = [];
-    const app = createBrickServer({
+    const app = brick({
       services: [makeService()],
       requestLogging: { enabled: false, logger: (msg) => lines.push(msg) },
     });

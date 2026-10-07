@@ -161,7 +161,7 @@ export function endpointPaths(defs: EndpointDefinition[]): Record<string, any> {
   return paths;
 }
 
-/** The app object returned by `createBrickServer`: Elysia plus `endpoint()`. */
+/** The app object returned by `brick`: Elysia plus `endpoint()`. */
 export type BrickApp = Elysia<any, any, any, any, any, any, any> & {
   /** Register a raw endpoint (outside the JSON action mesh). */
   endpoint(def: EndpointDefinition): void;

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { defineService, resetGlobalRegistry, t } from "@brickkit/core";
 import { compileBrickApplication, emitCompiledApplication } from "../src/compiler";
-import { createBrickServer } from "../src/server";
+import { brick } from "../src/server";
 
 beforeEach(resetGlobalRegistry);
 const request = (path: string, method = "GET", body?: unknown, headers: Record<string, string> = {}) => new Request(`http://localhost${path}`, {
@@ -43,8 +43,8 @@ it("matches generic route behavior for input precedence, coercion, schema errors
   service.action({ name: "badOutput", output: t.Number(), execute: async () => "bad" as any });
   service.action({ name: "knownError", execute: ({ error }) => error.NOT_FOUND("missing") });
   service.action({ name: "broken", execute: () => { throw new Error("broken"); } });
-  const compiled = createBrickServer({ services: [service], requestLogging: false });
-  const generic = createBrickServer({ services: [service], requestLogging: false, compiler: false });
+  const compiled = brick({ services: [service], requestLogging: false });
+  const generic = brick({ services: [service], requestLogging: false, compiler: false });
   const cases: [string, string, unknown?, Record<string, string>?][] = [
     ["/custom/path?count=2&enabled=1&id=query", "GET", undefined, { "x-user": "alice" }],
     ["/custom/path?count=0x10&enabled=false", "GET", undefined, { "x-user": "alice" }],
@@ -75,7 +75,7 @@ it("isolates request contexts and maps Promise/thenable rejections", async () =>
   const plain = defineService("plain");
   plain.action({ name: "getThenable", output: t.Object({ ok: t.Boolean() }), execute: () => ({ then: (resolve: Function) => resolve({ ok: true }) }) as any });
   plain.action({ name: "getRejected", execute: () => Promise.reject(new Error("rejected")) });
-  const app = createBrickServer({ services: [service, plain], requestLogging: false });
+  const app = brick({ services: [service, plain], requestLogging: false });
   const users = await Promise.all(Array.from({ length: 16 }, async (_, i) => {
     const response = await app.handle(request("/api/async/getUser", "GET", undefined, { "x-user": String(i) }));
     return response.json();
@@ -98,7 +98,7 @@ it("loads emitted handler functions and rejects stale schemas rather than using 
     await Bun.write(path, emitCompiledApplication(compilation.ir, new URL("../src/compiler.ts", import.meta.url).href));
     const emitted = await import(path);
     const rebound = emitted.bind([service]);
-    const app = createBrickServer({ services: [service], compilation: rebound, requestLogging: false });
+    const app = brick({ services: [service], compilation: rebound, requestLogging: false });
     expect(await (await app.handle(request("/v1/emitted/getItem?id=abc"))).json()).toEqual({ id: "abc" });
     action.config.input = t.Object({ id: t.Number() }) as any;
     expect(() => emitted.bind([service])).toThrow("differ from the compiled IR");

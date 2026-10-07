@@ -1,7 +1,7 @@
 import { existsSync } from "fs";
 import { resolve } from "path";
 import { getGlobalRegistry } from "@brickkit/core";
-import { createBrickServer } from "./server";
+import { brick } from "./server";
 
 export interface DevServerOptions {
   port?: number;
@@ -41,7 +41,7 @@ export async function startDevServer(options: DevServerOptions = {}) {
     }
   }
 
-  const app = createBrickServer({
+  const app = brick({
     port,
     prefix: options.prefix,
   });

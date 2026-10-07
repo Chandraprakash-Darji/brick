@@ -42,7 +42,7 @@ JSON response (ValidationError → its status; ActionExecutionError → its stat
 
 ## Route map
 
-`createBrickServer` mounts three route families (from `packages/cli/src/server.ts`):
+`brick` mounts three route families (from `packages/cli/src/server.ts`):
 
 - **REST** — `GET/POST /api/{resource}`, `GET/PATCH/PUT/DELETE /api/{resource}/:id` per enabled operation.
 - **Action mesh** — `POST /api/{service}/{action}` for every action, plus `GET` for read-like actions (names starting `get`/`list`/`find`/`read`).
@@ -70,7 +70,7 @@ export const getPublicPage = pagesService.action({
 
 ## Stage details
 
-1. **Elysia coerce.** `createBrickServer` coerces query strings to the input schema's `number`/`integer`/`boolean` types, then merges route params, JSON body, and query into one `input` object.
+1. **Elysia coerce.** `brick` coerces query strings to the input schema's `number`/`integer`/`boolean` types, then merges route params, JSON body, and query into one `input` object.
 2. **Input validation.** `defineAction` validates `input` against the action's TypeBox schema before anything else runs. Resource create/update/get/delete/list schemas are derived from the Drizzle table (see [Resources](/docs/resources)); custom constraints come from `fields` overrides or your own `input: t.Object(...)` on custom actions.
 3. **Context resolution.** `service.resolveContext()` builds the `BaseContext` (`request`, `db`, `logger`, `traceId`, `requestId`, `services`, `metadata`) and awaits your `context` resolver once per request. The canonical pattern loads the Better Auth session and returns `{ user, session }` — see [Access Control](/docs/access-control).
 4. **Authorization.** If the action declares `authorize({ user, input, ctx })`, a falsy result throws `ActionExecutionError("UNAUTHORIZED", …, 403)`. Generated CRUD actions carry no `authorize` by default — attach your own (the pages example late-binds a `requireSignedIn` guard onto every generated action).

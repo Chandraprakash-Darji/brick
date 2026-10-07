@@ -14,7 +14,7 @@ composing the primitives below — all TypeScript, in your own service files.
 | Custom actions | `service.action()` with optional `path` / `method` | Domain operations that are not CRUD (publish, render, invite) |
 | Raw endpoints | `app.endpoint({ method, path, handler, service, database, summary, description, tags })` | HTML pages, webhooks, MCP transports — anything outside the JSON action mesh |
 | Service proxy | `createServiceProxy()` | Call another service's actions with typed dispatch |
-| Built-in capabilities | `createBrickServer()` options | Request logging, Scalar / Swagger docs, OpenAPI, health, architecture export |
+| Built-in capabilities | `brick()` options | Request logging, Scalar / Swagger docs, OpenAPI, health, architecture export |
 
 ## Endpoint context
 
@@ -41,7 +41,7 @@ status; anything else becomes a 500.
 
 ## Where to go next
 
-- [Built-in capabilities](/docs/plugins/built-in) — what `createBrickServer()` gives you for free.
+- [Built-in capabilities](/docs/plugins/built-in) — what `brick()` gives you for free.
 - [Audit-trail pattern](/docs/plugins/audit) — `afterCreate` / `afterUpdate` / `afterDelete` hooks writing audit rows.
 - [Comments pattern](/docs/plugins/comments) — a comments table + resource with author checks.
 - [Build an extension](/docs/plugins/build-plugin) — runnable comments module with CRUD, hooks and a custom action.

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import { createBrickServer } from "@brickkit/cli";
+import { brick } from "@brickkit/cli";
 import { defineDatabase, syncSchema } from "@brickkit/core";
 import {
   pagesService,
@@ -14,13 +14,13 @@ import {
 } from "../src/services/pages/service";
 
 describe("Pages Service E2E Tests (Mirroring ../pages)", () => {
-  let app: ReturnType<typeof createBrickServer>;
+  let app: ReturnType<typeof brick>;
 
   beforeEach(async () => {
     const database = defineDatabase({ tables: { pagesTable } });
     syncSchema(database.tables, database.getDb());
     pagesService.setDb(database);
-    app = createBrickServer({ services: [pagesService] });
+    app = brick({ services: [pagesService] });
     const db = pagesService.getDb();
     if (db) {
       await db.delete(pagesTable);

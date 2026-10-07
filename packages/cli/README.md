@@ -9,9 +9,9 @@ bun add @brickkit/cli @brickkit/core
 ```
 
 ```ts
-import { createBrickServer } from "@brickkit/cli";
+import { brick } from "@brickkit/cli";
 
-const app = createBrickServer({ title: "Pages API", version: "1.0.0" });
+const app = brick({ title: "Pages API", version: "1.0.0" });
 app.listen(3333);
 ```
 
@@ -40,3 +40,5 @@ bun dist/brick/server.js
 
 See [the compilation plan and artifact contract](COMPILER.md) for implemented
 stages, limitations and the next optimizations.
+
+`createBrickServer` remains available as a deprecated alias. Use `brick()` in new code.

@@ -1,6 +1,6 @@
 import { beforeEach, expect, it } from "bun:test";
 import { defineDatabase, defineService, resetGlobalRegistry, syncSchema, sqliteTable, text, integer, t, sql } from "@brickkit/core";
-import { createBrickServer } from "../src/server";
+import { brick } from "../src/server";
 
 beforeEach(resetGlobalRegistry);
 const logger = { info() {}, warn() {}, error() {}, debug() {} };
@@ -15,7 +15,7 @@ function fixture(table: any, compiler: boolean, extra: any = {}) {
   let sequence = 0;
   const service = defineService(compiler ? "compiled_writes" : "generic_writes", { database, context: () => ({ logger }) });
   service.resource({ name: "item", table, defaultSort: "id", idGenerator: () => `id-${sequence++}`, ...extra });
-  const app = createBrickServer({ services: [service], compiler, requestLogging: false });
+  const app = brick({ services: [service], compiler, requestLogging: false });
   return { app, service, db, statements };
 }
 
@@ -145,7 +145,7 @@ it("keeps dynamic writes for a database supplied by request context", async () =
   syncSchema(primary.tables, first); syncSchema(secondary.tables, second);
   const service = defineService("context_writes", { database: primary, context: () => ({ db: second, logger }) });
   service.resource({ name: "item", table, idGenerator: () => "other-db", defaultSort: "id" });
-  const app = createBrickServer({ services: [service], requestLogging: false });
+  const app = brick({ services: [service], requestLogging: false });
   try {
     const created = await app.handle(request("POST", "/api/item", { title: "Secondary" }));
     expect(created.status).toBe(200); expect((await created.json()).title).toBe("Secondary");

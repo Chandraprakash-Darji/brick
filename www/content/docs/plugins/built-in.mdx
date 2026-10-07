@@ -1,9 +1,9 @@
 ---
 title: Built-in Capabilities
-description: Request logging, docs, health, and architecture export from createBrickServer
+description: Request logging, docs, health, and architecture export from brick
 ---
 
-These ship with `@brickkit/cli` — no install step, just `createBrickServer()`
+These ship with `@brickkit/cli` — no install step, just `brick()`
 options. They are framework behavior, not add-on packages.
 
 ## Request logging
@@ -11,9 +11,9 @@ options. They are framework behavior, not add-on packages.
 On by default. Every route is timed and logged via the `requestLoggingPlugin`:
 
 ```ts
-import { createBrickServer } from "@brickkit/cli";
+import { brick } from "@brickkit/cli";
 
-const app = createBrickServer({ requestLogging: true });
+const app = brick({ requestLogging: true });
 ```
 
 Pass an options object to tune it, or `false` to disable.
@@ -23,7 +23,7 @@ Pass an options object to tune it, or `false` to disable.
 Interactive docs are served from the live OpenAPI spec:
 
 ```ts
-const app = createBrickServer({
+const app = brick({
   docs: true, // GET /openapi.json, /docs (Scalar), /swagger
   reference: { path: "/reference", title: "Pages API" },
 });
@@ -61,7 +61,7 @@ import { secret } from "@brickkit/core";
 export const portSecret = secret("PORT").default("3333").transform(Number);
 export const databaseUrlSecret = secret("DATABASE_URL");
 
-const app = createBrickServer({
+const app = brick({
   port: portSecret.require(),
   secrets: { validate: true }, // fail fast on missing required secrets
 });

@@ -82,12 +82,12 @@ console.log(JSON.stringify(getGlobalRegistry().exportArchitecture(), null, 2));
 
 ## Live route: GET /_brick/services
 
-Every server built with `createBrickServer` exposes the same export at runtime:
+Every server built with `brick` exposes the same export at runtime:
 
 ```typescript
-import { createBrickServer } from "@brickkit/cli";
+import { brick } from "@brickkit/cli";
 
-const app = createBrickServer({ port: 4000 });
+const app = brick({ port: 4000 });
 app.listen(4000);
 // GET http://localhost:4000/_brick/services → ArchitectureSchema JSON
 ```
@@ -109,7 +109,7 @@ console.log(listSecrets());
 // [{ name: "DATABASE_URL", hasDefault: false, isSet: true }]
 ```
 
-At boot, `createBrickServer` fail-fasts via `resolveSecrets()` (unless `secrets.validate === false`), throwing a single error listing all missing required secrets.
+At boot, `brick` fail-fasts via `resolveSecrets()` (unless `secrets.validate === false`), throwing a single error listing all missing required secrets.
 
 ## How dashboards consume it
 

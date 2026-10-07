@@ -7,7 +7,7 @@ import {
   resetGlobalRegistry,
   ActionExecutionError,
 } from "@brickkit/core";
-import { createBrickServer } from "../src/server";
+import { brick } from "../src/server";
 
 describe("@brickkit/cli app.endpoint()", () => {
   beforeEach(() => {
@@ -19,7 +19,7 @@ describe("@brickkit/cli app.endpoint()", () => {
     const database = defineDatabase({ tables: { table } });
     const service = defineService("runtime_untouched", { database });
     service.resource({ name: "untouched", table });
-    const app = createBrickServer({ services: [service], secrets: { validate: false } });
+    const app = brick({ services: [service], secrets: { validate: false } });
     app.endpoint({ database, method: "GET", path: "/database", handler: ({ db }) => ({
       same: db === database.getDb(),
     }) });
@@ -32,7 +32,7 @@ describe("@brickkit/cli app.endpoint()", () => {
   });
 
   it("serves a raw HTML endpoint with status and headers", async () => {
-    const app = createBrickServer({ services: [] });
+    const app = brick({ services: [] });
     app.endpoint({
       handler: ({ params, set }) => {
         set.headers["content-type"] = "text/html; charset=utf-8";
@@ -61,7 +61,7 @@ describe("@brickkit/cli app.endpoint()", () => {
 
   it("injects the service db into the handler", async () => {
     const svc = defineService("ep_svc", { database: defineDatabase() });
-    const app = createBrickServer({ services: [svc] });
+    const app = brick({ services: [svc] });
 
     // Note: like raw app.get, endpoints must be registered before the first
     // request (Elysia compiles routes ahead-of-time).
@@ -94,7 +94,7 @@ describe("@brickkit/cli app.endpoint()", () => {
   });
 
   it("mounts startup endpoints from options and lists them", async () => {
-    const app = createBrickServer({
+    const app = brick({
       endpoints: [{ handler: () => "ok", method: "GET", path: "/ready" }],
       services: [],
     });
@@ -104,7 +104,7 @@ describe("@brickkit/cli app.endpoint()", () => {
   });
 
   it("dedupes double registration through the shared mountRoute", async () => {
-    const app = createBrickServer({ services: [] });
+    const app = brick({ services: [] });
     const def = { handler: () => "once", method: "GET" as const, path: "/once" };
     app.endpoint(def);
     app.endpoint(def);
@@ -114,7 +114,7 @@ describe("@brickkit/cli app.endpoint()", () => {
   });
 
   it("maps handler errors to mesh-consistent JSON", async () => {
-    const app = createBrickServer({ services: [] });
+    const app = brick({ services: [] });
     app.endpoint({
       handler: () => {
         throw new ActionExecutionError("GONE", "nope", 410);
@@ -138,7 +138,7 @@ describe("@brickkit/cli app.endpoint()", () => {
   });
 
   it("lists raw endpoints in the OpenAPI spec with {param} paths", async () => {
-    const app = createBrickServer({
+    const app = brick({
       endpoints: [
         {
           description: "Raw HTML page viewer",

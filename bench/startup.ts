@@ -8,7 +8,7 @@
  *   hyperfine --warmup 5 --runs 30 'bun bench/startup-once.ts'
  */
 import { defineService, defineAction, resetGlobalRegistry } from "../packages/core/src/index";
-import { createBrickServer } from "../packages/cli/src/server";
+import { brick } from "../packages/cli/src/server";
 import { parseArgs, argInt, median, percentile } from "./lib/stats";
 import { collectManifest, writeJson, stamp } from "./lib/manifest";
 
@@ -27,7 +27,7 @@ export async function measureStartup(actions: number, port: number): Promise<Sta
     svc.action(defineAction({ name: `a${i}`, execute: async () => ({ ok: true }) }));
   }
   const t0 = performance.now();
-  const app = createBrickServer({ services: [svc], requestLogging: false, docs: false });
+  const app = brick({ services: [svc], requestLogging: false, docs: false });
   const buildMs = performance.now() - t0;
 
   const t1 = performance.now();

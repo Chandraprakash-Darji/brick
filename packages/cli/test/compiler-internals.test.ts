@@ -1,6 +1,6 @@
 import { beforeEach, expect, it } from "bun:test";
 import { defineService, getGlobalRegistry, resetGlobalRegistry } from "@brickkit/core";
-import { createBrickServer } from "../src/server";
+import { brick } from "../src/server";
 
 beforeEach(resetGlobalRegistry);
 const request = (path: string) => new Request("http://localhost" + path);
@@ -9,7 +9,7 @@ it("pre-renders built-in pages and reuses identical JSON across repeated request
   const service = defineService("internal");
   service.action({ name: "getReady", execute: () => ({ ok: true }) });
   const settings = { services: [service], requestLogging: false, reference: true, title: "Internal API" };
-  const compiled = createBrickServer(settings), generic = createBrickServer({ ...settings, compiler: false });
+  const compiled = brick(settings), generic = brick({ ...settings, compiler: false });
   for (const path of ["/docs", "/swagger", "/reference", "/openapi.json", "/_brick/services"]) {
     const baseline = await generic.handle(request(path));
     const body = await baseline.text();
@@ -34,7 +34,7 @@ it("invalidates architecture for definition changes, registry replacement and cl
   const original = registry.exportArchitecture.bind(registry);
   let exports = 0;
   registry.exportArchitecture = () => { exports++; return original(); };
-  const app = createBrickServer({ requestLogging: false });
+  const app = brick({ requestLogging: false });
   for (let i = 0; i < 3; i++) await (await app.handle(request("/_brick/services"))).json();
   expect(exports).toBe(1);
   service.action({ name: "newAction", execute: () => null });
@@ -52,7 +52,7 @@ it("invalidates architecture for definition changes, registry replacement and cl
 
 it("invalidates OpenAPI when endpoints or service action definitions are added", async () => {
   const service = defineService("spec");
-  const app = createBrickServer({ services: [service], requestLogging: false,
+  const app = brick({ services: [service], requestLogging: false,
     endpoints: [{ method: "GET", path: "/first", handler: () => "first" }] });
   expect((await (await app.handle(request("/openapi.json"))).json()).paths["/first"]).toBeDefined();
   app.endpoint({ method: "GET", path: "/later", handler: () => "later" });

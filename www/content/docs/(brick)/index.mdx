@@ -7,7 +7,7 @@ Brick-TS is a TypeScript framework that gives developers **resource-based CRUD +
 
 ```ts
 import { defineService, defineDatabase } from "@brickkit/core";
-import { createBrickServer } from "@brickkit/cli";
+import { brick } from "@brickkit/cli";
 import { pagesTable } from "./services/pages/service";
 
 export const pagesDb = defineDatabase({
@@ -30,7 +30,7 @@ pagesService.resource({
   },
 });
 
-const app = createBrickServer({ port: 4000, services: [pagesService] });
+const app = brick({ port: 4000, services: [pagesService] });
 app.listen(4000);
 ```
 
@@ -49,7 +49,7 @@ Starts on `:4000` — health check at `/_health`, live OpenAPI at `/openapi.json
 | Package | Contents |
 |---------|----------|
 | `@brickkit/core` | `defineService`, `defineAction`, `defineResource`, `defineDatabase`, `generateOpenApiSpec`, `secret`/`resolveSecrets`, `createServiceProxy`, TypeBox `t` |
-| `@brickkit/cli` | `createBrickServer` (Elysia app), raw `app.endpoint()`, `/openapi.json`, `/docs`, `/swagger`, `/_health`, `/_brick/services` |
+| `@brickkit/cli` | `brick` (Elysia app), raw `app.endpoint()`, `/openapi.json`, `/docs`, `/swagger`, `/_health`, `/_brick/services` |
 | `examples/basic` | Canonical `pages` service (`examples/basic/src/services/pages/service.ts`) — table, resource, hooks, custom actions |
 | `examples/pages` | Full app with the Better Auth context-resolver pattern (`apps/api/src/services/pages/page/service.ts`) |
 
