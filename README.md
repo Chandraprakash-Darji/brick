@@ -21,6 +21,6 @@ to npm and creates a GitHub release after each successful publish. The
 **Publish to npm** workflow also supports manual dispatch and a dry-run option.
 
 For token-free publishing, configure a trusted publisher in each npm package's
-settings: owner `brick-org`, repository `brick`, workflow `publish-npm.yml`, with
+settings: owner `Chandraprakash-Darji`, repository `brick`, workflow `publish-npm.yml`, with
 `npm publish` allowed. The initial publish can use the repository's `NPM_TOKEN`
 secret with write access to the `@brickkit` scope.

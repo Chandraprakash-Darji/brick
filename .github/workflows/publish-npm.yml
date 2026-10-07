@@ -9,7 +9,7 @@
 # the job fails before publishing. Re-pushing an already-published version
 # is a no-op (checked via `npm view`, not an error).
 #
-# Configure npm trusted publishing for brick-org/brick + publish-npm.yml.
+# Configure npm trusted publishing for Chandraprakash-Darji/brick + publish-npm.yml.
 # For the initial publish, NPM_TOKEN can be a granular token with write
 # access to @brickkit and permission to publish without interactive 2FA.
 #

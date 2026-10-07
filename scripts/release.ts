@@ -14,7 +14,7 @@
 //   - target tag(s) don't already exist on origin
 //   - `gh` authenticated (for GitHub access)
 //   - npm trust mappings configured per package (one-time, browser):
-//     npmjs.com package Settings -> Trusted Publisher -> brick-org/brick
+//     npmjs.com package Settings -> Trusted Publisher -> Chandraprakash-Darji/brick
 
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -141,5 +141,5 @@ for (const r of releases) {
 }
 
 console.log("\nshipped. The publish workflow now publishes via OIDC:");
-console.log("  https://github.com/brick-org/brick/actions/workflows/publish-npm.yml");
+console.log("  https://github.com/Chandraprakash-Darji/brick/actions/workflows/publish-npm.yml");
 console.log("Requires npm trusted-publisher entries or an NPM_TOKEN secret with publish access.");
