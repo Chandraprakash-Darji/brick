@@ -18,8 +18,10 @@ export function getCompiledCheck<T extends TSchema>(schema: T): TypeCheck<T> {
 
 export function validateWithSchema<T extends TSchema>(
   schema: T | undefined,
-  value: unknown
-): { success: true; data: Static<T> } | { success: false; errors: ValidationErrorItem[] } {
+  value: unknown,
+):
+  | { success: true; data: Static<T> }
+  | { success: false; errors: ValidationErrorItem[] } {
   if (!schema) {
     return { success: true, data: value as Static<T> };
   }

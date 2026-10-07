@@ -48,11 +48,12 @@ async function time(
   benchmark: string,
   variant: string,
   fn: () => unknown,
-  iters: number
+  iters: number,
 ): Promise<MicroResult> {
   const WARM = Math.min(1000, Math.max(50, Math.floor(iters / 10)));
   for (let i = 0; i < WARM; i++) await fn();
-  if (typeof Bun !== "undefined" && typeof (Bun as any).gc === "function") (Bun as any).gc(true);
+  if (typeof Bun !== "undefined" && typeof (Bun as any).gc === "function")
+    (Bun as any).gc(true);
   const heap0 = process.memoryUsage().heapUsed;
   const t0 = performance.now();
   for (let i = 0; i < iters; i++) await fn();
@@ -74,7 +75,10 @@ async function time(
 function coerceCopy(query: any, schema: any): any {
   if (!query || !schema || !schema.properties) return query;
   const coerced: Record<string, any> = { ...query };
-  for (const [key, prop] of Object.entries(schema.properties) as [string, any][]) {
+  for (const [key, prop] of Object.entries(schema.properties) as [
+    string,
+    any,
+  ][]) {
     const val = query[key];
     if (val === undefined) continue;
     const type = prop?.type;
@@ -101,17 +105,25 @@ function main(): Promise<{ results: MicroResult[]; path: string }> {
   return (async () => {
     const args = parseArgs(process.argv.slice(2));
     const smoke = args["smoke"] === true;
-    const filter = args["filter"] ? new RegExp(argStr(args, "filter", ".*")) : /.*/;
+    const filter = args["filter"]
+      ? new RegExp(argStr(args, "filter", ".*"))
+      : /.*/;
     const mult = Number(args["iters"] ?? 1) || 1;
-    const N = (n: number) => Math.max(20, Math.floor(((smoke ? n / 10 : n) as number) * mult));
+    const N = (n: number) =>
+      Math.max(20, Math.floor(((smoke ? n / 10 : n) as number) * mult));
 
     const results: MicroResult[] = [];
-    const run = async (b: string, v: string, fn: () => unknown, iters: number) => {
+    const run = async (
+      b: string,
+      v: string,
+      fn: () => unknown,
+      iters: number,
+    ) => {
       if (!filter.test(`${b}/${v}`)) return;
       const r = await time(b, v, fn, N(iters));
       results.push(r);
       console.log(
-        `  ${b} [${v}]  ${fmtNs(r.ns_per_op)}/op  ${r.ops_per_sec.toLocaleString()} ops/s  heap ${r.heap_delta_bytes_per_op} B/op`
+        `  ${b} [${v}]  ${fmtNs(r.ns_per_op)}/op  ${r.ops_per_sec.toLocaleString()} ops/s  heap ${r.heap_delta_bytes_per_op} B/op`,
       );
     };
 
@@ -124,22 +136,35 @@ function main(): Promise<{ results: MicroResult[]; path: string }> {
       });
       await run("context", "custom-hook", () => hooked.resolveContext(), 5000);
       const pre = await service.resolveContext();
-      await run("context", "pre-resolved", () => service.resolveContext(pre as any), 20000);
+      await run(
+        "context",
+        "pre-resolved",
+        () => service.resolveContext(pre as any),
+        20000,
+      );
     }
 
     console.log("== micro: action invocation ==");
     {
       const { noop, validated, full } = makeBenchFixture("micro-act");
       await run("action", "empty", () => noop.execute({}), 5000);
-      const asyncAct = defineAction({ name: "a", execute: async () => ({ ok: true }) });
+      const asyncAct = defineAction({
+        name: "a",
+        execute: async () => ({ ok: true }),
+      });
       await run("action", "async", () => asyncAct.execute({}), 5000);
       const ctx = { user: { id: "bench-user" } };
-      await run("action", "auth", () => full.execute({ input: { slug: "ab" }, ctx }), 3000);
+      await run(
+        "action",
+        "auth",
+        () => full.execute({ input: { slug: "ab" }, ctx }),
+        3000,
+      );
       await run(
         "action",
         "context-hook",
         () => validated.execute({ input: { slug: "abc", title: "hey there" } }),
-        3000
+        3000,
       );
       void ctx;
     }
@@ -152,12 +177,37 @@ function main(): Promise<{ results: MicroResult[]; path: string }> {
       const bigVal = twentyFieldValue();
       const nested = nestedSchema();
       const nestedVal = nestedValue();
-      const arr = Type.Array(Type.Object({ sku: Type.String(), qty: Type.Number() }));
-      const arrVal = Array.from({ length: 25 }, (_, i) => ({ sku: `s-${i}`, qty: i }));
-      await run("validation", "small-object", () => validateWithSchema(small, smallVal), 20000);
-      await run("validation", "20-field", () => validateWithSchema(big, bigVal), 5000);
-      await run("validation", "nested", () => validateWithSchema(nested, nestedVal), 5000);
-      await run("validation", "arrays", () => validateWithSchema(arr, arrVal), 5000);
+      const arr = Type.Array(
+        Type.Object({ sku: Type.String(), qty: Type.Number() }),
+      );
+      const arrVal = Array.from({ length: 25 }, (_, i) => ({
+        sku: `s-${i}`,
+        qty: i,
+      }));
+      await run(
+        "validation",
+        "small-object",
+        () => validateWithSchema(small, smallVal),
+        20000,
+      );
+      await run(
+        "validation",
+        "20-field",
+        () => validateWithSchema(big, bigVal),
+        5000,
+      );
+      await run(
+        "validation",
+        "nested",
+        () => validateWithSchema(nested, nestedVal),
+        5000,
+      );
+      await run(
+        "validation",
+        "arrays",
+        () => validateWithSchema(arr, arrVal),
+        5000,
+      );
     }
 
     console.log("== micro: validation errors ==");
@@ -165,17 +215,40 @@ function main(): Promise<{ results: MicroResult[]; path: string }> {
       const schema = twentyFieldSchema();
       const oneBad = { ...twentyFieldValue(), field_0: "nope" };
       const manyBad = twentyFieldValue(false);
-      await run("validation-errors", "one-error", () => validateWithSchema(schema, oneBad), 5000);
-      await run("validation-errors", "many-errors", () => validateWithSchema(schema, manyBad), 2000);
+      await run(
+        "validation-errors",
+        "one-error",
+        () => validateWithSchema(schema, oneBad),
+        5000,
+      );
+      await run(
+        "validation-errors",
+        "many-errors",
+        () => validateWithSchema(schema, manyBad),
+        2000,
+      );
     }
 
     console.log("== micro: http input assembly (in-process app.handle) ==");
     {
       const { service } = makeBenchFixture("micro-http");
-      service.action({ name: "getInput", input: Type.Object({ slug: Type.String(), count: Type.Number() }), execute: ({ input }) => input });
-      const app = brick({ services: [service], requestLogging: false, docs: false });
+      service.action({
+        name: "getInput",
+        input: Type.Object({ slug: Type.String(), count: Type.Number() }),
+        execute: ({ input }) => input,
+      });
+      const app = brick({
+        services: [service],
+        requestLogging: false,
+        docs: false,
+      });
       const getReq = () =>
-        new Request(`http://localhost/api/${service.name}/getInput?slug=abc&count=3`, { method: "GET" });
+        new Request(
+          `http://localhost/api/${service.name}/getInput?slug=abc&count=3`,
+          {
+            method: "GET",
+          },
+        );
       const postReq = () =>
         new Request(`http://localhost/api/${service.name}/validated`, {
           method: "POST",
@@ -184,7 +257,8 @@ function main(): Promise<{ results: MicroResult[]; path: string }> {
         });
       const handle = async (req: Request) => {
         const res = await app.handle(req);
-        if (res.status !== 200) throw new Error(`Unexpected HTTP status ${res.status}`);
+        if (res.status !== 200)
+          throw new Error(`Unexpected HTTP status ${res.status}`);
         return res.text();
       };
       await run("http-input", "get-query", () => handle(getReq()), 1000);
@@ -196,8 +270,11 @@ function main(): Promise<{ results: MicroResult[]; path: string }> {
       const q0 = {};
       const q5 = { f0: "3", f1: "true", f2: "4", f3: "0", f4: "5" };
       const q20: Record<string, string> = {};
-      for (let i = 0; i < 20; i++) q20[`f${i}`] = i % 2 === 0 ? String(i) : "true";
-      const s0 = coercionSchema(0), s5 = coercionSchema(5), s20 = coercionSchema(20);
+      for (let i = 0; i < 20; i++)
+        q20[`f${i}`] = i % 2 === 0 ? String(i) : "true";
+      const s0 = coercionSchema(0),
+        s5 = coercionSchema(5),
+        s20 = coercionSchema(20);
       await run("coercion", "0-fields", () => coerceCopy(q0, s0), 50000);
       await run("coercion", "5-fields", () => coerceCopy(q5, s5), 20000);
       await run("coercion", "20-fields", () => coerceCopy(q20, s20), 10000);
@@ -211,18 +288,28 @@ function main(): Promise<{ results: MicroResult[]; path: string }> {
         "dispatch",
         "getAction",
         () => service.getAction("noop")!.execute({}),
-        5000
+        5000,
       );
       const proxy = createServiceProxy<any>(service.name);
-      await run("dispatch", "service-proxy", () => (proxy as any).noop(undefined, {}), 2000);
+      await run(
+        "dispatch",
+        "service-proxy",
+        () => (proxy as any).noop(undefined, {}),
+        2000,
+      );
     }
 
     console.log("== micro: cursor handling ==");
     {
       // Mirrors resource.ts:219 encodeCursor / :223 decodeCursor (base64url JSON).
-      const enc = (p: unknown) => Buffer.from(JSON.stringify(p), "utf8").toString("base64url");
-      const dec = (c: string) => JSON.parse(Buffer.from(c, "base64url").toString("utf8"));
-      const payload = { v: ["2024-01-01T00:00:00.000Z", "itm_abc123"], s: "-updatedAt" };
+      const enc = (p: unknown) =>
+        Buffer.from(JSON.stringify(p), "utf8").toString("base64url");
+      const dec = (c: string) =>
+        JSON.parse(Buffer.from(c, "base64url").toString("utf8"));
+      const payload = {
+        v: ["2024-01-01T00:00:00.000Z", "itm_abc123"],
+        s: "-updatedAt",
+      };
       const cursor = enc(payload);
       await run("cursor", "encode", () => enc(payload), 20000);
       await run("cursor", "decode", () => dec(cursor), 20000);
@@ -235,14 +322,26 @@ function main(): Promise<{ results: MicroResult[]; path: string }> {
       const res = (service as any).getResource("item");
       const q1 = { input: { limit: 20, sort: "-updatedAt" }, ctx: silentCtx };
       const q5 = {
-        input: { limit: 20, sort: "-updatedAt", status: "published", search: "title", select: "id,slug", views: 5 },
+        input: {
+          limit: 20,
+          sort: "-updatedAt",
+          status: "published",
+          search: "title",
+          select: "id,slug",
+          views: 5,
+        },
         ctx: silentCtx,
       };
       const q20: any = { limit: 20, sort: "-updatedAt" };
       for (let i = 0; i < 17; i++) q20[`extra${i}`] = "x";
       await run("resource-parse", "1-param", () => res.list(q1), 300);
       await run("resource-parse", "5-params", () => res.list(q5), 300);
-      await run("resource-parse", "20-params", () => res.list({ input: q20, ctx: silentCtx }), 300);
+      await run(
+        "resource-parse",
+        "20-params",
+        () => res.list({ input: q20, ctx: silentCtx }),
+        300,
+      );
     }
 
     console.log("== micro: json response ==");
@@ -250,7 +349,12 @@ function main(): Promise<{ results: MicroResult[]; path: string }> {
       for (const size of [256, 1024, 16 * 1024, 256 * 1024]) {
         const obj = JSON.parse(payloadOf(size));
         const label = size >= 1024 ? `${size / 1024}KiB` : `${size}B`;
-        await run("json", `serialize-${label}`, () => JSON.stringify(obj), size > 16384 ? 200 : 2000);
+        await run(
+          "json",
+          `serialize-${label}`,
+          () => JSON.stringify(obj),
+          size > 16384 ? 200 : 2000,
+        );
       }
     }
 
@@ -266,10 +370,15 @@ function main(): Promise<{ results: MicroResult[]; path: string }> {
               input: Type.Object({ id: Type.String() }),
               output: Type.Object({ ok: Type.Boolean() }),
               execute: async () => ({ ok: true }),
-            })
+            }),
           );
         }
-        await run("openapi", `${count}-actions`, () => generateOpenApiSpec({ services: [svc] }), count >= 1000 ? 3 : 20);
+        await run(
+          "openapi",
+          `${count}-actions`,
+          () => generateOpenApiSpec({ services: [svc] }),
+          count >= 1000 ? 3 : 20,
+        );
       }
     }
 
@@ -279,19 +388,27 @@ function main(): Promise<{ results: MicroResult[]; path: string }> {
         resetGlobalRegistry();
         const svc = defineService(`init_${count}`);
         for (let i = 0; i < count; i++) {
-          svc.action(defineAction({ name: `a${i}`, execute: async () => ({ ok: true }) }));
+          svc.action(
+            defineAction({
+              name: `a${i}`,
+              execute: async () => ({ ok: true }),
+            }),
+          );
         }
         await run(
           "server-init",
           `${count}-actions`,
           () => brick({ services: [svc], requestLogging: false, docs: false }),
-          count >= 100 ? 20 : 50
+          count >= 100 ? 20 : 50,
         );
       }
     }
 
     const manifest = collectManifest({ benchmark: "micro", db: "none" });
-    const path = await writeJson(`micro-${stamp()}.json`, { manifest, results });
+    const path = await writeJson(`micro-${stamp()}.json`, {
+      manifest,
+      results,
+    });
     console.log(`\nwrote ${path} (${results.length} results)`);
     return { results, path };
   })();

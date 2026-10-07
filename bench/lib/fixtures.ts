@@ -52,7 +52,10 @@ export function makeBenchFixture(tag = "bench"): BenchFixture {
   // The bench therefore prepares its own schema explicitly (tables via
   // syncSchema, then secondary indexes + the FTS5 sidecar the ?search= path
   // queries), exactly as an application developer would.
-  ensureResourceIndexes(db, benchTable, { ownerField: "authorId", searchFields: ["title", "slug"] });
+  ensureResourceIndexes(db, benchTable, {
+    ownerField: "authorId",
+    searchFields: ["title", "slug"],
+  });
   ensureSQLiteFts(db, benchTable, ["title", "slug"]);
 
   const service = defineService(`${tag}_svc_${fixtureSeq}`, {
@@ -88,7 +91,10 @@ export function makeBenchFixture(tag = "bench"): BenchFixture {
     input: Type.Object({ slug: Type.String({ minLength: 2 }) }),
     output: Type.Object({ ok: Type.Boolean(), tenant: Type.String() }),
     authorize: async ({ user }: any) => user?.id === "bench-user",
-    execute: async ({ input, ctx }: any) => ({ ok: true, tenant: (ctx as any).tenantId ?? "?" }),
+    execute: async ({ ctx }: any) => ({
+      ok: true,
+      tenant: (ctx as any).tenantId ?? "?",
+    }),
   });
 
   service.action(noop);
@@ -99,7 +105,11 @@ export function makeBenchFixture(tag = "bench"): BenchFixture {
 }
 
 /** Bulk seed rows in chunks (drizzle batch insert). Returns row count. */
-export async function seedRows(db: any, n: number, opts: { prefix?: string } = {}): Promise<number> {
+export async function seedRows(
+  db: any,
+  n: number,
+  opts: { prefix?: string } = {},
+): Promise<number> {
   const prefix = opts.prefix ?? "seed";
   const now = new Date().toISOString();
   const CHUNK = 1000;
@@ -129,7 +139,9 @@ export function explainPlan(db: any, drizzleQuery: any): string[] {
   try {
     const q = drizzleQuery.toSQL();
     const client = (db as any).$client;
-    const rows = client.query(`EXPLAIN QUERY PLAN ${q.sql}`, q.params ?? []).all();
+    const rows = client
+      .query(`EXPLAIN QUERY PLAN ${q.sql}`, q.params ?? [])
+      .all();
     return rows.map((r: any) => `${r.id}|${r.parent}|${r.notused}|${r.detail}`);
   } catch (err: any) {
     return [`EXPLAIN failed: ${err?.message ?? err}`];
@@ -195,7 +207,11 @@ export function nestedValue(): any {
   return {
     user: {
       id: "u_1",
-      profile: { name: "Bench", tags: ["a", "b", "c"], address: { city: "Berlin", zip: "10115" } },
+      profile: {
+        name: "Bench",
+        tags: ["a", "b", "c"],
+        address: { city: "Berlin", zip: "10115" },
+      },
     },
     items: Array.from({ length: 10 }, (_, i) => ({ sku: `sku-${i}`, qty: i })),
   };

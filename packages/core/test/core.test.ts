@@ -110,7 +110,7 @@ describe("@brickkit/core Engine", () => {
       name: "send",
       input: t.Object({ message: t.String() }),
       output: t.Object({ delivered: t.Boolean() }),
-      execute: async ({ input, ctx }: any) => {
+      execute: async ({ ctx }: any) => {
         expect(ctx.traceId).toBe("tr_custom_123");
         return { delivered: true };
       },
@@ -119,7 +119,7 @@ describe("@brickkit/core Engine", () => {
     interface NotifyServiceRpc {
       send: (
         input: { message: string },
-        ctx?: any
+        ctx?: any,
       ) => Promise<{ delivered: boolean }>;
     }
 

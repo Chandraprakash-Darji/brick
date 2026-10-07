@@ -33,7 +33,9 @@ export async function startDevServer(options: DevServerOptions = {}) {
     console.log(`   • ${svc.name} (${svc.listActions().length} actions)`);
     if (typeof (svc as any).listResources === "function") {
       for (const res of (svc as any).listResources()) {
-        console.log(`     -> Resource: /api/${res.name} (REST: GET, POST, /:id: GET, PATCH, DELETE)`);
+        console.log(
+          `     -> Resource: /api/${res.name} (REST: GET, POST, /:id: GET, PATCH, DELETE)`,
+        );
       }
     }
     for (const act of svc.listActions()) {
@@ -50,7 +52,9 @@ export async function startDevServer(options: DevServerOptions = {}) {
 
   console.log(`\n⚡ API Gateway running on: http://localhost:${port}`);
   console.log(`🩺 Health check:        http://localhost:${port}/_health`);
-  console.log(`🗺️ Architecture graph:  http://localhost:${port}/_brick/services\n`);
+  console.log(
+    `🗺️ Architecture graph:  http://localhost:${port}/_brick/services\n`,
+  );
 
   return app;
 }

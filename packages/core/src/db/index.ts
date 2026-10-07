@@ -4,7 +4,6 @@ import {
   createSQLiteDatabase,
   type SQLiteDatabaseConfig,
   type BunSQLiteDatabase,
-  type BrickSQLiteDatabase,
 } from "./sqlite";
 import {
   createPostgresDatabase,
@@ -45,9 +44,9 @@ export {
 } from "drizzle-orm";
 
 export interface DatabaseConfig<
-  TSchema extends Record<string, unknown> = Record<string, unknown>
-> extends SQLiteDatabaseConfig<TSchema>,
-    PostgresDatabaseConfig<TSchema> {
+  TSchema extends Record<string, unknown> = Record<string, unknown>,
+>
+  extends SQLiteDatabaseConfig<TSchema>, PostgresDatabaseConfig<TSchema> {
   /** Database engine. Default: 'sqlite' */
   engine?: "sqlite" | "postgres" | "clickhouse";
   /** Optional service name associated with this database */
@@ -55,7 +54,7 @@ export interface DatabaseConfig<
 }
 
 export type BrickDatabase<
-  TSchema extends Record<string, unknown> = Record<string, unknown>
+  TSchema extends Record<string, unknown> = Record<string, unknown>,
 > = BunSQLiteDatabase<TSchema> | PostgresDatabase<TSchema>;
 
 /**
@@ -64,8 +63,10 @@ export type BrickDatabase<
  * database in `:memory:` mode wrapped with Drizzle ORM.
  */
 export function createDatabase<
-  TSchema extends Record<string, unknown> = Record<string, unknown>
->(config: DatabaseConfig<TSchema> = {}): BunSQLiteDatabase<TSchema> | PostgresDatabase<TSchema> {
+  TSchema extends Record<string, unknown> = Record<string, unknown>,
+>(
+  config: DatabaseConfig<TSchema> = {},
+): BunSQLiteDatabase<TSchema> | PostgresDatabase<TSchema> {
   const engine = config.engine ?? "sqlite";
 
   if (engine === "sqlite") {
@@ -80,7 +81,10 @@ export function createDatabase<
 }
 
 /** Attach a defined database. Schema changes remain the caller's responsibility. */
-export function attachDatabase<TDb>(service: Service<TDb, any>, database: DatabaseHandle<TDb>): TDb {
+export function attachDatabase<TDb>(
+  service: Service<TDb, any>,
+  database: DatabaseHandle<TDb>,
+): TDb {
   service.setDb(database);
   return database.getDb();
 }
@@ -94,7 +98,7 @@ export function generateSQLiteTableDdl(table: any): string {
   const columns = getTableColumns(table);
   const colDefs: string[] = [];
 
-  for (const [key, col] of Object.entries(columns) as [string, any][]) {
+  for (const [, col] of Object.entries(columns) as [string, any][]) {
     let def = `"${col.name}" ${col.getSQLType().toUpperCase()}`;
     if (col.primary) def += " PRIMARY KEY";
     if (col.notNull) def += " NOT NULL";
@@ -124,7 +128,7 @@ export function generateSQLiteTableDdl(table: any): string {
  */
 export function generateSQLiteIndexDdl(
   table: any,
-  opts: { ownerField?: string; sortFields?: string[] } = {}
+  opts: { ownerField?: string; sortFields?: string[] } = {},
 ): string[] {
   const tableName = getTableName(table);
   const columns = getTableColumns(table);
@@ -138,7 +142,7 @@ export function generateSQLiteIndexDdl(
     seen.add(key);
     const colList = clean.map((c) => `"${c}"`).join(", ");
     stmts.push(
-      `CREATE INDEX IF NOT EXISTS "${name}" ON "${tableName}" (${colList});`
+      `CREATE INDEX IF NOT EXISTS "${name}" ON "${tableName}" (${colList});`,
     );
   };
 
@@ -173,7 +177,10 @@ export function generateSQLiteIndexDdl(
 
   // Composite owner+sort — the hot path for scoped sorted lists.
   if (ownerCol && sortCols.length > 0) {
-    push(`idx_${tableName}_${ownerCol}_${sortCols[0]}`, [ownerCol, sortCols[0]]);
+    push(`idx_${tableName}_${ownerCol}_${sortCols[0]}`, [
+      ownerCol,
+      sortCols[0],
+    ]);
   }
 
   return stmts;
@@ -188,7 +195,11 @@ export function generateSQLiteIndexDdl(
 export function ensureResourceIndexes(
   db: any,
   table: any,
-  opts: { ownerField?: string; sortFields?: string[]; searchFields?: string[] } = {}
+  opts: {
+    ownerField?: string;
+    sortFields?: string[];
+    searchFields?: string[];
+  } = {},
 ): void {
   if (!db) return;
   const isPostgres =
@@ -210,7 +221,7 @@ export function ensureResourceIndexes(
       const c = colNameOf(f);
       if (c) {
         stmts.push(
-          `CREATE INDEX IF NOT EXISTS "idx_${tableName}_${c}_trgm" ON "${tableName}" USING gin ("${c}" gin_trgm_ops);`
+          `CREATE INDEX IF NOT EXISTS "idx_${tableName}_${c}_trgm" ON "${tableName}" USING gin ("${c}" gin_trgm_ops);`,
         );
       }
     }
@@ -258,7 +269,7 @@ function quoteIdent(name: string): string {
 export function ensureSQLiteFts(
   db: any,
   table: any,
-  searchCols: string[]
+  searchCols: string[],
 ): void {
   if (!db || searchCols.length === 0) return;
   // SQLite only: Postgres has execute() but no $client.run.
@@ -280,35 +291,34 @@ export function ensureSQLiteFts(
       return undefined;
     };
     // Resolve to DB column names, drop unknowns.
-    const dbCols = searchCols
-      .map(colNameOf)
-      .filter((c): c is string => !!c);
+    const dbCols = searchCols.map(colNameOf).filter((c): c is string => !!c);
     if (dbCols.length === 0) return;
     const idCol =
       colNameOf("id") ??
       (Object.values(columns) as any[]).find((c) => c.primary)?.name ??
       "id";
     const fts = ftsTableName(table);
-    const ftsCols = [`"id" UNINDEXED`, ...dbCols.map((c) => quoteIdent(c))].join(
-      ", "
-    );
+    const ftsCols = [
+      `"id" UNINDEXED`,
+      ...dbCols.map((c) => quoteIdent(c)),
+    ].join(", ");
     run(
-      `CREATE VIRTUAL TABLE IF NOT EXISTS ${quoteIdent(fts)} USING fts5(${ftsCols}, tokenize='porter');`
+      `CREATE VIRTUAL TABLE IF NOT EXISTS ${quoteIdent(fts)} USING fts5(${ftsCols}, tokenize='porter');`,
     );
     const colList = dbCols.map(quoteIdent).join(", ");
     const newVals = dbCols.map((c) => `new.${quoteIdent(c)}`).join(", ");
     run(
-      `CREATE TRIGGER IF NOT EXISTS ${quoteIdent(`${fts}_ai`)} AFTER INSERT ON ${quoteIdent(tableName)} BEGIN INSERT INTO ${quoteIdent(fts)}("id", ${colList}) VALUES (new.${quoteIdent(idCol)}, ${newVals}); END;`
+      `CREATE TRIGGER IF NOT EXISTS ${quoteIdent(`${fts}_ai`)} AFTER INSERT ON ${quoteIdent(tableName)} BEGIN INSERT INTO ${quoteIdent(fts)}("id", ${colList}) VALUES (new.${quoteIdent(idCol)}, ${newVals}); END;`,
     );
     run(
-      `CREATE TRIGGER IF NOT EXISTS ${quoteIdent(`${fts}_ad`)} AFTER DELETE ON ${quoteIdent(tableName)} BEGIN DELETE FROM ${quoteIdent(fts)} WHERE "id" = old.${quoteIdent(idCol)}; END;`
+      `CREATE TRIGGER IF NOT EXISTS ${quoteIdent(`${fts}_ad`)} AFTER DELETE ON ${quoteIdent(tableName)} BEGIN DELETE FROM ${quoteIdent(fts)} WHERE "id" = old.${quoteIdent(idCol)}; END;`,
     );
     run(
-      `CREATE TRIGGER IF NOT EXISTS ${quoteIdent(`${fts}_au`)} AFTER UPDATE ON ${quoteIdent(tableName)} BEGIN DELETE FROM ${quoteIdent(fts)} WHERE "id" = old.${quoteIdent(idCol)}; INSERT INTO ${quoteIdent(fts)}("id", ${colList}) VALUES (new.${quoteIdent(idCol)}, ${newVals}); END;`
+      `CREATE TRIGGER IF NOT EXISTS ${quoteIdent(`${fts}_au`)} AFTER UPDATE ON ${quoteIdent(tableName)} BEGIN DELETE FROM ${quoteIdent(fts)} WHERE "id" = old.${quoteIdent(idCol)}; INSERT INTO ${quoteIdent(fts)}("id", ${colList}) VALUES (new.${quoteIdent(idCol)}, ${newVals}); END;`,
     );
     // Backfill rows predating the FTS table (dedupe via NOT IN).
     run(
-      `INSERT INTO ${quoteIdent(fts)}("id", ${colList}) SELECT ${quoteIdent(idCol)}, ${colList} FROM ${quoteIdent(tableName)} WHERE ${quoteIdent(idCol)} NOT IN (SELECT "id" FROM ${quoteIdent(fts)});`
+      `INSERT INTO ${quoteIdent(fts)}("id", ${colList}) SELECT ${quoteIdent(idCol)}, ${colList} FROM ${quoteIdent(tableName)} WHERE ${quoteIdent(idCol)} NOT IN (SELECT "id" FROM ${quoteIdent(fts)});`,
     );
   } catch {
     // best-effort: LIKE fallback in the list path covers FTS absence.
@@ -345,7 +355,7 @@ export function buildFtsMatchQuery(search: string): string | null {
  */
 export function syncSchema(
   tablesOrService: Map<string, any> | any[] | Record<string, any> | Service,
-  dbInstance?: any
+  dbInstance?: any,
 ): Promise<void> | void {
   let db = dbInstance;
   let tables: any[] = [];
@@ -391,7 +401,7 @@ export function syncSchema(
   return (async () => {
     for (const table of tables) {
       try {
-        const tableName = getTableName(table);
+        const _tableName = getTableName(table);
         // Postgres sync or migration runner if configured
       } catch (err: any) {
         console.warn(`[Brick-TS DB] Postgres syncSchema error:`, err.message);

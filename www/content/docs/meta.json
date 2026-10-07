@@ -1,7 +1,3 @@
 {
-  "pages": [
-    "(brick)",
-    "brick-cli",
-    "plugins"
-  ]
+  "pages": ["(brick)", "brick-cli", "plugins"]
 }

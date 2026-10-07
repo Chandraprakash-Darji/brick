@@ -47,7 +47,9 @@ describe("secret() type-safe env loading", () => {
     const s = secret("BRICK_TEST_MISSING");
     expect(s.value()).toBeUndefined();
     expect(s.isSet()).toBe(false);
-    expect(() => s.require()).toThrow('Missing required secret "BRICK_TEST_MISSING"');
+    expect(() => s.require()).toThrow(
+      'Missing required secret "BRICK_TEST_MISSING"',
+    );
   });
 
   it("re-declaring the same name returns the original ref", () => {
@@ -62,7 +64,7 @@ describe("secret() type-safe env loading", () => {
     secret("BRICK_TEST_MISSING");
     secret("BRICK_TEST_OPT", { default: "fallback" });
     expect(() => resolveSecrets()).toThrow(
-      "Missing required secrets: BRICK_TEST_REQ, BRICK_TEST_MISSING"
+      "Missing required secrets: BRICK_TEST_REQ, BRICK_TEST_MISSING",
     );
   });
 
@@ -100,67 +102,71 @@ describe("secret() type-safe env loading", () => {
     });
   });
 
-describe("secret() fluent chain", () => {
-  it("default().transform().require() converts types", () => {
-    const portRef = secret("BRICK_TEST_REQ").default("3333").transform(Number);
-    expect(portRef.require()).toBe(3333);
-    process.env.BRICK_TEST_REQ = "8080";
-    expect(portRef.require()).toBe(8080);
-  });
-
-  it("transform failure names the secret", () => {
-    process.env.BRICK_TEST_REQ = "raw";
-    secret("BRICK_TEST_REQ").transform(() => {
-      throw new Error("boom");
+  describe("secret() fluent chain", () => {
+    it("default().transform().require() converts types", () => {
+      const portRef = secret("BRICK_TEST_REQ")
+        .default("3333")
+        .transform(Number);
+      expect(portRef.require()).toBe(3333);
+      process.env.BRICK_TEST_REQ = "8080";
+      expect(portRef.require()).toBe(8080);
     });
-    expect(() => secret("BRICK_TEST_REQ").require()).toThrow(
-      'Invalid value for secret "BRICK_TEST_REQ": transform failed (boom)'
-    );
-  });
 
-  it("validate() accepts, rejects with reason, and propagates throws", () => {
-    process.env.BRICK_TEST_REQ = "sk_live_1";
-    const key = secret("BRICK_TEST_REQ").validate(
-      (v) => v.startsWith("sk_") || "must start with sk_"
-    );
-    expect(key.require()).toBe("sk_live_1");
-
-    process.env.BRICK_TEST_REQ = "nope";
-    expect(() => key.require()).toThrow(
-      'Invalid value for secret "BRICK_TEST_REQ": must start with sk_'
-    );
-
-    const throwing = secret("BRICK_TEST_OPT").validate(() => {
-      throw new Error("custom check");
+    it("transform failure names the secret", () => {
+      process.env.BRICK_TEST_REQ = "raw";
+      secret("BRICK_TEST_REQ").transform(() => {
+        throw new Error("boom");
+      });
+      expect(() => secret("BRICK_TEST_REQ").require()).toThrow(
+        'Invalid value for secret "BRICK_TEST_REQ": transform failed (boom)',
+      );
     });
-    process.env.BRICK_TEST_OPT = "x";
-    expect(() => throwing.require()).toThrow(
-      'Invalid value for secret "BRICK_TEST_OPT": custom check'
-    );
 
-    const boolCheck = secret("BRICK_TEST_MISSING").validate(() => false);
-    overrideSecret("BRICK_TEST_MISSING", "x");
-    expect(() => boolCheck.require()).toThrow(
-      'Invalid value for secret "BRICK_TEST_MISSING": validation failed'
-    );
-  });
+    it("validate() accepts, rejects with reason, and propagates throws", () => {
+      process.env.BRICK_TEST_REQ = "sk_live_1";
+      const key = secret("BRICK_TEST_REQ").validate(
+        (v) => v.startsWith("sk_") || "must start with sk_",
+      );
+      expect(key.require()).toBe("sk_live_1");
 
-  it("url() validates URL shape", () => {
-    process.env.BRICK_TEST_REQ = "http://localhost:3333";
-    expect(secret("BRICK_TEST_REQ").url().require()).toBe("http://localhost:3333");
-    process.env.BRICK_TEST_REQ = "not a url";
-    expect(() => secret("BRICK_TEST_REQ").require()).toThrow(
-      'Invalid value for secret "BRICK_TEST_REQ": must be a valid URL'
-    );
-  });
+      process.env.BRICK_TEST_REQ = "nope";
+      expect(() => key.require()).toThrow(
+        'Invalid value for secret "BRICK_TEST_REQ": must start with sk_',
+      );
 
-  it("validators run on defaults too", () => {
-    const s = secret("BRICK_TEST_OPT")
-      .default("not a url")
-      .url();
-    expect(() => s.require()).toThrow('Invalid value for secret "BRICK_TEST_OPT"');
+      const throwing = secret("BRICK_TEST_OPT").validate(() => {
+        throw new Error("custom check");
+      });
+      process.env.BRICK_TEST_OPT = "x";
+      expect(() => throwing.require()).toThrow(
+        'Invalid value for secret "BRICK_TEST_OPT": custom check',
+      );
+
+      const boolCheck = secret("BRICK_TEST_MISSING").validate(() => false);
+      overrideSecret("BRICK_TEST_MISSING", "x");
+      expect(() => boolCheck.require()).toThrow(
+        'Invalid value for secret "BRICK_TEST_MISSING": validation failed',
+      );
+    });
+
+    it("url() validates URL shape", () => {
+      process.env.BRICK_TEST_REQ = "http://localhost:3333";
+      expect(secret("BRICK_TEST_REQ").url().require()).toBe(
+        "http://localhost:3333",
+      );
+      process.env.BRICK_TEST_REQ = "not a url";
+      expect(() => secret("BRICK_TEST_REQ").require()).toThrow(
+        'Invalid value for secret "BRICK_TEST_REQ": must be a valid URL',
+      );
+    });
+
+    it("validators run on defaults too", () => {
+      const s = secret("BRICK_TEST_OPT").default("not a url").url();
+      expect(() => s.require()).toThrow(
+        'Invalid value for secret "BRICK_TEST_OPT"',
+      );
+    });
   });
-});
 
   it("listSecrets() exposes metadata without values", () => {
     process.env.BRICK_TEST_REQ = "req-val";

@@ -1,7 +1,13 @@
 import { describe, it, expect } from "bun:test";
 import {
-  defineDatabase, defineService, sqliteTable, text, SecretRef,
-  attachDatabase, syncSchema, type BunSQLiteDatabase,
+  defineDatabase,
+  defineService,
+  sqliteTable,
+  text,
+  SecretRef,
+  attachDatabase,
+  syncSchema,
+  type BunSQLiteDatabase,
 } from "../src";
 
 const items = sqliteTable("defined_items", { id: text("id").primaryKey() });
@@ -36,15 +42,21 @@ describe("defineDatabase", () => {
 
   it("resolves and validates env inputs lazily, including transformed options", () => {
     const path = new SecretRef("BRICK_DEFINED_PATH");
-    const wal = new SecretRef("BRICK_DEFINED_WAL", { default: "false" }).transform(v => v === "true");
+    const wal = new SecretRef("BRICK_DEFINED_WAL", {
+      default: "false",
+    }).transform((v) => v === "true");
     const database = defineDatabase({ path, wal, tables: { items } });
     const service = defineService("defined_lazy", { database });
     service.resource({ name: "item", table: items });
     expect(() => database.getDb()).toThrow("BRICK_DEFINED_PATH");
     path.default(":memory:");
     expect(service.getDb()).toBe(database.getDb());
-    const invalid = new SecretRef("BRICK_DEFINED_INVALID", { default: "bad" }).validate(() => false);
-    expect(() => defineDatabase({ path: invalid }).getDb()).toThrow("BRICK_DEFINED_INVALID");
+    const invalid = new SecretRef("BRICK_DEFINED_INVALID", {
+      default: "bad",
+    }).validate(() => false);
+    expect(() => defineDatabase({ path: invalid }).getDb()).toThrow(
+      "BRICK_DEFINED_INVALID",
+    );
   });
 
   it("registers service tables without creating them, even after opening the database", () => {
@@ -77,27 +89,38 @@ describe("defineDatabase", () => {
 
   it("rejects incompatible engine fields at runtime", () => {
     // @ts-expect-error SQLite cannot take a Postgres URL.
-    expect(() => defineDatabase({ engine: "sqlite", url: "postgres://localhost/db" })).toThrow("url");
+    expect(() =>
+      defineDatabase({ engine: "sqlite", url: "postgres://localhost/db" }),
+    ).toThrow("url");
     // @ts-expect-error Postgres cannot take a SQLite path.
-    expect(() => defineDatabase({ engine: "postgres", path: ":memory:" })).toThrow("path");
+    expect(() =>
+      defineDatabase({ engine: "postgres", path: ":memory:" }),
+    ).toThrow("path");
   });
 
   it("defines Postgres lazily without opening a connection", () => {
-    const database = defineDatabase({ engine: "postgres", url: new SecretRef("BRICK_DEFINED_PG") });
+    const database = defineDatabase({
+      engine: "postgres",
+      url: new SecretRef("BRICK_DEFINED_PG"),
+    });
     expect(database.engine).toBe("postgres");
     expect(() => database.getDb()).toThrow("BRICK_DEFINED_PG");
   });
 });
 
 // Compile-time assertions: service and action inference must retain the schema.
-function typeAssertions() {
+function _typeAssertions() {
   const database = defineDatabase({ tables: { items } });
   const service = defineService("defined_types", { database });
-  const typed: BunSQLiteDatabase<{ items: typeof items }> | undefined = service.getDb();
-  service.action({ name: "typed", execute: ({ ctx }) => {
-    // @ts-expect-error Unknown tables must not become any.
-    ctx.db.query.missing.findMany();
-    return ctx.db.query.items.findMany();
-  } });
+  const typed: BunSQLiteDatabase<{ items: typeof items }> | undefined =
+    service.getDb();
+  service.action({
+    name: "typed",
+    execute: ({ ctx }) => {
+      // @ts-expect-error Unknown tables must not become any.
+      ctx.db.query.missing.findMany();
+      return ctx.db.query.items.findMany();
+    },
+  });
   return typed;
 }

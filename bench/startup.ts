@@ -7,7 +7,11 @@
  *   bun bench/startup.ts [--smoke] [--runs 10]
  *   hyperfine --warmup 5 --runs 30 'bun bench/startup-once.ts'
  */
-import { defineService, defineAction, resetGlobalRegistry } from "../packages/core/src/index";
+import {
+  defineService,
+  defineAction,
+  resetGlobalRegistry,
+} from "../packages/core/src/index";
 import { brick } from "../packages/cli/src/server";
 import { parseArgs, argInt, median, percentile } from "./lib/stats";
 import { collectManifest, writeJson, stamp } from "./lib/manifest";
@@ -20,11 +24,16 @@ export interface StartupSample {
   rss_mb: number;
 }
 
-export async function measureStartup(actions: number, port: number): Promise<StartupSample> {
+export async function measureStartup(
+  actions: number,
+  port: number,
+): Promise<StartupSample> {
   resetGlobalRegistry();
   const svc = defineService(`startup_${actions}_${port}`);
   for (let i = 0; i < actions; i++) {
-    svc.action(defineAction({ name: `a${i}`, execute: async () => ({ ok: true }) }));
+    svc.action(
+      defineAction({ name: `a${i}`, execute: async () => ({ ok: true }) }),
+    );
   }
   const t0 = performance.now();
   const app = brick({ services: [svc], requestLogging: false, docs: false });
@@ -42,7 +51,13 @@ export async function measureStartup(actions: number, port: number): Promise<Sta
   const rssMb = Math.round((process.memoryUsage().rss / 1024 ** 2) * 100) / 100;
   await app.stop();
   await new Promise((r) => setTimeout(r, 50));
-  return { actions, build_ms: r3(buildMs), listen_ms: r3(listenMs), first_request_ms: r3(firstMs), rss_mb: rssMb };
+  return {
+    actions,
+    build_ms: r3(buildMs),
+    listen_ms: r3(listenMs),
+    first_request_ms: r3(firstMs),
+    rss_mb: rssMb,
+  };
 }
 
 function r3(n: number): number {
@@ -71,7 +86,9 @@ async function main() {
     for (let i = 0; i < runs; i++) {
       const s = await measureStartup(n, 3490 + (i % 20));
       samples.push(s);
-      console.log(`  run ${i + 1}: build=${s.build_ms}ms listen=${s.listen_ms}ms first=${s.first_request_ms}ms rss=${s.rss_mb}MB`);
+      console.log(
+        `  run ${i + 1}: build=${s.build_ms}ms listen=${s.listen_ms}ms first=${s.first_request_ms}ms rss=${s.rss_mb}MB`,
+      );
     }
   }
 
@@ -79,15 +96,32 @@ async function main() {
   for (const n of counts) {
     const group = samples.filter((s) => s.actions === n);
     byCount[`${n}_actions`] = {
-      build_ms: dist("build", group.map((g) => g.build_ms)),
-      listen_ms: dist("listen", group.map((g) => g.listen_ms)),
-      first_request_ms: dist("first", group.map((g) => g.first_request_ms)),
-      rss_mb: dist("rss", group.map((g) => g.rss_mb)),
+      build_ms: dist(
+        "build",
+        group.map((g) => g.build_ms),
+      ),
+      listen_ms: dist(
+        "listen",
+        group.map((g) => g.listen_ms),
+      ),
+      first_request_ms: dist(
+        "first",
+        group.map((g) => g.first_request_ms),
+      ),
+      rss_mb: dist(
+        "rss",
+        group.map((g) => g.rss_mb),
+      ),
     };
   }
 
   const manifest = collectManifest({ benchmark: "startup", db: "none" });
-  const path = await writeJson(`startup-${stamp()}.json`, { manifest, runs, samples, summary: byCount });
+  const path = await writeJson(`startup-${stamp()}.json`, {
+    manifest,
+    runs,
+    samples,
+    summary: byCount,
+  });
   console.log(`\nwrote ${path}`);
 }
 

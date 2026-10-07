@@ -1,13 +1,24 @@
-import * as React from "react"
+import * as React from "react";
 
-import { isWorse, commitUrl, formatChange, formatDate, formatValue, median, shortCPU, type Commit, type Runner, type Step } from "@/lib/benchmarks"
-import { cn } from "@/lib/utils"
+import {
+  isWorse,
+  commitUrl,
+  formatChange,
+  formatDate,
+  formatValue,
+  median,
+  shortCPU,
+  type Commit,
+  type Runner,
+  type Step,
+} from "@/lib/benchmarks";
+import { cn } from "@/lib/utils";
 
-const height = 112
-const top = 16
-const bottom = 6
+const height = 112;
+const top = 16;
+const bottom = 6;
 // Room for the end dot at both ends.
-const pad = 6
+const pad = 6;
 
 /**
  * A line of a benchmark's values over commits, with a triangle at each
@@ -27,64 +38,81 @@ export function TrendChart({
   unit,
   label,
 }: {
-  values: (number | null)[]
-  commits: Commit[]
-  runners: (Runner | null)[]
+  values: (number | null)[];
+  commits: Commit[];
+  runners: (Runner | null)[];
   /** The steps, by the index of their commit in values. */
-  steps: Step[]
-  unit: string
-  label: string
+  steps: Step[];
+  unit: string;
+  label: string;
 }) {
-  const ref = React.useRef<HTMLDivElement>(null)
-  const width = useWidth(ref)
-  const [hover, setHover] = React.useState<number | null>(null)
+  const ref = React.useRef<HTMLDivElement>(null);
+  const width = useWidth(ref);
+  const [hover, setHover] = React.useState<number | null>(null);
   // A tap shows a commit, and a second tap on it opens it.
-  const touched = React.useRef(false)
+  const touched = React.useRef(false);
 
-  const n = values.length
-  const present = values.flatMap((v, i) => (v == null ? [] : [i]))
-  const [lo, hi] = domain(present.map((i) => values[i]!))
-  const step = n > 1 ? (width - 2 * pad) / (n - 1) : 0
-  const x = (i: number) => (n > 1 ? pad + i * step : width / 2)
-  const y = (v: number) => top + (1 - (v - lo) / (hi - lo)) * (height - top - bottom)
-  const base = height - bottom
+  const n = values.length;
+  const present = values.flatMap((v, i) => (v == null ? [] : [i]));
+  const [lo, hi] = domain(present.map((i) => values[i]!));
+  const step = n > 1 ? (width - 2 * pad) / (n - 1) : 0;
+  const x = (i: number) => (n > 1 ? pad + i * step : width / 2);
+  const y = (v: number) =>
+    top + (1 - (v - lo) / (hi - lo)) * (height - top - bottom);
+  const base = height - bottom;
 
   // A line a CPU for timings, the last commit's drawn over the others'.
-  const byCPU = true
-  const cpuOf = (i: number) => (byCPU ? (runners[i]?.cpu ?? "") : "")
-  const cpu = present.length ? cpuOf(present.at(-1)!) : ""
-  const lines = new Map<string, number[]>()
-  for (const i of present) lines.set(cpuOf(i), [...(lines.get(cpuOf(i)) ?? []), i])
-  const others = [...lines].filter(([c]) => c !== cpu).map(([, points]) => points)
-  const path = (points: number[]) => points.map((i, k) => `${k ? "L" : "M"}${x(i).toFixed(1)} ${y(values[i]!).toFixed(1)}`).join("")
+  const byCPU = true;
+  const cpuOf = (i: number) => (byCPU ? (runners[i]?.cpu ?? "") : "");
+  const cpu = present.length ? cpuOf(present.at(-1)!) : "";
+  const lines = new Map<string, number[]>();
+  for (const i of present)
+    lines.set(cpuOf(i), [...(lines.get(cpuOf(i)) ?? []), i]);
+  const others = [...lines]
+    .filter(([c]) => c !== cpu)
+    .map(([, points]) => points);
+  const path = (points: number[]) =>
+    points
+      .map(
+        (i, k) =>
+          `${k ? "L" : "M"}${x(i).toFixed(1)} ${y(values[i]!).toFixed(1)}`,
+      )
+      .join("");
 
   /** The commit with a value nearest to index i. */
   const nearest = (i: number) => {
-    let best = present[0]
-    for (const p of present) if (Math.abs(p - i) < Math.abs(best! - i)) best = p
-    return best ?? null
-  }
+    let best = present[0];
+    for (const p of present)
+      if (Math.abs(p - i) < Math.abs(best! - i)) best = p;
+    return best ?? null;
+  };
   const pointAt = (clientX: number) => {
-    const rect = ref.current!.getBoundingClientRect()
-    return nearest(step ? Math.round((clientX - rect.left - pad) / step) : 0)
-  }
+    const rect = ref.current!.getBoundingClientRect();
+    return nearest(step ? Math.round((clientX - rect.left - pad) / step) : 0);
+  };
   const open = (i: number | null) => {
-    if (i != null && commits[i]) window.open(commitUrl(commits[i].sha), "_blank", "noopener,noreferrer")
-  }
+    if (i != null && commits[i])
+      window.open(commitUrl(commits[i].sha), "_blank", "noopener,noreferrer");
+  };
   const onKeyDown = (e: React.KeyboardEvent) => {
-    const at = hover ?? present.at(-1) ?? null
-    if (at == null) return
-    const k = present.indexOf(at)
-    const to = { ArrowLeft: present[k - 1], ArrowRight: present[k + 1], Home: present[0], End: present.at(-1) }[e.key]
+    const at = hover ?? present.at(-1) ?? null;
+    if (at == null) return;
+    const k = present.indexOf(at);
+    const to = {
+      ArrowLeft: present[k - 1],
+      ArrowRight: present[k + 1],
+      Home: present[0],
+      End: present.at(-1),
+    }[e.key];
     if (to !== undefined) {
-      e.preventDefault()
-      setHover(to)
-    } else if (e.key === "Enter") open(at)
-  }
+      e.preventDefault();
+      setHover(to);
+    } else if (e.key === "Enter") open(at);
+  };
 
-  const h = hover != null && values[hover] != null ? hover : null
-  const runner = h != null ? runners[h] : null
-  const moved = h != null ? steps.find((st) => st.index === h) : undefined
+  const h = hover != null && values[hover] != null ? hover : null;
+  const runner = h != null ? runners[h] : null;
+  const moved = h != null ? steps.find((st) => st.index === h) : undefined;
 
   return (
     <div ref={ref} className="relative">
@@ -99,9 +127,9 @@ export function TrendChart({
         onPointerMove={(e) => setHover(pointAt(e.clientX))}
         onPointerLeave={(e) => e.pointerType === "mouse" && setHover(null)}
         onClick={(e) => {
-          const i = pointAt(e.clientX)
-          if (touched.current && i !== hover) setHover(i)
-          else open(i)
+          const i = pointAt(e.clientX);
+          if (touched.current && i !== hover) setHover(i);
+          else open(i);
         }}
         onFocus={() => setHover(present.at(-1) ?? null)}
         onBlur={() => setHover(null)}
@@ -109,27 +137,70 @@ export function TrendChart({
       >
         {[lo, (lo + hi) / 2, hi].map((v, k) => (
           <g key={k}>
-            <line x1={0} x2={width} y1={y(v)} y2={y(v)} className="stroke-border" strokeWidth={1} />
+            <line
+              x1={0}
+              x2={width}
+              y1={y(v)}
+              y2={y(v)}
+              className="stroke-border"
+              strokeWidth={1}
+            />
             {k !== 1 && (
-              <text x={0} y={y(v) - 4} className="fill-muted-foreground text-[10px] tabular-nums">
+              <text
+                x={0}
+                y={y(v) - 4}
+                className="fill-muted-foreground text-[10px] tabular-nums"
+              >
                 {formatValue(v, unit)}
               </text>
             )}
           </g>
         ))}
         {others.map((points) => (
-          <Line key={points[0]} points={points} d={path(points)} x={x} y={(i) => y(values[i]!)} className="stroke-muted-foreground/45" dot="fill-muted-foreground/45" />
+          <Line
+            key={points[0]}
+            points={points}
+            d={path(points)}
+            x={x}
+            y={(i) => y(values[i]!)}
+            className="stroke-muted-foreground/45"
+            dot="fill-muted-foreground/45"
+          />
         ))}
         {lines.has(cpu) && (
-          <Line points={lines.get(cpu)!} d={path(lines.get(cpu)!)} x={x} y={(i) => y(values[i]!)} className="stroke-gopher-ink" dot="fill-gopher-ink" width={2} />
+          <Line
+            points={lines.get(cpu)!}
+            d={path(lines.get(cpu)!)}
+            x={x}
+            y={(i) => y(values[i]!)}
+            className="stroke-gopher-ink"
+            dot="fill-gopher-ink"
+            width={2}
+          />
         )}
         {steps.map((st) =>
-          values[st.index] == null ? null : <Mark key={st.index} cx={x(st.index)} cy={y(values[st.index]!)} worse={isWorse(st.change, unit)} />
+          values[st.index] == null ? null : (
+            <Mark
+              key={st.index}
+              cx={x(st.index)}
+              cy={y(values[st.index]!)}
+              worse={isWorse(st.change, unit)}
+            />
+          ),
         )}
-        {present.length > 0 && h == null && <Dot cx={x(present.at(-1)!)} cy={y(values[present.at(-1)!]!)} />}
+        {present.length > 0 && h == null && (
+          <Dot cx={x(present.at(-1)!)} cy={y(values[present.at(-1)!]!)} />
+        )}
         {h != null && (
           <>
-            <line x1={x(h)} x2={x(h)} y1={top} y2={base} className="stroke-foreground/40" strokeWidth={1} />
+            <line
+              x1={x(h)}
+              x2={x(h)}
+              y1={top}
+              y2={base}
+              className="stroke-foreground/40"
+              strokeWidth={1}
+            />
             <Dot cx={x(h)} cy={y(values[h]!)} />
           </>
         )}
@@ -153,25 +224,41 @@ export function TrendChart({
       {h != null && commits[h] && (
         <div
           className="pointer-events-none absolute top-0 z-10 w-max max-w-[min(17rem,80%)] rounded-md border bg-popover px-2.5 py-2 text-xs leading-5 text-popover-foreground shadow-md"
-          style={x(h) < width / 2 ? { left: x(h) + 10 } : { right: width - x(h) + 10 }}
+          style={
+            x(h) < width / 2
+              ? { left: x(h) + 10 }
+              : { right: width - x(h) + 10 }
+          }
         >
-          <div className="text-sm font-semibold tabular-nums">{formatValue(values[h]!, unit)}</div>
+          <div className="text-sm font-semibold tabular-nums">
+            {formatValue(values[h]!, unit)}
+          </div>
           <div className="truncate text-muted-foreground">
-            <span className="font-mono text-foreground">{commits[h].sha.slice(0, 7)}</span> {commits[h].message}
+            <span className="font-mono text-foreground">
+              {commits[h].sha.slice(0, 7)}
+            </span>{" "}
+            {commits[h].message}
           </div>
           <div className="text-muted-foreground">
             {formatDate(commits[h].date, true)}
             {runner && ` · ${runner.cpu}`}
           </div>
           {moved && (
-            <div className={cn("font-medium", isWorse(moved.change, unit) ? "text-worse" : "text-better")}>
-              {isWorse(moved.change, unit) ? "▲" : "▼"} {formatChange(moved.change)}: {formatValue(moved.before, unit)} before, {formatValue(moved.after, unit)} after
+            <div
+              className={cn(
+                "font-medium",
+                isWorse(moved.change, unit) ? "text-worse" : "text-better",
+              )}
+            >
+              {isWorse(moved.change, unit) ? "▲" : "▼"}{" "}
+              {formatChange(moved.change)}: {formatValue(moved.before, unit)}{" "}
+              before, {formatValue(moved.after, unit)} after
             </div>
           )}
         </div>
       )}
     </div>
-  )
+  );
 }
 
 /** A line through points, or a dot for one. */
@@ -184,27 +271,58 @@ function Line({
   dot,
   width = 1.5,
 }: {
-  points: number[]
-  d: string
-  x: (i: number) => number
-  y: (i: number) => number
-  className: string
-  dot: string
-  width?: number
+  points: number[];
+  d: string;
+  x: (i: number) => number;
+  y: (i: number) => number;
+  className: string;
+  dot: string;
+  width?: number;
 }) {
-  if (points.length === 1) return <circle cx={x(points[0]!)} cy={y(points[0]!)} r={2} className={dot} />
-  return <path d={d} fill="none" className={className} strokeWidth={width} strokeLinejoin="round" strokeLinecap="round" />
+  if (points.length === 1)
+    return (
+      <circle cx={x(points[0]!)} cy={y(points[0]!)} r={2} className={dot} />
+    );
+  return (
+    <path
+      d={d}
+      fill="none"
+      className={className}
+      strokeWidth={width}
+      strokeLinejoin="round"
+      strokeLinecap="round"
+    />
+  );
 }
 
 /** The end dot, ringed with the surface. */
 function Dot({ cx, cy }: { cx: number; cy: number }) {
-  return <circle cx={cx} cy={cy} r={4} className="fill-gopher-ink stroke-background" strokeWidth={2} />
+  return (
+    <circle
+      cx={cx}
+      cy={cy}
+      r={4}
+      className="fill-gopher-ink stroke-background"
+      strokeWidth={2}
+    />
+  );
 }
 
 /** A step's triangle, pointing up for worse, down for better, ringed with the surface. */
 function Mark({ cx, cy, worse }: { cx: number; cy: number; worse: boolean }) {
-  const d = worse ? `M${cx} ${cy - 6}l5.5 9.5h-11z` : `M${cx} ${cy + 6}l5.5 -9.5h-11z`
-  return <path d={d} className={worse ? "fill-worse stroke-background" : "fill-better stroke-background"} strokeWidth={1.5} strokeLinejoin="round" />
+  const d = worse
+    ? `M${cx} ${cy - 6}l5.5 9.5h-11z`
+    : `M${cx} ${cy + 6}l5.5 -9.5h-11z`;
+  return (
+    <path
+      d={d}
+      className={
+        worse ? "fill-worse stroke-background" : "fill-better stroke-background"
+      }
+      strokeWidth={1.5}
+      strokeLinejoin="round"
+    />
+  );
 }
 
 /**
@@ -212,24 +330,26 @@ function Mark({ cx, cy, worse }: { cx: number; cy: number; worse: boolean }) {
  * at least, from zero when it would start near it.
  */
 function domain(values: number[]): [number, number] {
-  if (!values.length) return [0, 1]
-  const min = Math.min(...values)
-  const max = Math.max(...values)
-  const span = Math.max((max - min) * 1.2, median(values) * 0.2) || 1
-  const lo = (min + max) / 2 - span / 2
-  if (lo < span * 0.25) return [0, Math.max(span, max * 1.1)]
-  return [lo, lo + span]
+  if (!values.length) return [0, 1];
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = Math.max((max - min) * 1.2, median(values) * 0.2) || 1;
+  const lo = (min + max) / 2 - span / 2;
+  if (lo < span * 0.25) return [0, Math.max(span, max * 1.1)];
+  return [lo, lo + span];
 }
 
 function useWidth(ref: React.RefObject<HTMLElement | null>) {
-  const [width, setWidth] = React.useState(320)
+  const [width, setWidth] = React.useState(320);
   React.useLayoutEffect(() => {
-    const el = ref.current
-    if (!el) return
-    setWidth(el.clientWidth)
-    const observer = new ResizeObserver(([entry]) => entry && setWidth(entry.contentRect.width))
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [ref])
-  return width
+    const el = ref.current;
+    if (!el) return;
+    setWidth(el.clientWidth);
+    const observer = new ResizeObserver(
+      ([entry]) => entry && setWidth(entry.contentRect.width),
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref]);
+  return width;
 }

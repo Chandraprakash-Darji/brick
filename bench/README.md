@@ -61,15 +61,15 @@ it does not attribute uncommitted measurements to a later commit. Development
 uses the local snapshot; production reads the data branch. Set
 `VITE_BENCHMARKS_URL` to override either source.
 
-| Suite | Coverage |
-| --- | --- |
-| `micro.ts` | Context, action invocation, validation/errors, HTTP query/body assembly, 0/5/20-field coercion, direct/lookup/proxy dispatch, cursor codec, resource list execution, JSON serialization, OpenAPI and server construction |
-| `prepared.ts` | Get/list/insert/update/delete: dynamic Drizzle, prepared Drizzle and raw SQL; SQLite query plans |
-| `batch.ts` | 1M validations/transforms; bounded-memory JSONL generation/parsing; row/chunk/transaction bulk writes; CPU and synthetic I/O transforms; sequential read/write-heavy profiles; Worker message/compute verification |
-| `startup.ts` | Repeated in-process build/listen/first-request timing, 10/100/1000 actions |
-| `http.ts` | Equivalent `{ok:true}` framework layers; SQLite CRUD; list, cursor, search/filter, count/page SQL timings; payloads, streams, synthetic RTT and slow-action traffic; file-backed WAL; scaling to 100K (10M opt-in) |
-| `postgres.ts` | Optional PostgreSQL HTTP CRUD, database version and `EXPLAIN (ANALYZE, BUFFERS, WAL)` |
-| `run-all.ts` | Runs suites, aggregates artifacts, reports framework tax and advisory baseline thresholds |
+| Suite         | Coverage                                                                                                                                                                                                                 |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `micro.ts`    | Context, action invocation, validation/errors, HTTP query/body assembly, 0/5/20-field coercion, direct/lookup/proxy dispatch, cursor codec, resource list execution, JSON serialization, OpenAPI and server construction |
+| `prepared.ts` | Get/list/insert/update/delete: dynamic Drizzle, prepared Drizzle and raw SQL; SQLite query plans                                                                                                                         |
+| `batch.ts`    | 1M validations/transforms; bounded-memory JSONL generation/parsing; row/chunk/transaction bulk writes; CPU and synthetic I/O transforms; sequential read/write-heavy profiles; Worker message/compute verification       |
+| `startup.ts`  | Repeated in-process build/listen/first-request timing, 10/100/1000 actions                                                                                                                                               |
+| `http.ts`     | Equivalent `{ok:true}` framework layers; SQLite CRUD; list, cursor, search/filter, count/page SQL timings; payloads, streams, synthetic RTT and slow-action traffic; file-backed WAL; scaling to 100K (10M opt-in)       |
+| `postgres.ts` | Optional PostgreSQL HTTP CRUD, database version and `EXPLAIN (ANALYZE, BUFFERS, WAL)`                                                                                                                                    |
+| `run-all.ts`  | Runs suites, aggregates artifacts, reports framework tax and advisory baseline thresholds                                                                                                                                |
 
 ### Select scenarios
 

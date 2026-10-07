@@ -6,13 +6,16 @@
     "packages/*",
     "examples/basic",
     "examples/showcase",
-    "examples/extensions"
+    "examples/extensions",
+    "www"
   ],
   "scripts": {
+    "prepare": "lefthook install",
+    "check": "bun run lint && bun run fmt:check && bun run build && bun run typecheck && bun run test",
     "build": "bun run --filter @brickkit/core build && bun run --filter @brickkit/cli build",
     "release": "bun scripts/release.ts",
     "test": "bun test",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "bun run --filter @brickkit/core typecheck && bun run --filter @brickkit/cli typecheck && bun run bench:typecheck",
     "bench": "bun bench/run-all.ts",
     "bench:smoke": "bun bench/run-all.ts --smoke",
     "bench:micro": "bun bench/micro.ts",
@@ -23,11 +26,18 @@
     "bench:postgres": "bun bench/postgres.ts",
     "bench:typecheck": "tsc --noEmit -p bench/tsconfig.json",
     "bench:test": "bun test bench/lab.test.ts",
-    "bench:compiler": "bun bench/compiler.ts"
+    "bench:compiler": "bun bench/compiler.ts",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check ."
   },
   "devDependencies": {
     "@types/bun": "latest",
     "elysia": "^1.2.0",
+    "lefthook": "^2.1.17",
+    "oxfmt": "^0.72.0",
+    "oxlint": "^1.87.0",
     "typescript": "^5.7.0"
   }
 }

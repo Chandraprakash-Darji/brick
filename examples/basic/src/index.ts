@@ -4,9 +4,7 @@ import {
   ActionExecutionError,
 } from "@brickkit/core";
 import {
-  pagesService,
   createPage,
-  getPage,
   getPublicPage,
   listPages,
   updatePage,
@@ -14,10 +12,16 @@ import {
 } from "./services/pages/service";
 
 export async function bootstrap() {
-  console.log("===============================================================");
+  console.log(
+    "===============================================================",
+  );
   console.log("📄 Pages — Publishing Workspace Engine (Brick-TS Demo)");
-  console.log("   Direction: Content first, typeset canvas & publishing inspector");
-  console.log("===============================================================\n");
+  console.log(
+    "   Direction: Content first, typeset canvas & publishing inspector",
+  );
+  console.log(
+    "===============================================================\n",
+  );
 
   // 1. Service Discovery & Architecture Introspection
   const registry = getGlobalRegistry();
@@ -27,8 +31,10 @@ export async function bootstrap() {
   for (const serviceSchema of architecture.services) {
     console.log(
       `\n  Service: '${serviceSchema.name}' (Database: ${
-        serviceSchema.hasDatabase ? "Enabled (Bun SQLite + Drizzle)" : "Disabled"
-      })`
+        serviceSchema.hasDatabase
+          ? "Enabled (Bun SQLite + Drizzle)"
+          : "Disabled"
+      })`,
     );
     for (const action of serviceSchema.actions) {
       console.log(`    ↳ Action: [${action.name}]`);
@@ -38,12 +44,18 @@ export async function bootstrap() {
     }
   }
 
-  console.log("\n---------------------------------------------------------------");
+  console.log(
+    "\n---------------------------------------------------------------",
+  );
   console.log("🚀 Executing Pages Lifecycle Demo Pipeline");
-  console.log("---------------------------------------------------------------\n");
+  console.log(
+    "---------------------------------------------------------------\n",
+  );
 
   // Step 1: Create a published documentation page with markdown headings
-  console.log("👉 1. Creating a technical specification page with Markdown headings...");
+  console.log(
+    "👉 1. Creating a technical specification page with Markdown headings...",
+  );
   const guideMarkdown = `# Brick Architecture Guide
 The document is the main event. Its interface uses warm paper, deep ink, and quiet controls.
 
@@ -79,26 +91,38 @@ All action schemas compile ahead-of-time into high-speed V8 byte code.
   console.log(`      Created:    ${newDoc.createdAt}\n`);
 
   // Step 2: Extract Table of Contents via renderPage
-  console.log("👉 2. Rendering page and extracting Table of Contents (TOC) rail...");
+  console.log(
+    "👉 2. Rendering page and extracting Table of Contents (TOC) rail...",
+  );
   const rendered = await renderPage({
     input: { slug: "brick-architecture-guide" },
   });
-  console.log(`   ✅ Rendered with theme '${rendered.theme}'. Generated TOC items:`);
+  console.log(
+    `   ✅ Rendered with theme '${rendered.theme}'. Generated TOC items:`,
+  );
   for (const item of rendered.toc) {
     const indent = "   ".repeat(item.level);
-    console.log(`      ${indent}H${item.level} [${item.text}] (anchor: #${item.id})`);
+    console.log(
+      `      ${indent}H${item.level} [${item.text}] (anchor: #${item.id})`,
+    );
   }
   console.log("");
 
   // Step 3: Test public reader retrieval by slug
-  console.log("👉 3. Fetching published page by slug via public reader endpoint...");
+  console.log(
+    "👉 3. Fetching published page by slug via public reader endpoint...",
+  );
   const publicPage = await getPublicPage({
     input: { slug: "brick-architecture-guide" },
   });
-  console.log(`   ✅ Public reader fetched: "${publicPage.title}" (${publicPage.slug})\n`);
+  console.log(
+    `   ✅ Public reader fetched: "${publicPage.title}" (${publicPage.slug})\n`,
+  );
 
   // Step 4: Test validation - invalid slug format (uppercase / spaces)
-  console.log("👉 4. Testing slug schema validation (rejecting uppercase and spaces)...");
+  console.log(
+    "👉 4. Testing slug schema validation (rejecting uppercase and spaces)...",
+  );
   try {
     await createPage({
       input: {
@@ -120,7 +144,9 @@ All action schemas compile ahead-of-time into high-speed V8 byte code.
   }
 
   // Step 5: Test slug collision rejection (409 Conflict)
-  console.log("👉 5. Testing duplicate slug collision rejection (409 Conflict)...");
+  console.log(
+    "👉 5. Testing duplicate slug collision rejection (409 Conflict)...",
+  );
   try {
     await createPage({
       input: {
@@ -156,14 +182,22 @@ All action schemas compile ahead-of-time into high-speed V8 byte code.
   const list = await listPages({
     input: { limit: 10 },
   });
-  console.log(`   ✅ Workspace contains ${list.pages.length} document(s) (Total: ${list.total}):`);
+  console.log(
+    `   ✅ Workspace contains ${list.pages.length} document(s) (Total: ${list.total}):`,
+  );
   for (const page of list.pages) {
-    console.log(`      • [/${page.slug}] "${page.title}" (${page.theme}, ${page.isPublic ? "Public" : "Draft"})`);
+    console.log(
+      `      • [/${page.slug}] "${page.title}" (${page.theme}, ${page.isPublic ? "Public" : "Draft"})`,
+    );
   }
 
-  console.log("\n===============================================================");
+  console.log(
+    "\n===============================================================",
+  );
   console.log("🎉 All Pages demo pipeline assertions succeeded!");
-  console.log("===============================================================");
+  console.log(
+    "===============================================================",
+  );
 }
 
 if (import.meta.main) {

@@ -14,13 +14,24 @@
  *             used by bench/http.ts (in-process, no separate process needed).
  */
 import { Elysia } from "elysia";
-import { defineDatabase, syncSchema, ensureResourceIndexes, ensureSQLiteFts, type Service } from "../packages/core/src/index";
+import {
+  defineDatabase,
+  syncSchema,
+  ensureResourceIndexes,
+  ensureSQLiteFts,
+  type Service,
+} from "../packages/core/src/index";
 import { brick } from "../packages/cli/src/server";
 import { benchTable } from "./lib/fixtures";
 import { seedRows } from "./lib/fixtures";
 import { parseArgs, argInt, argStr } from "./lib/stats";
 
-export const BENCH_PORTS = { floor: 3451, elysia: 3452, brick: 3453, brickFile: 3454 };
+export const BENCH_PORTS = {
+  floor: 3451,
+  elysia: 3452,
+  brick: 3453,
+  brickFile: 3454,
+};
 
 /** Layer 1: runtime floor — bare Bun.serve, no framework. */
 export function startFloorServer(port: number) {
@@ -32,7 +43,9 @@ export function startFloorServer(port: number) {
 
 /** Layer 2: direct Elysia, no Brick. Measures the Elysia tax. */
 export async function startElysiaServer(port: number) {
-  const app = new Elysia().get("/__bench/noop", () => ({ ok: true })).post("/__bench/noop", () => ({ ok: true }));
+  const app = new Elysia()
+    .get("/__bench/noop", () => ({ ok: true }))
+    .post("/__bench/noop", () => ({ ok: true }));
   app.listen(port);
   return app;
 }
@@ -51,7 +64,8 @@ export async function startBrickServer(opts: {
   dbPath?: string;
   prefix?: string;
 }): Promise<BrickBench> {
-  const { defineService, defineAction, Type } = await import("../packages/core/src/index");
+  const { defineService, defineAction, Type } =
+    await import("../packages/core/src/index");
   const { resetGlobalRegistry } = await import("../packages/core/src/index");
 
   resetGlobalRegistry();
@@ -64,7 +78,10 @@ export async function startBrickServer(opts: {
   // Brick does no schema management by design — the app owns its database.
   // The bench prepares its own schema explicitly (tables, indexes, FTS5
   // sidecar), exactly as an application developer would.
-  ensureResourceIndexes(db, benchTable, { ownerField: "authorId", searchFields: ["title", "slug"] });
+  ensureResourceIndexes(db, benchTable, {
+    ownerField: "authorId",
+    searchFields: ["title", "slug"],
+  });
   ensureSQLiteFts(db, benchTable, ["title", "slug"]);
 
   const service = defineService("bench", { database });
@@ -89,7 +106,7 @@ export async function startBrickServer(opts: {
   });
 
   service.action(
-    defineAction({ name: "noop", execute: async () => ({ ok: true }) })
+    defineAction({ name: "noop", execute: async () => ({ ok: true }) }),
   );
   service.action(
     defineAction({
@@ -101,7 +118,7 @@ export async function startBrickServer(opts: {
       }),
       output: Type.Object({ ok: Type.Boolean() }),
       execute: async () => ({ ok: true }),
-    })
+    }),
   );
   authService.action(
     defineAction({
@@ -116,7 +133,7 @@ export async function startBrickServer(opts: {
       output: Type.Object({ ok: Type.Boolean() }),
       authorize: async ({ user }: any) => user?.id === "bench-user",
       execute: async () => ({ ok: true }),
-    })
+    }),
   );
   // Synthetic N-round-trip action: value-of-removed-round-trips demo
   // (used when no real PostgreSQL is available; labelled synthetic).
@@ -131,7 +148,7 @@ export async function startBrickServer(opts: {
         }
         return { ok: true, trips: input.trips };
       },
-    })
+    }),
   );
   service.action(
     defineAction({
@@ -141,7 +158,7 @@ export async function startBrickServer(opts: {
         await new Promise((r) => setTimeout(r, 25)); // one slow query under load
         return { ok: true };
       },
-    })
+    }),
   );
 
   const app = brick({
@@ -159,32 +176,50 @@ export async function startBrickServer(opts: {
   });
 
   // Sized JSON / payload / streaming routes for parse+serialize scaling.
-  const sizes: Record<string, number> = { "1kib": 1024, "32kib": 32 * 1024, "256kib": 256 * 1024 };
+  const sizes: Record<string, number> = {
+    "1kib": 1024,
+    "32kib": 32 * 1024,
+    "256kib": 256 * 1024,
+  };
   for (const [name, bytes] of Object.entries(sizes)) {
-    const body = JSON.stringify({ ok: true, data: "x".repeat(Math.max(0, bytes - 32)) });
-    app.endpoint({ method: "GET", path: `/__bench/json/${name}`, handler: () => new Response(body, { headers: { "content-type": "application/json" } }) });
+    const body = JSON.stringify({
+      ok: true,
+      data: "x".repeat(Math.max(0, bytes - 32)),
+    });
+    app.endpoint({
+      method: "GET",
+      path: `/__bench/json/${name}`,
+      handler: () =>
+        new Response(body, { headers: { "content-type": "application/json" } }),
+    });
     app.endpoint({
       method: "POST",
       path: `/__bench/echo/${name}`,
-      handler: async (ctx: any) => ({ ok: true, bytes: JSON.stringify(ctx.body ?? {}).length }),
+      handler: async (ctx: any) => ({
+        ok: true,
+        bytes: JSON.stringify(ctx.body ?? {}).length,
+      }),
     });
   }
-  for (const mib of [1, 10, 100]) app.endpoint({
-    method: "GET",
-    path: `/__bench/stream/${mib}mib`,
-    handler: () => {
-      const chunk = "x".repeat(64 * 1024);
-      let sent = 0;
-      const stream = new ReadableStream({
-        pull(controller) {
-          if (sent >= 16 * mib) return controller.close();
-          sent++;
-          controller.enqueue(new TextEncoder().encode(chunk));
-        },
-      });
-      return new Response(stream, { headers: { "content-type": "application/octet-stream" } });
-    },
-  });
+  for (const mib of [1, 10, 100])
+    app.endpoint({
+      method: "GET",
+      path: `/__bench/stream/${mib}mib`,
+      handler: () => {
+        const chunk = "x".repeat(64 * 1024);
+        let sent = 0;
+        const stream = new ReadableStream({
+          pull(controller) {
+            if (sent >= 16 * mib) return controller.close();
+            sent++;
+            controller.enqueue(new TextEncoder().encode(chunk));
+          },
+        });
+        return new Response(stream, {
+          headers: { "content-type": "application/octet-stream" },
+        });
+      },
+    });
 
   const rows = opts.rows ?? 5000;
   if (rows > 0) await seedRows(db, rows);
@@ -211,11 +246,15 @@ if (import.meta.main) {
     rows,
     dbPath: dbArg.startsWith("file:") ? dbArg.slice(5) : ":memory:",
   });
-  console.log(`brick bench server on http://127.0.0.1:${port} (rows=${rows} db=${dbArg})`);
+  console.log(
+    `brick bench server on http://127.0.0.1:${port} (rows=${rows} db=${dbArg})`,
+  );
   console.log(`  POST /__bench/noop            raw endpoint`);
   console.log(`  POST /api/bench/noop          no-schema action`);
   console.log(`  POST /api/bench/validated     input+output validation`);
-  console.log(`  POST /api/bench/full          context hook + authorize (user bench-user)`);
+  console.log(
+    `  POST /api/bench/full          context hook + authorize (user bench-user)`,
+  );
   console.log(`  CRUD /api/item(/:id)          resource + database`);
   const stop = async () => {
     await bench.stop();

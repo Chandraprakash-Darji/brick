@@ -9,7 +9,7 @@ function formatLog(
   method: string,
   path: string,
   status: string | number,
-  elapsedMs: number
+  elapsedMs: number,
 ): string {
   return `${method} ${path} → ${String(status)} (${elapsedMs}ms)`;
 }
@@ -38,9 +38,7 @@ function thrownStatus(error: unknown): number | undefined {
  * because onRequest offers no `as` option and is never propagated from a
  * used instance. Unmatched routes (no beforeHandle) fall back to Date.now().
  */
-export function requestLoggingPlugin(
-  opts: RequestLoggingOptions = {}
-): Elysia {
+export function requestLoggingPlugin(opts: RequestLoggingOptions = {}): Elysia {
   const plugin = new Elysia();
   const enabled = opts.enabled ?? true;
   if (!enabled) return plugin;
@@ -51,10 +49,15 @@ export function requestLoggingPlugin(
     startedAt.set(request, Date.now());
   };
 
-  const logSuccess = ({ request, set }: Pick<Context, "request" | "set">): void => {
+  const logSuccess = ({
+    request,
+    set,
+  }: Pick<Context, "request" | "set">): void => {
     const start = startedAt.get(request) ?? Date.now();
     const path = new URL(request.url).pathname;
-    logger(formatLog(request.method, path, set.status ?? 200, Date.now() - start));
+    logger(
+      formatLog(request.method, path, set.status ?? 200, Date.now() - start),
+    );
   };
 
   const logError = ({

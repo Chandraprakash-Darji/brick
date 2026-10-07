@@ -1,11 +1,18 @@
-import { eq, sql, t, type BunSQLiteDatabase, type Service } from "@brickkit/core";
+import {
+  eq,
+  sql,
+  t,
+  type BunSQLiteDatabase,
+  type Service,
+} from "@brickkit/core";
 import { commentsTable } from "./schema";
 
 export { commentsTable } from "./schema";
 
-export function registerComments<TDb extends BunSQLiteDatabase<any>, TContext extends Record<string, unknown>>(
-  service: Service<TDb, TContext>,
-) {
+export function registerComments<
+  TDb extends BunSQLiteDatabase<any>,
+  TContext extends Record<string, unknown>,
+>(service: Service<TDb, TContext>) {
   const comments = service.resource({
     name: "comment",
     table: commentsTable,
@@ -31,8 +38,11 @@ export function registerComments<TDb extends BunSQLiteDatabase<any>, TContext ex
     input: t.Object({ targetId: t.String({ minLength: 1 }) }),
     output: t.Object({ count: t.Integer({ minimum: 0 }) }),
     execute: ({ input, ctx }) => {
-      const [row] = ctx.db.select({ count: sql<number>`count(*)` })
-        .from(commentsTable).where(eq(commentsTable.targetId, input.targetId)).all();
+      const [row] = ctx.db
+        .select({ count: sql<number>`count(*)` })
+        .from(commentsTable)
+        .where(eq(commentsTable.targetId, input.targetId))
+        .all();
       return { count: row!.count };
     },
   });

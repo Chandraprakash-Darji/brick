@@ -103,7 +103,7 @@ export class SecretRef<T = string> {
         value = this.transformFn(raw);
       } catch (err) {
         throw new Error(
-          `Invalid value for secret "${this.name}": transform failed (${err instanceof Error ? err.message : String(err)})`
+          `Invalid value for secret "${this.name}": transform failed (${err instanceof Error ? err.message : String(err)})`,
         );
       }
     } else {
@@ -115,11 +115,13 @@ export class SecretRef<T = string> {
         result = fn(value);
       } catch (err) {
         throw new Error(
-          `Invalid value for secret "${this.name}": ${err instanceof Error ? err.message : String(err)}`
+          `Invalid value for secret "${this.name}": ${err instanceof Error ? err.message : String(err)}`,
         );
       }
       if (result === false) {
-        throw new Error(`Invalid value for secret "${this.name}": validation failed`);
+        throw new Error(
+          `Invalid value for secret "${this.name}": validation failed`,
+        );
       }
       if (typeof result === "string") {
         throw new Error(`Invalid value for secret "${this.name}": ${result}`);
@@ -140,7 +142,7 @@ export class SecretRef<T = string> {
     const raw = this.resolveRaw(source);
     if (raw === undefined) {
       throw new Error(
-        `Missing required secret "${this.name}": set it in .env (local) or the environment (prod)`
+        `Missing required secret "${this.name}": set it in .env (local) or the environment (prod)`,
       );
     }
     return this.coerce(raw);
@@ -156,7 +158,10 @@ export class SecretRef<T = string> {
  * Declare a secret. Idempotent: re-declaring the same name returns the
  * original ref (first declaration wins) so module re-evaluation is safe.
  */
-export function secret(name: string, options: SecretOptions = {}): SecretRef<string> {
+export function secret(
+  name: string,
+  options: SecretOptions = {},
+): SecretRef<string> {
   const existing = registry.get(name);
   if (existing) return existing;
   const ref = new SecretRef<string>(name, options);
@@ -169,7 +174,7 @@ export function secret(name: string, options: SecretOptions = {}): SecretRef<str
  * all missing required secrets. Returns the resolved values.
  */
 export function resolveSecrets(
-  opts: { source?: SecretSource } = {}
+  opts: { source?: SecretSource } = {},
 ): Record<string, unknown> {
   const source = opts.source ?? envSource;
   const missing: string[] = [];
@@ -181,7 +186,7 @@ export function resolveSecrets(
   }
   if (missing.length > 0) {
     throw new Error(
-      `Missing required secrets: ${missing.join(", ")}. Set them in .env (local) or the environment (prod)`
+      `Missing required secrets: ${missing.join(", ")}. Set them in .env (local) or the environment (prod)`,
     );
   }
   return resolved;
@@ -189,7 +194,7 @@ export function resolveSecrets(
 
 /** Metadata for introspection (values never exposed — future dashboard use). */
 export function listSecrets(
-  opts: { source?: SecretSource } = {}
+  opts: { source?: SecretSource } = {},
 ): Array<{ name: string; hasDefault: boolean; isSet: boolean }> {
   const source = opts.source ?? envSource;
   return [...registry.values()].map((ref) => ({
@@ -205,7 +210,9 @@ export function overrideSecret(name: string, value: string | undefined): void {
 }
 
 /** Bulk overrides (test/session scoped). */
-export function overrideSecrets(values: Record<string, string | undefined>): void {
+export function overrideSecrets(
+  values: Record<string, string | undefined>,
+): void {
   for (const [name, value] of Object.entries(values)) {
     overrides.set(name, value);
   }

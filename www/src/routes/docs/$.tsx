@@ -66,7 +66,9 @@ const clientLoader = browserCollections.docs.createClientLoader({
     return (
       <DocsPage toc={toc}>
         <DocsTitle className="docs-title">{frontmatter.title}</DocsTitle>
-        <DocsDescription className="docs-description">{frontmatter.description}</DocsDescription>
+        <DocsDescription className="docs-description">
+          {frontmatter.description}
+        </DocsDescription>
         <div className="-mt-4 flex flex-row items-center gap-2 border-b pb-6">
           <MarkdownCopyButton markdownUrl={markdownUrl} />
           <ViewOptionsPopover
@@ -88,7 +90,12 @@ function Page() {
   );
 
   return (
-    <DocsLayout {...baseOptions()} nav={{ title: "Documentation", url: "/docs" }} themeSwitch={{ enabled: false }} tree={pageTree}>
+    <DocsLayout
+      {...baseOptions()}
+      nav={{ title: "Documentation", url: "/docs" }}
+      themeSwitch={{ enabled: false }}
+      tree={pageTree}
+    >
       <AISearch>
         <AISearchPanel />
         <AISearchTrigger

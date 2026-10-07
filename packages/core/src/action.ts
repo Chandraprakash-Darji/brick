@@ -1,7 +1,6 @@
-import type { TSchema, Static } from "@sinclair/typebox";
+import type { TSchema } from "@sinclair/typebox";
 import {
   type Action,
-  type ActionConfig,
   type ActionConfigWithAuthorize,
   type ActionConfigWithoutAuthorize,
   type ActionContext,
@@ -10,7 +9,6 @@ import {
   type BaseContext,
   ActionExecutionError,
   ValidationError,
-  type ValidationErrorItem,
   type Logger,
 } from "./types";
 import { validateWithSchema } from "./typebox";
@@ -26,7 +24,10 @@ const defaultLogger: Logger = {
 const DEFAULT_REQUEST = new Request("http://localhost");
 let _defaultCtxSeq = 0;
 
-const standardErrorDefaults: Record<string, { status: number; message: string }> = {
+const standardErrorDefaults: Record<
+  string,
+  { status: number; message: string }
+> = {
   BAD_REQUEST: { status: 400, message: "Bad Request" },
   UNAUTHORIZED: { status: 401, message: "Unauthorized" },
   FORBIDDEN: { status: 403, message: "Forbidden" },
@@ -53,9 +54,9 @@ function createDefaultContext(partial?: any): BaseContext & any {
   };
 }
 
-export function buildErrorHelpers<TErrors extends Record<string, ActionErrorDefinition>>(
-  errorsDef?: TErrors
-): ErrorBuilder<TErrors> {
+export function buildErrorHelpers<
+  TErrors extends Record<string, ActionErrorDefinition>,
+>(errorsDef?: TErrors): ErrorBuilder<TErrors> {
   const helpers: Record<string, any> = {};
 
   // 1. Populate standard HTTP error helpers
@@ -84,28 +85,41 @@ export function buildErrorHelpers<TErrors extends Record<string, ActionErrorDefi
 export function defineAction<
   TInputSchema extends TSchema | undefined = undefined,
   TOutputSchema extends TSchema | undefined = undefined,
-  TErrors extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>,
-  TContext extends ActionContext = ActionContext
+  TErrors extends Record<string, ActionErrorDefinition> = Record<
+    string,
+    ActionErrorDefinition
+  >,
+  TContext extends ActionContext = ActionContext,
 >(
-  config: ActionConfigWithAuthorize<TInputSchema, TOutputSchema, TErrors, TContext>
+  config: ActionConfigWithAuthorize<
+    TInputSchema,
+    TOutputSchema,
+    TErrors,
+    TContext
+  >,
 ): Action<TInputSchema, TOutputSchema, TErrors, TContext>;
 
 export function defineAction<
   TInputSchema extends TSchema | undefined = undefined,
   TOutputSchema extends TSchema | undefined = undefined,
-  TErrors extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>,
-  TContext extends ActionContext = ActionContext
+  TErrors extends Record<string, ActionErrorDefinition> = Record<
+    string,
+    ActionErrorDefinition
+  >,
+  TContext extends ActionContext = ActionContext,
 >(
-  config: ActionConfigWithoutAuthorize<TInputSchema, TOutputSchema, TErrors, TContext>
+  config: ActionConfigWithoutAuthorize<
+    TInputSchema,
+    TOutputSchema,
+    TErrors,
+    TContext
+  >,
 ): Action<TInputSchema, TOutputSchema, TErrors, TContext>;
 
 export function defineAction(config: any): any {
   const errorHelpers = buildErrorHelpers(config.errors);
 
-  const actionFn = (async (params: {
-    input?: any;
-    ctx?: any;
-  }) => {
+  const actionFn = (async (params: { input?: any; ctx?: any }) => {
     return actionFn.execute(params);
   }) as any;
 
@@ -129,10 +143,7 @@ export function defineAction(config: any): any {
     return actionFn.execute({ input, ctx });
   };
 
-  actionFn.execute = async (params: {
-    input?: any;
-    ctx?: any;
-  }) => {
+  actionFn.execute = async (params: { input?: any; ctx?: any }) => {
     let fullCtx: any;
     if (params?.ctx?._resolved) {
       fullCtx = params.ctx;
@@ -163,7 +174,7 @@ export function defineAction(config: any): any {
       if (!inputValidation.success) {
         throw new ValidationError(
           `Validation failed for action '${config.name}' input` as string,
-          inputValidation.errors
+          inputValidation.errors,
         );
       }
     }
@@ -179,7 +190,7 @@ export function defineAction(config: any): any {
         throw new ActionExecutionError(
           "UNAUTHORIZED",
           `Access denied for action '${config.name}'`,
-          403
+          403,
         );
       }
     }
@@ -198,7 +209,7 @@ export function defineAction(config: any): any {
         throw new ValidationError(
           `Validation failed for action '${config.name}' output` as string,
           outputValidation.errors,
-          500
+          500,
         );
       }
     }

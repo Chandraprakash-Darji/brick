@@ -1,7 +1,14 @@
-import { ValidationError, ActionExecutionError, type CompiledRoutePlan } from "@brickkit/core";
+import {
+  ValidationError,
+  ActionExecutionError,
+  type CompiledRoutePlan,
+} from "@brickkit/core";
 
 export type CompiledHandler = (context: any) => unknown | Promise<unknown>;
-export type HandlerFactory = (binding: CompiledRoutePlan, runtime: typeof compilerRuntime) => CompiledHandler;
+export type HandlerFactory = (
+  binding: CompiledRoutePlan,
+  runtime: typeof compilerRuntime,
+) => CompiledHandler;
 
 const EMPTY_SERVICES = Object.freeze({});
 const DEFAULT_REQUEST = new Request("http://localhost");
@@ -15,7 +22,9 @@ function isNonEmpty(value: any): boolean {
 
 /** Retains Brick's existing source precedence and treatment of empty bodies. */
 function mergeInput(first: any, second: any, third: any) {
-  const a = isNonEmpty(first), b = isNonEmpty(second), c = isNonEmpty(third);
+  const a = isNonEmpty(first),
+    b = isNonEmpty(second),
+    c = isNonEmpty(third);
   if (a && !b && !c) return first;
   if (b && !a && !c) return second;
   if (c && !a && !b) return third;
@@ -23,10 +32,23 @@ function mergeInput(first: any, second: any, third: any) {
   return undefined;
 }
 
-function validate(check: NonNullable<CompiledRoutePlan["inputChecker"]>, value: unknown, action: string, stage: "input" | "output") {
+function validate(
+  check: NonNullable<CompiledRoutePlan["inputChecker"]>,
+  value: unknown,
+  action: string,
+  stage: "input" | "output",
+) {
   if (check.Check(value)) return;
-  const errors = Array.from(check.Errors(value)).map((err: any) => ({ path: err.path, message: err.message, value: err.value }));
-  throw new ValidationError(`Validation failed for action '${action}' ${stage}`, errors, stage === "output" ? 500 : 400);
+  const errors = Array.from(check.Errors(value)).map((err: any) => ({
+    path: err.path,
+    message: err.message,
+    value: err.value,
+  }));
+  throw new ValidationError(
+    `Validation failed for action '${action}' ${stage}`,
+    errors,
+    stage === "output" ? 500 : 400,
+  );
 }
 
 function mapError(err: any, set: any) {
@@ -35,12 +57,27 @@ function mapError(err: any, set: any) {
     return err.toJSON();
   }
   set.status = 500;
-  return { name: "InternalServerError", message: err?.message || "An unexpected error occurred", status: 500 };
+  return {
+    name: "InternalServerError",
+    message: err?.message || "An unexpected error occurred",
+    status: 500,
+  };
 }
 
 export const compilerRuntime = Object.freeze({
-  emptyServices: EMPTY_SERVICES, defaultRequest: DEFAULT_REQUEST,
-  nextSequence: () => (++sequence).toString(36), mergeInput, validate, mapError,
-  isThenable: (value: any): boolean => value != null && typeof value.then === "function",
-  deny: (action: string): never => { throw new ActionExecutionError("UNAUTHORIZED", `Access denied for action '${action}'`, 403); },
+  emptyServices: EMPTY_SERVICES,
+  defaultRequest: DEFAULT_REQUEST,
+  nextSequence: () => (++sequence).toString(36),
+  mergeInput,
+  validate,
+  mapError,
+  isThenable: (value: any): boolean =>
+    value != null && typeof value.then === "function",
+  deny: (action: string): never => {
+    throw new ActionExecutionError(
+      "UNAUTHORIZED",
+      `Access denied for action '${action}'`,
+      403,
+    );
+  },
 });

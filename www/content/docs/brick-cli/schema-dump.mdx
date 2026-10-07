@@ -17,17 +17,25 @@ Prints `registry.exportArchitecture()` as JSON — the full service graph: servi
 
 ```typescript
 interface ArchitectureSchema {
-  version: string;          // currently "1.0.0"
+  version: string; // currently "1.0.0"
   services: ServiceSchema[];
 }
 
 interface ServiceSchema {
   name: string;
   options: Omit<ServiceOptions, "database"> & {
-    database?: { name?: string; engine: "sqlite" | "postgres"; tables: string[] };
+    database?: {
+      name?: string;
+      engine: "sqlite" | "postgres";
+      tables: string[];
+    };
   };
   hasDatabase: boolean;
-  databaseConfig?: { name?: string; engine: "sqlite" | "postgres"; tables: string[] };
+  databaseConfig?: {
+    name?: string;
+    engine: "sqlite" | "postgres";
+    tables: string[];
+  };
   actions: ActionSchema[];
   resources?: { name: string; ownerField?: string; operations: string[] }[];
 }
@@ -64,7 +72,10 @@ brick info
         { "name": "deleteUser", "hasAuthorize": true }
       ],
       "resources": [
-        { "name": "users", "operations": ["list", "create", "get", "update", "delete"] }
+        {
+          "name": "users",
+          "operations": ["list", "create", "get", "update", "delete"]
+        }
       ]
     }
   ]
@@ -80,7 +91,7 @@ import { getGlobalRegistry } from "@brickkit/core";
 console.log(JSON.stringify(getGlobalRegistry().exportArchitecture(), null, 2));
 ```
 
-## Live route: GET /_brick/services
+## Live route: GET /\_brick/services
 
 Every server built with `brick` exposes the same export at runtime:
 
@@ -127,6 +138,6 @@ import "./src/index";
 const architecture = getGlobalRegistry().exportArchitecture();
 await writeFile(
   "inventory.json",
-  JSON.stringify({ architecture, secrets: listSecrets() }, null, 2)
+  JSON.stringify({ architecture, secrets: listSecrets() }, null, 2),
 );
 ```

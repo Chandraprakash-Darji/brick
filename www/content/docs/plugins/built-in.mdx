@@ -39,13 +39,13 @@ const app = brick({
 
 ```ts
 // Always mounted:
-GET /_health // { status: "ok", uptime, timestamp }
+GET / _health; // { status: "ok", uptime, timestamp }
 ```
 
 ## Architecture export
 
 ```ts
-GET /_brick/services // introspected services, actions, resources, ownerFields
+GET / _brick / services; // introspected services, actions, resources, ownerFields
 ```
 
 Use it to verify what the mesh actually mounted, or to feed client codegen.
@@ -77,7 +77,7 @@ plugin package:
   (`tools/list`, `tools/call`), bearer-protected via JWT.
 - `GET /.well-known/oauth-protected-resource/mcp` — OAuth discovery metadata.
 - `GET /p/:slug` — raw HTML page viewer via `app.endpoint({ method: "GET",
-  path: "/p/:slug", service: pagesService, handler })`, with cache headers
+path: "/p/:slug", service: pagesService, handler })`, with cache headers
   set through `ctx.set.headers`.
 
 See `examples/pages/apps/api/src/mcp.ts` and `src/app.ts` for the wiring.

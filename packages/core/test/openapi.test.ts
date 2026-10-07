@@ -37,7 +37,7 @@ describe("OpenAPI 3.1 Specification Generator", () => {
           message: "Slug is already taken",
         },
       },
-      authorize: ({ ctx }) => true,
+      authorize: () => true,
       execute: async ({ input }) => ({
         id: "p_1",
         title: input.title,
@@ -91,15 +91,26 @@ describe("OpenAPI 3.1 Specification Generator", () => {
 
     // Request Body
     expect(createPath.post.requestBody.required).toBe(true);
-    expect(createPath.post.requestBody.content["application/json"].schema.properties.title).toBeDefined();
-    expect(createPath.post.requestBody.content["application/json"].schema.properties.slug).toBeDefined();
+    expect(
+      createPath.post.requestBody.content["application/json"].schema.properties
+        .title,
+    ).toBeDefined();
+    expect(
+      createPath.post.requestBody.content["application/json"].schema.properties
+        .slug,
+    ).toBeDefined();
 
     // Responses (200, 400, 403, 409, 500)
-    expect(createPath.post.responses["200"].content["application/json"].schema.properties.id).toBeDefined();
+    expect(
+      createPath.post.responses["200"].content["application/json"].schema
+        .properties.id,
+    ).toBeDefined();
     expect(createPath.post.responses["400"]).toBeDefined();
     expect(createPath.post.responses["403"]).toBeDefined();
     expect(createPath.post.responses["409"]).toBeDefined();
-    expect(createPath.post.responses["409"].description).toBe("Slug is already taken");
+    expect(createPath.post.responses["409"].description).toBe(
+      "Slug is already taken",
+    );
     expect(createPath.post.responses["500"]).toBeDefined();
 
     // Security

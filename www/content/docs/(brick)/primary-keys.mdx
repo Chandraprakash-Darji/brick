@@ -18,7 +18,7 @@ import { randomUUID } from "node:crypto";
 pagesService.resource({
   name: "page",
   table: pagesTable,
-  idPrefix: "pg",                    // pg_a1b2c3d4 (explicit; same as default here)
+  idPrefix: "pg", // pg_a1b2c3d4 (explicit; same as default here)
   idGenerator: () => `pg_${randomUUID()}`, // or take over completely
   // ...
 });
@@ -44,7 +44,13 @@ ticketsService.resource({
   table: ticketsTable,
   idField: "ticketNo",
   idGenerator: () => `TICKET-${Date.now()}`,
-  operations: { get: true, create: true, update: true, delete: true, list: true },
+  operations: {
+    get: true,
+    create: true,
+    update: true,
+    delete: true,
+    list: true,
+  },
 });
 ```
 

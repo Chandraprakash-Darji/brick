@@ -1,11 +1,15 @@
-import { createMiddleware, createCsrfMiddleware, createStart } from '@tanstack/react-start';
-import { isMarkdownPreferred } from 'fumadocs-core/negotiation';
-import { redirect } from '@tanstack/react-router';
-import { docsRoute } from '@/lib/shared';
-import { slugsToMarkdownPath } from './lib/source';
+import {
+  createMiddleware,
+  createCsrfMiddleware,
+  createStart,
+} from "@tanstack/react-start";
+import { isMarkdownPreferred } from "fumadocs-core/negotiation";
+import { redirect } from "@tanstack/react-router";
+import { docsRoute } from "@/lib/shared";
+import { slugsToMarkdownPath } from "./lib/source";
 
 const csrfMiddleware = createCsrfMiddleware({
-  filter: (ctx) => ctx.handlerType === 'serverFn',
+  filter: (ctx) => ctx.handlerType === "serverFn",
 });
 
 const llmMiddleware = createMiddleware().server(({ next, request }) => {
@@ -13,12 +17,12 @@ const llmMiddleware = createMiddleware().server(({ next, request }) => {
 
   if (
     url.pathname.startsWith(docsRoute) &&
-    !url.pathname.endsWith('.md') &&
+    !url.pathname.endsWith(".md") &&
     isMarkdownPreferred(request)
   ) {
     const slugs = url.pathname
       .slice(docsRoute.length)
-      .split('/')
+      .split("/")
       .filter((v) => v.length > 0);
     url.pathname = slugsToMarkdownPath(slugs).url;
 

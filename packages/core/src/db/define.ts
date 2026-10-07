@@ -3,8 +3,15 @@ import { dirname } from "node:path";
 import { type Table, getTableName } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { SecretRef } from "../secrets";
-import { createSQLiteDatabase, type SQLiteDatabaseConfig, type BunSQLiteDatabase } from "./sqlite";
-import { createPostgresDatabase, type PostgresDatabaseConfig } from "./postgres";
+import {
+  createSQLiteDatabase,
+  type SQLiteDatabaseConfig,
+  type BunSQLiteDatabase,
+} from "./sqlite";
+import {
+  createPostgresDatabase,
+  type PostgresDatabaseConfig,
+} from "./postgres";
 
 export type EnvInput<T> = T | SecretRef<T>;
 type EnvOptions<T> = { [K in keyof T]: EnvInput<Exclude<T[K], undefined>> };
@@ -16,16 +23,20 @@ interface DefinitionOptions<TSchema extends Record<string, unknown>> {
   schema?: TSchema;
 }
 
-export type SQLiteDefinition<TSchema extends Record<string, unknown> = Record<string, unknown>> =
-  DefinitionOptions<TSchema> & EnvOptions<Omit<SQLiteDatabaseConfig<TSchema>, "schema" | "client">> & {
+export type SQLiteDefinition<
+  TSchema extends Record<string, unknown> = Record<string, unknown>,
+> = DefinitionOptions<TSchema> &
+  EnvOptions<Omit<SQLiteDatabaseConfig<TSchema>, "schema" | "client">> & {
     engine?: "sqlite";
     client?: SQLiteDatabaseConfig<TSchema>["client"];
     url?: never;
     connectionString?: never;
   };
 
-export type PostgresDefinition<TSchema extends Record<string, unknown> = Record<string, unknown>> =
-  DefinitionOptions<TSchema> & EnvOptions<Omit<PostgresDatabaseConfig<TSchema>, "schema">> & {
+export type PostgresDefinition<
+  TSchema extends Record<string, unknown> = Record<string, unknown>,
+> = DefinitionOptions<TSchema> &
+  EnvOptions<Omit<PostgresDatabaseConfig<TSchema>, "schema">> & {
     engine: "postgres";
     path?: never;
     filename?: never;
@@ -34,10 +45,14 @@ export type PostgresDefinition<TSchema extends Record<string, unknown> = Record<
     client?: never;
   };
 
-export type DatabaseDefinition<TSchema extends Record<string, unknown> = Record<string, unknown>> =
-  SQLiteDefinition<TSchema> | PostgresDefinition<TSchema>;
+export type DatabaseDefinition<
+  TSchema extends Record<string, unknown> = Record<string, unknown>,
+> = SQLiteDefinition<TSchema> | PostgresDefinition<TSchema>;
 
-export interface DatabaseHandle<TDb, TSchema extends Record<string, unknown> = Record<string, unknown>> {
+export interface DatabaseHandle<
+  TDb,
+  TSchema extends Record<string, unknown> = Record<string, unknown>,
+> {
   readonly kind: "brick-database";
   readonly name?: string;
   readonly engine: "sqlite" | "postgres";
@@ -46,29 +61,52 @@ export interface DatabaseHandle<TDb, TSchema extends Record<string, unknown> = R
   getDb(): TDb;
 }
 
-export function isDatabaseHandle(value: unknown): value is DatabaseHandle<unknown> {
-  return typeof value === "object" && value !== null &&
-    "kind" in value && value.kind === "brick-database";
+export function isDatabaseHandle(
+  value: unknown,
+): value is DatabaseHandle<unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "kind" in value &&
+    value.kind === "brick-database"
+  );
 }
 
-export function defineDatabase<TSchema extends Record<string, unknown> = Record<string, unknown>>(
-  options?: SQLiteDefinition<TSchema>
+export function defineDatabase<
+  TSchema extends Record<string, unknown> = Record<string, unknown>,
+>(
+  options?: SQLiteDefinition<TSchema>,
 ): DatabaseHandle<BunSQLiteDatabase<TSchema>, TSchema>;
-export function defineDatabase<TSchema extends Record<string, unknown> = Record<string, unknown>>(
-  options: PostgresDefinition<TSchema>
+export function defineDatabase<
+  TSchema extends Record<string, unknown> = Record<string, unknown>,
+>(
+  options: PostgresDefinition<TSchema>,
 ): DatabaseHandle<PostgresJsDatabase<TSchema>, TSchema>;
 export function defineDatabase(
-  options: DatabaseDefinition = {}
+  options: DatabaseDefinition = {},
 ): DatabaseHandle<unknown> {
   const engine = options.engine ?? "sqlite";
   if (engine !== "sqlite" && engine !== "postgres") {
     throw new Error(`Unsupported database engine: ${engine}`);
   }
-  const forbidden = engine === "sqlite"
-    ? ["url", "connectionString", "host", "port", "user", "password", "database", "ssl", "max", "schemaName"]
-    : ["path", "filename", "wal", "foreignKeys", "client"];
+  const forbidden =
+    engine === "sqlite"
+      ? [
+          "url",
+          "connectionString",
+          "host",
+          "port",
+          "user",
+          "password",
+          "database",
+          "ssl",
+          "max",
+          "schemaName",
+        ]
+      : ["path", "filename", "wal", "foreignKeys", "client"];
   for (const key of forbidden) {
-    if (key in options) throw new Error(`Database option "${key}" is not valid for ${engine}`);
+    if (key in options)
+      throw new Error(`Database option "${key}" is not valid for ${engine}`);
   }
   const declared = options.tables ?? {};
   const tables: Record<string, Table> = Array.isArray(declared)
@@ -92,7 +130,8 @@ export function defineDatabase(
       }
       if (engine === "sqlite") {
         const path = (config.filename ?? config.path ?? ":memory:") as string;
-        if (!config.client && path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
+        if (!config.client && path !== ":memory:")
+          mkdirSync(dirname(path), { recursive: true });
         const instance = createSQLiteDatabase({ ...config, schema });
         db = instance;
       } else {

@@ -2,6 +2,20 @@
   "name": "brick-extensions-example",
   "private": true,
   "type": "module",
-  "scripts": { "demo": "bun src/main.ts", "serve": "bun src/server.ts" },
-  "dependencies": { "@brickkit/core": "workspace:*", "@brickkit/cli": "workspace:*" }
+  "scripts": {
+    "demo": "bun src/main.ts",
+    "serve": "bun src/server.ts",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check ."
+  },
+  "dependencies": {
+    "@brickkit/core": "workspace:*",
+    "@brickkit/cli": "workspace:*"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.72.0",
+    "oxlint": "^1.87.0"
+  }
 }

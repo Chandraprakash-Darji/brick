@@ -25,12 +25,12 @@ Options: `title` (default `"Brick-TS API Mesh"`), `version` (`"1.0.0"`), `descri
 
 `brick` wires these automatically (all paths configurable via options):
 
-| Path | Content |
-|------|---------|
-| `GET /openapi.json` | The generated spec (raw endpoints merged in) |
-| `GET /docs` | Scalar API reference (HTML) |
-| `GET /swagger` | Swagger UI (HTML) |
-| `GET /_brick/services` | Architecture JSON (`exportArchitecture()`) |
+| Path                   | Content                                      |
+| ---------------------- | -------------------------------------------- |
+| `GET /openapi.json`    | The generated spec (raw endpoints merged in) |
+| `GET /docs`            | Scalar API reference (HTML)                  |
+| `GET /swagger`         | Swagger UI (HTML)                            |
+| `GET /_brick/services` | Architecture JSON (`exportArchitecture()`)   |
 
 ```ts
 const app = brick({

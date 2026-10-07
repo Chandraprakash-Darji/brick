@@ -27,12 +27,12 @@ In an installed application, invoke the same command through `bunx brick build`.
 
 ## Inspect the output
 
-| File | Purpose |
-| --- | --- |
-| `brick-ir.json` | Analyzed services, route plans and compiler diagnostics |
-| `routes.js` | Generated handler factories bound to the registered services |
-| `server.js` | Runnable bundled Bun server |
-| `server.js.map` | Source map for the bundled server |
+| File            | Purpose                                                      |
+| --------------- | ------------------------------------------------------------ |
+| `brick-ir.json` | Analyzed services, route plans and compiler diagnostics      |
+| `routes.js`     | Generated handler factories bound to the registered services |
+| `server.js`     | Runnable bundled Bun server                                  |
+| `server.js.map` | Source map for the bundled server                            |
 
 The compiler prepares routing and execution plans. Custom action callbacks remain
 JavaScript in the Bun runtime; compiling an application does not translate its

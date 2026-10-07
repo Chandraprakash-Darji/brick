@@ -47,7 +47,7 @@ describe("@brickkit/cli Server Engine", () => {
             id: t.String(),
             title: t.String(),
             amount: t.Number(),
-          })
+          }),
         ),
       }),
       execute: async () => {
@@ -61,14 +61,16 @@ describe("@brickkit/cli Server Engine", () => {
     const app = brick({ services: [dealsService] });
 
     // 1. Health check
-    const healthRes = await app.handle(new Request("http://localhost:4000/_health"));
+    const healthRes = await app.handle(
+      new Request("http://localhost:4000/_health"),
+    );
     expect(healthRes.status).toBe(200);
     const healthJson = await healthRes.json();
     expect(healthJson.status).toBe("ok");
 
     // 2. Introspection check
     const infoRes = await app.handle(
-      new Request("http://localhost:4000/_brick/services")
+      new Request("http://localhost:4000/_brick/services"),
     );
     expect(infoRes.status).toBe(200);
     const infoJson = await infoRes.json();
@@ -81,7 +83,7 @@ describe("@brickkit/cli Server Engine", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: "Enterprise License", amount: 50000 }),
-      })
+      }),
     );
     expect(createRes.status).toBe(200);
     const createData = await createRes.json();
@@ -95,7 +97,7 @@ describe("@brickkit/cli Server Engine", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: "Bad Deal", amount: -10 }),
-      })
+      }),
     );
     expect(invalidRes.status).toBe(400);
     const invalidData = await invalidRes.json();
@@ -104,7 +106,7 @@ describe("@brickkit/cli Server Engine", () => {
 
     // 5. GET /api/deals/listDeals
     const listRes = await app.handle(
-      new Request("http://localhost:4000/api/deals/listDeals")
+      new Request("http://localhost:4000/api/deals/listDeals"),
     );
     expect(listRes.status).toBe(200);
     const listData = await listRes.json();

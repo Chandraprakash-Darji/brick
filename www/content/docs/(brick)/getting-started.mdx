@@ -91,14 +91,14 @@ bun run src/index.ts
 
 ## Verify
 
-| URL | What |
-|-----|------|
-| `http://localhost:4000/_health` | `{ status: "ok", uptime, timestamp }` |
-| `http://localhost:4000/_brick/services` | Live architecture introspection |
-| `http://localhost:4000/openapi.json` | Generated OpenAPI 3.1 spec |
-| `http://localhost:4000/docs` | Scalar API reference |
-| `http://localhost:4000/swagger` | Swagger UI |
-| `GET http://localhost:4000/api/page` | List pages |
-| `POST http://localhost:4000/api/page` | Create a page |
+| URL                                     | What                                  |
+| --------------------------------------- | ------------------------------------- |
+| `http://localhost:4000/_health`         | `{ status: "ok", uptime, timestamp }` |
+| `http://localhost:4000/_brick/services` | Live architecture introspection       |
+| `http://localhost:4000/openapi.json`    | Generated OpenAPI 3.1 spec            |
+| `http://localhost:4000/docs`            | Scalar API reference                  |
+| `http://localhost:4000/swagger`         | Swagger UI                            |
+| `GET http://localhost:4000/api/page`    | List pages                            |
+| `POST http://localhost:4000/api/page`   | Create a page                         |
 
 Postgres instead of SQLite? Pass `engine: "postgres"` with `tables` and a `url` — see [Schema Management](/docs/migrations). Need a signed-in user on every CRUD op? See [Access Control](/docs/access-control) for the context-resolver + `authorize` pattern.

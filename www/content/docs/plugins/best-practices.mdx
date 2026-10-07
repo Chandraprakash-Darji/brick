@@ -52,7 +52,9 @@ safe:
 service.action({
   name: "page.publish",
   authorize: ({ user }) => !!user?.id,
-  execute: async ({ input, ctx }) => { /* ... */ },
+  execute: async ({ input, ctx }) => {
+    /* ... */
+  },
 });
 ```
 

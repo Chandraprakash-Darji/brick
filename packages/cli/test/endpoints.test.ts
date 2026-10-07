@@ -15,18 +15,33 @@ describe("@brickkit/cli app.endpoint()", () => {
   });
 
   it("accepts a database handle without applying schema at startup or on requests", async () => {
-    const table = sqliteTable("runtime_untouched", { id: text("id").primaryKey() });
+    const table = sqliteTable("runtime_untouched", {
+      id: text("id").primaryKey(),
+    });
     const database = defineDatabase({ tables: { table } });
     const service = defineService("runtime_untouched", { database });
     service.resource({ name: "untouched", table });
     const app = brick({ services: [service], secrets: { validate: false } });
-    app.endpoint({ database, method: "GET", path: "/database", handler: ({ db }) => ({
-      same: db === database.getDb(),
-    }) });
+    app.endpoint({
+      database,
+      method: "GET",
+      path: "/database",
+      handler: ({ db }) => ({
+        same: db === database.getDb(),
+      }),
+    });
     const response = await app.handle(new Request("http://localhost/database"));
     expect(await response.json()).toEqual({ same: true });
-    expect(database.getDb().all("SELECT name FROM sqlite_master WHERE type IN ('table', 'index', 'trigger')")).toEqual([]);
-    const architecture = await app.handle(new Request("http://localhost/_brick/services"));
+    expect(
+      database
+        .getDb()
+        .all(
+          "SELECT name FROM sqlite_master WHERE type IN ('table', 'index', 'trigger')",
+        ),
+    ).toEqual([]);
+    const architecture = await app.handle(
+      new Request("http://localhost/_brick/services"),
+    );
     expect(architecture.status).toBe(200);
     expect(await architecture.json()).toBeDefined();
   });
@@ -83,13 +98,17 @@ describe("@brickkit/cli app.endpoint()", () => {
       service: "nope",
     });
 
-    const byDefault = await app.handle(new Request("http://localhost/db-check"));
+    const byDefault = await app.handle(
+      new Request("http://localhost/db-check"),
+    );
     expect(await byDefault.json()).toEqual({ hasDb: true });
 
     const byName = await app.handle(new Request("http://localhost/db-named"));
     expect(await byName.json()).toEqual({ hasDb: true });
 
-    const missing = await app.handle(new Request("http://localhost/db-missing"));
+    const missing = await app.handle(
+      new Request("http://localhost/db-missing"),
+    );
     expect(await missing.json()).toEqual({ hasDb: false });
   });
 
@@ -105,7 +124,11 @@ describe("@brickkit/cli app.endpoint()", () => {
 
   it("dedupes double registration through the shared mountRoute", async () => {
     const app = brick({ services: [] });
-    const def = { handler: () => "once", method: "GET" as const, path: "/once" };
+    const def = {
+      handler: () => "once",
+      method: "GET" as const,
+      path: "/once",
+    };
     app.endpoint(def);
     app.endpoint(def);
     expect(app.listEndpoints()).toHaveLength(2);
@@ -132,7 +155,9 @@ describe("@brickkit/cli app.endpoint()", () => {
 
     const known = await app.handle(new Request("http://localhost/fail-known"));
     expect(known.status).toBe(410);
-    const unknown = await app.handle(new Request("http://localhost/fail-unknown"));
+    const unknown = await app.handle(
+      new Request("http://localhost/fail-unknown"),
+    );
     expect(unknown.status).toBe(500);
     expect(await unknown.json()).toEqual({ message: "kaput", status: 500 });
   });

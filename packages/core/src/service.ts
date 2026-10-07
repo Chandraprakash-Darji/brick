@@ -32,17 +32,23 @@ let _ctxSeq = 0;
 
 export class ServiceImpl<
   TDb = BunSQLiteDatabase<Record<string, unknown>>,
-  TServiceContext extends Record<string, any> = Record<string, any>
+  TServiceContext extends Record<string, any> = Record<string, any>,
 > implements Service<TDb, TServiceContext> {
   readonly name: string;
   readonly options: ServiceOptions<TServiceContext, TDb>;
   readonly actions = new Map<string, Action<any, any, any, any>>();
   readonly tables = new Map<string, any>();
-  readonly resources = new Map<string, Resource<any, BaseContext<TDb> & TServiceContext>>();
+  readonly resources = new Map<
+    string,
+    Resource<any, BaseContext<TDb> & TServiceContext>
+  >();
   private database?: DatabaseHandle<TDb>;
   private _isBuilt = false;
 
-  constructor(name: string, options: ServiceOptions<TServiceContext, TDb> = {}) {
+  constructor(
+    name: string,
+    options: ServiceOptions<TServiceContext, TDb> = {},
+  ) {
     this.name = name;
     this.options = options;
     if (options.database !== undefined && !isDatabaseHandle(options.database)) {
@@ -80,7 +86,8 @@ export class ServiceImpl<
       const tableName = getTableName(table);
       this.tables.set(tableName, table);
     } catch {
-      const fallbackName = (table as any)._?.name ?? `table_${this.tables.size + 1}`;
+      const fallbackName =
+        (table as any)._?.name ?? `table_${this.tables.size + 1}`;
       this.tables.set(fallbackName, table);
     }
 
@@ -88,7 +95,7 @@ export class ServiceImpl<
   }
 
   resource<TTable = any>(
-    config: ResourceConfig<TTable, BaseContext<TDb> & TServiceContext>
+    config: ResourceConfig<TTable, BaseContext<TDb> & TServiceContext>,
   ): Resource<TTable, BaseContext<TDb> & TServiceContext> {
     const resourceInstance = defineResource(this, config);
     this.resources.set(resourceInstance.name, resourceInstance);
@@ -97,7 +104,9 @@ export class ServiceImpl<
     return resourceInstance;
   }
 
-  getResource(name: string): Resource<any, BaseContext<TDb> & TServiceContext> | undefined {
+  getResource(
+    name: string,
+  ): Resource<any, BaseContext<TDb> & TServiceContext> | undefined {
     return this.resources.get(name);
   }
 
@@ -108,23 +117,40 @@ export class ServiceImpl<
   action<
     TIn extends TSchema | undefined = undefined,
     TOut extends TSchema | undefined = undefined,
-    TErr extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>
-  >(
-    action: Action<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>
-  ): this;
+    TErr extends Record<string, ActionErrorDefinition> = Record<
+      string,
+      ActionErrorDefinition
+    >,
+  >(action: Action<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>): this;
   action<
     TIn extends TSchema | undefined = undefined,
     TOut extends TSchema | undefined = undefined,
-    TErr extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>
+    TErr extends Record<string, ActionErrorDefinition> = Record<
+      string,
+      ActionErrorDefinition
+    >,
   >(
-    config: ActionConfigWithAuthorize<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>
+    config: ActionConfigWithAuthorize<
+      TIn,
+      TOut,
+      TErr,
+      BaseContext<TDb> & TServiceContext
+    >,
   ): Action<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>;
   action<
     TIn extends TSchema | undefined = undefined,
     TOut extends TSchema | undefined = undefined,
-    TErr extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>
+    TErr extends Record<string, ActionErrorDefinition> = Record<
+      string,
+      ActionErrorDefinition
+    >,
   >(
-    config: ActionConfigWithoutAuthorize<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>
+    config: ActionConfigWithoutAuthorize<
+      TIn,
+      TOut,
+      TErr,
+      BaseContext<TDb> & TServiceContext
+    >,
   ): Action<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>;
   action(actionOrConfig: any): any {
     let actionInstance: Action<any, any, any, any>;
@@ -161,7 +187,8 @@ export class ServiceImpl<
   }
 
   setDb(database: DatabaseHandle<TDb>): void {
-    if (!isDatabaseHandle(database)) throw new Error("Use defineDatabase() to set a service database");
+    if (!isDatabaseHandle(database))
+      throw new Error("Use defineDatabase() to set a service database");
     this.database = database;
     getGlobalRegistry().touch();
   }
@@ -171,7 +198,7 @@ export class ServiceImpl<
    * Merges framework BaseContext with the service's custom context hook.
    */
   resolveContext(
-    callCtx?: Partial<BaseContext<TDb> & TServiceContext>
+    callCtx?: Partial<BaseContext<TDb> & TServiceContext>,
   ): Promise<BaseContext<TDb> & TServiceContext> {
     if ((callCtx as any)?._resolved) {
       return Promise.resolve(callCtx as BaseContext<TDb> & TServiceContext);
@@ -180,7 +207,7 @@ export class ServiceImpl<
   }
 
   private async _resolveContextSlow(
-    callCtx?: Partial<BaseContext<TDb> & TServiceContext>
+    callCtx?: Partial<BaseContext<TDb> & TServiceContext>,
   ): Promise<BaseContext<TDb> & TServiceContext> {
     const seq = ++_ctxSeq;
     const req = callCtx?.request ?? DEFAULT_REQUEST;
@@ -231,7 +258,11 @@ export class ServiceImpl<
 
   introspect(): ServiceSchema {
     const databaseConfig = this.database
-      ? { name: this.database.name, engine: this.database.engine, tables: Object.keys(this.database.tables) }
+      ? {
+          name: this.database.name,
+          engine: this.database.engine,
+          tables: Object.keys(this.database.tables),
+        }
       : undefined;
     const { database: _database, ...options } = this.options;
     return {
@@ -261,10 +292,10 @@ export class ServiceImpl<
 
 export function defineService<
   TDb = BunSQLiteDatabase<Record<string, unknown>>,
-  TServiceContext extends Record<string, any> = Record<string, any>
+  TServiceContext extends Record<string, any> = Record<string, any>,
 >(
   name: string,
-  options?: ServiceOptions<TServiceContext, TDb>
+  options?: ServiceOptions<TServiceContext, TDb>,
 ): Service<TDb, TServiceContext> {
   const service = new ServiceImpl<TDb, TServiceContext>(name, options);
   getGlobalRegistry().register(service as any);

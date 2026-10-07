@@ -45,7 +45,7 @@ export interface EndpointDefinition {
 /** Resolve the db for an endpoint: explicit service first, else first service holding one. */
 export function resolveEndpointDb(
   service: Service<any, any> | string | undefined,
-  services: Service<any, any>[]
+  services: Service<any, any>[],
 ): any {
   if (service) {
     const svc =
@@ -64,7 +64,7 @@ export function resolveEndpointDb(
 /** Wrap a raw handler with trace ids, logger, db, and mesh-consistent error mapping. */
 export function createEndpointHandler(
   def: EndpointDefinition,
-  services: Service<any, any>[]
+  services: Service<any, any>[],
 ): (elysiaCtx: any) => Promise<unknown> {
   return async ({ params, body, query, headers, request, set }: any) => {
     const traceId =
@@ -82,7 +82,9 @@ export function createEndpointHandler(
     const tag = `endpoint:${def.method} ${def.path}`;
     const ctx: EndpointContext = {
       body,
-      db: def.database ? def.database.getDb() : resolveEndpointDb(def.service, services),
+      db: def.database
+        ? def.database.getDb()
+        : resolveEndpointDb(def.service, services),
       headers: headers ?? {},
       logger: {
         info: (...args) => console.log(`[${tag}]`, ...args),

@@ -18,6 +18,12 @@ export {
   type ReferenceOptions,
 } from "./docs";
 
-export { compileBrickApplication, bindCompiledApplication, emitCompiledApplication,
-  type BrickIR, type RouteIR, type CompiledApplication } from "./compiler";
+export {
+  compileBrickApplication,
+  bindCompiledApplication,
+  emitCompiledApplication,
+  type BrickIR,
+  type RouteIR,
+  type CompiledApplication,
+} from "./compiler";
 export { buildApplication, type BuildApplicationOptions } from "./build";

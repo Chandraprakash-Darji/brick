@@ -2,7 +2,7 @@ import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 
 export interface PostgresDatabaseConfig<
-  TSchema extends Record<string, unknown> = Record<string, unknown>
+  TSchema extends Record<string, unknown> = Record<string, unknown>,
 > {
   /** Database connection URL (e.g. postgresql://user:pass@host:5432/dbname) */
   url?: string;
@@ -28,7 +28,7 @@ export interface PostgresDatabaseConfig<
 }
 
 export type PostgresDatabase<
-  TSchema extends Record<string, unknown> = Record<string, unknown>
+  _TSchema extends Record<string, unknown> = Record<string, unknown>,
 > = any;
 
 export interface DatabaseAdapter<TDb = any, TConfig = any> {
@@ -42,7 +42,7 @@ export interface DatabaseAdapter<TDb = any, TConfig = any> {
  * `sqlite.ts` since it only exists under Bun.
  */
 export function createPostgresDatabase<
-  TSchema extends Record<string, unknown> = Record<string, unknown>
+  TSchema extends Record<string, unknown> = Record<string, unknown>,
 >(config: PostgresDatabaseConfig<TSchema> = {}): PostgresDatabase<TSchema> {
   const connectionUrl =
     config.url ??

@@ -46,7 +46,11 @@ export interface CreateServerOptions {
   endpoints?: EndpointDefinition[];
 }
 
-export { compileRoutePlan, executeCompiledRoute, createActionHandler } from "./action-handler";
+export {
+  compileRoutePlan,
+  executeCompiledRoute,
+  createActionHandler,
+} from "./action-handler";
 
 /** @deprecated Use brick() instead. */
 export const createBrickServer = brick;
@@ -77,12 +81,18 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
   }));
 
   // Serialize stable metadata once; registry changes invalidate the snapshot.
-  app.get("/_brick/services", compiled
-    ? cachedJsonRoute(() => getGlobalRegistry().exportArchitecture(), () => {
-        const registry = getGlobalRegistry();
-        return [registry, registry.revision] as const;
-      })
-    : () => getGlobalRegistry().exportArchitecture());
+  app.get(
+    "/_brick/services",
+    compiled
+      ? cachedJsonRoute(
+          () => getGlobalRegistry().exportArchitecture(),
+          () => {
+            const registry = getGlobalRegistry();
+            return [registry, registry.revision] as const;
+          },
+        )
+      : () => getGlobalRegistry().exportArchitecture(),
+  );
 
   // Request logging first so every route below is timed.
   const requestLogging = options.requestLogging ?? true;
@@ -102,7 +112,11 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
       title: refOpts.title ?? title,
       specUrl: refOpts.specUrl ?? openApiPath,
     };
-    if (compiled) app.get(settings.path, htmlResponse(scalarDocsHTML(settings.specUrl, settings.title)));
+    if (compiled)
+      app.get(
+        settings.path,
+        htmlResponse(scalarDocsHTML(settings.specUrl, settings.title)),
+      );
     else registerReferenceRoute(app, settings);
   }
 
@@ -130,11 +144,24 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
         services,
       });
       // Raw endpoints show up in the spec alongside the action mesh.
-      return { ...spec, paths: { ...(spec.paths ?? {}), ...endpointPaths(endpointDefs) } };
+      return {
+        ...spec,
+        paths: { ...spec.paths, ...endpointPaths(endpointDefs) },
+      };
     };
-    app.get(openApiPath, compiled
-      ? cachedJsonRoute(buildSpec, () => [getGlobalRegistry(), getGlobalRegistry().revision + endpointRevision] as const)
-      : buildSpec);
+    app.get(
+      openApiPath,
+      compiled
+        ? cachedJsonRoute(
+            buildSpec,
+            () =>
+              [
+                getGlobalRegistry(),
+                getGlobalRegistry().revision + endpointRevision,
+              ] as const,
+          )
+        : buildSpec,
+    );
 
     if (compiled) {
       app.get(docsPath, htmlResponse(scalarDocsHTML(openApiPath, title)));
@@ -158,7 +185,7 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
   const mountRoute = (
     method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
     path: string,
-    handler: any
+    handler: any,
   ) => {
     const routeKey = `${method} ${path}`;
     if (registeredRoutes.has(routeKey)) {
@@ -202,22 +229,39 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
   };
   brickApp.listEndpoints = () => [...endpointDefs];
 
-  const compilation = options.compilation ?? compileBrickApplication({ services, prefix,
-    mode: options.compiler === false ? "generic" : "specialized" });
-  if (compilation.ir.prefix !== prefix || JSON.stringify(compilation.ir.services) !== JSON.stringify(services.map(service => service.name))) {
-    throw new Error("Brick compiler: server services/prefix differ from the bound compilation");
+  const compilation =
+    options.compilation ??
+    compileBrickApplication({
+      services,
+      prefix,
+      mode: options.compiler === false ? "generic" : "specialized",
+    });
+  if (
+    compilation.ir.prefix !== prefix ||
+    JSON.stringify(compilation.ir.services) !==
+      JSON.stringify(services.map((service) => service.name))
+  ) {
+    throw new Error(
+      "Brick compiler: server services/prefix differ from the bound compilation",
+    );
   }
-  for (const route of compilation.routes) mountRoute(route.ir.method, route.ir.path, route.handler);
+  for (const route of compilation.routes)
+    mountRoute(route.ir.method, route.ir.path, route.handler);
 
   return brickApp;
 }
 
 function htmlResponse(html: string): Response {
-  return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
+  return new Response(html, {
+    headers: { "content-type": "text/html; charset=utf-8" },
+  });
 }
 
 /** Reuse serialized JSON, without sharing a mutable response body between requests. */
-function cachedJsonRoute(build: () => unknown, revision: () => readonly [unknown, number]) {
+function cachedJsonRoute(
+  build: () => unknown,
+  revision: () => readonly [unknown, number],
+) {
   let [owner, version] = revision();
   let json = JSON.stringify(build());
   return ({ set }: { set: { headers: Record<string, unknown> } }) => {

@@ -27,14 +27,14 @@ curl 'http://localhost:3001/api/comment?targetId=page-1'
 curl 'http://localhost:3001/api/comments/count?targetId=page-1'
 ```
 
-| Method | Route | Behavior |
-| --- | --- | --- |
-| POST | `/api/comment` | Create; trim body and reject blank text |
-| GET | `/api/comment?targetId=page-1` | List comments for a target |
-| GET | `/api/comment/:id` | Read one comment |
-| PATCH | `/api/comment/:id` | Update; trim body and reject blank text |
-| DELETE | `/api/comment/:id` | Delete one comment |
-| GET | `/api/comments/count?targetId=page-1` | Custom TypeBox-validated count action |
+| Method | Route                                 | Behavior                                |
+| ------ | ------------------------------------- | --------------------------------------- |
+| POST   | `/api/comment`                        | Create; trim body and reject blank text |
+| GET    | `/api/comment?targetId=page-1`        | List comments for a target              |
+| GET    | `/api/comment/:id`                    | Read one comment                        |
+| PATCH  | `/api/comment/:id`                    | Update; trim body and reject blank text |
+| DELETE | `/api/comment/:id`                    | Delete one comment                      |
+| GET    | `/api/comments/count?targetId=page-1` | Custom TypeBox-validated count action   |
 
 To reuse it, import `commentsTable` and `registerComments`, include the table in
 `defineDatabase`, apply your schema, and call `registerComments` before building

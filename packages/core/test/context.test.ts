@@ -1,10 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import {
-  defineService,
-  defineDatabase,
-  t,
-  resetGlobalRegistry,
-} from "../src";
+import { defineService, defineDatabase, t, resetGlobalRegistry } from "../src";
 
 // Mock User and Session types mirroring Better Auth
 interface User {
@@ -111,7 +106,7 @@ describe("Service-Level Context Resolution & Session Injection", () => {
       createDoc.run({
         title: "Secret Doc",
         content: "Draft",
-      })
+      }),
     ).rejects.toThrow("Access denied for action 'createDoc'");
 
     // 4. Test zero-mock unit testing ergonomics with injected mock context
@@ -135,7 +130,7 @@ describe("Service-Level Context Resolution & Session Injection", () => {
           expiresAt: new Date(),
         },
         isOwner: (id: string) => id === mockUser.id,
-      }
+      },
     );
 
     expect(result).toBeDefined();
@@ -173,11 +168,14 @@ describe("Service-Level Context Resolution & Session Injection", () => {
     });
 
     // Invoke with valid Bearer token via custom request
-    const authedRequest = new Request("http://localhost/api/secured/getProfile", {
-      headers: {
-        authorization: "Bearer valid-token",
+    const authedRequest = new Request(
+      "http://localhost/api/secured/getProfile",
+      {
+        headers: {
+          authorization: "Bearer valid-token",
+        },
       },
-    });
+    );
 
     const authedResult = await getProfile.execute({
       ctx: { request: authedRequest },
@@ -188,16 +186,19 @@ describe("Service-Level Context Resolution & Session Injection", () => {
     expect(contextResolutionCount).toBe(1);
 
     // Invoke with invalid / missing token
-    const unauthedRequest = new Request("http://localhost/api/secured/getProfile", {
-      headers: {
-        authorization: "Bearer invalid-token",
+    const unauthedRequest = new Request(
+      "http://localhost/api/secured/getProfile",
+      {
+        headers: {
+          authorization: "Bearer invalid-token",
+        },
       },
-    });
+    );
 
     expect(
       getProfile.execute({
         ctx: { request: unauthedRequest },
-      })
+      }),
     ).rejects.toThrow("Access denied for action 'getProfile'");
   });
 

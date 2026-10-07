@@ -9,9 +9,7 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "types": [
-      "bun"
-    ],
+    "types": ["bun"],
     "paths": {
       "@brickkit/core": ["./packages/core/src"],
       "@brickkit/cli": ["./packages/cli/src"],

@@ -8,13 +8,13 @@ composing the primitives below — all TypeScript, in your own service files.
 
 ## Extension points
 
-| Extension point | API | Use it for |
-|-----------------|-----|------------|
-| Resource hooks | `beforeCreate` / `afterCreate` / `beforeUpdate` / `afterUpdate` / `beforeDelete` / `afterDelete` on `service.resource()` | Audit trails, slug validation, denormalized counters |
-| Custom actions | `service.action()` with optional `path` / `method` | Domain operations that are not CRUD (publish, render, invite) |
-| Raw endpoints | `app.endpoint({ method, path, handler, service, database, summary, description, tags })` | HTML pages, webhooks, MCP transports — anything outside the JSON action mesh |
-| Service proxy | `createServiceProxy()` | Call another service's actions with typed dispatch |
-| Built-in capabilities | `brick()` options | Request logging, Scalar / Swagger docs, OpenAPI, health, architecture export |
+| Extension point       | API                                                                                                                      | Use it for                                                                   |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| Resource hooks        | `beforeCreate` / `afterCreate` / `beforeUpdate` / `afterUpdate` / `beforeDelete` / `afterDelete` on `service.resource()` | Audit trails, slug validation, denormalized counters                         |
+| Custom actions        | `service.action()` with optional `path` / `method`                                                                       | Domain operations that are not CRUD (publish, render, invite)                |
+| Raw endpoints         | `app.endpoint({ method, path, handler, service, database, summary, description, tags })`                                 | HTML pages, webhooks, MCP transports — anything outside the JSON action mesh |
+| Service proxy         | `createServiceProxy()`                                                                                                   | Call another service's actions with typed dispatch                           |
+| Built-in capabilities | `brick()` options                                                                                                        | Request logging, Scalar / Swagger docs, OpenAPI, health, architecture export |
 
 ## Endpoint context
 
@@ -29,7 +29,12 @@ interface EndpointContext {
   request: Request;
   set: { status?: number; headers: Record<string, string> };
   db: any; // Drizzle db from `service` (or first service with one)
-  logger: { info: (...a: any[]) => void; warn: (...a: any[]) => void; error: (...a: any[]) => void; debug: (...a: any[]) => void };
+  logger: {
+    info: (...a: any[]) => void;
+    warn: (...a: any[]) => void;
+    error: (...a: any[]) => void;
+    debug: (...a: any[]) => void;
+  };
   traceId: string;
   requestId: string;
 }

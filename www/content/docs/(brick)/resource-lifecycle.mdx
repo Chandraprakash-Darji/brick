@@ -57,8 +57,13 @@ export const getPublicPage = pagesService.action({
     const [page] = await ctx.db
       .select()
       .from(pagesTable)
-      .where(and(eq(pagesTable.slug, input.slug), eq(pagesTable.isPublic, true)));
-    if (!page) error.NOT_FOUND(`Published page '/${input.slug}' not found or is private`);
+      .where(
+        and(eq(pagesTable.slug, input.slug), eq(pagesTable.isPublic, true)),
+      );
+    if (!page)
+      error.NOT_FOUND(
+        `Published page '/${input.slug}' not found or is private`,
+      );
     return page;
   },
 });

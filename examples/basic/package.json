@@ -5,7 +5,11 @@
   "scripts": {
     "db:setup": "bun src/setup-db.ts",
     "dev": "brick dev src/index.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check ."
   },
   "dependencies": {
     "@brickkit/core": "workspace:*",
@@ -14,6 +18,8 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "oxfmt": "^0.72.0",
+    "oxlint": "^1.87.0"
   }
 }

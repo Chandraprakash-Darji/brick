@@ -18,7 +18,7 @@ export {
 } from "drizzle-orm/sqlite-core";
 
 export interface SQLiteDatabaseConfig<
-  TSchema extends Record<string, unknown> = Record<string, unknown>
+  TSchema extends Record<string, unknown> = Record<string, unknown>,
 > {
   /** Database file path or ':memory:' (default: ':memory:') */
   path?: string;
@@ -35,7 +35,7 @@ export interface SQLiteDatabaseConfig<
 }
 
 export type BrickSQLiteDatabase<
-  TSchema extends Record<string, unknown> = Record<string, unknown>
+  TSchema extends Record<string, unknown> = Record<string, unknown>,
 > = BunSQLiteDatabase<TSchema> & {
   $client: Database;
 };
@@ -49,7 +49,7 @@ export type BrickSQLiteDatabase<
  * called.
  */
 export function createSQLiteDatabase<
-  TSchema extends Record<string, unknown> = Record<string, unknown>
+  TSchema extends Record<string, unknown> = Record<string, unknown>,
 >(config: SQLiteDatabaseConfig<TSchema> = {}): BunSQLiteDatabase<TSchema> {
   let Database: new (path: string) => Database;
   let drizzle: (

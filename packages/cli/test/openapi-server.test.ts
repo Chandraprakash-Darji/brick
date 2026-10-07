@@ -13,8 +13,7 @@ describe("@brickkit/cli OpenAPI & Interactive Documentation Server", () => {
   });
 
   it("should serve OpenAPI 3.1 JSON at /openapi.json and documentation at /docs & /swagger", async () => {
-    const pagesService = defineService("pages", {
-    });
+    const pagesService = defineService("pages", {});
 
     const createPage = defineAction({
       name: "createPage",
@@ -42,7 +41,9 @@ describe("@brickkit/cli OpenAPI & Interactive Documentation Server", () => {
     });
 
     // 1. Test /openapi.json
-    const specResponse = await app.handle(new Request("http://localhost/openapi.json"));
+    const specResponse = await app.handle(
+      new Request("http://localhost/openapi.json"),
+    );
     expect(specResponse.status).toBe(200);
     const spec = await specResponse.json();
 
@@ -51,7 +52,9 @@ describe("@brickkit/cli OpenAPI & Interactive Documentation Server", () => {
     expect(spec.info.version).toBe("2.5.0");
     expect(spec.paths["/api/pages/createPage"]).toBeDefined();
     expect(spec.paths["/api/pages/createPage"].post).toBeDefined();
-    expect(spec.paths["/api/pages/createPage"].post.summary).toBe("pages.createPage");
+    expect(spec.paths["/api/pages/createPage"].post.summary).toBe(
+      "pages.createPage",
+    );
     expect(spec.paths["/api/pages/createPage"].post.requestBody).toBeDefined();
 
     // 2. Test /docs (Scalar UI)
@@ -60,16 +63,18 @@ describe("@brickkit/cli OpenAPI & Interactive Documentation Server", () => {
     expect(docsResponse.headers.get("content-type")).toContain("text/html");
     const docsHtml = await docsResponse.text();
     expect(docsHtml).toContain("@scalar/api-reference");
-    expect(docsHtml).toContain("data-url=\"/openapi.json\"");
+    expect(docsHtml).toContain('data-url="/openapi.json"');
     expect(docsHtml).toContain("Pages Platform API — API Reference");
 
     // 3. Test /swagger (Swagger UI)
-    const swaggerResponse = await app.handle(new Request("http://localhost/swagger"));
+    const swaggerResponse = await app.handle(
+      new Request("http://localhost/swagger"),
+    );
     expect(swaggerResponse.status).toBe(200);
     expect(swaggerResponse.headers.get("content-type")).toContain("text/html");
     const swaggerHtml = await swaggerResponse.text();
     expect(swaggerHtml).toContain("swagger-ui");
-    expect(swaggerHtml).toContain("url: \"/openapi.json\"");
+    expect(swaggerHtml).toContain('url: "/openapi.json"');
   });
 
   it("should allow disabling documentation via docs: false", async () => {
@@ -79,7 +84,9 @@ describe("@brickkit/cli OpenAPI & Interactive Documentation Server", () => {
       services: [s],
     });
 
-    const specResponse = await app.handle(new Request("http://localhost/openapi.json"));
+    const specResponse = await app.handle(
+      new Request("http://localhost/openapi.json"),
+    );
     expect(specResponse.status).toBe(404);
 
     const docsResponse = await app.handle(new Request("http://localhost/docs"));

@@ -26,7 +26,17 @@ export function percentile(sorted: number[], p: number): number {
 
 export function summarize(latenciesMs: number[]): LatencySummary {
   if (latenciesMs.length === 0) {
-    return { count: 0, min_ms: 0, p50_ms: 0, p90_ms: 0, p95_ms: 0, p99_ms: 0, p999_ms: 0, max_ms: 0, mean_ms: 0 };
+    return {
+      count: 0,
+      min_ms: 0,
+      p50_ms: 0,
+      p90_ms: 0,
+      p95_ms: 0,
+      p99_ms: 0,
+      p999_ms: 0,
+      max_ms: 0,
+      mean_ms: 0,
+    };
   }
   const sorted = [...latenciesMs].sort((a, b) => a - b);
   const sum = sorted.reduce((a, b) => a + b, 0);
@@ -91,20 +101,32 @@ export function parseArgs(argv: string[]): Record<string, string | boolean> {
   return out;
 }
 
-export function argInt(args: Record<string, string | boolean>, key: string, fallback: number): number {
+export function argInt(
+  args: Record<string, string | boolean>,
+  key: string,
+  fallback: number,
+): number {
   const v = args[key];
   if (v === undefined || v === true) return fallback;
   const n = Number(v);
   return Number.isFinite(n) ? Math.floor(n) : fallback;
 }
 
-export function argStr(args: Record<string, string | boolean>, key: string, fallback: string): string {
+export function argStr(
+  args: Record<string, string | boolean>,
+  key: string,
+  fallback: string,
+): string {
   const v = args[key];
   if (v === undefined || v === true) return fallback;
   return String(v);
 }
 
-export function argList(args: Record<string, string | boolean>, key: string, fallback: number[]): number[] {
+export function argList(
+  args: Record<string, string | boolean>,
+  key: string,
+  fallback: number[],
+): number[] {
   const v = args[key];
   if (v === undefined || v === true) return fallback;
   return String(v)

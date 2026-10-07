@@ -22,7 +22,7 @@ export const renderPage = pagesService.action({
     content: t.String(),
     theme: t.String(),
     toc: t.Array(
-      t.Object({ level: t.Number(), id: t.String(), text: t.String() })
+      t.Object({ level: t.Number(), id: t.String(), text: t.String() }),
     ),
   }),
   execute: async ({ input, ctx, error }) => {
@@ -33,7 +33,13 @@ export const renderPage = pagesService.action({
     if (!page) {
       error.NOT_FOUND(`Page '${input.slug}' not found`);
     }
-    return { slug: page.slug, title: page.title, content: page.content, theme: page.theme, toc: [] };
+    return {
+      slug: page.slug,
+      title: page.title,
+      content: page.content,
+      theme: page.theme,
+      toc: [],
+    };
   },
 });
 ```
@@ -50,14 +56,14 @@ export const renderPage = pagesService.action({
 
 Every `execute` and every `before*` hook receives `error`. These standard helpers always exist:
 
-| Helper | Status |
-|--------|--------|
-| `error.BAD_REQUEST(msg?, details?)` | 400 |
-| `error.UNAUTHORIZED(msg?, details?)` | 401 |
-| `error.FORBIDDEN(msg?, details?)` | 403 |
-| `error.NOT_FOUND(msg?, details?)` | 404 |
-| `error.CONFLICT(msg?, details?)` | 409 |
-| `error.INTERNAL_SERVER_ERROR(msg?, details?)` | 500 |
+| Helper                                        | Status |
+| --------------------------------------------- | ------ |
+| `error.BAD_REQUEST(msg?, details?)`           | 400    |
+| `error.UNAUTHORIZED(msg?, details?)`          | 401    |
+| `error.FORBIDDEN(msg?, details?)`             | 403    |
+| `error.NOT_FOUND(msg?, details?)`             | 404    |
+| `error.CONFLICT(msg?, details?)`              | 409    |
+| `error.INTERNAL_SERVER_ERROR(msg?, details?)` | 500    |
 
 Declare custom codes per action (or per resource via `errors:`) and they become helpers too:
 

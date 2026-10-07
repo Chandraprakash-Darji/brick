@@ -35,7 +35,9 @@ function memMb() {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const smoke = args["smoke"] === true;
-  const filter = args["filter"] ? new RegExp(argStr(args, "filter", ".*")) : /.*/;
+  const filter = args["filter"]
+    ? new RegExp(argStr(args, "filter", ".*"))
+    : /.*/;
   const results: BatchResult[] = [];
   const keep = (n: string) => filter.test(n);
 
@@ -51,7 +53,11 @@ async function main() {
     const t0 = performance.now();
     let ok = 0;
     for (let i = 0; i < N; i++) {
-      const r = validateWithSchema(schema, { slug: `s-${i}`, title: `title ${i}`, count: i % 100 });
+      const r = validateWithSchema(schema, {
+        slug: `s-${i}`,
+        title: `title ${i}`,
+        count: i % 100,
+      });
       if (r.success) ok++;
       // transform inline (no accumulation — never hold all in memory)
       const t = `${(r as any).data?.slug ?? ""}:${(r as any).data?.count ?? 0}`;
@@ -61,10 +67,16 @@ async function main() {
     const cpu = process.cpuUsage(cpu0);
     const cpuMs = (cpu.user + cpu.system) / 1000;
     results.push({
-      benchmark: "validations-1M", records: N, seconds: round(s),
-      records_per_sec: Math.round(N / s), cpu_us_per_record: round((cpuMs * 1000) / N, 3), extra: { ok },
+      benchmark: "validations-1M",
+      records: N,
+      seconds: round(s),
+      records_per_sec: Math.round(N / s),
+      cpu_us_per_record: round((cpuMs * 1000) / N, 3),
+      extra: { ok },
     });
-    console.log(`  validations: ${(N / s).toLocaleString()} rec/s  cpu ${(((cpuMs * 1000) / N)).toFixed(3)}µs/rec`);
+    console.log(
+      `  validations: ${(N / s).toLocaleString()} rec/s  cpu ${((cpuMs * 1000) / N).toFixed(3)}µs/rec`,
+    );
   }
 
   if (keep("jsonl-stream")) {
@@ -78,8 +90,13 @@ async function main() {
     const chunks = function* () {
       let chunk = "";
       for (let i = 0; i < N; i++) {
-        chunk += JSON.stringify({ slug: `s-${i}`, title: `t ${i}`, count: i % 50 }) + "\n";
-        if (chunk.length >= 64 * 1024) { yield chunk; chunk = ""; }
+        chunk +=
+          JSON.stringify({ slug: `s-${i}`, title: `t ${i}`, count: i % 50 }) +
+          "\n";
+        if (chunk.length >= 64 * 1024) {
+          yield chunk;
+          chunk = "";
+        }
       }
       if (chunk) yield chunk;
     };
@@ -94,22 +111,37 @@ async function main() {
         if (v.success) count++;
       }
     }
-    if (rest) { const v = validateWithSchema(schema, JSON.parse(rest)); if (v.success) count++; }
+    if (rest) {
+      const v = validateWithSchema(schema, JSON.parse(rest));
+      if (v.success) count++;
+    }
     const s = (performance.now() - t0) / 1000;
     const mb = bytes / 1024 ** 2;
     results.push({
-      benchmark: "jsonl-stream", records: count, seconds: round(s),
-      records_per_sec: Math.round(count / s), mb_per_sec: round(mb / s),
+      benchmark: "jsonl-stream",
+      records: count,
+      seconds: round(s),
+      records_per_sec: Math.round(count / s),
+      mb_per_sec: round(mb / s),
       bytes_per_record: Math.round(bytes / count),
     });
-    console.log(`  jsonl-stream: ${(count / s).toLocaleString()} rec/s  ${(mb / s).toFixed(1)} MB/s`);
+    console.log(
+      `  jsonl-stream: ${(count / s).toLocaleString()} rec/s  ${(mb / s).toFixed(1)} MB/s`,
+    );
   }
 
   if (keep("bulk-writes")) {
     const N = smoke ? 2000 : 20000;
     const mk = (tag: string, i: number, now: string) => ({
-      id: `${tag}_${i}`, slug: `${tag}-slug-${i}`, title: `Bulk ${i}`,
-      content: "bulk body", status: "draft", views: 0, authorId: null, createdAt: now, updatedAt: now,
+      id: `${tag}_${i}`,
+      slug: `${tag}-slug-${i}`,
+      title: `Bulk ${i}`,
+      content: "bulk body",
+      status: "draft",
+      views: 0,
+      authorId: null,
+      createdAt: now,
+      updatedAt: now,
     });
     const now = new Date().toISOString();
     const { benchTable: tbl } = await import("./lib/fixtures");
@@ -117,9 +149,15 @@ async function main() {
     // 1) row-by-row
     const f1 = makeBenchFixture("batch-bulk1");
     let t0 = performance.now();
-    for (let i = 0; i < N; i++) await f1.db.insert(tbl).values(mk("row", i, now));
+    for (let i = 0; i < N; i++)
+      await f1.db.insert(tbl).values(mk("row", i, now));
     let s = (performance.now() - t0) / 1000;
-    results.push({ benchmark: "bulk.row-by-row", records: N, seconds: round(s), records_per_sec: Math.round(N / s) });
+    results.push({
+      benchmark: "bulk.row-by-row",
+      records: N,
+      seconds: round(s),
+      records_per_sec: Math.round(N / s),
+    });
     console.log(`  bulk row-by-row: ${(N / s).toLocaleString()} rec/s`);
 
     // 2) chunked bulk (1k rows/statement)
@@ -127,20 +165,43 @@ async function main() {
     t0 = performance.now();
     for (let base = 0; base < N; base += 1000) {
       const rows = [];
-      for (let i = base; i < Math.min(base + 1000, N); i++) rows.push(mk("chunk", i, now));
+      for (let i = base; i < Math.min(base + 1000, N); i++)
+        rows.push(mk("chunk", i, now));
       await f2.db.insert(tbl).values(rows);
     }
     s = (performance.now() - t0) / 1000;
-    results.push({ benchmark: "bulk.chunked-1k", records: N, seconds: round(s), records_per_sec: Math.round(N / s) });
+    results.push({
+      benchmark: "bulk.chunked-1k",
+      records: N,
+      seconds: round(s),
+      records_per_sec: Math.round(N / s),
+    });
     console.log(`  bulk chunked-1k: ${(N / s).toLocaleString()} rec/s`);
     const f3 = makeBenchFixture("batch-transaction");
     t0 = performance.now();
     f3.db.$client.transaction(() => {
-      const insert = f3.db.$client.prepare(`INSERT INTO bench_items (id, slug, title, content, status, views, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
-      for (let i = 0; i < N; i++) insert.run(`txn_${i}`, `txn-slug-${i}`, `Bulk ${i}`, "bulk body", "draft", 0, now, now);
+      const insert = f3.db.$client.prepare(
+        `INSERT INTO bench_items (id, slug, title, content, status, views, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (let i = 0; i < N; i++)
+        insert.run(
+          `txn_${i}`,
+          `txn-slug-${i}`,
+          `Bulk ${i}`,
+          "bulk body",
+          "draft",
+          0,
+          now,
+          now,
+        );
     })();
     s = (performance.now() - t0) / 1000;
-    results.push({ benchmark: "bulk.transaction-prepared", records: N, seconds: round(s), records_per_sec: Math.round(N / s) });
+    results.push({
+      benchmark: "bulk.transaction-prepared",
+      records: N,
+      seconds: round(s),
+      records_per_sec: Math.round(N / s),
+    });
   }
 
   if (keep("cpu-transform")) {
@@ -152,7 +213,8 @@ async function main() {
       const sI = `Title Number ${i} Bench!`;
       let h = 0;
       const slug = sI.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-      for (let k = 0; k < slug.length; k++) h = (h * 31 + slug.charCodeAt(k)) | 0;
+      for (let k = 0; k < slug.length; k++)
+        h = (h * 31 + slug.charCodeAt(k)) | 0;
       acc += h;
     }
     const s = (performance.now() - t0) / 1000;
@@ -164,22 +226,38 @@ async function main() {
       const w = new Worker(new URL("./worker.ts", import.meta.url).href);
       try {
         const result = await new Promise<number>((resolve, reject) => {
-          const timer = setTimeout(() => reject(new Error("Worker timed out")), 5000);
-          w.onmessage = event => { clearTimeout(timer); resolve(event.data); };
-          w.onerror = event => { clearTimeout(timer); reject(new Error(event.message)); };
+          const timer = setTimeout(
+            () => reject(new Error("Worker timed out")),
+            5000,
+          );
+          w.onmessage = (event) => {
+            clearTimeout(timer);
+            resolve(event.data);
+          };
+          w.onerror = (event) => {
+            clearTimeout(timer);
+            reject(new Error(event.message));
+          };
           w.postMessage(100);
         });
         workersOk = result === 4950;
         workerInfo = `Bun ${Bun.version}: message/compute round trip ${workersOk ? "verified" : "failed"}`;
-      } finally { w.terminate(); }
+      } finally {
+        w.terminate();
+      }
     } catch (err: any) {
       workerInfo = `Worker unavailable: ${err?.message ?? err}`;
     }
     results.push({
-      benchmark: "cpu-transform", records: N, seconds: round(s),
-      records_per_sec: Math.round(N / s), extra: { workersOk, workerInfo },
+      benchmark: "cpu-transform",
+      records: N,
+      seconds: round(s),
+      records_per_sec: Math.round(N / s),
+      extra: { workersOk, workerInfo },
     });
-    console.log(`  cpu-transform: ${(N / s).toLocaleString()} rec/s  workers: ${workerInfo}`);
+    console.log(
+      `  cpu-transform: ${(N / s).toLocaleString()} rec/s  workers: ${workerInfo}`,
+    );
   }
 
   if (keep("io-transform")) {
@@ -189,7 +267,11 @@ async function main() {
     let done = 0;
     const one = async (i: number) => {
       await new Promise((r) => setTimeout(r, 1)); // simulated I/O wait
-      const v = validateWithSchema(schema, { slug: `s-${i}`, title: `t ${i}`, count: i });
+      const v = validateWithSchema(schema, {
+        slug: `s-${i}`,
+        title: `t ${i}`,
+        count: i,
+      });
       if (v.success) done++;
     };
     for (let base = 0; base < N; base += CONC) {
@@ -198,8 +280,16 @@ async function main() {
       await Promise.all(batch);
     }
     const s = (performance.now() - t0) / 1000;
-    results.push({ benchmark: "io-transform", records: done, seconds: round(s), records_per_sec: Math.round(done / s), extra: { concurrency: CONC } });
-    console.log(`  io-transform: ${(done / s).toLocaleString()} rec/s (conc=${CONC})`);
+    results.push({
+      benchmark: "io-transform",
+      records: done,
+      seconds: round(s),
+      records_per_sec: Math.round(done / s),
+      extra: { concurrency: CONC },
+    });
+    console.log(
+      `  io-transform: ${(done / s).toLocaleString()} rec/s (conc=${CONC})`,
+    );
   }
 
   if (keep("profile.read-heavy") || keep("profile.write-heavy")) {
@@ -209,43 +299,79 @@ async function main() {
     const N = smoke ? 200 : 1000;
     // read-heavy: 75% lists/gets, 15% creates/updates, 10% search
     if (keep("profile.read-heavy")) {
-    let t0 = performance.now();
-    for (let i = 0; i < N; i++) {
-      const m = i % 20;
-      if (m < 15) {
-        if (m % 2 === 0) await res.list({ input: { limit: 20 }, ctx: silentCtx });
-        else await res.get({ input: { id: `seed_${i % 500}` }, ctx: silentCtx });
-      } else if (m < 18) {
-        await res.create({ input: { slug: `p-${Date.now()}-${i}`, title: `P ${i}`, content: "b" }, ctx: silentCtx });
-      } else {
-        await res.list({ input: { limit: 20, search: "Benchmark" }, ctx: silentCtx });
+      let t0 = performance.now();
+      for (let i = 0; i < N; i++) {
+        const m = i % 20;
+        if (m < 15) {
+          if (m % 2 === 0)
+            await res.list({ input: { limit: 20 }, ctx: silentCtx });
+          else
+            await res.get({ input: { id: `seed_${i % 500}` }, ctx: silentCtx });
+        } else if (m < 18) {
+          await res.create({
+            input: {
+              slug: `p-${Date.now()}-${i}`,
+              title: `P ${i}`,
+              content: "b",
+            },
+            ctx: silentCtx,
+          });
+        } else {
+          await res.list({
+            input: { limit: 20, search: "Benchmark" },
+            ctx: silentCtx,
+          });
+        }
       }
-    }
-    let s = (performance.now() - t0) / 1000;
-    results.push({ benchmark: "profile.read-heavy", records: N, seconds: round(s), records_per_sec: Math.round(N / s) });
-    console.log(`  read-heavy: ${(N / s).toLocaleString()} ops/s`);
+      let s = (performance.now() - t0) / 1000;
+      results.push({
+        benchmark: "profile.read-heavy",
+        records: N,
+        seconds: round(s),
+        records_per_sec: Math.round(N / s),
+      });
+      console.log(`  read-heavy: ${(N / s).toLocaleString()} ops/s`);
     }
     // write-heavy: 80% creates/updates, 20% reads
     if (keep("profile.write-heavy")) {
-    const t0 = performance.now();
-    for (let i = 0; i < N; i++) {
-      const m = i % 10;
-      if (m < 6) {
-        await res.create({ input: { slug: `w-${Date.now()}-${i}`, title: `W ${i}`, content: "b" }, ctx: silentCtx });
-      } else if (m < 8) {
-        await res.update({ input: { id: `seed_${i % 500}`, title: `WU ${i}` }, ctx: silentCtx });
-      } else {
-        await res.list({ input: { limit: 20 }, ctx: silentCtx });
+      const t0 = performance.now();
+      for (let i = 0; i < N; i++) {
+        const m = i % 10;
+        if (m < 6) {
+          await res.create({
+            input: {
+              slug: `w-${Date.now()}-${i}`,
+              title: `W ${i}`,
+              content: "b",
+            },
+            ctx: silentCtx,
+          });
+        } else if (m < 8) {
+          await res.update({
+            input: { id: `seed_${i % 500}`, title: `WU ${i}` },
+            ctx: silentCtx,
+          });
+        } else {
+          await res.list({ input: { limit: 20 }, ctx: silentCtx });
+        }
       }
-    }
-    const s = (performance.now() - t0) / 1000;
-    results.push({ benchmark: "profile.write-heavy", records: N, seconds: round(s), records_per_sec: Math.round(N / s) });
-    console.log(`  write-heavy: ${(N / s).toLocaleString()} ops/s`);
+      const s = (performance.now() - t0) / 1000;
+      results.push({
+        benchmark: "profile.write-heavy",
+        records: N,
+        seconds: round(s),
+        records_per_sec: Math.round(N / s),
+      });
+      console.log(`  write-heavy: ${(N / s).toLocaleString()} ops/s`);
     }
   }
 
   const manifest = collectManifest({ benchmark: "batch", db: "sqlite-memory" });
-  const path = await writeJson(`batch-${stamp()}.json`, { manifest, rss_mb: memMb(), results });
+  const path = await writeJson(`batch-${stamp()}.json`, {
+    manifest,
+    rss_mb: memMb(),
+    results,
+  });
   console.log(`\nwrote ${path}`);
 }
 

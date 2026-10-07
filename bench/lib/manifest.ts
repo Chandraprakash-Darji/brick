@@ -42,8 +42,12 @@ export function collectManifest(opts: {
   const isLinuxX64 = platform() === "linux" && arch() === "x64";
   return {
     brick_commit: gitCommit(),
-    working_tree_dirty: execSync("git status --porcelain", { encoding: "utf8" }).trim().length > 0,
-    lockfile_sha256: createHash("sha256").update(readFileSync(new URL("../../bun.lock", import.meta.url))).digest("hex"),
+    working_tree_dirty:
+      execSync("git status --porcelain", { encoding: "utf8" }).trim().length >
+      0,
+    lockfile_sha256: createHash("sha256")
+      .update(readFileSync(new URL("../../bun.lock", import.meta.url)))
+      .digest("hex"),
     runtime: `bun-${Bun.version}`,
     os: `${platform()}-${arch()} (${release()})`,
     cpu: cpuList[0]?.model?.trim() ?? "unknown",
@@ -102,7 +106,13 @@ export function checkGates(input: {
   stmtsCand?: number;
   enforce: boolean;
 }): { gates: GateResult[]; pass: boolean } {
-  const g = (gate: string, baseline: number, candidate: number, threshold: string, pass: boolean): GateResult => ({
+  const g = (
+    gate: string,
+    baseline: number,
+    candidate: number,
+    threshold: string,
+    pass: boolean,
+  ): GateResult => ({
     gate,
     baseline: Math.round(baseline * 100) / 100,
     candidate: Math.round(candidate * 100) / 100,
@@ -111,14 +121,44 @@ export function checkGates(input: {
     pass,
   });
   const gates = [
-    g("throughput", input.rpsBase, input.rpsCand, ">= -5%", input.rpsCand >= input.rpsBase * 0.95),
-    g("p99", input.p99Base, input.p99Cand, "<= +8%", input.p99Cand <= input.p99Base * 1.08),
-    g("cpu_per_req", input.cpuPerReqBase, input.cpuPerReqCand, "<= +8%", input.cpuPerReqCand <= input.cpuPerReqBase * 1.08),
-    g("rss", input.rssBase, input.rssCand, "<= +10%", input.rssCand <= input.rssBase * 1.1),
+    g(
+      "throughput",
+      input.rpsBase,
+      input.rpsCand,
+      ">= -5%",
+      input.rpsCand >= input.rpsBase * 0.95,
+    ),
+    g(
+      "p99",
+      input.p99Base,
+      input.p99Cand,
+      "<= +8%",
+      input.p99Cand <= input.p99Base * 1.08,
+    ),
+    g(
+      "cpu_per_req",
+      input.cpuPerReqBase,
+      input.cpuPerReqCand,
+      "<= +8%",
+      input.cpuPerReqCand <= input.cpuPerReqBase * 1.08,
+    ),
+    g(
+      "rss",
+      input.rssBase,
+      input.rssCand,
+      "<= +10%",
+      input.rssCand <= input.rssBase * 1.1,
+    ),
   ];
   if (input.startupBase !== undefined && input.startupCand !== undefined) {
     gates.push(
-      g("startup", input.startupBase, input.startupCand, "<= +10%", input.startupCand <= input.startupBase * 1.1)
+      g(
+        "startup",
+        input.startupBase,
+        input.startupCand,
+        "<= +10%",
+        input.startupCand <= input.startupBase * 1.1,
+      ),
     );
   }
   if (input.stmtsBase !== undefined && input.stmtsCand !== undefined) {
@@ -128,8 +168,8 @@ export function checkGates(input: {
         input.stmtsBase,
         input.stmtsCand,
         "no increase unless approved",
-        input.stmtsCand <= input.stmtsBase
-      )
+        input.stmtsCand <= input.stmtsBase,
+      ),
     );
   }
   return { gates, pass: gates.every((x) => x.pass) };

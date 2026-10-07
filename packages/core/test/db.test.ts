@@ -52,12 +52,25 @@ describe("@brickkit/core Database & Drizzle Integration", () => {
 
     // Insert records with Drizzle ORM
     await db.insert(itemsTable).values([
-      { id: "item_1", title: "Mechanical Keyboard", quantity: 15, category: "electronics" },
-      { id: "item_2", title: "Ergonomic Chair", quantity: 5, category: "furniture" },
+      {
+        id: "item_1",
+        title: "Mechanical Keyboard",
+        quantity: 15,
+        category: "electronics",
+      },
+      {
+        id: "item_2",
+        title: "Ergonomic Chair",
+        quantity: 5,
+        category: "furniture",
+      },
     ]);
 
     // Query back with Drizzle ORM
-    const items = await db.select().from(itemsTable).where(eq(itemsTable.category, "electronics"));
+    const items = await db
+      .select()
+      .from(itemsTable)
+      .where(eq(itemsTable.category, "electronics"));
     expect(items.length).toBe(1);
     expect(items[0].id).toBe("item_1");
     expect(items[0].title).toBe("Mechanical Keyboard");
@@ -65,7 +78,9 @@ describe("@brickkit/core Database & Drizzle Integration", () => {
   });
 
   it("should automatically initialize service.db and populate ctx.db in actions", async () => {
-    const inventoryService = defineService("inventory", { database: defineDatabase() });
+    const inventoryService = defineService("inventory", {
+      database: defineDatabase(),
+    });
     expect(inventoryService.db).toBeDefined();
     expect(inventoryService.getDb()).toBeDefined();
 
@@ -147,7 +162,10 @@ describe("@brickkit/core Database & Drizzle Integration", () => {
     expect(auditService.getDb()).toBeUndefined();
 
     // Attach new zero-config SQLite database via attachDatabase
-    const db = attachDatabase(auditService, defineDatabase({ path: ":memory:" }));
+    const db = attachDatabase(
+      auditService,
+      defineDatabase({ path: ":memory:" }),
+    );
     expect(db).toBeDefined();
     expect(auditService.getDb()).toBe(db);
     expect(auditService.db).toBe(db);
@@ -177,7 +195,10 @@ describe("@brickkit/core Database & Drizzle Integration", () => {
 
     await logEvent({ input: { id: "log_1", message: "User logged in" } });
 
-    const rows = await db.select().from(logsTable).where(eq(logsTable.id, "log_1"));
+    const rows = await db
+      .select()
+      .from(logsTable)
+      .where(eq(logsTable.id, "log_1"));
     expect(rows.length).toBe(1);
     expect(rows[0].message).toBe("User logged in");
 
@@ -213,7 +234,10 @@ describe("@brickkit/core Database & Drizzle Integration", () => {
     const queryPerfAction = defineAction({
       name: "queryPerf",
       execute: async ({ ctx }) => {
-        return ctx.db.select().from(itemsTable).where(eq(itemsTable.category, "even"));
+        return ctx.db
+          .select()
+          .from(itemsTable)
+          .where(eq(itemsTable.category, "even"));
       },
     });
 
@@ -237,7 +261,9 @@ describe("@brickkit/core Database & Drizzle Integration", () => {
   });
 
   it("should propagate service.db across RPC service proxies", async () => {
-    const warehouseService = defineService("warehouse", { database: defineDatabase() });
+    const warehouseService = defineService("warehouse", {
+      database: defineDatabase(),
+    });
 
     warehouseService.db!.run(sql`
       CREATE TABLE IF NOT EXISTS items (

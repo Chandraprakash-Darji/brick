@@ -36,7 +36,7 @@ export interface DefaultServiceContext {
  */
 export type ActionContext<
   TDb = any,
-  TServiceContext = DefaultServiceContext
+  TServiceContext = DefaultServiceContext,
 > = BaseContext<TDb> & TServiceContext;
 
 /**
@@ -65,7 +65,11 @@ export class ValidationError extends Error {
   readonly status: number;
   readonly errors: ValidationErrorItem[];
 
-  constructor(message: string, errors: ValidationErrorItem[] = [], status = 400) {
+  constructor(
+    message: string,
+    errors: ValidationErrorItem[] = [],
+    status = 400,
+  ) {
     super(message);
     this.name = "ValidationError";
     this.status = status;
@@ -113,18 +117,24 @@ export interface StandardErrorMap {
   NOT_FOUND: (overrideMessage?: string, details?: unknown) => never;
   CONFLICT: (overrideMessage?: string, details?: unknown) => never;
   INTERNAL_SERVER_ERROR: (overrideMessage?: string, details?: unknown) => never;
-  [key: string]: ((overrideMessage?: string, details?: unknown) => never) | undefined;
+  [key: string]:
+    | ((overrideMessage?: string, details?: unknown) => never)
+    | undefined;
 }
 
-export type ErrorBuilder<TErrors extends Record<string, ActionErrorDefinition>> =
-  StandardErrorMap & {
-    [K in keyof TErrors]: (overrideMessage?: string, details?: unknown) => never;
-  };
+export type ErrorBuilder<
+  TErrors extends Record<string, ActionErrorDefinition>,
+> = StandardErrorMap & {
+  [K in keyof TErrors]: (overrideMessage?: string, details?: unknown) => never;
+};
 
 export interface BaseActionConfig<
   TInputSchema extends TSchema | undefined = undefined,
   TOutputSchema extends TSchema | undefined = undefined,
-  TErrors extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>
+  TErrors extends Record<string, ActionErrorDefinition> = Record<
+    string,
+    ActionErrorDefinition
+  >,
 > {
   name: string;
   description?: string;
@@ -140,8 +150,11 @@ export interface BaseActionConfig<
 export interface ActionConfigWithAuthorize<
   TInputSchema extends TSchema | undefined = undefined,
   TOutputSchema extends TSchema | undefined = undefined,
-  TErrors extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>,
-  TContext extends ActionContext = ActionContext
+  TErrors extends Record<string, ActionErrorDefinition> = Record<
+    string,
+    ActionErrorDefinition
+  >,
+  TContext extends ActionContext = ActionContext,
 > extends BaseActionConfig<TInputSchema, TOutputSchema, TErrors> {
   authorize: (params: {
     user?: TContext extends { user: infer U } ? U : any;
@@ -160,8 +173,11 @@ export interface ActionConfigWithAuthorize<
 export interface ActionConfigWithoutAuthorize<
   TInputSchema extends TSchema | undefined = undefined,
   TOutputSchema extends TSchema | undefined = undefined,
-  TErrors extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>,
-  TContext extends ActionContext = ActionContext
+  TErrors extends Record<string, ActionErrorDefinition> = Record<
+    string,
+    ActionErrorDefinition
+  >,
+  TContext extends ActionContext = ActionContext,
 > extends BaseActionConfig<TInputSchema, TOutputSchema, TErrors> {
   authorize?: undefined;
   execute: (params: {
@@ -176,17 +192,28 @@ export interface ActionConfigWithoutAuthorize<
 export type ActionConfig<
   TInputSchema extends TSchema | undefined = any,
   TOutputSchema extends TSchema | undefined = any,
-  TErrors extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>,
-  TContext extends ActionContext = ActionContext
+  TErrors extends Record<string, ActionErrorDefinition> = Record<
+    string,
+    ActionErrorDefinition
+  >,
+  TContext extends ActionContext = ActionContext,
 > =
   | ActionConfigWithAuthorize<TInputSchema, TOutputSchema, TErrors, TContext>
-  | ActionConfigWithoutAuthorize<TInputSchema, TOutputSchema, TErrors, TContext>;
+  | ActionConfigWithoutAuthorize<
+      TInputSchema,
+      TOutputSchema,
+      TErrors,
+      TContext
+    >;
 
 export interface Action<
   TInputSchema extends TSchema | undefined = any,
   TOutputSchema extends TSchema | undefined = any,
-  TErrors extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>,
-  TContext extends ActionContext = ActionContext
+  TErrors extends Record<string, ActionErrorDefinition> = Record<
+    string,
+    ActionErrorDefinition
+  >,
+  TContext extends ActionContext = ActionContext,
 > {
   (params: {
     input?: TInputSchema extends TSchema ? Static<TInputSchema> : any;
@@ -198,7 +225,7 @@ export interface Action<
   config: ActionConfig<TInputSchema, TOutputSchema, TErrors, TContext>;
   run(
     input?: TInputSchema extends TSchema ? Static<TInputSchema> : any,
-    ctx?: Partial<TContext>
+    ctx?: Partial<TContext>,
   ): Promise<TOutputSchema extends TSchema ? Static<TOutputSchema> : any>;
   execute(params: {
     input?: TInputSchema extends TSchema ? Static<TInputSchema> : any;
@@ -208,8 +235,16 @@ export interface Action<
     input?: TInputSchema extends TSchema ? Static<TInputSchema> : any;
     ctx: TContext;
   }): Promise<TOutputSchema extends TSchema ? Static<TOutputSchema> : any>;
-  validateInput(input: unknown): { success: true; data: any } | { success: false; errors: ValidationErrorItem[] };
-  validateOutput(output: unknown): { success: true; data: any } | { success: false; errors: ValidationErrorItem[] };
+  validateInput(
+    input: unknown,
+  ):
+    | { success: true; data: any }
+    | { success: false; errors: ValidationErrorItem[] };
+  validateOutput(
+    output: unknown,
+  ):
+    | { success: true; data: any }
+    | { success: false; errors: ValidationErrorItem[] };
   errorHelpers?: ErrorBuilder<TErrors>;
 }
 
@@ -229,27 +264,66 @@ export interface ResourceOperationsConfig {
   delete?: boolean;
 }
 
-export type InferTableRow<TTable> = TTable extends { $inferSelect: infer S } ? S : any;
-export type InferTableInsert<TTable> = TTable extends { $inferInsert: infer S } ? S : any;
+export type InferTableRow<TTable> = TTable extends { $inferSelect: infer S }
+  ? S
+  : any;
+export type InferTableInsert<TTable> = TTable extends { $inferInsert: infer S }
+  ? S
+  : any;
 
 export interface ResourceHooks<
   TRow = any,
   TInsert = any,
   TCtx = any,
-  TErrors extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>
+  TErrors extends Record<string, ActionErrorDefinition> = Record<
+    string,
+    ActionErrorDefinition
+  >,
 > {
-  beforeCreate?: (params: { data: TInsert; ctx: TCtx; error: ErrorBuilder<TErrors> }) => Promise<void> | void;
-  afterCreate?: (params: { data: TInsert; result: TRow; ctx: TCtx }) => Promise<void> | void;
-  beforeUpdate?: (params: { id: string | number; data: Partial<TInsert>; existing: TRow; ctx: TCtx; error: ErrorBuilder<TErrors> }) => Promise<void> | void;
-  afterUpdate?: (params: { id: string | number; data: Partial<TInsert>; result: TRow; ctx: TCtx }) => Promise<void> | void;
-  beforeDelete?: (params: { id: string | number; existing: TRow; ctx: TCtx; error: ErrorBuilder<TErrors> }) => Promise<void> | void;
-  afterDelete?: (params: { id: string | number; existing: TRow; ctx: TCtx; error: ErrorBuilder<TErrors> }) => Promise<void> | void;
+  beforeCreate?: (params: {
+    data: TInsert;
+    ctx: TCtx;
+    error: ErrorBuilder<TErrors>;
+  }) => Promise<void> | void;
+  afterCreate?: (params: {
+    data: TInsert;
+    result: TRow;
+    ctx: TCtx;
+  }) => Promise<void> | void;
+  beforeUpdate?: (params: {
+    id: string | number;
+    data: Partial<TInsert>;
+    existing: TRow;
+    ctx: TCtx;
+    error: ErrorBuilder<TErrors>;
+  }) => Promise<void> | void;
+  afterUpdate?: (params: {
+    id: string | number;
+    data: Partial<TInsert>;
+    result: TRow;
+    ctx: TCtx;
+  }) => Promise<void> | void;
+  beforeDelete?: (params: {
+    id: string | number;
+    existing: TRow;
+    ctx: TCtx;
+    error: ErrorBuilder<TErrors>;
+  }) => Promise<void> | void;
+  afterDelete?: (params: {
+    id: string | number;
+    existing: TRow;
+    ctx: TCtx;
+    error: ErrorBuilder<TErrors>;
+  }) => Promise<void> | void;
 }
 
 export interface ResourceConfig<
   TTable = any,
   TCtx = any,
-  TErrors extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>
+  TErrors extends Record<string, ActionErrorDefinition> = Record<
+    string,
+    ActionErrorDefinition
+  >,
 > {
   name: string;
   table: TTable;
@@ -259,7 +333,12 @@ export interface ResourceConfig<
   idGenerator?: () => string;
   pluralName?: string;
   operations?: ResourceOperationsConfig;
-  hooks?: ResourceHooks<InferTableRow<TTable>, InferTableInsert<TTable>, TCtx, TErrors>;
+  hooks?: ResourceHooks<
+    InferTableRow<TTable>,
+    InferTableInsert<TTable>,
+    TCtx,
+    TErrors
+  >;
   fields?: Record<string, TSchema>;
   errors?: TErrors;
   searchable?: string[];
@@ -292,8 +371,14 @@ export interface ResourcePlan<TTable = any> {
   readonly sortable: {
     readonly fields: Set<string>;
     readonly defaultSort: string;
-    readonly defaultSortEntries: ReadonlyArray<{ field: string; dir: "asc" | "desc" }>;
-    readonly fallbackEntries: ReadonlyArray<{ field: string; dir: "asc" | "desc" }>;
+    readonly defaultSortEntries: ReadonlyArray<{
+      field: string;
+      dir: "asc" | "desc";
+    }>;
+    readonly fallbackEntries: ReadonlyArray<{
+      field: string;
+      dir: "asc" | "desc";
+    }>;
     readonly tiebreakCol: any;
   };
   readonly projections: {
@@ -307,7 +392,7 @@ export interface ResourcePlan<TTable = any> {
 
 export interface Resource<
   TTable = any,
-  TCtx extends ActionContext = ActionContext
+  TCtx extends ActionContext = ActionContext,
 > {
   readonly name: string;
   readonly serviceName: string;
@@ -374,10 +459,12 @@ export interface LifecycleOptions {
 
 export interface ServiceOptions<
   TServiceContext extends Record<string, any> = Record<string, any>,
-  TDb = any
+  TDb = any,
 > {
   database?: DatabaseHandle<TDb>;
-  context?: (baseCtx: BaseContext<TDb>) => Promise<TServiceContext> | TServiceContext;
+  context?: (
+    baseCtx: BaseContext<TDb>,
+  ) => Promise<TServiceContext> | TServiceContext;
   auth?: ServiceAuthOptions;
   rateLimit?: RateLimitOptions;
   cache?: CacheOptions;
@@ -401,10 +488,18 @@ export interface ActionSchema {
 export interface ServiceSchema {
   name: string;
   options: Omit<ServiceOptions, "database"> & {
-    database?: { name?: string; engine: "sqlite" | "postgres"; tables: string[] };
+    database?: {
+      name?: string;
+      engine: "sqlite" | "postgres";
+      tables: string[];
+    };
   };
   hasDatabase: boolean;
-  databaseConfig?: { name?: string; engine: "sqlite" | "postgres"; tables: string[] };
+  databaseConfig?: {
+    name?: string;
+    engine: "sqlite" | "postgres";
+    tables: string[];
+  };
   actions: ActionSchema[];
   resources?: {
     name: string;
@@ -432,8 +527,14 @@ export interface CompiledRoutePlan {
   hasAuthorize: boolean;
   authorize?: (params: any) => boolean | Promise<boolean>;
   execute: (params: any) => Promise<any> | any;
-  inputChecker?: { Check: (val: any) => boolean; Errors: (val: any) => Iterable<any> };
-  outputChecker?: { Check: (val: any) => boolean; Errors: (val: any) => Iterable<any> };
+  inputChecker?: {
+    Check: (val: any) => boolean;
+    Errors: (val: any) => Iterable<any>;
+  };
+  outputChecker?: {
+    Check: (val: any) => boolean;
+    Errors: (val: any) => Iterable<any>;
+  };
   coercions?: Array<{ key: string; isNumber: boolean; isBoolean: boolean }>;
   logger: Logger;
   errorBuilder: any;
@@ -442,13 +543,16 @@ export interface CompiledRoutePlan {
 
 export interface Service<
   TDb = BunSQLiteDatabase<Record<string, unknown>>,
-  TServiceContext extends Record<string, any> = Record<string, any>
+  TServiceContext extends Record<string, any> = Record<string, any>,
 > {
   readonly name: string;
   readonly options: ServiceOptions<TServiceContext, TDb>;
   readonly actions: Map<string, Action<any, any, any, any>>;
   readonly tables: Map<string, any>;
-  readonly resources: Map<string, Resource<any, BaseContext<TDb> & TServiceContext>>;
+  readonly resources: Map<
+    string,
+    Resource<any, BaseContext<TDb> & TServiceContext>
+  >;
   readonly db?: TDb;
   readonly isBuilt?: boolean;
 
@@ -457,40 +561,61 @@ export interface Service<
   action<
     TIn extends TSchema | undefined = undefined,
     TOut extends TSchema | undefined = undefined,
-    TErr extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>
+    TErr extends Record<string, ActionErrorDefinition> = Record<
+      string,
+      ActionErrorDefinition
+    >,
   >(
-    action: Action<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>
+    action: Action<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>,
   ): this;
 
   action<
     TIn extends TSchema | undefined = undefined,
     TOut extends TSchema | undefined = undefined,
-    TErr extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>
+    TErr extends Record<string, ActionErrorDefinition> = Record<
+      string,
+      ActionErrorDefinition
+    >,
   >(
-    config: ActionConfigWithAuthorize<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>
+    config: ActionConfigWithAuthorize<
+      TIn,
+      TOut,
+      TErr,
+      BaseContext<TDb> & TServiceContext
+    >,
   ): Action<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>;
 
   action<
     TIn extends TSchema | undefined = undefined,
     TOut extends TSchema | undefined = undefined,
-    TErr extends Record<string, ActionErrorDefinition> = Record<string, ActionErrorDefinition>
+    TErr extends Record<string, ActionErrorDefinition> = Record<
+      string,
+      ActionErrorDefinition
+    >,
   >(
-    config: ActionConfigWithoutAuthorize<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>
+    config: ActionConfigWithoutAuthorize<
+      TIn,
+      TOut,
+      TErr,
+      BaseContext<TDb> & TServiceContext
+    >,
   ): Action<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>;
 
   resource<TTable = any>(
-    config: ResourceConfig<TTable, BaseContext<TDb> & TServiceContext>
+    config: ResourceConfig<TTable, BaseContext<TDb> & TServiceContext>,
   ): Resource<TTable, BaseContext<TDb> & TServiceContext>;
 
   registerTable(table: any): this;
   getAction(name: string): Action<any, any, any, any> | undefined;
   listActions(): Action<any, any, any, any>[];
-  getResource(name: string): Resource<any, BaseContext<TDb> & TServiceContext> | undefined;
+  getResource(
+    name: string,
+  ): Resource<any, BaseContext<TDb> & TServiceContext> | undefined;
   listResources(): Resource<any, BaseContext<TDb> & TServiceContext>[];
   getDb(): TDb | undefined;
   setDb(database: DatabaseHandle<TDb>): void;
   resolveContext(
-    callCtx?: Partial<BaseContext<TDb> & TServiceContext>
+    callCtx?: Partial<BaseContext<TDb> & TServiceContext>,
   ): Promise<BaseContext<TDb> & TServiceContext>;
   introspect(): ServiceSchema;
 }

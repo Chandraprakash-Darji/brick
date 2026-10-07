@@ -46,13 +46,13 @@ appService.action({
 
 ## Commands
 
-| Command | Alias | What it does |
-|---------|-------|--------------|
-| `brick dev [entry] [--port <number>]` | — | Import `entry`, list services/actions/resources, start `brick` with live reload |
-| `brick start [entry]` | — | Same boot path as `dev`, intended for production |
-| `brick build <entry> [--outdir <directory>]` | — | Compile registered definitions into route handlers, Brick IR and a bundled Bun server |
-| `brick gen openapi [--output <file>]` | — | Print OpenAPI 3.1 JSON to stdout, or write it to `--output` |
-| `brick info` | `services` | Print `registry.exportArchitecture()` JSON to stdout |
+| Command                                      | Alias      | What it does                                                                          |
+| -------------------------------------------- | ---------- | ------------------------------------------------------------------------------------- |
+| `brick dev [entry] [--port <number>]`        | —          | Import `entry`, list services/actions/resources, start `brick` with live reload       |
+| `brick start [entry]`                        | —          | Same boot path as `dev`, intended for production                                      |
+| `brick build <entry> [--outdir <directory>]` | —          | Compile registered definitions into route handlers, Brick IR and a bundled Bun server |
+| `brick gen openapi [--output <file>]`        | —          | Print OpenAPI 3.1 JSON to stdout, or write it to `--output`                           |
+| `brick info`                                 | `services` | Print `registry.exportArchitecture()` JSON to stdout                                  |
 
 Unknown `gen` subcommands fail:
 
@@ -97,16 +97,16 @@ import { brick } from "@brickkit/cli";
 
 const app = brick({
   port: 4000,
-  prefix: "/api",        // default "/api"
-  title: "My API",       // default "Brick-TS API Mesh"
+  prefix: "/api", // default "/api"
+  title: "My API", // default "Brick-TS API Mesh"
   version: "1.0.0",
   description: "My service mesh",
-  docs: true,            // default true — mounts /openapi.json, /docs, /swagger
+  docs: true, // default true — mounts /openapi.json, /docs, /swagger
   openApiPath: "/openapi.json",
-  docsPath: "/docs",     // Scalar HTML
+  docsPath: "/docs", // Scalar HTML
   swaggerPath: "/swagger", // Swagger UI
-  requestLogging: true,  // default true; set false or pass { enabled: false }
-  reference: false,      // default false; set true or { path: "/reference" } for the opt-in Scalar reference plugin
+  requestLogging: true, // default true; set false or pass { enabled: false }
+  reference: false, // default false; set true or { path: "/reference" } for the opt-in Scalar reference plugin
   secrets: { validate: true }, // fail-fast via resolveSecrets() unless validate === false
 });
 

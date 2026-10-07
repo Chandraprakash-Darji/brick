@@ -51,7 +51,7 @@ Benchmark throughput and p99 together before making performance claims.
 Startup compilation is enabled by default:
 
 ```ts
-import { brick } from '@brickkit/cli';
+import { brick } from "@brickkit/cli";
 const app = brick({ services: [pagesService] });
 app.listen(4000);
 ```
@@ -92,9 +92,12 @@ and startup; mismatches fail with a rebuild instruction.
 import {
   compileBrickApplication,
   emitCompiledApplication,
-} from '@brickkit/cli/compiler';
+} from "@brickkit/cli/compiler";
 
-const compilation = compileBrickApplication({ services: [pagesService], prefix: '/api' });
+const compilation = compileBrickApplication({
+  services: [pagesService],
+  prefix: "/api",
+});
 console.log(compilation.ir);
 const generatedSource = emitCompiledApplication(compilation.ir);
 ```

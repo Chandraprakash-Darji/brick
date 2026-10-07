@@ -68,7 +68,7 @@ describe("REST Route Binding for Resources (@brickkit/cli)", () => {
           content: "Remember the milk",
           isPinned: true,
         }),
-      })
+      }),
     );
     expect(postRes.status).toBe(200);
     const createdNote = await postRes.json();
@@ -78,7 +78,7 @@ describe("REST Route Binding for Resources (@brickkit/cli)", () => {
 
     // 2. GET /api/note (list with query coercion)
     const listRes = await app.handle(
-      new Request("http://localhost:4000/api/note?isPinned=true&limit=5")
+      new Request("http://localhost:4000/api/note?isPinned=true&limit=5"),
     );
     expect(listRes.status).toBe(200);
     const listData = await listRes.json();
@@ -87,7 +87,7 @@ describe("REST Route Binding for Resources (@brickkit/cli)", () => {
 
     // 3. GET /api/note/:id
     const getRes = await app.handle(
-      new Request(`http://localhost:4000/api/note/${createdNote.id}`)
+      new Request(`http://localhost:4000/api/note/${createdNote.id}`),
     );
     expect(getRes.status).toBe(200);
     const fetched = await getRes.json();
@@ -102,7 +102,7 @@ describe("REST Route Binding for Resources (@brickkit/cli)", () => {
         body: JSON.stringify({
           content: "Remember oat milk",
         }),
-      })
+      }),
     );
     expect(patchRes.status).toBe(200);
     const updated = await patchRes.json();
@@ -110,7 +110,7 @@ describe("REST Route Binding for Resources (@brickkit/cli)", () => {
 
     // 5. Custom route with path param: /api/notes-custom/:noteId
     const customRes = await app.handle(
-      new Request(`http://localhost:4000/api/notes-custom/${createdNote.id}`)
+      new Request(`http://localhost:4000/api/notes-custom/${createdNote.id}`),
     );
     expect(customRes.status).toBe(200);
     const customData = await customRes.json();
@@ -121,7 +121,7 @@ describe("REST Route Binding for Resources (@brickkit/cli)", () => {
     const deleteRes = await app.handle(
       new Request(`http://localhost:4000/api/note/${createdNote.id}`, {
         method: "DELETE",
-      })
+      }),
     );
     expect(deleteRes.status).toBe(200);
     const deleteData = await deleteRes.json();
@@ -129,7 +129,7 @@ describe("REST Route Binding for Resources (@brickkit/cli)", () => {
 
     // 7. Verify deletion via GET /api/note/:id -> 404
     const notFoundRes = await app.handle(
-      new Request(`http://localhost:4000/api/note/${createdNote.id}`)
+      new Request(`http://localhost:4000/api/note/${createdNote.id}`),
     );
     expect(notFoundRes.status).toBe(404);
   });

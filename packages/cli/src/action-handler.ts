@@ -1,5 +1,13 @@
-import { type Service, type Action, type Logger, type CompiledRoutePlan,
-  ValidationError, ActionExecutionError, getCompiledCheck, buildErrorHelpers } from "@brickkit/core";
+import {
+  type Service,
+  type Action,
+  type Logger,
+  type CompiledRoutePlan,
+  ValidationError,
+  ActionExecutionError,
+  getCompiledCheck,
+  buildErrorHelpers,
+} from "@brickkit/core";
 
 let _srvSeq = 0;
 const EMPTY_SERVICES = Object.freeze({});
@@ -15,7 +23,7 @@ export function compileRoutePlan(
   service: Service,
   action: Action,
   routePath: string,
-  method?: string
+  method?: string,
 ): CompiledRoutePlan {
   const actionName = action.name;
   const serviceName = service.name;
@@ -31,14 +39,22 @@ export function compileRoutePlan(
   const inputSchema = action.config?.input;
   const outputSchema = action.config?.output;
   const hasInput = Boolean(inputSchema);
-  const inputChecker = inputSchema ? (getCompiledCheck(inputSchema) as any) : undefined;
-  const hasOutputCheck = Boolean(outputSchema);
-  const outputChecker = outputSchema ? (getCompiledCheck(outputSchema) as any) : undefined;
+  const inputChecker = inputSchema
+    ? (getCompiledCheck(inputSchema) as any)
+    : undefined;
+  const outputChecker = outputSchema
+    ? (getCompiledCheck(outputSchema) as any)
+    : undefined;
 
-  let coercions: Array<{ key: string; isNumber: boolean; isBoolean: boolean }> | undefined;
+  let coercions:
+    | Array<{ key: string; isNumber: boolean; isBoolean: boolean }>
+    | undefined;
   if (inputSchema && typeof (inputSchema as any).properties === "object") {
-    const list: Array<{ key: string; isNumber: boolean; isBoolean: boolean }> = [];
-    for (const [key, prop] of Object.entries((inputSchema as any).properties) as [string, any][]) {
+    const list: Array<{ key: string; isNumber: boolean; isBoolean: boolean }> =
+      [];
+    for (const [key, prop] of Object.entries(
+      (inputSchema as any).properties,
+    ) as [string, any][]) {
       const type = prop?.type;
       if (type === "number" || type === "integer") {
         list.push({ key, isNumber: true, isBoolean: false });
@@ -65,7 +81,8 @@ export function compileRoutePlan(
     debug: (...args) => console.debug(tag, ...args),
   };
 
-  const errorBuilder = (action as any).errorHelpers ?? buildErrorHelpers(action.config?.errors);
+  const errorBuilder =
+    (action as any).errorHelpers ?? buildErrorHelpers(action.config?.errors);
   const cachedDb = service.getDb();
 
   return {
@@ -91,7 +108,10 @@ export function compileRoutePlan(
   };
 }
 
-export async function executeCompiledRoute(plan: CompiledRoutePlan, elysiaCtx: any) {
+export async function executeCompiledRoute(
+  plan: CompiledRoutePlan,
+  elysiaCtx: any,
+) {
   const { params, body, query, headers, request, set } = elysiaCtx;
   const seq = (++_srvSeq).toString(36);
   const traceId = (headers && headers["x-trace-id"]) || `tr_${seq}`;
@@ -116,7 +136,8 @@ export async function executeCompiledRoute(plan: CompiledRoutePlan, elysiaCtx: a
             if (!isNaN(num)) coercedQuery[c.key] = num;
           } else if (c.isBoolean) {
             if (val === "true" || val === "1") coercedQuery[c.key] = true;
-            else if (val === "false" || val === "0") coercedQuery[c.key] = false;
+            else if (val === "false" || val === "0")
+              coercedQuery[c.key] = false;
           }
         }
       }
@@ -149,7 +170,8 @@ export async function executeCompiledRoute(plan: CompiledRoutePlan, elysiaCtx: a
     }
   }
 
-  const standardRequest = request instanceof Request ? request : DEFAULT_REQUEST;
+  const standardRequest =
+    request instanceof Request ? request : DEFAULT_REQUEST;
 
   const ctx: any = {
     request: standardRequest,
@@ -173,12 +195,17 @@ export async function executeCompiledRoute(plan: CompiledRoutePlan, elysiaCtx: a
 
     if (plan.hasInput && plan.inputChecker) {
       if (!plan.inputChecker.Check(input)) {
-        const errors = Array.from(plan.inputChecker.Errors(input)).map((err: any) => ({
-          path: err.path,
-          message: err.message,
-          value: err.value,
-        }));
-        throw new ValidationError(`Validation failed for action '${plan.actionName}' input`, errors);
+        const errors = Array.from(plan.inputChecker.Errors(input)).map(
+          (err: any) => ({
+            path: err.path,
+            message: err.message,
+            value: err.value,
+          }),
+        );
+        throw new ValidationError(
+          `Validation failed for action '${plan.actionName}' input`,
+          errors,
+        );
       }
     }
 
@@ -190,7 +217,11 @@ export async function executeCompiledRoute(plan: CompiledRoutePlan, elysiaCtx: a
       });
       const isAuthorized = authRes instanceof Promise ? await authRes : authRes;
       if (!isAuthorized) {
-        throw new ActionExecutionError("UNAUTHORIZED", `Access denied for action '${plan.actionName}'`, 403);
+        throw new ActionExecutionError(
+          "UNAUTHORIZED",
+          `Access denied for action '${plan.actionName}'`,
+          403,
+        );
       }
     }
 
@@ -199,12 +230,18 @@ export async function executeCompiledRoute(plan: CompiledRoutePlan, elysiaCtx: a
 
     if (plan.outputChecker) {
       if (!plan.outputChecker.Check(result)) {
-        const errors = Array.from(plan.outputChecker.Errors(result)).map((err: any) => ({
-          path: err.path,
-          message: err.message,
-          value: err.value,
-        }));
-        throw new ValidationError(`Validation failed for action '${plan.actionName}' output`, errors, 500);
+        const errors = Array.from(plan.outputChecker.Errors(result)).map(
+          (err: any) => ({
+            path: err.path,
+            message: err.message,
+            value: err.value,
+          }),
+        );
+        throw new ValidationError(
+          `Validation failed for action '${plan.actionName}' output`,
+          errors,
+          500,
+        );
       }
     }
 
@@ -227,7 +264,7 @@ export function createActionHandler(
   service: Service,
   action: Action,
   routePath: string,
-  method?: string
+  method?: string,
 ) {
   const plan = compileRoutePlan(service, action, routePath, method);
   return (elysiaCtx: any) => executeCompiledRoute(plan, elysiaCtx);

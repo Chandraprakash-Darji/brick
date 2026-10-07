@@ -46,7 +46,7 @@ export function referencePlugin(opts: ReferenceOptions = {}): Elysia {
 /** Mounts the Scalar reference route onto an existing app. */
 export function registerReferenceRoute(
   app: Elysia,
-  opts: ReferenceOptions = {}
+  opts: ReferenceOptions = {},
 ): Elysia {
   return app.use(referencePlugin(opts)) as Elysia;
 }

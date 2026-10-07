@@ -3,7 +3,7 @@ import { getGlobalRegistry } from "./registry";
 
 export function createServiceProxy<T extends Record<string, any>>(
   serviceName: string,
-  options: ProxyOptions = {}
+  options: ProxyOptions = {},
 ): T {
   const isMonolith = options.isMonolith ?? true;
 
@@ -14,12 +14,16 @@ export function createServiceProxy<T extends Record<string, any>>(
           const registry = getGlobalRegistry();
           const service = registry.get(serviceName);
           if (!service) {
-            throw new Error(`[Brick-TS RPC] Service '${serviceName}' is not registered in the local runtime.`);
+            throw new Error(
+              `[Brick-TS RPC] Service '${serviceName}' is not registered in the local runtime.`,
+            );
           }
 
           const action = service.getAction(actionName);
           if (!action) {
-            throw new Error(`[Brick-TS RPC] Action '${actionName}' does not exist on service '${serviceName}'.`);
+            throw new Error(
+              `[Brick-TS RPC] Action '${actionName}' does not exist on service '${serviceName}'.`,
+            );
           }
 
           const mergedCtx = {
@@ -37,7 +41,7 @@ export function createServiceProxy<T extends Record<string, any>>(
           });
         } else {
           throw new Error(
-            `[Brick-TS RPC] Remote microservice dispatch for '${serviceName}.${actionName}' is not yet configured for this environment.`
+            `[Brick-TS RPC] Remote microservice dispatch for '${serviceName}.${actionName}' is not yet configured for this environment.`,
           );
         }
       };

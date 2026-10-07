@@ -45,8 +45,12 @@ export interface LoadResult {
 }
 
 export async function runLoad(opts: LoadOptions): Promise<LoadResult> {
-  for (const [key, value] of Object.entries({ requests: opts.requests, concurrency: opts.concurrency })) {
-    if (!Number.isInteger(value) || value <= 0) throw new Error(`${key} must be a positive integer`);
+  for (const [key, value] of Object.entries({
+    requests: opts.requests,
+    concurrency: opts.concurrency,
+  })) {
+    if (!Number.isInteger(value) || value <= 0)
+      throw new Error(`${key} must be a positive integer`);
   }
   const method = opts.method ?? "GET";
   const timeoutMs = opts.timeoutMs ?? 15000;
@@ -84,7 +88,8 @@ export async function runLoad(opts: LoadOptions): Promise<LoadResult> {
     for (let i = 0; i < n; i++) {
       const url = typeof opts.url === "function" ? opts.url() : opts.url;
       const body = typeof opts.body === "function" ? opts.body() : opts.body;
-      if (body && method !== "GET" && method !== "HEAD") bytesOut += Buffer.byteLength(body);
+      if (body && method !== "GET" && method !== "HEAD")
+        bytesOut += Buffer.byteLength(body);
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), timeoutMs);
       const start = performance.now();
@@ -106,7 +111,7 @@ export async function runLoad(opts: LoadOptions): Promise<LoadResult> {
         statusCodes[k] = (statusCodes[k] ?? 0) + 1;
         if (res.ok) successful++;
         else errors++;
-      } catch (err: unknown) {
+      } catch {
         latencies.push(performance.now() - start);
         if (ctrl.signal.aborted) timeouts++;
         errors++;
@@ -132,7 +137,9 @@ export async function runLoad(opts: LoadOptions): Promise<LoadResult> {
   rssPeak = Math.max(rssPeak, rssEnd);
 
   return {
-    name: opts.name ?? `${method} ${typeof opts.url === "function" ? "<dynamic-url>" : opts.url}`,
+    name:
+      opts.name ??
+      `${method} ${typeof opts.url === "function" ? "<dynamic-url>" : opts.url}`,
     url: typeof opts.url === "function" ? "<dynamic-url>" : opts.url,
     concurrency: opts.concurrency,
     offered: opts.requests,
@@ -146,12 +153,21 @@ export async function runLoad(opts: LoadOptions): Promise<LoadResult> {
     latency: summarize(latencies),
     latencies_ms: latencies,
     successful,
-    measurement_scope: "closed-loop; CPU/RSS/event-loop: combined local server + generator process; bytes: body only",
+    measurement_scope:
+      "closed-loop; CPU/RSS/event-loop: combined local server + generator process; bytes: body only",
     bytes_in: bytesIn,
     bytes_out: bytesOut,
-    bytes_in_per_req: completed > 0 ? Math.round((bytesIn / completed) * 10) / 10 : 0,
-    cpu_ms_per_req: completed > 0 ? Math.round((cpuMs / completed) * 1000) / 1000 : 0,
-    rss_mb_mean: Math.round((rssSamples.reduce((a, b) => a + b, 0) / rssSamples.length / 1024 ** 2) * 100) / 100,
+    bytes_in_per_req:
+      completed > 0 ? Math.round((bytesIn / completed) * 10) / 10 : 0,
+    cpu_ms_per_req:
+      completed > 0 ? Math.round((cpuMs / completed) * 1000) / 1000 : 0,
+    rss_mb_mean:
+      Math.round(
+        (rssSamples.reduce((a, b) => a + b, 0) /
+          rssSamples.length /
+          1024 ** 2) *
+          100,
+      ) / 100,
     rss_mb_peak: Math.round((rssPeak / 1024 ** 2) * 100) / 100,
     event_loop_delay_ms: Math.round(Math.max(0, loopDelay) * 1000) / 1000,
   };

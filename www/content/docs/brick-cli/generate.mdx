@@ -33,12 +33,12 @@ The same function powers the live `GET /openapi.json` route in `brick`. Options 
 import { generateOpenApiSpec } from "@brickkit/core";
 
 const spec = generateOpenApiSpec({
-  title: "My API",          // default "Brick-TS API Mesh"
-  version: "1.0.0",         // default "1.0.0"
-  description: "My mesh",   // default automated-spec sentence
-  prefix: "/api",           // default "/api" — prefixes every action path
-  services: undefined,      // default: getGlobalRegistry().list()
-  registry: undefined,      // alternative to services
+  title: "My API", // default "Brick-TS API Mesh"
+  version: "1.0.0", // default "1.0.0"
+  description: "My mesh", // default automated-spec sentence
+  prefix: "/api", // default "/api" — prefixes every action path
+  services: undefined, // default: getGlobalRegistry().list()
+  registry: undefined, // alternative to services
 });
 ```
 

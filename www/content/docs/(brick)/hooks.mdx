@@ -7,14 +7,14 @@ Hooks let you run custom logic around resource writes. There are exactly **six**
 
 ## The six hooks
 
-| Hook | Signature | Common use cases |
-|------|-----------|------------------|
-| `beforeCreate` | `({ data, ctx, error })` | Uniqueness checks, defaults, minting tokens |
-| `afterCreate` | `({ data, result, ctx })` | Notifications, audit logs |
-| `beforeUpdate` | `({ id, data, existing, ctx, error })` | Validate changes, prevent field mutation |
-| `afterUpdate` | `({ id, data, result, ctx })` | Cache invalidation, audit logs |
-| `beforeDelete` | `({ id, existing, ctx, error })` | Prevent deletion, guard published rows |
-| `afterDelete` | `({ id, existing, ctx, error })` | Cleanup related rows, audit logs |
+| Hook           | Signature                              | Common use cases                            |
+| -------------- | -------------------------------------- | ------------------------------------------- |
+| `beforeCreate` | `({ data, ctx, error })`               | Uniqueness checks, defaults, minting tokens |
+| `afterCreate`  | `({ data, result, ctx })`              | Notifications, audit logs                   |
+| `beforeUpdate` | `({ id, data, existing, ctx, error })` | Validate changes, prevent field mutation    |
+| `afterUpdate`  | `({ id, data, result, ctx })`          | Cache invalidation, audit logs              |
+| `beforeDelete` | `({ id, existing, ctx, error })`       | Prevent deletion, guard published rows      |
+| `afterDelete`  | `({ id, existing, ctx, error })`       | Cleanup related rows, audit logs            |
 
 Only the `before*` hooks (plus `afterDelete`) receive `error`. Call an error helper to abort — it throws immediately:
 
@@ -25,7 +25,10 @@ pagesService.resource({
   ownerField: "userId",
   operations: {
     list: { defaultLimit: 20, maxLimit: 100 },
-    get: true, create: true, update: true, delete: true,
+    get: true,
+    create: true,
+    update: true,
+    delete: true,
   },
   hooks: {
     // Reject duplicate slugs before the INSERT

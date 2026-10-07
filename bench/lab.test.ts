@@ -12,23 +12,45 @@ describe("benchmark lab", () => {
     expect(summarize([1, 2, 3]).p50_ms).toBe(2);
   });
   test("load accounting counts HTTP failures without negative goodput", async () => {
-    const server = Bun.serve({ port: 0, fetch: () => new Response("bad", { status: 403 }) });
+    const server = Bun.serve({
+      port: 0,
+      fetch: () => new Response("bad", { status: 403 }),
+    });
     try {
-      const r = await runLoad({ url: `http://127.0.0.1:${server.port}`, requests: 10, concurrency: 2 });
+      const r = await runLoad({
+        url: `http://127.0.0.1:${server.port}`,
+        requests: 10,
+        concurrency: 2,
+      });
       expect(r.completed).toBe(10);
       expect(r.errors).toBe(10);
       expect(r.successful).toBe(0);
       expect(r.goodput_rps).toBe(0);
       expect(r.latencies_ms.length).toBe(10);
-    } finally { server.stop(true); }
+    } finally {
+      server.stop(true);
+    }
   });
   test("load parameters reject zero and negative values", async () => {
-    await expect(runLoad({ url: "http://localhost", requests: 0, concurrency: 1 })).rejects.toThrow();
-    await expect(runLoad({ url: "http://localhost", requests: 1, concurrency: -1 })).rejects.toThrow();
+    await expect(
+      runLoad({ url: "http://localhost", requests: 0, concurrency: 1 }),
+    ).rejects.toThrow();
+    await expect(
+      runLoad({ url: "http://localhost", requests: 1, concurrency: -1 }),
+    ).rejects.toThrow();
   });
   test("advisory gates still report actual regression", () => {
-    const r = checkGates({ rpsBase: 100, rpsCand: 80, p99Base: 1, p99Cand: 1,
-      cpuPerReqBase: 1, cpuPerReqCand: 1, rssBase: 1, rssCand: 1, enforce: false });
+    const r = checkGates({
+      rpsBase: 100,
+      rpsCand: 80,
+      p99Base: 1,
+      p99Cand: 1,
+      cpuPerReqBase: 1,
+      cpuPerReqCand: 1,
+      rssBase: 1,
+      rssCand: 1,
+      enforce: false,
+    });
     expect(r.gates[0]!.pass).toBe(false);
     expect(r.pass).toBe(false);
   });
@@ -36,27 +58,55 @@ describe("benchmark lab", () => {
     const bench = await startBrickServer({ port: 0, rows: 20 });
     const base = `http://127.0.0.1:${bench.app.server.port}`;
     try {
-      for (const path of ["/__bench/noop", "/api/bench/noop", "/api/bench/validated", "/api/bench/full"]) {
-        const res = await fetch(base + path, { method: "POST", headers: { "content-type": "application/json", "x-user-id": "bench-user" },
-          body: JSON.stringify({ slug: "test", title: "Benchmark", count: 3 }) });
+      for (const path of [
+        "/__bench/noop",
+        "/api/bench/noop",
+        "/api/bench/validated",
+        "/api/bench/full",
+      ]) {
+        const res = await fetch(base + path, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-user-id": "bench-user",
+          },
+          body: JSON.stringify({ slug: "test", title: "Benchmark", count: 3 }),
+        });
         expect(res.status).toBe(200);
         expect(await res.json()).toEqual({ ok: true });
       }
       const list = await fetch(base + "/api/item?search=Benchmark&limit=20");
       expect(list.status).toBe(200);
-      expect((await list.json() as { items: unknown[] }).items.length).toBe(20);
-    } finally { await bench.stop(); }
+      expect(((await list.json()) as { items: unknown[] }).items.length).toBe(
+        20,
+      );
+    } finally {
+      await bench.stop();
+    }
   });
   test("scaling fixtures pass resource output validation", async () => {
     const bench = await startBrickServer({ port: 0, rows: 0 });
     try {
       await seedRows(bench.db, 25, { prefix: "scale100000_98000" });
-      const response = await fetch(`http://127.0.0.1:${bench.app.server.port}/api/item?limit=20`);
+      const response = await fetch(
+        `http://127.0.0.1:${bench.app.server.port}/api/item?limit=20`,
+      );
       expect(response.status).toBe(200);
-      const body = await response.json() as { items: { id: string; slug: string }[]; total: number };
+      const body = (await response.json()) as {
+        items: { id: string; slug: string }[];
+        total: number;
+      };
       expect(body.total).toBe(25);
       expect(body.items).toHaveLength(20);
-      expect(body.items.every(item => item.id.startsWith("scale100000_98000_") && /^[a-z0-9-]+$/.test(item.slug))).toBe(true);
-    } finally { await bench.stop(); }
+      expect(
+        body.items.every(
+          (item) =>
+            item.id.startsWith("scale100000_98000_") &&
+            /^[a-z0-9-]+$/.test(item.slug),
+        ),
+      ).toBe(true);
+    } finally {
+      await bench.stop();
+    }
   });
 });

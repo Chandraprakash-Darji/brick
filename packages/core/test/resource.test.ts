@@ -91,7 +91,7 @@ describe("Service-Level Resources & User-Owned Schema (@brickkit/core)", () => {
           title: "FORBIDDEN_WORD",
           content: "Some content",
         },
-      })
+      }),
     ).rejects.toThrow("Title contains forbidden word");
   });
 
@@ -109,7 +109,7 @@ describe("Service-Level Resources & User-Owned Schema (@brickkit/core)", () => {
     });
 
     // 2. Create article as Bob
-    const bobArticle = await articlesResource.create({
+    await articlesResource.create({
       input: {
         slug: "bob-post",
         title: "Bob Post",
@@ -137,7 +137,7 @@ describe("Service-Level Resources & User-Owned Schema (@brickkit/core)", () => {
         ctx: {
           user: { id: "user_bob" },
         },
-      })
+      }),
     ).rejects.toThrow("Access denied to article");
 
     // 5. Bob tries to update Alice's article: should be 403 FORBIDDEN
@@ -150,7 +150,7 @@ describe("Service-Level Resources & User-Owned Schema (@brickkit/core)", () => {
         ctx: {
           user: { id: "user_bob" },
         },
-      })
+      }),
     ).rejects.toThrow("Access denied to update article");
 
     // 6. Bob tries to delete Alice's article: should be 403 FORBIDDEN
@@ -160,7 +160,7 @@ describe("Service-Level Resources & User-Owned Schema (@brickkit/core)", () => {
         ctx: {
           user: { id: "user_bob" },
         },
-      })
+      }),
     ).rejects.toThrow("Access denied to delete article");
 
     // 7. Alice can update her own article

@@ -129,10 +129,11 @@ import { pgDb } from "./db";
 async function checkMigrationsApplied(): Promise<void> {
   const db = pgDb.getDb();
   const pending = await db.execute(
-    sql`select count(*)::int as n from __drizzle_migrations where success = false`
+    sql`select count(*)::int as n from __drizzle_migrations where success = false`,
   );
   const n = (pending.rows?.[0] as any)?.n ?? 0;
-  if (n > 0) throw new Error(`${n} pending migration(s) — run migrations before boot`);
+  if (n > 0)
+    throw new Error(`${n} pending migration(s) — run migrations before boot`);
 }
 
 await checkMigrationsApplied();

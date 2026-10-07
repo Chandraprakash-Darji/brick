@@ -10,7 +10,10 @@
     "preview": "vite preview",
     "types:check": "fumadocs-mdx && tsc --noEmit",
     "postinstall": "fumadocs-mdx",
-    "lint": "oxlint"
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check ."
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.198",
@@ -56,9 +59,10 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
     "nitro": "3.0.260603-beta",
-    "oxlint": "^1.68.0",
+    "oxlint": "^1.87.0",
     "tailwindcss": "^4.3.0",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "oxfmt": "^0.72.0"
   },
   "overrides": {
     "mdast-util-to-markdown": "2.1.2"

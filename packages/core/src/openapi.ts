@@ -1,6 +1,6 @@
 import type { ServiceRegistry } from "./registry";
 import { getGlobalRegistry } from "./registry";
-import type { Action, Service, ActionErrorDefinition } from "./types";
+import type { Service, ActionErrorDefinition } from "./types";
 
 export interface OpenApiGeneratorOptions {
   title?: string;
@@ -11,7 +11,9 @@ export interface OpenApiGeneratorOptions {
   registry?: ServiceRegistry;
 }
 
-export function generateOpenApiSpec(options: OpenApiGeneratorOptions = {}): Record<string, any> {
+export function generateOpenApiSpec(
+  options: OpenApiGeneratorOptions = {},
+): Record<string, any> {
   const title = options.title ?? "Brick-TS API Mesh";
   const version = options.version ?? "1.0.0";
   const description =
@@ -135,8 +137,13 @@ export function generateOpenApiSpec(options: OpenApiGeneratorOptions = {}): Reco
       const postOperation: Record<string, any> = {
         operationId: `${service.name}_${action.name}_post`,
         summary: `${service.name}.${action.name}`,
-        description: action.config.description ?? `Execute action '${action.name}' on service '${service.name}'`,
-        tags: action.config.tags && action.config.tags.length > 0 ? action.config.tags : [service.name],
+        description:
+          action.config.description ??
+          `Execute action '${action.name}' on service '${service.name}'`,
+        tags:
+          action.config.tags && action.config.tags.length > 0
+            ? action.config.tags
+            : [service.name],
         responses,
       };
 
@@ -162,8 +169,13 @@ export function generateOpenApiSpec(options: OpenApiGeneratorOptions = {}): Reco
         const getOperation: Record<string, any> = {
           operationId: `${service.name}_${action.name}_get`,
           summary: `${service.name}.${action.name}`,
-          description: action.config.description ?? `Read-like query action '${action.name}' on service '${service.name}'`,
-          tags: action.config.tags && action.config.tags.length > 0 ? action.config.tags : [service.name],
+          description:
+            action.config.description ??
+            `Read-like query action '${action.name}' on service '${service.name}'`,
+          tags:
+            action.config.tags && action.config.tags.length > 0
+              ? action.config.tags
+              : [service.name],
           responses,
         };
 
@@ -173,7 +185,9 @@ export function generateOpenApiSpec(options: OpenApiGeneratorOptions = {}): Reco
             const parameters: any[] = [];
             const requiredFields: string[] = inputSchema.required || [];
 
-            for (const [key, propSchema] of Object.entries(inputSchema.properties)) {
+            for (const [key, propSchema] of Object.entries(
+              inputSchema.properties,
+            )) {
               parameters.push({
                 name: key,
                 in: "query",

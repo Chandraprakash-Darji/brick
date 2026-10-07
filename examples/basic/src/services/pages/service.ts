@@ -11,7 +11,12 @@ import {
 
 export type Theme = "github-dark" | "github-light" | "dracula" | "nord";
 export type ContentType = "markdown" | "html";
-export const THEMES = ["github-dark", "github-light", "dracula", "nord"] as const;
+export const THEMES = [
+  "github-dark",
+  "github-light",
+  "dracula",
+  "nord",
+] as const;
 export const CONTENT_TYPES = ["markdown", "html"] as const;
 
 // 1. Define pure Drizzle table (The single source of truth)
@@ -20,7 +25,10 @@ export const pagesTable = sqliteTable("pages", {
   slug: text("slug").notNull().unique(),
   title: text("title").notNull(),
   content: text("content").notNull(),
-  contentType: text("content_type").$type<ContentType>().notNull().default("markdown"),
+  contentType: text("content_type")
+    .$type<ContentType>()
+    .notNull()
+    .default("markdown"),
   isPublic: integer("is_public", { mode: "boolean" }).notNull().default(false),
   theme: text("theme").$type<Theme>().notNull().default("github-dark"),
   userId: text("user_id"),
@@ -122,10 +130,14 @@ export const getPublicPage = pagesService.action({
     const [page] = await ctx.db
       .select()
       .from(pagesTable)
-      .where(and(eq(pagesTable.slug, input.slug), eq(pagesTable.isPublic, true)));
+      .where(
+        and(eq(pagesTable.slug, input.slug), eq(pagesTable.isPublic, true)),
+      );
 
     if (!page) {
-      error.NOT_FOUND(`Published page '/${input.slug}' not found or is private`);
+      error.NOT_FOUND(
+        `Published page '/${input.slug}' not found or is private`,
+      );
     }
 
     return page;
@@ -135,7 +147,8 @@ export const getPublicPage = pagesService.action({
 // 5. Custom render action with TOC extraction
 export const renderPage = pagesService.action({
   name: "renderPage",
-  description: "Render markdown document with Table of Contents and theme styling",
+  description:
+    "Render markdown document with Table of Contents and theme styling",
   input: t.Object({
     slug: t.String(),
   }),
@@ -149,7 +162,7 @@ export const renderPage = pagesService.action({
         level: t.Number(),
         id: t.String(),
         text: t.String(),
-      })
+      }),
     ),
   }),
   execute: async ({ input, ctx, error }) => {

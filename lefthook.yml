@@ -1,0 +1,33 @@
+glob_matcher: doublestar
+
+pre-commit:
+  parallel: true
+  commands:
+    whitespace:
+      run: git diff --cached --check
+    tests:
+      glob:
+        - "packages/**/*.ts"
+        - "examples/**/*.ts"
+        - "bench/**/*.ts"
+        - "**/package.json"
+        - "bun.lock"
+      exclude: "www/**"
+      run: bun run test
+    lint:
+      glob: "**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
+      run: bunx --no-install oxlint {staged_files}
+    format:
+      glob: "**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json,jsonc,yml,yaml,md,mdx,css,html}"
+      run: bunx --no-install oxfmt --check {staged_files}
+    packages:
+      run: bun run check
+    website:
+      glob:
+        - "www/**"
+        - "package.json"
+        - "bun.lock"
+        - ".oxlintrc.json"
+        - ".oxfmtrc.json"
+        - "lefthook.yml"
+      run: bun run --cwd www lint && bun run --cwd www types:check

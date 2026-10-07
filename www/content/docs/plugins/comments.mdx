@@ -71,12 +71,12 @@ service.action({
 
 The resource CRUD plus per-target listing covers the surface:
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| `GET` | `/api/comment?targetType=page&targetId=:id` | List comments on a target |
-| `POST` | `/api/comment` | Create a comment (`targetType`, `targetId`, `body`, optional `parentId`) |
-| `PATCH` | `/api/comment/:id` | Edit a comment (author only) |
-| `DELETE` | `/api/comment/:id` | Delete a comment (author only) |
+| Method   | Path                                        | Purpose                                                                  |
+| -------- | ------------------------------------------- | ------------------------------------------------------------------------ |
+| `GET`    | `/api/comment?targetType=page&targetId=:id` | List comments on a target                                                |
+| `POST`   | `/api/comment`                              | Create a comment (`targetType`, `targetId`, `body`, optional `parentId`) |
+| `PATCH`  | `/api/comment/:id`                          | Edit a comment (author only)                                             |
+| `DELETE` | `/api/comment/:id`                          | Delete a comment (author only)                                           |
 
 Replies are `POST /api/comment` with `parentId` set; fetch a thread with
 `GET /api/comment?parentId=:id` or filter client-side on the list response.

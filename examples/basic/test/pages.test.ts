@@ -5,7 +5,6 @@ import {
   pagesService,
   createPage,
   getPage,
-  getPublicPage,
   listPages,
   updatePage,
   deletePage,
@@ -55,8 +54,10 @@ describe("Pages Service E2E Tests (Mirroring ../pages)", () => {
             title: "Bad Slug",
             content: "Some content",
           },
-        })
-      ).rejects.toThrow(/Validation failed for action '(createPage|page\.create)' input/);
+        }),
+      ).rejects.toThrow(
+        /Validation failed for action '(createPage|page\.create)' input/,
+      );
     });
 
     it("should reject duplicate slug with 409 SLUG_EXISTS error", async () => {
@@ -75,7 +76,7 @@ describe("Pages Service E2E Tests (Mirroring ../pages)", () => {
             title: "Second Post with Same Slug",
             content: "Duplicate content",
           },
-        })
+        }),
       ).rejects.toThrow("already taken");
     });
   });
@@ -96,7 +97,7 @@ describe("Pages Service E2E Tests (Mirroring ../pages)", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ slug: "public-announcement" }),
-        })
+        }),
       );
 
       expect(res.status).toBe(200);
@@ -120,7 +121,7 @@ describe("Pages Service E2E Tests (Mirroring ../pages)", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ slug: "secret-draft" }),
-        })
+        }),
       );
 
       expect(res.status).toBe(404);
@@ -214,20 +215,37 @@ How it works.`,
       const deleteRes = await deletePage({ input: { id: created.id } });
       expect(deleteRes.success).toBe(true);
 
-      expect(getPage({ input: { id: created.id } })).rejects.toThrow("does not exist");
+      expect(getPage({ input: { id: created.id } })).rejects.toThrow(
+        "does not exist",
+      );
     });
   });
 
   describe("listPages", () => {
     it("should list pages and filter by public visibility", async () => {
       await createPage({
-        input: { slug: "pub-1", title: "Public 1", content: "c", isPublic: true },
+        input: {
+          slug: "pub-1",
+          title: "Public 1",
+          content: "c",
+          isPublic: true,
+        },
       });
       await createPage({
-        input: { slug: "pub-2", title: "Public 2", content: "c", isPublic: true },
+        input: {
+          slug: "pub-2",
+          title: "Public 2",
+          content: "c",
+          isPublic: true,
+        },
       });
       await createPage({
-        input: { slug: "draft-1", title: "Draft 1", content: "c", isPublic: false },
+        input: {
+          slug: "draft-1",
+          title: "Draft 1",
+          content: "c",
+          isPublic: false,
+        },
       });
 
       const all = await listPages({ input: {} });
@@ -252,7 +270,7 @@ How it works.`,
             content: "REST Body",
             isPublic: true,
           }),
-        })
+        }),
       );
       expect(createRes.status).toBe(200);
       const created = await createRes.json();
@@ -261,7 +279,7 @@ How it works.`,
 
       // 2. GET /api/page (list)
       const listRes = await app.handle(
-        new Request("http://localhost:4000/api/page?limit=10")
+        new Request("http://localhost:4000/api/page?limit=10"),
       );
       expect(listRes.status).toBe(200);
       const listData = await listRes.json();
@@ -270,7 +288,7 @@ How it works.`,
 
       // 3. GET /api/page/:id (get)
       const getRes = await app.handle(
-        new Request(`http://localhost:4000/api/page/${created.id}`)
+        new Request(`http://localhost:4000/api/page/${created.id}`),
       );
       expect(getRes.status).toBe(200);
       const getData = await getRes.json();
@@ -285,7 +303,7 @@ How it works.`,
           body: JSON.stringify({
             title: "Updated via PATCH",
           }),
-        })
+        }),
       );
       expect(patchRes.status).toBe(200);
       const patched = await patchRes.json();
@@ -293,7 +311,7 @@ How it works.`,
 
       // 5. Custom path route: GET /api/public/pages/:slug
       const publicSlugRes = await app.handle(
-        new Request("http://localhost:4000/api/public/pages/rest-post")
+        new Request("http://localhost:4000/api/public/pages/rest-post"),
       );
       expect(publicSlugRes.status).toBe(200);
       const publicSlugData = await publicSlugRes.json();
@@ -303,7 +321,7 @@ How it works.`,
       const deleteRes = await app.handle(
         new Request(`http://localhost:4000/api/page/${created.id}`, {
           method: "DELETE",
-        })
+        }),
       );
       expect(deleteRes.status).toBe(200);
       const deletedData = await deleteRes.json();
