@@ -8,7 +8,9 @@ import {
   ownerId,
 } from "./_shared";
 
-export const getPageTool = pagesService.action({
+export const getPageTool = pagesService.tool({
+  annotations: { readOnlyHint: true },
+  title: "View Page",
   authorize: requireUser,
   description:
     "Get a single page's metadata (id, title, slug, contentType, theme, isPublic, createdAt, updatedAt). Does NOT include the page body — use get_page_content or render_page for that.",

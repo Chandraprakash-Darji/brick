@@ -3,7 +3,9 @@ import { t } from "@brickkit/core";
 import { pagesService } from "../service";
 import { requireUser } from "./_shared";
 
-export const whoamiTool = pagesService.action({
+export const whoamiTool = pagesService.tool({
+  annotations: { readOnlyHint: true },
+  title: "View Connected Account",
   authorize: requireUser,
   description:
     "Returns the authenticated subject (user ID) of the current bearer token.",

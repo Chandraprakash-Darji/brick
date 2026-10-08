@@ -63,3 +63,12 @@ export {
   resetSecrets,
 } from "./secrets";
 export type { SecretSource, SecretOptions } from "./secrets";
+
+export { defineTool, isTool } from "./tool";
+export { createMcpRegistry, createMcpHandler, UnknownToolError } from "./mcp";
+export type {
+  McpToolDefinition,
+  McpRegistry,
+  McpRegistryOptions,
+  McpHandlerOptions,
+} from "./mcp";

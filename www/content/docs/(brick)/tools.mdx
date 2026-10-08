@@ -1,0 +1,137 @@
+---
+title: MCP Tools
+description: Define typed tools with inline annotations, shared dispatch, and a JSON-RPC handler
+---
+
+Use `service.tool()` to define an MCP tool with the same input validation, output validation, authorization, and service context as an action. Tools register separately from HTTP actions. They do not create routes or appear in OpenAPI unless you explicitly opt in.
+
+## Define a tool
+
+```ts
+// services/crm/tools/whoami.ts
+import { defineService, t } from "@brickkit/core";
+import { getSessionUser } from "../../../auth";
+
+export const crm = defineService("crm", {
+  // Your app supplies the session lookup: { id: string } | null.
+  context: async ({ request }) => ({ user: await getSessionUser(request) }),
+});
+
+export const whoami = crm.tool({
+  name: "crm_whoami",
+  title: "View Connected CRM Account",
+  description: "Return the authenticated CRM account ID.",
+  annotations: { readOnlyHint: true },
+  input: t.Object({}, { additionalProperties: false }),
+  output: t.String(),
+  authorize: ({ user }) => !!user,
+  execute: ({ ctx }) => ctx.user.id,
+});
+```
+
+Input and output types infer from the schemas. Declaring `authorize` narrows a nullable `ctx.user` inside `execute`, just as it does for `.action()`. Tool input schemas must describe an object. For a tool with no arguments, use `t.Object({})`.
+
+A tool is also directly callable:
+
+```ts
+const accountId = await whoami({
+  input: {},
+  ctx: { user: { id: "user_1" } },
+}); // string
+```
+
+For a standalone definition, use `defineTool(config)` and attach it with `crm.tool(tool)`. The service exposes `getTool(name)` and `listTools()` separately from `getAction(name)` and `listActions()`.
+
+## Keep annotations with the definition
+
+There is no separate annotation map. Both the tool's display title and its behavioral hints live on the definition:
+
+| Field                         | Type      | Purpose                                                  |
+| ----------------------------- | --------- | -------------------------------------------------------- |
+| `title`                       | `string`  | Human-readable tool name                                 |
+| `annotations.title`           | `string`  | Display title fallback when top-level `title` is absent  |
+| `annotations.readOnlyHint`    | `boolean` | Whether the tool only reads data                         |
+| `annotations.destructiveHint` | `boolean` | Whether the tool may make destructive changes            |
+| `annotations.idempotentHint`  | `boolean` | Whether repeating the same call has no additional effect |
+| `annotations.openWorldHint`   | `boolean` | Whether the tool interacts with external entities        |
+
+Hints are optional metadata for MCP clients. They do not enforce permissions or replace `authorize`.
+
+## List and dispatch tools
+
+```ts
+// services/crm/mcp.ts
+import { createMcpRegistry } from "@brickkit/core";
+import { crm } from "./tools/whoami";
+// Import your other tool modules here so they register on the service.
+
+export const registry = createMcpRegistry({ services: [crm] });
+
+const tools = registry.listTools();
+const accountId = await registry.callTool(
+  "crm_whoami",
+  {},
+  { user: { id: "user_1" } },
+);
+```
+
+The registry derives names, descriptions, input schemas, titles, and annotations from the registered definitions. Calls pass through the tool's normal validation, authorization, and context resolution. Ordinary actions are not added to the MCP registry.
+
+You can collect multiple services, supply an explicit `tools` array, or combine both. Duplicate names across different tools are rejected. The registry reads service registrations when listing or calling tools, so later definitions are included too. An unknown name throws `UnknownToolError`.
+
+Keep one file per tool under a `tools/` folder. Import those files before using the registry; no manually maintained tool array or dispatcher is required.
+
+## Handle MCP JSON-RPC
+
+```ts
+import { createMcpHandler } from "@brickkit/core";
+import { registry } from "./services/crm/mcp";
+
+export const handleMcp = createMcpHandler({
+  registry,
+  serverInfo: { name: "crm-agent", version: "1.0.0" },
+});
+
+// In your authenticated HTTP handler, pass the verified identity:
+// return handleMcp(request, { user: { id: verifiedSubject } });
+```
+
+This is a stateless POST handler using Web `Request` and `Response`. Mount it in your app and keep token verification or session authentication in your existing auth layer. The incoming request is forwarded to the service context resolver.
+
+| Method                      | Behavior                                                                 |
+| --------------------------- | ------------------------------------------------------------------------ |
+| `initialize`                | Advertises tools, server information, and the supported protocol version |
+| `ping`                      | Returns an empty result                                                  |
+| `tools/list`                | Returns the registry's tool definitions                                  |
+| `tools/call`                | Dispatches the named tool and returns text content                       |
+| Notifications without an ID | Returns an empty HTTP 202 response                                       |
+
+The default protocol version is `2025-06-18`. Set `protocolVersions` to the versions your transport supports, newest first. Initialization selects the requested version when supported, otherwise the first configured version.
+
+Malformed JSON, invalid requests, invalid tool parameters, unknown tools, and unknown methods produce JSON-RPC errors. Tool validation, authorization, and domain failures produce a tool result with `isError: true`. String results become text directly; other values are serialized as JSON text.
+
+The Pages example combines this handler with Better Auth's `requireMcpAuth` wrapper. See `examples/pages/src/api/mcp.ts` for token verification and OAuth discovery, and `examples/pages/src/api/services/pages/page/tools/` for the definitions.
+
+## Explicitly expose a tool over HTTP
+
+Add `http: true` when defining the tool:
+
+```ts
+const echo = crm.tool({
+  name: "echo",
+  http: true,
+  input: t.Object({ message: t.String() }),
+  output: t.String(),
+  execute: ({ input }) => input.message,
+});
+```
+
+Or register an existing tool as an HTTP action:
+
+```ts
+crm.action(whoami);
+```
+
+Both keep the definition in the MCP registry and also register it for normal HTTP routing and OpenAPI generation. Referencing an MCP-only tool or its service in `brickFromContract` does not opt it into HTTP. Include only HTTP-enabled tools in the contract you expose to a browser's [Typed Client](/docs/typed-client).
+
+Related: [Access Control](/docs/access-control), [Input/Output Validation](/docs/validate-hook), and [OpenAPI](/docs/openapi).

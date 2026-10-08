@@ -66,20 +66,22 @@ framework and benchmark tests without requiring the pages Postgres database.
 - `src/api/db.ts`: shared Postgres client, handle, and schema.
 - `src/api/contract.ts`: server contract and exported `PagesApi` type.
 - `src/api/app.ts`: contract-based server, auth, public HTML, and MCP routes.
-- `src/api/services/pages/page/`: table, resource, rendering, and custom actions.
+- `src/api/services/pages/page/`: table, resource, and rendering.
+- `src/api/services/pages/page/tools/`: MCP tool definitions with inline annotations.
+- `src/api/services/pages/mcp.ts`: shared MCP registry for the Pages service.
 - `test/`: API, auth, MCP, rendering, and local SDK tests.
 - `src/lib/api.ts`: browser-safe SDK, cookie credentials, and page types.
 - `src/collections/pages.ts`: paginated SDK reads for TanStack DB.
 - `src/actions/pages.ts`: optimistic writes through the SDK.
 
-CRUD and custom action types infer directly from the contract. List rows allow
+CRUD and explicitly exposed tool types infer directly from the contract. List rows allow
 omitted columns because resource lists support projection. Backend modules are
 imported only as types in the browser client.
 
 ## Routes
 
 - `/api/page` and `/api/page/:id`: owner-scoped CRUD.
-- `/api/pages/<action>`: custom page actions.
+- `/api/pages/echo`: tool explicitly exposed over HTTP.
 - `/api/auth/*`: Better Auth.
 - `/api/public/pages/:slug`: public metadata.
 - `/p/:slug`: rendered public page.
@@ -88,3 +90,9 @@ imported only as types in the browser client.
 
 The web server mounts the API in-process, so development requires one server.
 The separate pages repository is no longer needed to run this example.
+
+Tools register with `pagesService.tool()` and remain MCP-only by default. The
+shared `createMcpRegistry({ services: [pagesService] })` lists and dispatches them,
+so no separate annotations map or tool array is needed. Echo and the public
+metadata tool opt into HTTP with `http: true`. The shared `createMcpHandler()`
+handles JSON-RPC; Better Auth still verifies tokens in the app's MCP wrapper.

@@ -8,7 +8,9 @@ import {
   ownerId,
 } from "./_shared";
 
-export const listPagesTool = pagesService.action({
+export const listPagesTool = pagesService.tool({
+  annotations: { readOnlyHint: true },
+  title: "List Pages",
   authorize: requireUser,
   description:
     "List all pages owned by the authenticated user. Returns an array of page metadata objects with id, title, slug, contentType, theme, isPublic, userId, createdAt, and updatedAt. **No content body is included.**",

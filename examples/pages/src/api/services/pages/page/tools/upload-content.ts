@@ -3,7 +3,9 @@ import { t, eq, and } from "@brickkit/core";
 import { pagesService, pagesTable } from "../service";
 import { requireUser, ownerId } from "./_shared";
 
-export const uploadContentTool = pagesService.action({
+export const uploadContentTool = pagesService.tool({
+  annotations: { destructiveHint: false },
+  title: "Upload Page Content",
   authorize: requireUser,
   description:
     "Upload (or replace) the full content body of a page. The content is raw markdown or HTML source, NOT a rendered document. After uploading you can call render_page to verify it looks correct, or use get_page_content to read it back. Prefer writing the content to a file locally first and then uploading it here — this lets you keep a local copy and use render_page for preview before committing.",

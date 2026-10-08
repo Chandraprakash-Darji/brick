@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { createPageTool } from "../src/api/services/pages/page/actions/create";
+import { createPageTool } from "../src/api/services/pages/page/tools/create";
 
 describe("create_page input", () => {
   const required = { slug: "single-name", title: "Single name" };

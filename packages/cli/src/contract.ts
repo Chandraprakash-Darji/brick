@@ -46,7 +46,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return proto === Object.prototype || proto === null;
 }
 
-/** Collects every action reachable from a contract tree (actions, resources, services, namespaces). */
+/** Collects definitions to resolve services; each service registers its own HTTP actions. */
 function collectActions(
   node: unknown,
   out: Action<any, any, any, any>[],
@@ -56,7 +56,7 @@ function collectActions(
     return;
   }
   if (isService(node)) {
-    out.push(...node.listActions());
+    out.push(...node.listActions(), ...(node.listTools?.() ?? []));
     return;
   }
   if (isResource(node)) {
@@ -90,8 +90,9 @@ function collectActions(
  * ```
  *
  * Services are resolved through the global registry by each action's
- * `serviceName`, so every action in the contract must be bound to a service
- * (define it via `service.action(...)`, which registers and binds it). An
+ * `serviceName`, so every definition in the contract must be bound to a service
+ * (via `service.action(...)` or `service.tool(...)`). Only HTTP actions
+ * registered on that service produce routes. An
  * error names the offending action when it is unbound or its service was
  * never registered.
  */

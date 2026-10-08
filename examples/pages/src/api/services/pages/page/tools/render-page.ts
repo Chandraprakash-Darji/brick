@@ -4,7 +4,9 @@ import { renderContent } from "../render";
 import { pagesService, pagesTable } from "../service";
 import { requireUser, ownerId } from "./_shared";
 
-export const renderPageTool = pagesService.action({
+export const renderPageTool = pagesService.tool({
+  annotations: { readOnlyHint: true },
+  title: "Render Page",
   authorize: requireUser,
   description:
     "Render a page to a complete, self-contained HTML document. The returned HTML inlines all theme CSS so it renders correctly without external resources. Save this output to a .html file locally to preview how the page will look when published. Supports GitHub-Flavored Markdown (tables, strikethrough, task lists, auto-heading IDs), Mermaid diagrams, and auto-generated table of contents.",

@@ -3,7 +3,10 @@ import { t, eq, and } from "@brickkit/core";
 import { pagesService, pagesTable } from "../service";
 import { PageMetaSchema } from "./_shared";
 
-export const getPublicPageTool = pagesService.action({
+export const getPublicPageTool = pagesService.tool({
+  annotations: { readOnlyHint: true },
+  title: "View Public Page",
+  http: true,
   description:
     "Get a public page by its slug. No authentication required. Returns page metadata (id, title, slug, contentType, theme, isPublic, createdAt, updatedAt). Only works for pages with isPublic=true. For private pages, the authenticated user must use get_page instead.",
   execute: async ({ input, ctx, error }) => {

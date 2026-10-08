@@ -3,7 +3,9 @@ import { t } from "@brickkit/core";
 import { pagesService } from "../service";
 import { requireUser } from "./_shared";
 
-export const echoTool = pagesService.action({
+export const echoTool = pagesService.tool({
+  title: "Echo Message",
+  http: true,
   authorize: requireUser,
   description:
     "Connectivity test — echoes back the message you send. Returns the message prefixed with 'Echo:' and the authenticated user's ID.",

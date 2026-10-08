@@ -151,23 +151,7 @@ async function invokeDispatch(
 ): Promise<any> {
   const d = dispatchPick?.value;
   if (!d) throw new Error("dispatcher missing");
-  // Try common dispatcher signatures in order.
-  const attempts: Array<() => Promise<any>> = [
-    () => d(name, args, ctx),
-    () => d({ arguments: args, name }, ctx),
-    () => d({ params: { arguments: args, name } }, ctx),
-    () => d.execute?.({ ctx, input: { arguments: args, name } }),
-  ];
-  let lastErr: any = null;
-  for (const fn of attempts) {
-    try {
-      const out = await fn();
-      if (out !== undefined) return out;
-    } catch (err) {
-      lastErr = err;
-    }
-  }
-  throw lastErr ?? new Error(`dispatch failed for ${name}`);
+  return d(name, args, ctx);
 }
 
 function toolText(out: any): string {

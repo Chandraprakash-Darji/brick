@@ -7,7 +7,7 @@ export interface OpenApiGeneratorOptions {
   version?: string;
   description?: string;
   prefix?: string;
-  services?: Service[];
+  services?: Service<any, any>[];
   registry?: ServiceRegistry;
 }
 

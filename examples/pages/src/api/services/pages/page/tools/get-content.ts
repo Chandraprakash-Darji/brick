@@ -3,7 +3,9 @@ import { t, eq, and } from "@brickkit/core";
 import { pagesService, pagesTable } from "../service";
 import { requireUser, ownerId } from "./_shared";
 
-export const getPageContentTool = pagesService.action({
+export const getPageContentTool = pagesService.tool({
+  annotations: { readOnlyHint: true },
+  title: "View Page Content",
   authorize: requireUser,
   description:
     "Get the raw source content of a page. Returns the original markdown or HTML source as a plain text string — NOT rendered. Use render_page to get a previewable HTML document. The returned content can be used with tools that write files (like VS Code's filesystem tools) for local editing before uploading back.",

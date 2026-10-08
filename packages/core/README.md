@@ -42,3 +42,51 @@ const pages = await api.page.list({ limit: 10 });
 
 See `www/content/docs/(brick)/typed-client.mdx` for the contract-first setup
 (`defineAppContract` + `brickFromContract`), routing, and error handling.
+
+## MCP tools
+
+Define tools like actions, with typed input/output schemas and inline metadata:
+
+```ts
+import {
+  defineService,
+  createMcpRegistry,
+  createMcpHandler,
+  t,
+} from "@brickkit/core";
+
+const crm = defineService("crm");
+const whoami = crm.tool({
+  name: "crm_whoami",
+  title: "View Connected CRM Account",
+  annotations: { readOnlyHint: true },
+  input: t.Object({}),
+  output: t.String(),
+  authorize: ({ user }) => !!user?.id,
+  execute: ({ ctx }) => ctx.user.id,
+});
+
+const registry = createMcpRegistry({ services: [crm] });
+registry.listTools();
+await registry.callTool("crm_whoami", {}, { user: { id: "user_1" } });
+
+const handleMcp = createMcpHandler({
+  registry,
+  serverInfo: { name: "crm", version: "1.0.0" },
+});
+// After your app authenticates a request:
+// return handleMcp(request, { user: { id: verifiedSubject } });
+```
+
+Tools use action validation, authorization, and service context. They are stored
+separately from HTTP actions and stay out of routes and OpenAPI by default,
+including when a service or tool is referenced in `brickFromContract`. Add
+`http: true` to a tool definition, or register it with `crm.action(whoami)`, to
+expose it over HTTP as well.
+
+The registry accepts `services` and/or an explicit `tools` array, rejects duplicate
+names, and reads annotations directly from definitions. The handler is a
+stateless POST JSON-RPC helper for initialize, ping, tools/list, and tools/call;
+notifications receive an empty 202 response. Authentication and mounting remain
+in your app. Its default protocol version is `2025-06-18`, following the
+[MCP tools specification](https://modelcontextprotocol.io/specification/2025-06-18/server/tools).

@@ -1,8 +1,9 @@
+import { createMcpHandler as createBrickMcpHandler } from "@brickkit/core";
 import { requireMcpAuth } from "@better-auth/mcp";
 
 import { getAuth, type PagesAuth } from "./auth";
 import { baseUrlSecret, mcpResourceSecret } from "./secrets";
-import { callTool, toolList } from "./services/pages/mcp";
+import { pageMcpRegistry } from "./services/pages/mcp";
 
 // MCP JSON-RPC transport over HTTP (Go `server/mcp` parity): bearer tokens
 // minted by the better-auth `mcp()` OAuth plugin authorize `tools/call`, and
@@ -27,72 +28,11 @@ export function protectedResourceMetadata(): {
   };
 }
 
-function jsonRpcResult(id: unknown, result: unknown): Response {
-  return Response.json({ id, jsonrpc: "2.0", result });
-}
-
-function jsonRpcError(id: unknown, code: number, message: string): Response {
-  return Response.json({ error: { code, message }, id, jsonrpc: "2.0" });
-}
-
-function toText(result: unknown): string {
-  return typeof result === "string" ? result : JSON.stringify(result, null, 2);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-async function handleJsonRpc(
-  request: Request,
-  claims: { sub?: string },
-): Promise<Response> {
-  let body: { id?: unknown; method?: string; params?: any };
-  try {
-    body = (await request.json()) as typeof body;
-  } catch {
-    return jsonRpcError(null, -32700, "parse error");
-  }
-  const { id = null, method, params } = body ?? {};
-
-  switch (method) {
-    case "initialize":
-      return jsonRpcResult(id, {
-        capabilities: { tools: {} },
-        protocolVersion: PROTOCOL_VERSION,
-        serverInfo: SERVER_INFO,
-      });
-    case "notifications/initialized":
-      return new Response(null, { status: 202 });
-    case "tools/list":
-      return jsonRpcResult(id, { tools: toolList() });
-    case "tools/call": {
-      const name = params?.name;
-      const args = params?.arguments ?? {};
-      const userId = typeof claims?.sub === "string" ? claims.sub : "";
-      try {
-        const result = await callTool(
-          name,
-          args,
-          userId ? { user: { id: userId } } : undefined,
-        );
-        return jsonRpcResult(id, {
-          content: [{ text: toText(result), type: "text" }],
-        });
-      } catch (error) {
-        if (errorMessage(error).startsWith("unknown tool:")) {
-          return jsonRpcError(id, -32602, errorMessage(error));
-        }
-        return jsonRpcResult(id, {
-          content: [{ text: errorMessage(error), type: "text" }],
-          isError: true,
-        });
-      }
-    }
-    default:
-      return jsonRpcError(id, -32601, `method not found: ${method}`);
-  }
-}
+const handleJsonRpc = createBrickMcpHandler({
+  registry: pageMcpRegistry,
+  protocolVersions: [PROTOCOL_VERSION],
+  serverInfo: SERVER_INFO,
+});
 
 /**
  * Bearer-protecting `/mcp` handler. Verifies the JWT against the
@@ -103,7 +43,13 @@ async function handleJsonRpc(
 export function createMcpHandler(auth: PagesAuth = getAuth()) {
   return requireMcpAuth(
     auth,
-    (request, claims) => handleJsonRpc(request, claims),
+    (request, claims) =>
+      handleJsonRpc(
+        request,
+        typeof claims.sub === "string"
+          ? { user: { id: claims.sub } }
+          : undefined,
+      ),
     { resource: mcpResource() },
   );
 }

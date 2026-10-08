@@ -4,6 +4,9 @@ import type {
   Service,
   ServiceOptions,
   Action,
+  Tool,
+  ToolConfigWithAuthorize,
+  ToolConfigWithoutAuthorize,
   ActionConfigWithAuthorize,
   ActionConfigWithoutAuthorize,
   ActionErrorDefinition,
@@ -13,6 +16,7 @@ import type {
   Resource,
   ResourceConfig,
 } from "./types";
+import { defineTool, isTool } from "./tool";
 import { defineAction } from "./action";
 import { getGlobalRegistry } from "./registry";
 import { getTableName, isDatabaseHandle, type DatabaseHandle } from "./db";
@@ -37,6 +41,7 @@ export class ServiceImpl<
   readonly name: string;
   readonly options: ServiceOptions<TServiceContext, TDb>;
   readonly actions = new Map<string, Action<any, any, any, any>>();
+  readonly tools = new Map<string, Tool<any, any, any, any>>();
   readonly tables = new Map<string, any>();
   readonly resources = new Map<
     string,
@@ -164,6 +169,7 @@ export class ServiceImpl<
       actionInstance = defineAction(actionOrConfig);
     }
 
+    if (isTool(actionInstance)) actionInstance.config.http = true;
     actionInstance.serviceName = this.name;
     (actionInstance as any).service = this;
     this.actions.set(actionInstance.name, actionInstance);
@@ -173,6 +179,65 @@ export class ServiceImpl<
       return this;
     }
     return actionInstance;
+  }
+
+  tool<
+    TIn extends TSchema | undefined = undefined,
+    TOut extends TSchema | undefined = undefined,
+    TErr extends Record<string, ActionErrorDefinition> = Record<
+      string,
+      ActionErrorDefinition
+    >,
+  >(action: Tool<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>): this;
+  tool<
+    TIn extends TSchema | undefined = undefined,
+    TOut extends TSchema | undefined = undefined,
+    TErr extends Record<string, ActionErrorDefinition> = Record<
+      string,
+      ActionErrorDefinition
+    >,
+  >(
+    config: ToolConfigWithAuthorize<
+      TIn,
+      TOut,
+      TErr,
+      BaseContext<TDb> & TServiceContext
+    >,
+  ): Tool<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>;
+  tool<
+    TIn extends TSchema | undefined = undefined,
+    TOut extends TSchema | undefined = undefined,
+    TErr extends Record<string, ActionErrorDefinition> = Record<
+      string,
+      ActionErrorDefinition
+    >,
+  >(
+    config: ToolConfigWithoutAuthorize<
+      TIn,
+      TOut,
+      TErr,
+      BaseContext<TDb> & TServiceContext
+    >,
+  ): Tool<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>;
+  tool(toolOrConfig: any): any {
+    const existing = isTool(toolOrConfig);
+    const tool = existing ? toolOrConfig : defineTool(toolOrConfig);
+    if (this.tools.has(tool.name))
+      throw new Error(`Duplicate tool: ${tool.name}`);
+    tool.serviceName = this.name;
+    (tool as any).service = this;
+    this.tools.set(tool.name, tool);
+    if (tool.config.http) this.action(tool);
+    getGlobalRegistry().touch();
+    return existing ? this : tool;
+  }
+
+  getTool(name: string): Tool<any, any, any, any> | undefined {
+    return this.tools.get(name);
+  }
+
+  listTools(): Tool<any, any, any, any>[] {
+    return Array.from(this.tools.values());
   }
 
   getAction(name: string): Action<any, any, any, any> | undefined {

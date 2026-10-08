@@ -9,7 +9,8 @@ import {
   ownerId,
 } from "./_shared";
 
-export const editPageTool = pagesService.action({
+export const editPageTool = pagesService.tool({
+  title: "Edit Page",
   authorize: requireUser,
   description:
     "Edit page metadata (title, slug, theme, isPublic, contentType). Only the fields you provide will be updated — missing fields keep their current values. Does NOT touch the page content body — use upload_content for that.",

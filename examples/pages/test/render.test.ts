@@ -5,7 +5,7 @@ import { prepareTestDatabase } from "./database";
 // Port of server/resources/render.go + mermaid.go + themes.go behavior:
 // markdown/html routing, theme fallback, mermaid injection, public-page not-found.
 import * as service from "../src/api/services/pages/service";
-import { getPublicPageTool } from "../src/api/services/pages/page/actions/get-public-page";
+import { getPublicPageTool } from "../src/api/services/pages/page/tools/get-public-page";
 
 const svcMod = {
   ...service,

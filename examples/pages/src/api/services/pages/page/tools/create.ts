@@ -9,7 +9,9 @@ import {
   ownerId,
 } from "./_shared";
 
-export const createPageTool = pagesService.action({
+export const createPageTool = pagesService.tool({
+  annotations: { idempotentHint: true },
+  title: "Create Page",
   authorize: requireUser,
   description:
     "Create a new page with metadata (title, slug, contentType, theme, isPublic). The page is created with empty content — use upload_content to set the body after optionally previewing the rendered HTML with render_page. The slug must be unique across all pages.",

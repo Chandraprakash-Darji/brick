@@ -248,6 +248,53 @@ export interface Action<
   errorHelpers?: ErrorBuilder<TErrors>;
 }
 
+/** MCP tool metadata, kept with the executable definition. */
+export interface ToolAnnotations {
+  title?: string;
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+}
+export interface ToolOptions {
+  title?: string;
+  annotations?: ToolAnnotations;
+  /** Also register HTTP routes and OpenAPI. Defaults to false. */
+  http?: boolean;
+}
+export type ToolConfigWithAuthorize<
+  I extends TSchema | undefined = undefined,
+  O extends TSchema | undefined = undefined,
+  E extends Record<string, ActionErrorDefinition> = Record<
+    string,
+    ActionErrorDefinition
+  >,
+  C extends ActionContext = ActionContext,
+> = ActionConfigWithAuthorize<I, O, E, C> & ToolOptions;
+export type ToolConfigWithoutAuthorize<
+  I extends TSchema | undefined = undefined,
+  O extends TSchema | undefined = undefined,
+  E extends Record<string, ActionErrorDefinition> = Record<
+    string,
+    ActionErrorDefinition
+  >,
+  C extends ActionContext = ActionContext,
+> = ActionConfigWithoutAuthorize<I, O, E, C> & ToolOptions;
+export interface Tool<
+  I extends TSchema | undefined = any,
+  O extends TSchema | undefined = any,
+  E extends Record<string, ActionErrorDefinition> = Record<
+    string,
+    ActionErrorDefinition
+  >,
+  C extends ActionContext = ActionContext,
+> extends Action<I, O, E, C> {
+  readonly kind: "tool";
+  config:
+    | ToolConfigWithAuthorize<I, O, E, C>
+    | ToolConfigWithoutAuthorize<I, O, E, C>;
+}
+
 export interface ResourceOperationsConfig {
   list?:
     | boolean
@@ -685,6 +732,7 @@ export interface Service<
   readonly name: string;
   readonly options: ServiceOptions<TServiceContext, TDb>;
   readonly actions: Map<string, Action<any, any, any, any>>;
+  readonly tools: Map<string, Tool<any, any, any, any>>;
   readonly tables: Map<string, any>;
   readonly resources: Map<
     string,
@@ -738,6 +786,49 @@ export interface Service<
     >,
   ): Action<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>;
 
+  tool<
+    TIn extends TSchema | undefined = undefined,
+    TOut extends TSchema | undefined = undefined,
+    TErr extends Record<string, ActionErrorDefinition> = Record<
+      string,
+      ActionErrorDefinition
+    >,
+  >(
+    action: Tool<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>,
+  ): this;
+
+  tool<
+    TIn extends TSchema | undefined = undefined,
+    TOut extends TSchema | undefined = undefined,
+    TErr extends Record<string, ActionErrorDefinition> = Record<
+      string,
+      ActionErrorDefinition
+    >,
+  >(
+    config: ToolConfigWithAuthorize<
+      TIn,
+      TOut,
+      TErr,
+      BaseContext<TDb> & TServiceContext
+    >,
+  ): Tool<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>;
+
+  tool<
+    TIn extends TSchema | undefined = undefined,
+    TOut extends TSchema | undefined = undefined,
+    TErr extends Record<string, ActionErrorDefinition> = Record<
+      string,
+      ActionErrorDefinition
+    >,
+  >(
+    config: ToolConfigWithoutAuthorize<
+      TIn,
+      TOut,
+      TErr,
+      BaseContext<TDb> & TServiceContext
+    >,
+  ): Tool<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>;
+
   resource<
     TTable = any,
     const TOptions extends ResourceTypeOptions = ResourceTypeOptions,
@@ -749,6 +840,8 @@ export interface Service<
   registerTable(table: any): this;
   getAction(name: string): Action<any, any, any, any> | undefined;
   listActions(): Action<any, any, any, any>[];
+  getTool(name: string): Tool<any, any, any, any> | undefined;
+  listTools(): Tool<any, any, any, any>[];
   getResource(
     name: string,
   ): Resource<any, BaseContext<TDb> & TServiceContext> | undefined;

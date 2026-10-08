@@ -7,7 +7,7 @@ import {
   pagesResource,
   pagesTable as table,
 } from "../src/api/services/pages/service";
-import { getPublicPageTool as getPublicPage } from "../src/api/services/pages/page/actions/get-public-page";
+import { getPublicPageTool as getPublicPage } from "../src/api/services/pages/page/tools/get-public-page";
 
 const {
   create: createPage,
