@@ -44,6 +44,7 @@ export function SiteFooter() {
             Documentation
           </Link>
           <Link to="/benchmarks">Benchmarks</Link>
+          <Link to="/blog">Blog</Link>
           <a
             href={`${site.repo}/tree/main/examples`}
             target="_blank"

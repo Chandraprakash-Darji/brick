@@ -11,6 +11,7 @@ export function baseOptions(): BaseLayoutProps {
   };
 }
 export const links: LinkItemType[] = [
+  { active: "url", text: "Blog", url: "/blog" },
   {
     active: "url",
     text: "Docs",

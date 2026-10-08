@@ -1,0 +1,133 @@
+---
+title: "Build a typed API with BrickKit"
+description: "Define a service once, expose it over HTTP, and call it from TypeScript without generating a client."
+date: "2026-10-08"
+category: guide
+---
+
+A backend and its client need to agree on inputs, outputs, and routes. With BrickKit, you can derive the client types from your backend definitions. This guide builds a small user lookup API using the APIs available in v0.2.0.
+
+You will define an action, create a contract, start a server, and call it from a separate TypeScript module. The example uses an in-memory map so you can try the request flow before introducing a database.
+
+## Install the framework
+
+Create a Bun project and install the core and CLI packages:
+
+```sh
+mkdir brick-users
+cd brick-users
+bun init -y
+bun add @brickkit/core@0.2.0 @brickkit/cli@0.2.0
+```
+
+## Define a service and action
+
+Create `src/users.ts`:
+
+```ts
+import { defineService, t } from "@brickkit/core";
+
+const users = new Map([["usr_42", { id: "usr_42", name: "Ada" }]]);
+
+export const usersService = defineService("users");
+
+export const getUser = usersService.action({
+  name: "getUser",
+  input: t.Object({ id: t.String() }),
+  output: t.Object({ id: t.String(), name: t.String() }),
+  execute: ({ input, error }) => {
+    const user = users.get(input.id);
+    if (!user) error.NOT_FOUND("User not found");
+    return user;
+  },
+});
+```
+
+The input and output schemas provide validation and TypeScript inference. The service groups the action under the `users` namespace. The action can also be called directly in the same process:
+
+```ts
+const user = await getUser({ input: { id: "usr_42" } });
+console.log(user.name); // Ada
+```
+
+This map is sample data. It does not persist between process restarts. For persistent records, use a database handle and a [resource](/docs/resources).
+
+## Export a contract
+
+Create `src/contract.ts`:
+
+```ts
+import { defineAppContract } from "@brickkit/core/client";
+import { getUser } from "./users";
+
+export const contract = defineAppContract({
+  users: { getUser },
+});
+
+export type UsersApi = typeof contract;
+```
+
+The contract preserves the action's types. Your frontend will import `UsersApi` as a type, which keeps the backend module out of the browser bundle.
+
+The contract describes the client API and identifies participating services. It does not limit which registered actions those services expose. Keep authorization on your action definitions when adding private operations.
+
+## Start the HTTP server
+
+Create `src/server.ts`:
+
+```ts
+import { brickFromContract } from "@brickkit/cli";
+import { contract } from "./contract";
+
+const app = brickFromContract(contract, { port: 4000 });
+app.listen(4000);
+```
+
+Start it in a terminal:
+
+```sh
+bun src/server.ts
+```
+
+Try the HTTP route:
+
+```sh
+curl 'http://localhost:4000/api/users/getUser?id=usr_42'
+```
+
+The response contains Ada's user record. The server also exposes `/openapi.json` for API documentation.
+
+## Call it with the typed client
+
+Create `src/client.ts`:
+
+```ts
+import { createBrickClient } from "@brickkit/core/client";
+import type { UsersApi } from "./contract";
+
+const api = createBrickClient<UsersApi>({
+  baseUrl: "http://localhost:4000",
+});
+
+const user = await api.users.getUser({ id: "usr_42" });
+console.log(user.name); // Ada
+```
+
+Run it in another terminal:
+
+```sh
+bun src/client.ts
+```
+
+Your editor knows that `id` is required and that the result has `id` and `name` fields. There is no generated client file to refresh after updating an action schema.
+
+For a browser app, use the same type-only contract import and set the appropriate API origin. A frontend served from a different origin also needs server-side CORS configuration. The [typed client guide](/docs/typed-client) covers credentials, headers, custom fetch implementations, and request options.
+
+## Where to go next
+
+- Add [resources](/docs/resources) for database-backed CRUD operations.
+- Add [access control](/docs/access-control) before exposing private data.
+- Define [MCP tools](/docs/tools) when an operation should be available to an AI client. Tools stay outside HTTP routing and OpenAPI until you explicitly opt in.
+- Explore the [Pages example](https://github.com/brick-org/brick/tree/main/examples/pages) for a TanStack Start app with Brick, Better Auth, Postgres, and MCP in one server.
+
+For the changes that introduced these APIs and the upgrade steps from v0.1.3, read the [v0.2.0 framework update](/blog/brickkit-v0-2-0).

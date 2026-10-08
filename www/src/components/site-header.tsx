@@ -19,7 +19,7 @@ export function SiteHeader() {
       <Link to="/">
         <Wordmark />
       </Link>
-      <nav className="order-3 flex w-full items-center gap-6 text-sm sm:order-none sm:w-auto">
+      <nav className="order-3 flex w-full flex-wrap items-center gap-x-6 gap-y-3 text-sm sm:order-none sm:w-auto">
         <a
           href={pathname === "/" ? "#platform" : "/#platform"}
           className={navLink}
@@ -49,6 +49,13 @@ export function SiteHeader() {
         >
           Examples
         </a>
+        <Link
+          to="/blog"
+          className={navLink}
+          data-current={pathname.startsWith("/blog") || undefined}
+        >
+          Blog
+        </Link>
       </nav>
       <div className="header-actions ml-auto flex items-center gap-2">
         <Link
