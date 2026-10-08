@@ -1,4 +1,6 @@
 import { describe, it, expect } from "bun:test";
+import postgres from "postgres";
+import { pgTable, text as pgText } from "drizzle-orm/pg-core";
 import {
   defineDatabase,
   defineService,
@@ -8,10 +10,13 @@ import {
   attachDatabase,
   syncSchema,
   type BunSQLiteDatabase,
+  createPostgresDatabase,
+  createDatabase,
 } from "../src";
 
 const items = sqliteTable("defined_items", { id: text("id").primaryKey() });
 const other = sqliteTable("defined_other", { id: text("id").primaryKey() });
+const pgItems = pgTable("defined_pg_items", { id: pgText("id").primaryKey() });
 
 describe("defineDatabase", () => {
   it("shares one typed Drizzle instance between services", async () => {
@@ -88,12 +93,12 @@ describe("defineDatabase", () => {
   });
 
   it("rejects incompatible engine fields at runtime", () => {
-    // @ts-expect-error SQLite cannot take a Postgres URL.
     expect(() =>
+      // @ts-expect-error SQLite cannot take a Postgres URL.
       defineDatabase({ engine: "sqlite", url: "postgres://localhost/db" }),
     ).toThrow("url");
-    // @ts-expect-error Postgres cannot take a SQLite path.
     expect(() =>
+      // @ts-expect-error Postgres cannot take a SQLite path.
       defineDatabase({ engine: "postgres", path: ":memory:" }),
     ).toThrow("path");
   });
@@ -105,6 +110,31 @@ describe("defineDatabase", () => {
     });
     expect(database.engine).toBe("postgres");
     expect(() => database.getDb()).toThrow("BRICK_DEFINED_PG");
+  });
+
+  it("reuses an injected Postgres client and ignores connection secrets", async () => {
+    const client = postgres("postgres://localhost:1/unused");
+    try {
+      const database = defineDatabase({
+        engine: "postgres",
+        client,
+        schema: { pgItems },
+        url: new SecretRef("BRICK_INJECTED_PG_UNUSED_URL"),
+        password: new SecretRef("BRICK_INJECTED_PG_UNUSED_PASSWORD"),
+        prepare: new SecretRef<boolean>("BRICK_INJECTED_PG_UNUSED_PREPARE"),
+      });
+      const db = database.getDb();
+      expect(db.$client).toBe(client);
+      expect(database.getDb()).toBe(db);
+      expect(database.schema.pgItems).toBe(pgItems);
+      expect(db.query.pgItems).toBeDefined();
+      expect(createPostgresDatabase({ client }).$client).toBe(client);
+      expect(createDatabase({ engine: "postgres", client }).$client).toBe(
+        client,
+      );
+    } finally {
+      await client.end();
+    }
   });
 });
 
@@ -123,4 +153,18 @@ function _typeAssertions() {
     },
   });
   return typed;
+}
+
+function _postgresTypeAssertions(client: ReturnType<typeof postgres>) {
+  const database = defineDatabase({
+    engine: "postgres",
+    client,
+    schema: { pgItems },
+  });
+  const db = database.getDb();
+  const typedClient: typeof client = db.$client;
+  // @ts-expect-error Unknown tables must not become any.
+  db.query.missing.findMany();
+  db.query.pgItems.findMany();
+  return typedClient;
 }

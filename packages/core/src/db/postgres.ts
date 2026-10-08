@@ -1,9 +1,11 @@
-import postgres from "postgres";
+import postgres, { type Sql } from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 
 export interface PostgresDatabaseConfig<
   TSchema extends Record<string, unknown> = Record<string, unknown>,
 > {
+  /** Existing postgres-js client. Connection options are ignored; the caller owns its lifecycle. */
+  client?: Sql;
   /** Database connection URL (e.g. postgresql://user:pass@host:5432/dbname) */
   url?: string;
   /** Connection string alias */
@@ -49,22 +51,24 @@ export function createPostgresDatabase<
     config.connectionString ??
     (typeof process !== "undefined" ? process.env?.DATABASE_URL : undefined);
 
-  const client = connectionUrl
-    ? postgres(connectionUrl, {
-        max: config.max,
-        prepare: config.prepare,
-        ssl: config.ssl,
-      })
-    : postgres({
-        host: config.host ?? "localhost",
-        port: config.port ?? 5432,
-        user: config.user,
-        password: config.password,
-        database: config.database,
-        max: config.max,
-        prepare: config.prepare,
-        ssl: config.ssl,
-      });
+  const client =
+    config.client ??
+    (connectionUrl
+      ? postgres(connectionUrl, {
+          max: config.max,
+          prepare: config.prepare,
+          ssl: config.ssl,
+        })
+      : postgres({
+          host: config.host ?? "localhost",
+          port: config.port ?? 5432,
+          user: config.user,
+          password: config.password,
+          database: config.database,
+          max: config.max,
+          prepare: config.prepare,
+          ssl: config.ssl,
+        }));
 
   return drizzle(client, {
     schema: config.schema,

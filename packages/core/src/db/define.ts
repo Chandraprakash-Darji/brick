@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { type Table, getTableName } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { Sql } from "postgres";
 import { SecretRef } from "../secrets";
 import {
   createSQLiteDatabase,
@@ -36,13 +37,13 @@ export type SQLiteDefinition<
 export type PostgresDefinition<
   TSchema extends Record<string, unknown> = Record<string, unknown>,
 > = DefinitionOptions<TSchema> &
-  EnvOptions<Omit<PostgresDatabaseConfig<TSchema>, "schema">> & {
+  EnvOptions<Omit<PostgresDatabaseConfig<TSchema>, "schema" | "client">> & {
     engine: "postgres";
     path?: never;
     filename?: never;
     wal?: never;
     foreignKeys?: never;
-    client?: never;
+    client?: PostgresDatabaseConfig<TSchema>["client"];
   };
 
 export type DatabaseDefinition<
@@ -81,7 +82,7 @@ export function defineDatabase<
   TSchema extends Record<string, unknown> = Record<string, unknown>,
 >(
   options: PostgresDefinition<TSchema>,
-): DatabaseHandle<PostgresJsDatabase<TSchema>, TSchema>;
+): DatabaseHandle<PostgresJsDatabase<TSchema> & { $client: Sql }, TSchema>;
 export function defineDatabase(
   options: DatabaseDefinition = {},
 ): DatabaseHandle<unknown> {
@@ -103,7 +104,7 @@ export function defineDatabase(
           "max",
           "schemaName",
         ]
-      : ["path", "filename", "wal", "foreignKeys", "client"];
+      : ["path", "filename", "wal", "foreignKeys"];
   for (const key of forbidden) {
     if (key in options)
       throw new Error(`Database option "${key}" is not valid for ${engine}`);
@@ -126,6 +127,14 @@ export function defineDatabase(
       const config: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(options)) {
         if (["tables", "schema", "name", "engine"].includes(key)) continue;
+        // An injected Postgres client already owns all connection settings.
+        if (
+          engine === "postgres" &&
+          options.client &&
+          key !== "client" &&
+          key !== "schemaName"
+        )
+          continue;
         config[key] = value instanceof SecretRef ? value.require() : value;
       }
       if (engine === "sqlite") {

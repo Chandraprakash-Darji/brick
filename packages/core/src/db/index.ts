@@ -46,7 +46,12 @@ export {
 export interface DatabaseConfig<
   TSchema extends Record<string, unknown> = Record<string, unknown>,
 >
-  extends SQLiteDatabaseConfig<TSchema>, PostgresDatabaseConfig<TSchema> {
+  extends
+    Omit<SQLiteDatabaseConfig<TSchema>, "client">,
+    Omit<PostgresDatabaseConfig<TSchema>, "client"> {
+  client?:
+    | SQLiteDatabaseConfig<TSchema>["client"]
+    | PostgresDatabaseConfig<TSchema>["client"];
   /** Database engine. Default: 'sqlite' */
   engine?: "sqlite" | "postgres" | "clickhouse";
   /** Optional service name associated with this database */
@@ -70,11 +75,15 @@ export function createDatabase<
   const engine = config.engine ?? "sqlite";
 
   if (engine === "sqlite") {
-    return createSQLiteDatabase<TSchema>(config);
+    return createSQLiteDatabase<TSchema>(
+      config as SQLiteDatabaseConfig<TSchema>,
+    );
   }
 
   if (engine === "postgres") {
-    return createPostgresDatabase<TSchema>(config);
+    return createPostgresDatabase<TSchema>(
+      config as PostgresDatabaseConfig<TSchema>,
+    );
   }
 
   throw new Error(`[Brick-TS DB] Unsupported database engine: '${engine}'`);
