@@ -23906,5 +23906,5982 @@
         }
       }
     }
+  },
+  {
+    "sha": "1d57261cb3e982a5773ae9560636f1412a5fbcf1",
+    "date": "2026-10-08T16:43:01.000Z",
+    "message": "feat(deployment): add Vercel configuration and update server preset for deployment builds",
+    "runs": {
+      "darwin": {
+        "arch": "arm64",
+        "cpu": "Apple M1 (Virtual)",
+        "runtime": "bun-1.4.2",
+        "dirty": false,
+        "measuredAt": "2026-10-08T16:51:13.287Z",
+        "count": 3,
+        "results": {
+          "micro": {
+            "context.minimal": {
+              "ns/op": 422.92,
+              "ops/s": 2364531.3,
+              "B/op": 0
+            },
+            "context.custom-hook": {
+              "ns/op": 354.48,
+              "ops/s": 2821006.6,
+              "B/op": 0
+            },
+            "context.pre-resolved": {
+              "ns/op": 56.91,
+              "ops/s": 17572762.2,
+              "B/op": 0
+            },
+            "action.empty": {
+              "ns/op": 525.16,
+              "ops/s": 1904187.4,
+              "B/op": 0
+            },
+            "action.async": {
+              "ns/op": 293.62,
+              "ops/s": 3405799.7,
+              "B/op": 0
+            },
+            "action.auth": {
+              "ns/op": 1099.21,
+              "ops/s": 909745.7,
+              "B/op": 0
+            },
+            "action.context-hook": {
+              "ns/op": 1252.03,
+              "ops/s": 798704.2,
+              "B/op": 0
+            },
+            "validation.small-object": {
+              "ns/op": 52.86,
+              "ops/s": 18919238.5,
+              "B/op": 0
+            },
+            "validation.20-field": {
+              "ns/op": 175.74,
+              "ops/s": 5690172.4,
+              "B/op": 0
+            },
+            "validation.nested": {
+              "ns/op": 239.53,
+              "ops/s": 4174929.5,
+              "B/op": 0
+            },
+            "validation.arrays": {
+              "ns/op": 214.18,
+              "ops/s": 4668895.9,
+              "B/op": 0
+            },
+            "validation-errors.one-error": {
+              "ns/op": 13388.77,
+              "ops/s": 74689.5,
+              "B/op": 22.46
+            },
+            "validation-errors.many-errors": {
+              "ns/op": 10635.96,
+              "ops/s": 94020.7,
+              "B/op": 5.79
+            },
+            "http-input.get-query": {
+              "ns/op": 5184,
+              "ops/s": 192901.2,
+              "B/op": 0
+            },
+            "http-input.post-body": {
+              "ns/op": 5885.58,
+              "ops/s": 169906.7,
+              "B/op": 0
+            },
+            "coercion.0-fields": {
+              "ns/op": 117.44,
+              "ops/s": 8514623.9,
+              "B/op": 0
+            },
+            "coercion.5-fields": {
+              "ns/op": 569.36,
+              "ops/s": 1756363.1,
+              "B/op": 0.19
+            },
+            "coercion.20-fields": {
+              "ns/op": 1776.66,
+              "ops/s": 562854.4,
+              "B/op": 0.75
+            },
+            "dispatch.direct-action": {
+              "ns/op": 618.7,
+              "ops/s": 1616292.2,
+              "B/op": 0
+            },
+            "dispatch.getAction": {
+              "ns/op": 423.64,
+              "ops/s": 2360485.8,
+              "B/op": 0
+            },
+            "dispatch.service-proxy": {
+              "ns/op": 1205.02,
+              "ops/s": 829861.1,
+              "B/op": 0
+            },
+            "cursor.encode": {
+              "ns/op": 386.65,
+              "ops/s": 2586332.4,
+              "B/op": 0
+            },
+            "cursor.decode": {
+              "ns/op": 488.35,
+              "ops/s": 2047703.1,
+              "B/op": 0
+            },
+            "resource-parse.1-param": {
+              "ns/op": 511097.64,
+              "ops/s": 1956.6,
+              "B/op": 0
+            },
+            "resource-parse.5-params": {
+              "ns/op": 3630076.11,
+              "ops/s": 275.5,
+              "B/op": 534.41
+            },
+            "resource-parse.20-params": {
+              "ns/op": 557758.19,
+              "ops/s": 1792.9,
+              "B/op": 0
+            },
+            "json.serialize-256B": {
+              "ns/op": 129.71,
+              "ops/s": 7709595,
+              "B/op": 0
+            },
+            "json.serialize-1KiB": {
+              "ns/op": 462.17,
+              "ops/s": 2163720,
+              "B/op": 0
+            },
+            "json.serialize-16KiB": {
+              "ns/op": 3824.29,
+              "ops/s": 261486.3,
+              "B/op": 81.95
+            },
+            "json.serialize-256KiB": {
+              "ns/op": 100583.34,
+              "ops/s": 9942,
+              "B/op": 17039.69
+            },
+            "openapi.10-actions": {
+              "ns/op": 27300,
+              "ops/s": 36630,
+              "B/op": 0
+            },
+            "openapi.100-actions": {
+              "ns/op": 378316.65,
+              "ops/s": 2643.3,
+              "B/op": 110324.85
+            },
+            "openapi.1000-actions": {
+              "ns/op": 2545591.7,
+              "ops/s": 392.8,
+              "B/op": 526267.25
+            },
+            "server-init.10-actions": {
+              "ns/op": 78492.5,
+              "ops/s": 12740.1,
+              "B/op": 0
+            },
+            "server-init.100-actions": {
+              "ns/op": 529977.1,
+              "ops/s": 1886.9,
+              "B/op": 0
+            },
+            "server-init.1000-actions": {
+              "ns/op": 5208787.5,
+              "ops/s": 192,
+              "B/op": 308410.45
+            }
+          },
+          "prepared": {
+            "get-by-id.dynamic-drizzle": {
+              "ns/op": 144480
+            },
+            "get-by-id.prepared": {
+              "ns/op": 5110
+            },
+            "get-by-id.raw-sql": {
+              "ns/op": 2390
+            },
+            "list-filter.dynamic-drizzle": {
+              "ns/op": 145060
+            },
+            "list-filter.prepared": {
+              "ns/op": 58160
+            },
+            "list-filter.raw-sql": {
+              "ns/op": 15890
+            },
+            "insert.dynamic-drizzle": {
+              "ns/op": 92660
+            },
+            "insert.prepared": {
+              "ns/op": 34410
+            },
+            "insert.raw-sql": {
+              "ns/op": 36160
+            },
+            "update-by-id.dynamic-drizzle": {
+              "ns/op": 1550490
+            },
+            "update-by-id.prepared": {
+              "ns/op": 1663230
+            },
+            "update-by-id.raw-sql": {
+              "ns/op": 1437000
+            },
+            "delete-by-id.dynamic-drizzle": {
+              "ns/op": 1279190
+            },
+            "delete-by-id.prepared": {
+              "ns/op": 1467990
+            },
+            "delete-by-id.raw-sql": {
+              "ns/op": 1591630
+            }
+          },
+          "batch": {
+            "validations-1M": {
+              "ops/s": 7539429,
+              "ns/op": 133
+            },
+            "jsonl-stream": {
+              "ops/s": 990485,
+              "ns/op": 1010.0000000000001
+            },
+            "bulk.row-by-row": {
+              "ops/s": 14104,
+              "ns/op": 70900
+            },
+            "bulk.chunked-1k": {
+              "ops/s": 64357,
+              "ns/op": 15549.999999999998
+            },
+            "bulk.transaction-prepared": {
+              "ops/s": 53082,
+              "ns/op": 18850
+            },
+            "cpu-transform": {
+              "ops/s": 1832014,
+              "ns/op": 546
+            },
+            "io-transform": {
+              "ops/s": 20826,
+              "ns/op": 48000
+            },
+            "profile.read-heavy": {
+              "ops/s": 459,
+              "ns/op": 2179000
+            },
+            "profile.write-heavy": {
+              "ops/s": 2570,
+              "ns/op": 389000
+            }
+          },
+          "startup": {
+            "10_actions.build": {
+              "ms": 0.45
+            },
+            "10_actions.listen": {
+              "ms": 2.226
+            },
+            "10_actions.first_request": {
+              "ms": 1.668
+            },
+            "10_actions.rss": {
+              "B": 48124395.52
+            },
+            "100_actions.build": {
+              "ms": 1.11
+            },
+            "100_actions.listen": {
+              "ms": 3.095
+            },
+            "100_actions.first_request": {
+              "ms": 2.797
+            },
+            "100_actions.rss": {
+              "B": 53540290.56
+            },
+            "1000_actions.build": {
+              "ms": 5.219
+            },
+            "1000_actions.listen": {
+              "ms": 12.373
+            },
+            "1000_actions.first_request": {
+              "ms": 14.058
+            },
+            "1000_actions.rss": {
+              "B": 89527418.88
+            }
+          },
+          "footprint": {
+            "cold-start": {
+              "ms": 110.81316700000025
+            },
+            "idle-cpu": {
+              "ms": 8.055,
+              "%": 0.16104130179824147
+            }
+          },
+          "bundle": {
+            "server-bundle": {
+              "B": 457602
+            },
+            "server-bundle-gzip": {
+              "B": 133304
+            }
+          },
+          "http": {
+            "floor.bun-serve c=1": {
+              "req/s": 3880.67,
+              "ms": 0.984,
+              "B": 110792540.16
+            },
+            "floor.bun-serve c=1.p50": {
+              "ms": 0.156
+            },
+            "floor.bun-serve c=1.p95": {
+              "ms": 0.456
+            },
+            "floor.bun-serve c=1.p999": {
+              "ms": 5.528
+            },
+            "floor.bun-serve c=1.rss-peak": {
+              "B": 111432171.52
+            },
+            "tax.elysia c=1": {
+              "req/s": 3749.55,
+              "ms": 1.269,
+              "B": 112784834.56
+            },
+            "tax.elysia c=1.p50": {
+              "ms": 0.219
+            },
+            "tax.elysia c=1.p95": {
+              "ms": 0.534
+            },
+            "tax.elysia c=1.p999": {
+              "ms": 3.731
+            },
+            "tax.elysia c=1.rss-peak": {
+              "B": 112931635.2
+            },
+            "tax.raw-endpoint c=1": {
+              "req/s": 3571.05,
+              "ms": 1.937,
+              "B": 113403494.4
+            },
+            "tax.raw-endpoint c=1.p50": {
+              "ms": 0.195
+            },
+            "tax.raw-endpoint c=1.p95": {
+              "ms": 0.645
+            },
+            "tax.raw-endpoint c=1.p999": {
+              "ms": 3.488
+            },
+            "tax.raw-endpoint c=1.rss-peak": {
+              "B": 113571266.56
+            },
+            "tax.no-schema c=1": {
+              "req/s": 4464.06,
+              "ms": 1.056,
+              "B": 113655152.64
+            },
+            "tax.no-schema c=1.p50": {
+              "ms": 0.168
+            },
+            "tax.no-schema c=1.p95": {
+              "ms": 0.515
+            },
+            "tax.no-schema c=1.p999": {
+              "ms": 1.323
+            },
+            "tax.no-schema c=1.rss-peak": {
+              "B": 113686609.92
+            },
+            "tax.validated c=1": {
+              "req/s": 3957.41,
+              "ms": 1.618,
+              "B": 113822924.8
+            },
+            "tax.validated c=1.p50": {
+              "ms": 0.165
+            },
+            "tax.validated c=1.p95": {
+              "ms": 0.604
+            },
+            "tax.validated c=1.p999": {
+              "ms": 2.675
+            },
+            "tax.validated c=1.rss-peak": {
+              "B": 113885839.36
+            },
+            "tax.full-auth-ctx c=1": {
+              "req/s": 3577.55,
+              "ms": 2.065,
+              "B": 114095554.56
+            },
+            "tax.full-auth-ctx c=1.p50": {
+              "ms": 0.163
+            },
+            "tax.full-auth-ctx c=1.p95": {
+              "ms": 0.663
+            },
+            "tax.full-auth-ctx c=1.p999": {
+              "ms": 9.896
+            },
+            "tax.full-auth-ctx c=1.rss-peak": {
+              "B": 114168954.88
+            },
+            "resource.get c=1": {
+              "req/s": 3104.13,
+              "ms": 1.583,
+              "B": 114556928
+            },
+            "resource.get c=1.p50": {
+              "ms": 0.222
+            },
+            "resource.get c=1.p95": {
+              "ms": 0.529
+            },
+            "resource.get c=1.p999": {
+              "ms": 4.068
+            },
+            "resource.get c=1.rss-peak": {
+              "B": 114735185.92
+            },
+            "resource.create c=1": {
+              "req/s": 2151.85,
+              "ms": 2.386,
+              "B": 115490160.64
+            },
+            "resource.create c=1.p50": {
+              "ms": 0.292
+            },
+            "resource.create c=1.p95": {
+              "ms": 0.932
+            },
+            "resource.create c=1.p999": {
+              "ms": 3.658
+            },
+            "resource.create c=1.rss-peak": {
+              "B": 115773276.16
+            },
+            "resource.list c=1": {
+              "req/s": 1836.79,
+              "ms": 1.986,
+              "B": 117859942.4
+            },
+            "resource.list c=1.p50": {
+              "ms": 0.391
+            },
+            "resource.list c=1.p95": {
+              "ms": 0.897
+            },
+            "resource.list c=1.p999": {
+              "ms": 2.766
+            },
+            "resource.list c=1.rss-peak": {
+              "B": 120229724.16
+            },
+            "resource.update c=1": {
+              "req/s": 678.21,
+              "ms": 4.311,
+              "B": 120743526.4
+            },
+            "resource.update c=1.p50": {
+              "ms": 1.135
+            },
+            "resource.update c=1.p95": {
+              "ms": 2.819
+            },
+            "resource.update c=1.p999": {
+              "ms": 10.721
+            },
+            "resource.update c=1.rss-peak": {
+              "B": 120848384
+            },
+            "payload.post-1kib c=1": {
+              "req/s": 3856.13,
+              "ms": 1.362,
+              "B": 121016156.16
+            },
+            "payload.post-1kib c=1.p50": {
+              "ms": 0.203
+            },
+            "payload.post-1kib c=1.p95": {
+              "ms": 0.5
+            },
+            "payload.post-1kib c=1.p999": {
+              "ms": 2.166
+            },
+            "payload.post-1kib c=1.rss-peak": {
+              "B": 121079070.72
+            },
+            "payload.post-32kib c=1": {
+              "req/s": 3333.24,
+              "ms": 1.627,
+              "B": 122893107.2
+            },
+            "payload.post-32kib c=1.p50": {
+              "ms": 0.179
+            },
+            "payload.post-32kib c=1.p95": {
+              "ms": 0.662
+            },
+            "payload.post-32kib c=1.p999": {
+              "ms": 2.881
+            },
+            "payload.post-32kib c=1.rss-peak": {
+              "B": 123784396.8
+            },
+            "payload.get-256kib c=1": {
+              "req/s": 1352.32,
+              "ms": 4.286,
+              "B": 140561612.8
+            },
+            "payload.get-256kib c=1.p50": {
+              "ms": 0.516
+            },
+            "payload.get-256kib c=1.p95": {
+              "ms": 1.997
+            },
+            "payload.get-256kib c=1.p999": {
+              "ms": 6.165
+            },
+            "payload.get-256kib c=1.rss-peak": {
+              "B": 148425932.8
+            },
+            "stream.raw-1mib c=1": {
+              "req/s": 479.28,
+              "ms": 7.78,
+              "B": 167751188.48
+            },
+            "stream.raw-1mib c=1.p50": {
+              "ms": 1.799
+            },
+            "stream.raw-1mib c=1.p95": {
+              "ms": 4.079
+            },
+            "stream.raw-1mib c=1.p999": {
+              "ms": 8.673
+            },
+            "stream.raw-1mib c=1.rss-peak": {
+              "B": 177618288.64
+            },
+            "rtt.synthetic-1-trip c=1": {
+              "req/s": 217.91,
+              "ms": 13.01,
+              "B": 177838489.6
+            },
+            "rtt.synthetic-1-trip c=1.p50": {
+              "ms": 4.087
+            },
+            "rtt.synthetic-1-trip c=1.p95": {
+              "ms": 6.244
+            },
+            "rtt.synthetic-1-trip c=1.p999": {
+              "ms": 21.385
+            },
+            "rtt.synthetic-1-trip c=1.rss-peak": {
+              "B": 177869946.88
+            },
+            "rtt.synthetic-3-trips c=1": {
+              "req/s": 73.95,
+              "ms": 21.79,
+              "B": 178100633.6
+            },
+            "rtt.synthetic-3-trips c=1.p50": {
+              "ms": 11.381
+            },
+            "rtt.synthetic-3-trips c=1.p95": {
+              "ms": 16.907
+            },
+            "rtt.synthetic-3-trips c=1.p999": {
+              "ms": 208.92
+            },
+            "rtt.synthetic-3-trips c=1.rss-peak": {
+              "B": 178289377.28
+            },
+            "tail.slow-query c=1": {
+              "req/s": 37.33,
+              "ms": 33.436,
+              "B": 178425692.16
+            },
+            "tail.slow-query c=1.p50": {
+              "ms": 26.378
+            },
+            "tail.slow-query c=1.p95": {
+              "ms": 29.591
+            },
+            "tail.slow-query c=1.p999": {
+              "ms": 41.611
+            },
+            "tail.slow-query c=1.rss-peak": {
+              "B": 178457149.44
+            },
+            "search.indexed c=1": {
+              "req/s": 58.46,
+              "ms": 29.396,
+              "B": 179725926.4
+            },
+            "search.indexed c=1.p50": {
+              "ms": 16.163
+            },
+            "search.indexed c=1.p95": {
+              "ms": 25.453
+            },
+            "search.indexed c=1.p999": {
+              "ms": 54.718
+            },
+            "search.indexed c=1.rss-peak": {
+              "B": 180879360
+            },
+            "search.filter-unindexed c=1": {
+              "req/s": 746.23,
+              "ms": 4.395,
+              "B": 181571420.16
+            },
+            "search.filter-unindexed c=1.p50": {
+              "ms": 1.074
+            },
+            "search.filter-unindexed c=1.p95": {
+              "ms": 2.727
+            },
+            "search.filter-unindexed c=1.p999": {
+              "ms": 8.075
+            },
+            "search.filter-unindexed c=1.rss-peak": {
+              "B": 182137651.2
+            },
+            "cursor.shallow c=1": {
+              "req/s": 2897.13,
+              "ms": 1.986,
+              "B": 182137651.2
+            },
+            "cursor.shallow c=1.p50": {
+              "ms": 0.235
+            },
+            "cursor.shallow c=1.p95": {
+              "ms": 0.702
+            },
+            "cursor.shallow c=1.p999": {
+              "ms": 4.283
+            },
+            "cursor.shallow c=1.rss-peak": {
+              "B": 182137651.2
+            },
+            "floor.bun-serve c=16": {
+              "req/s": 12916.55,
+              "ms": 2.884,
+              "B": 182232023.04
+            },
+            "floor.bun-serve c=16.p50": {
+              "ms": 0.649
+            },
+            "floor.bun-serve c=16.p95": {
+              "ms": 2.713
+            },
+            "floor.bun-serve c=16.p999": {
+              "ms": 3.861
+            },
+            "floor.bun-serve c=16.rss-peak": {
+              "B": 182326394.88
+            },
+            "tax.elysia c=16": {
+              "req/s": 16232.58,
+              "ms": 3.314,
+              "B": 182326394.88
+            },
+            "tax.elysia c=16.p50": {
+              "ms": 0.403
+            },
+            "tax.elysia c=16.p95": {
+              "ms": 2.076
+            },
+            "tax.elysia c=16.p999": {
+              "ms": 3.322
+            },
+            "tax.elysia c=16.rss-peak": {
+              "B": 182336880.64
+            },
+            "tax.raw-endpoint c=16": {
+              "req/s": 18128.26,
+              "ms": 2.055,
+              "B": 182441738.24
+            },
+            "tax.raw-endpoint c=16.p50": {
+              "ms": 0.603
+            },
+            "tax.raw-endpoint c=16.p95": {
+              "ms": 1.707
+            },
+            "tax.raw-endpoint c=16.p999": {
+              "ms": 2.08
+            },
+            "tax.raw-endpoint c=16.rss-peak": {
+              "B": 182546595.84
+            },
+            "tax.no-schema c=16": {
+              "req/s": 18437.54,
+              "ms": 1.844,
+              "B": 182546595.84
+            },
+            "tax.no-schema c=16.p50": {
+              "ms": 0.654
+            },
+            "tax.no-schema c=16.p95": {
+              "ms": 1.683
+            },
+            "tax.no-schema c=16.p999": {
+              "ms": 1.898
+            },
+            "tax.no-schema c=16.rss-peak": {
+              "B": 182546595.84
+            },
+            "tax.validated c=16": {
+              "req/s": 10746.56,
+              "ms": 4.813,
+              "B": 182567567.36
+            },
+            "tax.validated c=16.p50": {
+              "ms": 0.823
+            },
+            "tax.validated c=16.p95": {
+              "ms": 3.739
+            },
+            "tax.validated c=16.p999": {
+              "ms": 4.898
+            },
+            "tax.validated c=16.rss-peak": {
+              "B": 182588538.88
+            },
+            "tax.full-auth-ctx c=16": {
+              "req/s": 9011.47,
+              "ms": 15.119,
+              "B": 182588538.88
+            },
+            "tax.full-auth-ctx c=16.p50": {
+              "ms": 1.24
+            },
+            "tax.full-auth-ctx c=16.p95": {
+              "ms": 6.431
+            },
+            "tax.full-auth-ctx c=16.p999": {
+              "ms": 15.13
+            },
+            "tax.full-auth-ctx c=16.rss-peak": {
+              "B": 182588538.88
+            },
+            "resource.get c=16": {
+              "req/s": 14695.29,
+              "ms": 3.006,
+              "B": 182609510.4
+            },
+            "resource.get c=16.p50": {
+              "ms": 0.84
+            },
+            "resource.get c=16.p95": {
+              "ms": 2.076
+            },
+            "resource.get c=16.p999": {
+              "ms": 3.7
+            },
+            "resource.get c=16.rss-peak": {
+              "B": 182619996.16
+            },
+            "resource.create c=16": {
+              "req/s": 7040.2,
+              "ms": 6.417,
+              "B": 183385456.64
+            },
+            "resource.create c=16.p50": {
+              "ms": 1.827
+            },
+            "resource.create c=16.p95": {
+              "ms": 5.171
+            },
+            "resource.create c=16.p999": {
+              "ms": 8.091
+            },
+            "resource.create c=16.rss-peak": {
+              "B": 183679057.92
+            },
+            "resource.list c=16": {
+              "req/s": 3655.97,
+              "ms": 11.166,
+              "B": 184035573.76
+            },
+            "resource.list c=16.p50": {
+              "ms": 3.151
+            },
+            "resource.list c=16.p95": {
+              "ms": 7.434
+            },
+            "resource.list c=16.p999": {
+              "ms": 14.383
+            },
+            "resource.list c=16.rss-peak": {
+              "B": 184371118.08
+            },
+            "resource.update c=16": {
+              "req/s": 759.45,
+              "ms": 42.613,
+              "B": 184759091.2
+            },
+            "resource.update c=16.p50": {
+              "ms": 18.193
+            },
+            "resource.update c=16.p95": {
+              "ms": 32.335
+            },
+            "resource.update c=16.p999": {
+              "ms": 47.66
+            },
+            "resource.update c=16.rss-peak": {
+              "B": 184895406.08
+            },
+            "payload.post-1kib c=16": {
+              "req/s": 18695.9,
+              "ms": 1.898,
+              "B": 184895406.08
+            },
+            "payload.post-1kib c=16.p50": {
+              "ms": 0.723
+            },
+            "payload.post-1kib c=16.p95": {
+              "ms": 1.566
+            },
+            "payload.post-1kib c=16.p999": {
+              "ms": 2.047
+            },
+            "payload.post-1kib c=16.rss-peak": {
+              "B": 184895406.08
+            },
+            "payload.post-32kib c=16": {
+              "req/s": 9909.22,
+              "ms": 5.94,
+              "B": 186814300.16
+            },
+            "payload.post-32kib c=16.p50": {
+              "ms": 1.324
+            },
+            "payload.post-32kib c=16.p95": {
+              "ms": 3.138
+            },
+            "payload.post-32kib c=16.p999": {
+              "ms": 6.769
+            },
+            "payload.post-32kib c=16.rss-peak": {
+              "B": 187778990.08
+            },
+            "payload.get-256kib c=16": {
+              "req/s": 2517.74,
+              "ms": 15.329,
+              "B": 199502069.76
+            },
+            "payload.get-256kib c=16.p50": {
+              "ms": 5.496
+            },
+            "payload.get-256kib c=16.p95": {
+              "ms": 13.594
+            },
+            "payload.get-256kib c=16.p999": {
+              "ms": 16.367
+            },
+            "payload.get-256kib c=16.rss-peak": {
+              "B": 208110878.72
+            },
+            "stream.raw-1mib c=16": {
+              "req/s": 662.11,
+              "ms": 49.831,
+              "B": 227981393.92
+            },
+            "stream.raw-1mib c=16.p50": {
+              "ms": 23.087
+            },
+            "stream.raw-1mib c=16.p95": {
+              "ms": 41.655
+            },
+            "stream.raw-1mib c=16.p999": {
+              "ms": 49.858
+            },
+            "stream.raw-1mib c=16.rss-peak": {
+              "B": 235059281.92
+            },
+            "rtt.synthetic-1-trip c=16": {
+              "req/s": 3216.81,
+              "ms": 8.331,
+              "B": 235069767.68
+            },
+            "rtt.synthetic-1-trip c=16.p50": {
+              "ms": 4.885
+            },
+            "rtt.synthetic-1-trip c=16.p95": {
+              "ms": 7.647
+            },
+            "rtt.synthetic-1-trip c=16.p999": {
+              "ms": 8.484
+            },
+            "rtt.synthetic-1-trip c=16.rss-peak": {
+              "B": 235080253.44
+            },
+            "rtt.synthetic-3-trips c=16": {
+              "req/s": 1276.38,
+              "ms": 15.271,
+              "B": 235080253.44
+            },
+            "rtt.synthetic-3-trips c=16.p50": {
+              "ms": 12.009
+            },
+            "rtt.synthetic-3-trips c=16.p95": {
+              "ms": 14.654
+            },
+            "rtt.synthetic-3-trips c=16.p999": {
+              "ms": 15.906
+            },
+            "rtt.synthetic-3-trips c=16.rss-peak": {
+              "B": 235080253.44
+            },
+            "tail.slow-query c=16": {
+              "req/s": 565.42,
+              "ms": 30.969,
+              "B": 235101224.96
+            },
+            "tail.slow-query c=16.p50": {
+              "ms": 26.815
+            },
+            "tail.slow-query c=16.p95": {
+              "ms": 29.949
+            },
+            "tail.slow-query c=16.p999": {
+              "ms": 31.063
+            },
+            "tail.slow-query c=16.rss-peak": {
+              "B": 235111710.72
+            },
+            "search.indexed c=16": {
+              "req/s": 57.79,
+              "ms": 518.86,
+              "B": 235132682.24
+            },
+            "search.indexed c=16.p50": {
+              "ms": 265.704
+            },
+            "search.indexed c=16.p95": {
+              "ms": 431.2
+            },
+            "search.indexed c=16.p999": {
+              "ms": 595.852
+            },
+            "search.indexed c=16.rss-peak": {
+              "B": 235143168
+            },
+            "search.filter-unindexed c=16": {
+              "req/s": 912,
+              "ms": 45.15,
+              "B": 235111710.72
+            },
+            "search.filter-unindexed c=16.p50": {
+              "ms": 14.33
+            },
+            "search.filter-unindexed c=16.p95": {
+              "ms": 34.024
+            },
+            "search.filter-unindexed c=16.p999": {
+              "ms": 52.298
+            },
+            "search.filter-unindexed c=16.rss-peak": {
+              "B": 235111710.72
+            },
+            "cursor.shallow c=16": {
+              "req/s": 4753.71,
+              "ms": 9.956,
+              "B": 235132682.24
+            },
+            "cursor.shallow c=16.p50": {
+              "ms": 2.273
+            },
+            "cursor.shallow c=16.p95": {
+              "ms": 4.753
+            },
+            "cursor.shallow c=16.p999": {
+              "ms": 11.068
+            },
+            "cursor.shallow c=16.rss-peak": {
+              "B": 235164139.52
+            },
+            "floor.bun-serve c=64": {
+              "req/s": 22486.4,
+              "ms": 5.62,
+              "B": 235164139.52
+            },
+            "floor.bun-serve c=64.p50": {
+              "ms": 2.356
+            },
+            "floor.bun-serve c=64.p95": {
+              "ms": 5.384
+            },
+            "floor.bun-serve c=64.p999": {
+              "ms": 6.302
+            },
+            "floor.bun-serve c=64.rss-peak": {
+              "B": 235164139.52
+            },
+            "tax.elysia c=64": {
+              "req/s": 16149.26,
+              "ms": 8.148,
+              "B": 235164139.52
+            },
+            "tax.elysia c=64.p50": {
+              "ms": 3.245
+            },
+            "tax.elysia c=64.p95": {
+              "ms": 7.17
+            },
+            "tax.elysia c=64.p999": {
+              "ms": 8.159
+            },
+            "tax.elysia c=64.rss-peak": {
+              "B": 235164139.52
+            },
+            "tax.raw-endpoint c=64": {
+              "req/s": 13806.93,
+              "ms": 8.739,
+              "B": 235164139.52
+            },
+            "tax.raw-endpoint c=64.p50": {
+              "ms": 4.277
+            },
+            "tax.raw-endpoint c=64.p95": {
+              "ms": 7.624
+            },
+            "tax.raw-endpoint c=64.p999": {
+              "ms": 10.46
+            },
+            "tax.raw-endpoint c=64.rss-peak": {
+              "B": 235164139.52
+            },
+            "tax.no-schema c=64": {
+              "req/s": 24665.83,
+              "ms": 4.668,
+              "B": 235164139.52
+            },
+            "tax.no-schema c=64.p50": {
+              "ms": 2.178
+            },
+            "tax.no-schema c=64.p95": {
+              "ms": 3.883
+            },
+            "tax.no-schema c=64.p999": {
+              "ms": 4.932
+            },
+            "tax.no-schema c=64.rss-peak": {
+              "B": 235164139.52
+            },
+            "tax.validated c=64": {
+              "req/s": 16945.75,
+              "ms": 7.785,
+              "B": 235164139.52
+            },
+            "tax.validated c=64.p50": {
+              "ms": 3.072
+            },
+            "tax.validated c=64.p95": {
+              "ms": 5.788
+            },
+            "tax.validated c=64.p999": {
+              "ms": 7.792
+            },
+            "tax.validated c=64.rss-peak": {
+              "B": 235174625.28
+            },
+            "tax.full-auth-ctx c=64": {
+              "req/s": 21225.75,
+              "ms": 5.465,
+              "B": 235185111.04
+            },
+            "tax.full-auth-ctx c=64.p50": {
+              "ms": 2.952
+            },
+            "tax.full-auth-ctx c=64.p95": {
+              "ms": 4.075
+            },
+            "tax.full-auth-ctx c=64.p999": {
+              "ms": 5.877
+            },
+            "tax.full-auth-ctx c=64.rss-peak": {
+              "B": 235195596.8
+            },
+            "resource.get c=64": {
+              "req/s": 14981.39,
+              "ms": 7.405,
+              "B": 235195596.8
+            },
+            "resource.get c=64.p50": {
+              "ms": 3.772
+            },
+            "resource.get c=64.p95": {
+              "ms": 6.774
+            },
+            "resource.get c=64.p999": {
+              "ms": 7.684
+            },
+            "resource.get c=64.rss-peak": {
+              "B": 235195596.8
+            },
+            "resource.create c=64": {
+              "req/s": 6476.14,
+              "ms": 17.271,
+              "B": 235436769.28
+            },
+            "resource.create c=64.p50": {
+              "ms": 8.621
+            },
+            "resource.create c=64.p95": {
+              "ms": 14.039
+            },
+            "resource.create c=64.p999": {
+              "ms": 20.133
+            },
+            "resource.create c=64.rss-peak": {
+              "B": 235552112.64
+            },
+            "resource.list c=64": {
+              "req/s": 5834,
+              "ms": 20.796,
+              "B": 235562598.4
+            },
+            "resource.list c=64.p50": {
+              "ms": 10.139
+            },
+            "resource.list c=64.p95": {
+              "ms": 14.06
+            },
+            "resource.list c=64.p999": {
+              "ms": 22.391
+            },
+            "resource.list c=64.rss-peak": {
+              "B": 235583569.92
+            },
+            "resource.update c=64": {
+              "req/s": 838.27,
+              "ms": 136.756,
+              "B": 235604541.44
+            },
+            "resource.update c=64.p50": {
+              "ms": 65.592
+            },
+            "resource.update c=64.p95": {
+              "ms": 126.641
+            },
+            "resource.update c=64.p999": {
+              "ms": 162.727
+            },
+            "resource.update c=64.rss-peak": {
+              "B": 235604541.44
+            },
+            "payload.post-1kib c=64": {
+              "req/s": 13986.1,
+              "ms": 7.673,
+              "B": 235604541.44
+            },
+            "payload.post-1kib c=64.p50": {
+              "ms": 3.818
+            },
+            "payload.post-1kib c=64.p95": {
+              "ms": 6.867
+            },
+            "payload.post-1kib c=64.p999": {
+              "ms": 7.675
+            },
+            "payload.post-1kib c=64.rss-peak": {
+              "B": 235604541.44
+            },
+            "payload.post-32kib c=64": {
+              "req/s": 7305.62,
+              "ms": 15.541,
+              "B": 235615027.2
+            },
+            "payload.post-32kib c=64.p50": {
+              "ms": 7.46
+            },
+            "payload.post-32kib c=64.p95": {
+              "ms": 12.6
+            },
+            "payload.post-32kib c=64.p999": {
+              "ms": 17.448
+            },
+            "payload.post-32kib c=64.rss-peak": {
+              "B": 235635998.72
+            },
+            "payload.get-256kib c=64": {
+              "req/s": 2796.23,
+              "ms": 33.812,
+              "B": 244664238.08
+            },
+            "payload.get-256kib c=64.p50": {
+              "ms": 18.123
+            },
+            "payload.get-256kib c=64.p95": {
+              "ms": 33.434
+            },
+            "payload.get-256kib c=64.p999": {
+              "ms": 33.873
+            },
+            "payload.get-256kib c=64.rss-peak": {
+              "B": 251018608.64
+            },
+            "stream.raw-1mib c=64": {
+              "req/s": 577.77,
+              "ms": 133.502,
+              "B": 297921413.12
+            },
+            "stream.raw-1mib c=64.p50": {
+              "ms": 106.118
+            },
+            "stream.raw-1mib c=64.p95": {
+              "ms": 131.251
+            },
+            "stream.raw-1mib c=64.p999": {
+              "ms": 205.265
+            },
+            "stream.raw-1mib c=64.rss-peak": {
+              "B": 337578557.44
+            },
+            "rtt.synthetic-1-trip c=64": {
+              "req/s": 9504.48,
+              "ms": 9.76,
+              "B": 337589043.2
+            },
+            "rtt.synthetic-1-trip c=64.p50": {
+              "ms": 6.175
+            },
+            "rtt.synthetic-1-trip c=64.p95": {
+              "ms": 9.247
+            },
+            "rtt.synthetic-1-trip c=64.p999": {
+              "ms": 9.767
+            },
+            "rtt.synthetic-1-trip c=64.rss-peak": {
+              "B": 337589043.2
+            },
+            "rtt.synthetic-3-trips c=64": {
+              "req/s": 4582.72,
+              "ms": 18.565,
+              "B": 337589043.2
+            },
+            "rtt.synthetic-3-trips c=64.p50": {
+              "ms": 13.503
+            },
+            "rtt.synthetic-3-trips c=64.p95": {
+              "ms": 16.361
+            },
+            "rtt.synthetic-3-trips c=64.p999": {
+              "ms": 18.648
+            },
+            "rtt.synthetic-3-trips c=64.rss-peak": {
+              "B": 337589043.2
+            },
+            "tail.slow-query c=64": {
+              "req/s": 2271.71,
+              "ms": 29.83,
+              "B": 337620500.48
+            },
+            "tail.slow-query c=64.p50": {
+              "ms": 27.255
+            },
+            "tail.slow-query c=64.p95": {
+              "ms": 29.725
+            },
+            "tail.slow-query c=64.p999": {
+              "ms": 29.834
+            },
+            "tail.slow-query c=64.rss-peak": {
+              "B": 337620500.48
+            },
+            "search.indexed c=64": {
+              "req/s": 56.68,
+              "ms": 2043.916,
+              "B": 338039930.88
+            },
+            "search.indexed c=64.p50": {
+              "ms": 1038.356
+            },
+            "search.indexed c=64.p95": {
+              "ms": 1734.801
+            },
+            "search.indexed c=64.p999": {
+              "ms": 2315.711
+            },
+            "search.indexed c=64.rss-peak": {
+              "B": 338218188.8
+            },
+            "search.filter-unindexed c=64": {
+              "req/s": 647.2,
+              "ms": 183.01,
+              "B": 338228674.56
+            },
+            "search.filter-unindexed c=64.p50": {
+              "ms": 91.445
+            },
+            "search.filter-unindexed c=64.p95": {
+              "ms": 117.196
+            },
+            "search.filter-unindexed c=64.p999": {
+              "ms": 209.565
+            },
+            "search.filter-unindexed c=64.rss-peak": {
+              "B": 338249646.08
+            },
+            "cursor.shallow c=64": {
+              "req/s": 5520.73,
+              "ms": 22.897,
+              "B": 338228674.56
+            },
+            "cursor.shallow c=64.p50": {
+              "ms": 9.797
+            },
+            "cursor.shallow c=64.p95": {
+              "ms": 19.57
+            },
+            "cursor.shallow c=64.p999": {
+              "ms": 23.437
+            },
+            "cursor.shallow c=64.rss-peak": {
+              "B": 338228674.56
+            },
+            "floor.bun-serve c=256": {
+              "req/s": 12247.67,
+              "ms": 33.902,
+              "B": 338228674.56
+            },
+            "floor.bun-serve c=256.p50": {
+              "ms": 13.809
+            },
+            "floor.bun-serve c=256.p95": {
+              "ms": 32.757
+            },
+            "floor.bun-serve c=256.p999": {
+              "ms": 33.985
+            },
+            "floor.bun-serve c=256.rss-peak": {
+              "B": 338228674.56
+            },
+            "tax.elysia c=256": {
+              "req/s": 4912.98,
+              "ms": 81.499,
+              "B": 338228674.56
+            },
+            "tax.elysia c=256.p50": {
+              "ms": 15.492
+            },
+            "tax.elysia c=256.p95": {
+              "ms": 34.246
+            },
+            "tax.elysia c=256.p999": {
+              "ms": 82.151
+            },
+            "tax.elysia c=256.rss-peak": {
+              "B": 338228674.56
+            },
+            "tax.raw-endpoint c=256": {
+              "req/s": 7535.65,
+              "ms": 43.374,
+              "B": 338239160.32
+            },
+            "tax.raw-endpoint c=256.p50": {
+              "ms": 25.145
+            },
+            "tax.raw-endpoint c=256.p95": {
+              "ms": 42.031
+            },
+            "tax.raw-endpoint c=256.p999": {
+              "ms": 43.377
+            },
+            "tax.raw-endpoint c=256.rss-peak": {
+              "B": 338249646.08
+            },
+            "tax.no-schema c=256": {
+              "req/s": 9808.41,
+              "ms": 32.092,
+              "B": 338249646.08
+            },
+            "tax.no-schema c=256.p50": {
+              "ms": 19.081
+            },
+            "tax.no-schema c=256.p95": {
+              "ms": 30.965
+            },
+            "tax.no-schema c=256.p999": {
+              "ms": 32.1
+            },
+            "tax.no-schema c=256.rss-peak": {
+              "B": 338249646.08
+            },
+            "tax.validated c=256": {
+              "req/s": 12113.34,
+              "ms": 29.221,
+              "B": 338249646.08
+            },
+            "tax.validated c=256.p50": {
+              "ms": 14.575
+            },
+            "tax.validated c=256.p95": {
+              "ms": 27.42
+            },
+            "tax.validated c=256.p999": {
+              "ms": 31.451
+            },
+            "tax.validated c=256.rss-peak": {
+              "B": 338249646.08
+            },
+            "tax.full-auth-ctx c=256": {
+              "req/s": 13206.38,
+              "ms": 30.987,
+              "B": 338260131.84
+            },
+            "tax.full-auth-ctx c=256.p50": {
+              "ms": 14.49
+            },
+            "tax.full-auth-ctx c=256.p95": {
+              "ms": 26.387
+            },
+            "tax.full-auth-ctx c=256.p999": {
+              "ms": 30.99
+            },
+            "tax.full-auth-ctx c=256.rss-peak": {
+              "B": 338281103.36
+            },
+            "resource.get c=256": {
+              "req/s": 5803.66,
+              "ms": 61.151,
+              "B": 338312560.64
+            },
+            "resource.get c=256.p50": {
+              "ms": 19.599
+            },
+            "resource.get c=256.p95": {
+              "ms": 61.112
+            },
+            "resource.get c=256.p999": {
+              "ms": 61.752
+            },
+            "resource.get c=256.rss-peak": {
+              "B": 338333532.16
+            },
+            "resource.create c=256": {
+              "req/s": 3905.04,
+              "ms": 116.748,
+              "B": 338427904
+            },
+            "resource.create c=256.p50": {
+              "ms": 30.758
+            },
+            "resource.create c=256.p95": {
+              "ms": 116.501
+            },
+            "resource.create c=256.p999": {
+              "ms": 118.659
+            },
+            "resource.create c=256.rss-peak": {
+              "B": 338511790.08
+            },
+            "resource.list c=256": {
+              "req/s": 2481.95,
+              "ms": 161.113,
+              "B": 338511790.08
+            },
+            "resource.list c=256.p50": {
+              "ms": 75.854
+            },
+            "resource.list c=256.p95": {
+              "ms": 160.794
+            },
+            "resource.list c=256.p999": {
+              "ms": 161.178
+            },
+            "resource.list c=256.rss-peak": {
+              "B": 338511790.08
+            },
+            "resource.update c=256": {
+              "req/s": 592.12,
+              "ms": 750.461,
+              "B": 338511790.08
+            },
+            "resource.update c=256.p50": {
+              "ms": 353.395
+            },
+            "resource.update c=256.p95": {
+              "ms": 742.572
+            },
+            "resource.update c=256.p999": {
+              "ms": 751.737
+            },
+            "resource.update c=256.rss-peak": {
+              "B": 338511790.08
+            },
+            "payload.post-1kib c=256": {
+              "req/s": 12580.28,
+              "ms": 21.376,
+              "B": 338511790.08
+            },
+            "payload.post-1kib c=256.p50": {
+              "ms": 16.072
+            },
+            "payload.post-1kib c=256.p95": {
+              "ms": 20.347
+            },
+            "payload.post-1kib c=256.p999": {
+              "ms": 21.387
+            },
+            "payload.post-1kib c=256.rss-peak": {
+              "B": 338511790.08
+            },
+            "payload.post-32kib c=256": {
+              "req/s": 6184.72,
+              "ms": 72.829,
+              "B": 338511790.08
+            },
+            "payload.post-32kib c=256.p50": {
+              "ms": 31.585
+            },
+            "payload.post-32kib c=256.p95": {
+              "ms": 72.334
+            },
+            "payload.post-32kib c=256.p999": {
+              "ms": 72.896
+            },
+            "payload.post-32kib c=256.rss-peak": {
+              "B": 338522275.84
+            },
+            "payload.get-256kib c=256": {
+              "req/s": 2901.35,
+              "ms": 68.085,
+              "B": 338606161.92
+            },
+            "payload.get-256kib c=256.p50": {
+              "ms": 62.898
+            },
+            "payload.get-256kib c=256.p95": {
+              "ms": 66.419
+            },
+            "payload.get-256kib c=256.p999": {
+              "ms": 68.139
+            },
+            "payload.get-256kib c=256.rss-peak": {
+              "B": 338637619.2
+            },
+            "stream.raw-1mib c=256": {
+              "req/s": 590.12,
+              "ms": 337.988,
+              "B": 418035793.92
+            },
+            "stream.raw-1mib c=256.p50": {
+              "ms": 248.455
+            },
+            "stream.raw-1mib c=256.p95": {
+              "ms": 322.026
+            },
+            "stream.raw-1mib c=256.p999": {
+              "ms": 338.006
+            },
+            "stream.raw-1mib c=256.rss-peak": {
+              "B": 479482347.52
+            },
+            "rtt.synthetic-1-trip c=256": {
+              "req/s": 8563.53,
+              "ms": 41.465,
+              "B": 479503319.04
+            },
+            "rtt.synthetic-1-trip c=256.p50": {
+              "ms": 21.268
+            },
+            "rtt.synthetic-1-trip c=256.p95": {
+              "ms": 38.243
+            },
+            "rtt.synthetic-1-trip c=256.p999": {
+              "ms": 41.465
+            },
+            "rtt.synthetic-1-trip c=256.rss-peak": {
+              "B": 479513804.8
+            },
+            "rtt.synthetic-3-trips c=256": {
+              "req/s": 9336.63,
+              "ms": 28.994,
+              "B": 479534776.32
+            },
+            "rtt.synthetic-3-trips c=256.p50": {
+              "ms": 21.279
+            },
+            "rtt.synthetic-3-trips c=256.p95": {
+              "ms": 28.914
+            },
+            "rtt.synthetic-3-trips c=256.p999": {
+              "ms": 29.064
+            },
+            "rtt.synthetic-3-trips c=256.rss-peak": {
+              "B": 479545262.08
+            },
+            "tail.slow-query c=256": {
+              "req/s": 6379.83,
+              "ms": 45.32,
+              "B": 479545262.08
+            },
+            "tail.slow-query c=256.p50": {
+              "ms": 33.04
+            },
+            "tail.slow-query c=256.p95": {
+              "ms": 43.771
+            },
+            "tail.slow-query c=256.p999": {
+              "ms": 61.428
+            },
+            "tail.slow-query c=256.rss-peak": {
+              "B": 479545262.08
+            },
+            "search.indexed c=256": {
+              "req/s": 46.94,
+              "ms": 9593.467,
+              "B": 480195379.2
+            },
+            "search.indexed c=256.p50": {
+              "ms": 4278.557
+            },
+            "search.indexed c=256.p95": {
+              "ms": 9593.159
+            },
+            "search.indexed c=256.p999": {
+              "ms": 9593.534
+            },
+            "search.indexed c=256.rss-peak": {
+              "B": 480447037.44
+            },
+            "search.filter-unindexed c=256": {
+              "req/s": 476.35,
+              "ms": 937.999,
+              "B": 480447037.44
+            },
+            "search.filter-unindexed c=256.p50": {
+              "ms": 304.191
+            },
+            "search.filter-unindexed c=256.p95": {
+              "ms": 702.459
+            },
+            "search.filter-unindexed c=256.p999": {
+              "ms": 938.136
+            },
+            "search.filter-unindexed c=256.rss-peak": {
+              "B": 480447037.44
+            },
+            "cursor.shallow c=256": {
+              "req/s": 4622.48,
+              "ms": 95.535,
+              "B": 480447037.44
+            },
+            "cursor.shallow c=256.p50": {
+              "ms": 37.599
+            },
+            "cursor.shallow c=256.p95": {
+              "ms": 94.851
+            },
+            "cursor.shallow c=256.p999": {
+              "ms": 95.576
+            },
+            "cursor.shallow c=256.rss-peak": {
+              "B": 480447037.44
+            },
+            "resource.delete c=1": {
+              "req/s": 460.53,
+              "ms": 4.928,
+              "B": 480981811.2
+            },
+            "resource.delete c=1.p50": {
+              "ms": 1.766
+            },
+            "resource.delete c=1.p95": {
+              "ms": 4.026
+            },
+            "resource.delete c=1.p999": {
+              "ms": 6.038
+            },
+            "resource.delete c=1.rss-peak": {
+              "B": 481002782.72
+            },
+            "resource.delete c=16": {
+              "req/s": 528.48,
+              "ms": 80.77,
+              "B": 481034240
+            },
+            "resource.delete c=16.p50": {
+              "ms": 27.7
+            },
+            "resource.delete c=16.p95": {
+              "ms": 48.517
+            },
+            "resource.delete c=16.p999": {
+              "ms": 81.392
+            },
+            "resource.delete c=16.rss-peak": {
+              "B": 481034240
+            },
+            "resource.delete c=64": {
+              "req/s": 595.83,
+              "ms": 217.018,
+              "B": 481055211.52
+            },
+            "resource.delete c=64.p50": {
+              "ms": 91.75
+            },
+            "resource.delete c=64.p95": {
+              "ms": 163.74
+            },
+            "resource.delete c=64.p999": {
+              "ms": 246.907
+            },
+            "resource.delete c=64.rss-peak": {
+              "B": 481055211.52
+            },
+            "resource.delete c=256": {
+              "req/s": 625.55,
+              "ms": 720.245,
+              "B": 481107640.32
+            },
+            "resource.delete c=256.p50": {
+              "ms": 317.102
+            },
+            "resource.delete c=256.p95": {
+              "ms": 720.043
+            },
+            "resource.delete c=256.p999": {
+              "ms": 720.284
+            },
+            "resource.delete c=256.rss-peak": {
+              "B": 481118126.08
+            },
+            "cursor.deep": {
+              "req/s": 227.8,
+              "ms": 1982.677,
+              "B": 481631928.32
+            },
+            "cursor.deep.p50": {
+              "ms": 847.898
+            },
+            "cursor.deep.p95": {
+              "ms": 1982.29
+            },
+            "cursor.deep.p999": {
+              "ms": 1982.749
+            },
+            "cursor.deep.rss-peak": {
+              "B": 481652899.84
+            },
+            "scale.list-20-from-100000": {
+              "req/s": 1090.03,
+              "ms": 34.266,
+              "B": 540362670.08
+            },
+            "scale.list-20-from-100000.p50": {
+              "ms": 11.727
+            },
+            "scale.list-20-from-100000.p95": {
+              "ms": 30.894
+            },
+            "scale.list-20-from-100000.p999": {
+              "ms": 38.203
+            },
+            "scale.list-20-from-100000.rss-peak": {
+              "B": 540362670.08
+            },
+            "file.resource.list": {
+              "req/s": 828.51,
+              "ms": 40.631,
+              "B": 540603842.56
+            },
+            "file.resource.list.p50": {
+              "ms": 17.811
+            },
+            "file.resource.list.p95": {
+              "ms": 34.184
+            },
+            "file.resource.list.p999": {
+              "ms": 47.417
+            },
+            "file.resource.list.rss-peak": {
+              "B": 540603842.56
+            },
+            "sql.count": {
+              "ms": 8.519
+            },
+            "sql.page_no_count": {
+              "ms": 0.135
+            }
+          },
+          "compiler": {
+            "sync": {
+              "req/s": 70540.8073068087,
+              "ms": 0.8500829999999999
+            },
+            "async": {
+              "req/s": 60167.234708537915,
+              "ms": 0.803208
+            },
+            "validated": {
+              "req/s": 39321.44940828592,
+              "ms": 1.1837499999999999
+            },
+            "context-auth": {
+              "req/s": 40868.94872173821,
+              "ms": 1.344084
+            },
+            "resource-get": {
+              "req/s": 31132.63240805853,
+              "ms": 1.605042
+            },
+            "resource-list": {
+              "req/s": 21733.16364195072,
+              "ms": 2.5972500000000003
+            },
+            "resource-create": {
+              "req/s": 15657.858064078275,
+              "ms": 2.993125
+            },
+            "resource-patch": {
+              "req/s": 21187.087781901406,
+              "ms": 1.852959
+            },
+            "resource-put": {
+              "req/s": 17709.42597355546,
+              "ms": 2.984333
+            },
+            "resource-delete": {
+              "req/s": 15516.96,
+              "ms": 3.258
+            }
+          }
+        },
+        "skipped": [
+          "http/pg.crud: no --pg url; set --pg $DATABASE_URL for the network-DB baseline",
+          "http/pg.rtt: no --pg url; see rtt.synthetic-N-trips instead",
+          "postgres: Provide --pg URL for a disposable benchmark database"
+        ],
+        "failures": [],
+        "suiteCounts": {
+          "micro": 3,
+          "prepared": 3,
+          "batch": 3,
+          "startup": 3,
+          "footprint": 3,
+          "http": 3,
+          "compiler": 3
+        }
+      },
+      "linux": {
+        "arch": "x64",
+        "cpu": "AMD EPYC 7763 64-Core Processor",
+        "runtime": "bun-1.4.2",
+        "dirty": false,
+        "measuredAt": "2026-10-08T16:50:58.354Z",
+        "count": 3,
+        "results": {
+          "micro": {
+            "context.minimal": {
+              "ns/op": 467.78,
+              "ops/s": 2137775.3,
+              "B/op": 0
+            },
+            "context.custom-hook": {
+              "ns/op": 571.5,
+              "ops/s": 1749789.2,
+              "B/op": 0
+            },
+            "context.pre-resolved": {
+              "ns/op": 77.71,
+              "ops/s": 12868207.7,
+              "B/op": 0
+            },
+            "action.empty": {
+              "ns/op": 744.04,
+              "ops/s": 1344019.2,
+              "B/op": 0
+            },
+            "action.async": {
+              "ns/op": 428.35,
+              "ops/s": 2334536.2,
+              "B/op": 0
+            },
+            "action.auth": {
+              "ns/op": 1142.7,
+              "ops/s": 875122.6,
+              "B/op": 0
+            },
+            "action.context-hook": {
+              "ns/op": 1431.31,
+              "ops/s": 698659.9,
+              "B/op": 0
+            },
+            "validation.small-object": {
+              "ns/op": 71.58,
+              "ops/s": 13969514.3,
+              "B/op": 0
+            },
+            "validation.20-field": {
+              "ns/op": 97.53,
+              "ops/s": 10253066.2,
+              "B/op": 0
+            },
+            "validation.nested": {
+              "ns/op": 252.35,
+              "ops/s": 3962806.7,
+              "B/op": 0
+            },
+            "validation.arrays": {
+              "ns/op": 370.62,
+              "ops/s": 2698204.7,
+              "B/op": 0
+            },
+            "validation-errors.one-error": {
+              "ns/op": 8443.31,
+              "ops/s": 118436.9,
+              "B/op": 22.3
+            },
+            "validation-errors.many-errors": {
+              "ns/op": 7214.19,
+              "ops/s": 138615.7,
+              "B/op": 6.9
+            },
+            "http-input.get-query": {
+              "ns/op": 6667.56,
+              "ops/s": 149979.9,
+              "B/op": 0
+            },
+            "http-input.post-body": {
+              "ns/op": 7390.25,
+              "ops/s": 135313.5,
+              "B/op": 0
+            },
+            "coercion.0-fields": {
+              "ns/op": 127.32,
+              "ops/s": 7854278.6,
+              "B/op": 0
+            },
+            "coercion.5-fields": {
+              "ns/op": 629.49,
+              "ops/s": 1588575.2,
+              "B/op": 0.2
+            },
+            "coercion.20-fields": {
+              "ns/op": 1899.07,
+              "ops/s": 526573,
+              "B/op": 0.56
+            },
+            "dispatch.direct-action": {
+              "ns/op": 941.09,
+              "ops/s": 1062601.9,
+              "B/op": 0
+            },
+            "dispatch.getAction": {
+              "ns/op": 590.47,
+              "ops/s": 1693558.1,
+              "B/op": 0
+            },
+            "dispatch.service-proxy": {
+              "ns/op": 1840.67,
+              "ops/s": 543281.6,
+              "B/op": 0
+            },
+            "cursor.encode": {
+              "ns/op": 661.73,
+              "ops/s": 1511188,
+              "B/op": 0
+            },
+            "cursor.decode": {
+              "ns/op": 719.14,
+              "ops/s": 1390556.4,
+              "B/op": 0
+            },
+            "resource-parse.1-param": {
+              "ns/op": 452655.07,
+              "ops/s": 2209.2,
+              "B/op": 0
+            },
+            "resource-parse.5-params": {
+              "ns/op": 2984714.8,
+              "ops/s": 335,
+              "B/op": 423.11
+            },
+            "resource-parse.20-params": {
+              "ns/op": 444786.77,
+              "ops/s": 2248.3,
+              "B/op": 0
+            },
+            "json.serialize-256B": {
+              "ns/op": 182.38,
+              "ops/s": 5482907,
+              "B/op": 0
+            },
+            "json.serialize-1KiB": {
+              "ns/op": 632.32,
+              "ops/s": 1581469,
+              "B/op": 0
+            },
+            "json.serialize-16KiB": {
+              "ns/op": 3453.47,
+              "ops/s": 289563.7,
+              "B/op": 49.17
+            },
+            "json.serialize-256KiB": {
+              "ns/op": 32122.03,
+              "ops/s": 31131.3,
+              "B/op": 10485.96
+            },
+            "openapi.10-actions": {
+              "ns/op": 27872.95,
+              "ops/s": 35877.1,
+              "B/op": 0
+            },
+            "openapi.100-actions": {
+              "ns/op": 245561.75,
+              "ops/s": 4072.3,
+              "B/op": 35828.85
+            },
+            "openapi.1000-actions": {
+              "ns/op": 2618089.25,
+              "ops/s": 382,
+              "B/op": 1433411.6
+            },
+            "server-init.10-actions": {
+              "ns/op": 120524.08,
+              "ops/s": 8297.1,
+              "B/op": 0
+            },
+            "server-init.100-actions": {
+              "ns/op": 583879.85,
+              "ops/s": 1712.7,
+              "B/op": 0
+            },
+            "server-init.1000-actions": {
+              "ns/op": 4917277.5,
+              "ops/s": 203.4,
+              "B/op": 244929.05
+            }
+          },
+          "prepared": {
+            "get-by-id.dynamic-drizzle": {
+              "ns/op": 119060
+            },
+            "get-by-id.prepared": {
+              "ns/op": 10020
+            },
+            "get-by-id.raw-sql": {
+              "ns/op": 3150
+            },
+            "list-filter.dynamic-drizzle": {
+              "ns/op": 145160
+            },
+            "list-filter.prepared": {
+              "ns/op": 57310
+            },
+            "list-filter.raw-sql": {
+              "ns/op": 23700
+            },
+            "insert.dynamic-drizzle": {
+              "ns/op": 89930
+            },
+            "insert.prepared": {
+              "ns/op": 34590
+            },
+            "insert.raw-sql": {
+              "ns/op": 41570
+            },
+            "update-by-id.dynamic-drizzle": {
+              "ns/op": 1383630
+            },
+            "update-by-id.prepared": {
+              "ns/op": 1308010
+            },
+            "update-by-id.raw-sql": {
+              "ns/op": 1329200
+            },
+            "delete-by-id.dynamic-drizzle": {
+              "ns/op": 1367350
+            },
+            "delete-by-id.prepared": {
+              "ns/op": 1320400
+            },
+            "delete-by-id.raw-sql": {
+              "ns/op": 1334810
+            }
+          },
+          "batch": {
+            "validations-1M": {
+              "ops/s": 11060179,
+              "ns/op": 90
+            },
+            "jsonl-stream": {
+              "ops/s": 1283574,
+              "ns/op": 780
+            },
+            "bulk.row-by-row": {
+              "ops/s": 13902,
+              "ns/op": 71950
+            },
+            "bulk.chunked-1k": {
+              "ops/s": 62328,
+              "ns/op": 16050
+            },
+            "bulk.transaction-prepared": {
+              "ops/s": 44856,
+              "ns/op": 22300
+            },
+            "cpu-transform": {
+              "ops/s": 1679437,
+              "ns/op": 596
+            },
+            "io-transform": {
+              "ops/s": 28759,
+              "ns/op": 34750
+            },
+            "profile.read-heavy": {
+              "ops/s": 506,
+              "ns/op": 1978000.0000000002
+            },
+            "profile.write-heavy": {
+              "ops/s": 2592,
+              "ns/op": 386000
+            }
+          },
+          "startup": {
+            "10_actions.build": {
+              "ms": 0.578
+            },
+            "10_actions.listen": {
+              "ms": 1.671
+            },
+            "10_actions.first_request": {
+              "ms": 1.242
+            },
+            "10_actions.rss": {
+              "B": 57309921.28
+            },
+            "100_actions.build": {
+              "ms": 1.642
+            },
+            "100_actions.listen": {
+              "ms": 2.233
+            },
+            "100_actions.first_request": {
+              "ms": 1.759
+            },
+            "100_actions.rss": {
+              "B": 62809702.4
+            },
+            "1000_actions.build": {
+              "ms": 6.138
+            },
+            "1000_actions.listen": {
+              "ms": 10.249
+            },
+            "1000_actions.first_request": {
+              "ms": 12.494
+            },
+            "1000_actions.rss": {
+              "B": 97396981.76
+            }
+          },
+          "footprint": {
+            "cold-start": {
+              "ms": 89.46766200000093
+            },
+            "idle-cpu": {
+              "ms": 8.292,
+              "%": 0.16583573497023374
+            }
+          },
+          "bundle": {
+            "server-bundle": {
+              "B": 457602
+            },
+            "server-bundle-gzip": {
+              "B": 133304
+            }
+          },
+          "http": {
+            "floor.bun-serve c=1": {
+              "req/s": 5927.31,
+              "ms": 0.542,
+              "B": 110897397.76
+            },
+            "floor.bun-serve c=1.p50": {
+              "ms": 0.143
+            },
+            "floor.bun-serve c=1.p95": {
+              "ms": 0.183
+            },
+            "floor.bun-serve c=1.p999": {
+              "ms": 2.801
+            },
+            "floor.bun-serve c=1.rss-peak": {
+              "B": 111558000.64
+            },
+            "tax.elysia c=1": {
+              "req/s": 5810.12,
+              "ms": 0.56,
+              "B": 114745671.68
+            },
+            "tax.elysia c=1.p50": {
+              "ms": 0.143
+            },
+            "tax.elysia c=1.p95": {
+              "ms": 0.191
+            },
+            "tax.elysia c=1.p999": {
+              "ms": 2.882
+            },
+            "tax.elysia c=1.rss-peak": {
+              "B": 115028787.2
+            },
+            "tax.raw-endpoint c=1": {
+              "req/s": 5284.48,
+              "ms": 0.601,
+              "B": 115018301.44
+            },
+            "tax.raw-endpoint c=1.p50": {
+              "ms": 0.168
+            },
+            "tax.raw-endpoint c=1.p95": {
+              "ms": 0.221
+            },
+            "tax.raw-endpoint c=1.p999": {
+              "ms": 1.687
+            },
+            "tax.raw-endpoint c=1.rss-peak": {
+              "B": 115144130.56
+            },
+            "tax.no-schema c=1": {
+              "req/s": 5418.71,
+              "ms": 0.623,
+              "B": 115343360
+            },
+            "tax.no-schema c=1.p50": {
+              "ms": 0.155
+            },
+            "tax.no-schema c=1.p95": {
+              "ms": 0.216
+            },
+            "tax.no-schema c=1.p999": {
+              "ms": 0.901
+            },
+            "tax.no-schema c=1.rss-peak": {
+              "B": 115605504
+            },
+            "tax.validated c=1": {
+              "req/s": 5168.68,
+              "ms": 0.614,
+              "B": 115794247.68
+            },
+            "tax.validated c=1.p50": {
+              "ms": 0.169
+            },
+            "tax.validated c=1.p95": {
+              "ms": 0.227
+            },
+            "tax.validated c=1.p999": {
+              "ms": 0.934
+            },
+            "tax.validated c=1.rss-peak": {
+              "B": 116056391.68
+            },
+            "tax.full-auth-ctx c=1": {
+              "req/s": 5201.05,
+              "ms": 0.626,
+              "B": 116014448.64
+            },
+            "tax.full-auth-ctx c=1.p50": {
+              "ms": 0.169
+            },
+            "tax.full-auth-ctx c=1.p95": {
+              "ms": 0.226
+            },
+            "tax.full-auth-ctx c=1.p999": {
+              "ms": 0.886
+            },
+            "tax.full-auth-ctx c=1.rss-peak": {
+              "B": 116140277.76
+            },
+            "resource.get c=1": {
+              "req/s": 4408.06,
+              "ms": 0.738,
+              "B": 116517765.12
+            },
+            "resource.get c=1.p50": {
+              "ms": 0.197
+            },
+            "resource.get c=1.p95": {
+              "ms": 0.286
+            },
+            "resource.get c=1.p999": {
+              "ms": 1.368
+            },
+            "resource.get c=1.rss-peak": {
+              "B": 116863795.2
+            },
+            "resource.create c=1": {
+              "req/s": 2846.01,
+              "ms": 0.892,
+              "B": 118331801.6
+            },
+            "resource.create c=1.p50": {
+              "ms": 0.317
+            },
+            "resource.create c=1.p95": {
+              "ms": 0.426
+            },
+            "resource.create c=1.p999": {
+              "ms": 1.853
+            },
+            "resource.create c=1.rss-peak": {
+              "B": 118772203.52
+            },
+            "resource.list c=1": {
+              "req/s": 2768.07,
+              "ms": 1.174,
+              "B": 121844531.2
+            },
+            "resource.list c=1.p50": {
+              "ms": 0.325
+            },
+            "resource.list c=1.p95": {
+              "ms": 0.474
+            },
+            "resource.list c=1.p999": {
+              "ms": 2.668
+            },
+            "resource.list c=1.rss-peak": {
+              "B": 124319170.56
+            },
+            "resource.update c=1": {
+              "req/s": 786.79,
+              "ms": 1.971,
+              "B": 122305904.64
+            },
+            "resource.update c=1.p50": {
+              "ms": 1.234
+            },
+            "resource.update c=1.p95": {
+              "ms": 1.393
+            },
+            "resource.update c=1.p999": {
+              "ms": 2.301
+            },
+            "resource.update c=1.rss-peak": {
+              "B": 123018936.32
+            },
+            "payload.post-1kib c=1": {
+              "req/s": 5200.94,
+              "ms": 0.658,
+              "B": 122410762.24
+            },
+            "payload.post-1kib c=1.p50": {
+              "ms": 0.164
+            },
+            "payload.post-1kib c=1.p95": {
+              "ms": 0.225
+            },
+            "payload.post-1kib c=1.p999": {
+              "ms": 0.897
+            },
+            "payload.post-1kib c=1.rss-peak": {
+              "B": 122505134.08
+            },
+            "payload.post-32kib c=1": {
+              "req/s": 4359.53,
+              "ms": 0.716,
+              "B": 124088483.84
+            },
+            "payload.post-32kib c=1.p50": {
+              "ms": 0.199
+            },
+            "payload.post-32kib c=1.p95": {
+              "ms": 0.27
+            },
+            "payload.post-32kib c=1.p999": {
+              "ms": 0.956
+            },
+            "payload.post-32kib c=1.rss-peak": {
+              "B": 124707143.68
+            },
+            "payload.get-256kib c=1": {
+              "req/s": 2045.63,
+              "ms": 3.113,
+              "B": 137793372.16
+            },
+            "payload.get-256kib c=1.p50": {
+              "ms": 0.341
+            },
+            "payload.get-256kib c=1.p95": {
+              "ms": 0.918
+            },
+            "payload.get-256kib c=1.p999": {
+              "ms": 4.592
+            },
+            "payload.get-256kib c=1.rss-peak": {
+              "B": 148079902.72
+            },
+            "stream.raw-1mib c=1": {
+              "req/s": 656.26,
+              "ms": 5.409,
+              "B": 156122480.64
+            },
+            "stream.raw-1mib c=1.p50": {
+              "ms": 1.287
+            },
+            "stream.raw-1mib c=1.p95": {
+              "ms": 2.118
+            },
+            "stream.raw-1mib c=1.p999": {
+              "ms": 6.012
+            },
+            "stream.raw-1mib c=1.rss-peak": {
+              "B": 163493969.92
+            },
+            "rtt.synthetic-1-trip c=1": {
+              "req/s": 296.8,
+              "ms": 4.173,
+              "B": 117503426.56
+            },
+            "rtt.synthetic-1-trip c=1.p50": {
+              "ms": 3.321
+            },
+            "rtt.synthetic-1-trip c=1.p95": {
+              "ms": 3.519
+            },
+            "rtt.synthetic-1-trip c=1.p999": {
+              "ms": 4.944
+            },
+            "rtt.synthetic-1-trip c=1.rss-peak": {
+              "B": 163493969.92
+            },
+            "rtt.synthetic-3-trips c=1": {
+              "req/s": 103.23,
+              "ms": 10.428,
+              "B": 110708654.08
+            },
+            "rtt.synthetic-3-trips c=1.p50": {
+              "ms": 9.524
+            },
+            "rtt.synthetic-3-trips c=1.p95": {
+              "ms": 10.112
+            },
+            "rtt.synthetic-3-trips c=1.p999": {
+              "ms": 10.849
+            },
+            "rtt.synthetic-3-trips c=1.rss-peak": {
+              "B": 113529323.52
+            },
+            "tail.slow-query c=1": {
+              "req/s": 39.31,
+              "ms": 26.255,
+              "B": 103683194.88
+            },
+            "tail.slow-query c=1.p50": {
+              "ms": 25.401
+            },
+            "tail.slow-query c=1.p95": {
+              "ms": 25.535
+            },
+            "tail.slow-query c=1.p999": {
+              "ms": 27.21
+            },
+            "tail.slow-query c=1.rss-peak": {
+              "B": 111002255.36
+            },
+            "search.indexed c=1": {
+              "req/s": 57.18,
+              "ms": 19.525,
+              "B": 103704166.4
+            },
+            "search.indexed c=1.p50": {
+              "ms": 17.708
+            },
+            "search.indexed c=1.p95": {
+              "ms": 18.641
+            },
+            "search.indexed c=1.p999": {
+              "ms": 24.928
+            },
+            "search.indexed c=1.rss-peak": {
+              "B": 105056829.44
+            },
+            "search.filter-unindexed c=1": {
+              "req/s": 872.48,
+              "ms": 1.831,
+              "B": 105759375.36
+            },
+            "search.filter-unindexed c=1.p50": {
+              "ms": 1.103
+            },
+            "search.filter-unindexed c=1.p95": {
+              "ms": 1.299
+            },
+            "search.filter-unindexed c=1.p999": {
+              "ms": 3.145
+            },
+            "search.filter-unindexed c=1.rss-peak": {
+              "B": 110603796.48
+            },
+            "cursor.shallow c=1": {
+              "req/s": 2925.01,
+              "ms": 0.767,
+              "B": 108370329.6
+            },
+            "cursor.shallow c=1.p50": {
+              "ms": 0.322
+            },
+            "cursor.shallow c=1.p95": {
+              "ms": 0.388
+            },
+            "cursor.shallow c=1.p999": {
+              "ms": 1.055
+            },
+            "cursor.shallow c=1.rss-peak": {
+              "B": 110698168.32
+            },
+            "floor.bun-serve c=16": {
+              "req/s": 19248.24,
+              "ms": 2.011,
+              "B": 107426611.2
+            },
+            "floor.bun-serve c=16.p50": {
+              "ms": 0.74
+            },
+            "floor.bun-serve c=16.p95": {
+              "ms": 1.431
+            },
+            "floor.bun-serve c=16.p999": {
+              "ms": 2.015
+            },
+            "floor.bun-serve c=16.rss-peak": {
+              "B": 107814584.32
+            },
+            "tax.elysia c=16": {
+              "req/s": 17224.43,
+              "ms": 2.041,
+              "B": 108213043.2
+            },
+            "tax.elysia c=16.p50": {
+              "ms": 0.803
+            },
+            "tax.elysia c=16.p95": {
+              "ms": 1.551
+            },
+            "tax.elysia c=16.p999": {
+              "ms": 2.265
+            },
+            "tax.elysia c=16.rss-peak": {
+              "B": 108601016.32
+            },
+            "tax.raw-endpoint c=16": {
+              "req/s": 12763.14,
+              "ms": 2.709,
+              "B": 109125304.32
+            },
+            "tax.raw-endpoint c=16.p50": {
+              "ms": 1.115
+            },
+            "tax.raw-endpoint c=16.p95": {
+              "ms": 2.114
+            },
+            "tax.raw-endpoint c=16.p999": {
+              "ms": 3.088
+            },
+            "tax.raw-endpoint c=16.rss-peak": {
+              "B": 109649592.32
+            },
+            "tax.no-schema c=16": {
+              "req/s": 16566.17,
+              "ms": 2.401,
+              "B": 109712506.88
+            },
+            "tax.no-schema c=16.p50": {
+              "ms": 0.946
+            },
+            "tax.no-schema c=16.p95": {
+              "ms": 1.553
+            },
+            "tax.no-schema c=16.p999": {
+              "ms": 2.575
+            },
+            "tax.no-schema c=16.rss-peak": {
+              "B": 109785907.2
+            },
+            "tax.validated c=16": {
+              "req/s": 11554.75,
+              "ms": 2.891,
+              "B": 110436024.32
+            },
+            "tax.validated c=16.p50": {
+              "ms": 1.22
+            },
+            "tax.validated c=16.p95": {
+              "ms": 2.156
+            },
+            "tax.validated c=16.p999": {
+              "ms": 3.05
+            },
+            "tax.validated c=16.rss-peak": {
+              "B": 111023226.88
+            },
+            "tax.full-auth-ctx c=16": {
+              "req/s": 10050.36,
+              "ms": 3.081,
+              "B": 111002255.36
+            },
+            "tax.full-auth-ctx c=16.p50": {
+              "ms": 1.395
+            },
+            "tax.full-auth-ctx c=16.p95": {
+              "ms": 2.533
+            },
+            "tax.full-auth-ctx c=16.p999": {
+              "ms": 3.368
+            },
+            "tax.full-auth-ctx c=16.rss-peak": {
+              "B": 111568486.4
+            },
+            "resource.get c=16": {
+              "req/s": 7905.33,
+              "ms": 3.972,
+              "B": 112134717.44
+            },
+            "resource.get c=16.p50": {
+              "ms": 1.709
+            },
+            "resource.get c=16.p95": {
+              "ms": 3.206
+            },
+            "resource.get c=16.p999": {
+              "ms": 4.08
+            },
+            "resource.get c=16.rss-peak": {
+              "B": 112491233.28
+            },
+            "resource.create c=16": {
+              "req/s": 4353.2,
+              "ms": 7.069,
+              "B": 113466408.96
+            },
+            "resource.create c=16.p50": {
+              "ms": 3.155
+            },
+            "resource.create c=16.p95": {
+              "ms": 6.148
+            },
+            "resource.create c=16.p999": {
+              "ms": 7.326
+            },
+            "resource.create c=16.rss-peak": {
+              "B": 114053611.52
+            },
+            "resource.list c=16": {
+              "req/s": 4428.48,
+              "ms": 7.026,
+              "B": 115930562.56
+            },
+            "resource.list c=16.p50": {
+              "ms": 3.208
+            },
+            "resource.list c=16.p95": {
+              "ms": 6.407
+            },
+            "resource.list c=16.p999": {
+              "ms": 8.9
+            },
+            "resource.list c=16.rss-peak": {
+              "B": 119013376
+            },
+            "resource.update c=16": {
+              "req/s": 808.54,
+              "ms": 38.188,
+              "B": 115930562.56
+            },
+            "resource.update c=16.p50": {
+              "ms": 18.71
+            },
+            "resource.update c=16.p95": {
+              "ms": 25.954
+            },
+            "resource.update c=16.p999": {
+              "ms": 39.067
+            },
+            "resource.update c=16.rss-peak": {
+              "B": 119013376
+            },
+            "payload.post-1kib c=16": {
+              "req/s": 10538.5,
+              "ms": 3.081,
+              "B": 115374817.28
+            },
+            "payload.post-1kib c=16.p50": {
+              "ms": 1.215
+            },
+            "payload.post-1kib c=16.p95": {
+              "ms": 2.649
+            },
+            "payload.post-1kib c=16.p999": {
+              "ms": 3.815
+            },
+            "payload.post-1kib c=16.rss-peak": {
+              "B": 115521617.92
+            },
+            "payload.post-32kib c=16": {
+              "req/s": 7855.2,
+              "ms": 3.899,
+              "B": 117587312.64
+            },
+            "payload.post-32kib c=16.p50": {
+              "ms": 1.842
+            },
+            "payload.post-32kib c=16.p95": {
+              "ms": 3.417
+            },
+            "payload.post-32kib c=16.p999": {
+              "ms": 4.201
+            },
+            "payload.post-32kib c=16.rss-peak": {
+              "B": 118761717.76
+            },
+            "payload.get-256kib c=16": {
+              "req/s": 2834.82,
+              "ms": 12.514,
+              "B": 147670958.08
+            },
+            "payload.get-256kib c=16.p50": {
+              "ms": 4.854
+            },
+            "payload.get-256kib c=16.p95": {
+              "ms": 10.281
+            },
+            "payload.get-256kib c=16.p999": {
+              "ms": 14.625
+            },
+            "payload.get-256kib c=16.rss-peak": {
+              "B": 171861606.4
+            },
+            "stream.raw-1mib c=16": {
+              "req/s": 720.94,
+              "ms": 34.619,
+              "B": 196985487.36
+            },
+            "stream.raw-1mib c=16.p50": {
+              "ms": 21.036
+            },
+            "stream.raw-1mib c=16.p95": {
+              "ms": 28.665
+            },
+            "stream.raw-1mib c=16.p999": {
+              "ms": 36.788
+            },
+            "stream.raw-1mib c=16.rss-peak": {
+              "B": 210868633.6
+            },
+            "rtt.synthetic-1-trip c=16": {
+              "req/s": 4578.71,
+              "ms": 4.445,
+              "B": 165098291.2
+            },
+            "rtt.synthetic-1-trip c=16.p50": {
+              "ms": 3.323
+            },
+            "rtt.synthetic-1-trip c=16.p95": {
+              "ms": 4.06
+            },
+            "rtt.synthetic-1-trip c=16.p999": {
+              "ms": 4.467
+            },
+            "rtt.synthetic-1-trip c=16.rss-peak": {
+              "B": 210868633.6
+            },
+            "rtt.synthetic-3-trips c=16": {
+              "req/s": 1596.37,
+              "ms": 10.908,
+              "B": 145468948.48
+            },
+            "rtt.synthetic-3-trips c=16.p50": {
+              "ms": 9.738
+            },
+            "rtt.synthetic-3-trips c=16.p95": {
+              "ms": 10.623
+            },
+            "rtt.synthetic-3-trips c=16.p999": {
+              "ms": 11.009
+            },
+            "rtt.synthetic-3-trips c=16.rss-peak": {
+              "B": 148467875.84
+            },
+            "tail.slow-query c=16": {
+              "req/s": 613.86,
+              "ms": 26.672,
+              "B": 142941880.32
+            },
+            "tail.slow-query c=16.p50": {
+              "ms": 25.374
+            },
+            "tail.slow-query c=16.p95": {
+              "ms": 26.397
+            },
+            "tail.slow-query c=16.p999": {
+              "ms": 26.817
+            },
+            "tail.slow-query c=16.rss-peak": {
+              "B": 144619601.92
+            },
+            "search.indexed c=16": {
+              "req/s": 57.91,
+              "ms": 465.667,
+              "B": 122263961.6
+            },
+            "search.indexed c=16.p50": {
+              "ms": 219.637
+            },
+            "search.indexed c=16.p95": {
+              "ms": 432.559
+            },
+            "search.indexed c=16.p999": {
+              "ms": 469.28
+            },
+            "search.indexed c=16.rss-peak": {
+              "B": 140530155.52
+            },
+            "search.filter-unindexed c=16": {
+              "req/s": 929.81,
+              "ms": 32.508,
+              "B": 114514984.96
+            },
+            "search.filter-unindexed c=16.p50": {
+              "ms": 16.069
+            },
+            "search.filter-unindexed c=16.p95": {
+              "ms": 31.347
+            },
+            "search.filter-unindexed c=16.p999": {
+              "ms": 33.142
+            },
+            "search.filter-unindexed c=16.rss-peak": {
+              "B": 116129792
+            },
+            "cursor.shallow c=16": {
+              "req/s": 4413.29,
+              "ms": 7.41,
+              "B": 117042053.12
+            },
+            "cursor.shallow c=16.p50": {
+              "ms": 3.161
+            },
+            "cursor.shallow c=16.p95": {
+              "ms": 6.693
+            },
+            "cursor.shallow c=16.p999": {
+              "ms": 8.537
+            },
+            "cursor.shallow c=16.rss-peak": {
+              "B": 119443292.16
+            },
+            "floor.bun-serve c=64": {
+              "req/s": 18243.24,
+              "ms": 6.02,
+              "B": 117503426.56
+            },
+            "floor.bun-serve c=64.p50": {
+              "ms": 3.466
+            },
+            "floor.bun-serve c=64.p95": {
+              "ms": 5.257
+            },
+            "floor.bun-serve c=64.p999": {
+              "ms": 6.519
+            },
+            "floor.bun-serve c=64.rss-peak": {
+              "B": 119579607.04
+            },
+            "tax.elysia c=64": {
+              "req/s": 15199.78,
+              "ms": 6.26,
+              "B": 114640814.08
+            },
+            "tax.elysia c=64.p50": {
+              "ms": 4.133
+            },
+            "tax.elysia c=64.p95": {
+              "ms": 5.483
+            },
+            "tax.elysia c=64.p999": {
+              "ms": 7.403
+            },
+            "tax.elysia c=64.rss-peak": {
+              "B": 114902958.08
+            },
+            "tax.raw-endpoint c=64": {
+              "req/s": 13393.1,
+              "ms": 6.087,
+              "B": 115343360
+            },
+            "tax.raw-endpoint c=64.p50": {
+              "ms": 4.711
+            },
+            "tax.raw-endpoint c=64.p95": {
+              "ms": 5.92
+            },
+            "tax.raw-endpoint c=64.p999": {
+              "ms": 9.429
+            },
+            "tax.raw-endpoint c=64.rss-peak": {
+              "B": 115563560.96
+            },
+            "tax.no-schema c=64": {
+              "req/s": 15118.32,
+              "ms": 6.28,
+              "B": 116024934.4
+            },
+            "tax.no-schema c=64.p50": {
+              "ms": 4.335
+            },
+            "tax.no-schema c=64.p95": {
+              "ms": 6.003
+            },
+            "tax.no-schema c=64.p999": {
+              "ms": 10.04
+            },
+            "tax.no-schema c=64.rss-peak": {
+              "B": 116517765.12
+            },
+            "tax.validated c=64": {
+              "req/s": 12032.24,
+              "ms": 10.979,
+              "B": 116842823.68
+            },
+            "tax.validated c=64.p50": {
+              "ms": 5.33
+            },
+            "tax.validated c=64.p95": {
+              "ms": 7.523
+            },
+            "tax.validated c=64.p999": {
+              "ms": 13.56
+            },
+            "tax.validated c=64.rss-peak": {
+              "B": 117220311.04
+            },
+            "tax.full-auth-ctx c=64": {
+              "req/s": 15013.47,
+              "ms": 9.17,
+              "B": 117744599.04
+            },
+            "tax.full-auth-ctx c=64.p50": {
+              "ms": 3.887
+            },
+            "tax.full-auth-ctx c=64.p95": {
+              "ms": 5.964
+            },
+            "tax.full-auth-ctx c=64.p999": {
+              "ms": 9.191
+            },
+            "tax.full-auth-ctx c=64.rss-peak": {
+              "B": 118268887.04
+            },
+            "resource.get c=64": {
+              "req/s": 7969.75,
+              "ms": 10.662,
+              "B": 118793175.04
+            },
+            "resource.get c=64.p50": {
+              "ms": 7.422
+            },
+            "resource.get c=64.p95": {
+              "ms": 9.82
+            },
+            "resource.get c=64.p999": {
+              "ms": 15.456
+            },
+            "resource.get c=64.rss-peak": {
+              "B": 119181148.16
+            },
+            "resource.create c=64": {
+              "req/s": 4751.47,
+              "ms": 21.385,
+              "B": 119653007.36
+            },
+            "resource.create c=64.p50": {
+              "ms": 13.165
+            },
+            "resource.create c=64.p95": {
+              "ms": 18.296
+            },
+            "resource.create c=64.p999": {
+              "ms": 26.648
+            },
+            "resource.create c=64.rss-peak": {
+              "B": 120061952
+            },
+            "resource.list c=64": {
+              "req/s": 4527.47,
+              "ms": 24.878,
+              "B": 121980846.08
+            },
+            "resource.list c=64.p50": {
+              "ms": 13.36
+            },
+            "resource.list c=64.p95": {
+              "ms": 19.531
+            },
+            "resource.list c=64.p999": {
+              "ms": 25.56
+            },
+            "resource.list c=64.rss-peak": {
+              "B": 123039907.84
+            },
+            "resource.update c=64": {
+              "req/s": 654.51,
+              "ms": 163.477,
+              "B": 119925637.12
+            },
+            "resource.update c=64.p50": {
+              "ms": 97.802
+            },
+            "resource.update c=64.p95": {
+              "ms": 106.737
+            },
+            "resource.update c=64.p999": {
+              "ms": 175.582
+            },
+            "resource.update c=64.rss-peak": {
+              "B": 123039907.84
+            },
+            "payload.post-1kib c=64": {
+              "req/s": 14953.01,
+              "ms": 8.761,
+              "B": 119139205.12
+            },
+            "payload.post-1kib c=64.p50": {
+              "ms": 3.695
+            },
+            "payload.post-1kib c=64.p95": {
+              "ms": 8.545
+            },
+            "payload.post-1kib c=64.p999": {
+              "ms": 9.248
+            },
+            "payload.post-1kib c=64.rss-peak": {
+              "B": 119338434.56
+            },
+            "payload.post-32kib c=64": {
+              "req/s": 8773.73,
+              "ms": 10.849,
+              "B": 123459338.24
+            },
+            "payload.post-32kib c=64.p50": {
+              "ms": 7.215
+            },
+            "payload.post-32kib c=64.p95": {
+              "ms": 9.906
+            },
+            "payload.post-32kib c=64.p999": {
+              "ms": 13.194
+            },
+            "payload.post-32kib c=64.rss-peak": {
+              "B": 125944463.36
+            },
+            "payload.get-256kib c=64": {
+              "req/s": 2877.03,
+              "ms": 31.345,
+              "B": 176664084.48
+            },
+            "payload.get-256kib c=64.p50": {
+              "ms": 20.134
+            },
+            "payload.get-256kib c=64.p95": {
+              "ms": 30.583
+            },
+            "payload.get-256kib c=64.p999": {
+              "ms": 31.54
+            },
+            "payload.get-256kib c=64.rss-peak": {
+              "B": 204325519.36
+            },
+            "stream.raw-1mib c=64": {
+              "req/s": 762.42,
+              "ms": 140.034,
+              "B": 252318842.88
+            },
+            "stream.raw-1mib c=64.p50": {
+              "ms": 80.149
+            },
+            "stream.raw-1mib c=64.p95": {
+              "ms": 95.794
+            },
+            "stream.raw-1mib c=64.p999": {
+              "ms": 144.273
+            },
+            "stream.raw-1mib c=64.rss-peak": {
+              "B": 289050460.16
+            },
+            "rtt.synthetic-1-trip c=64": {
+              "req/s": 11310.05,
+              "ms": 7.326,
+              "B": 280640880.64
+            },
+            "rtt.synthetic-1-trip c=64.p50": {
+              "ms": 5.127
+            },
+            "rtt.synthetic-1-trip c=64.p95": {
+              "ms": 7.04
+            },
+            "rtt.synthetic-1-trip c=64.p999": {
+              "ms": 7.771
+            },
+            "rtt.synthetic-1-trip c=64.rss-peak": {
+              "B": 280766709.76
+            },
+            "rtt.synthetic-3-trips c=64": {
+              "req/s": 5464.71,
+              "ms": 13.813,
+              "B": 210931548.16
+            },
+            "rtt.synthetic-3-trips c=64.p50": {
+              "ms": 11.125
+            },
+            "rtt.synthetic-3-trips c=64.p95": {
+              "ms": 13.099
+            },
+            "rtt.synthetic-3-trips c=64.p999": {
+              "ms": 13.87
+            },
+            "rtt.synthetic-3-trips c=64.rss-peak": {
+              "B": 280766709.76
+            },
+            "tail.slow-query c=64": {
+              "req/s": 2314.36,
+              "ms": 29.078,
+              "B": 181560934.4
+            },
+            "tail.slow-query c=64.p50": {
+              "ms": 26.01
+            },
+            "tail.slow-query c=64.p95": {
+              "ms": 28.744
+            },
+            "tail.slow-query c=64.p999": {
+              "ms": 29.145
+            },
+            "tail.slow-query c=64.rss-peak": {
+              "B": 183028940.8
+            },
+            "search.indexed c=64": {
+              "req/s": 57.06,
+              "ms": 2108.593,
+              "B": 145322147.84
+            },
+            "search.indexed c=64.p50": {
+              "ms": 1096.714
+            },
+            "search.indexed c=64.p95": {
+              "ms": 1394.755
+            },
+            "search.indexed c=64.p999": {
+              "ms": 2206.079
+            },
+            "search.indexed c=64.rss-peak": {
+              "B": 184895406.08
+            },
+            "search.filter-unindexed c=64": {
+              "req/s": 917.1,
+              "ms": 125.779,
+              "B": 121729187.84
+            },
+            "search.filter-unindexed c=64.p50": {
+              "ms": 67.799
+            },
+            "search.filter-unindexed c=64.p95": {
+              "ms": 86.542
+            },
+            "search.filter-unindexed c=64.p999": {
+              "ms": 136.091
+            },
+            "search.filter-unindexed c=64.rss-peak": {
+              "B": 121959874.56
+            },
+            "cursor.shallow c=64": {
+              "req/s": 4582.08,
+              "ms": 22.15,
+              "B": 121991331.84
+            },
+            "cursor.shallow c=64.p50": {
+              "ms": 13.524
+            },
+            "cursor.shallow c=64.p95": {
+              "ms": 20.35
+            },
+            "cursor.shallow c=64.p999": {
+              "ms": 28.414
+            },
+            "cursor.shallow c=64.rss-peak": {
+              "B": 122075217.92
+            },
+            "floor.bun-serve c=256": {
+              "req/s": 15588.03,
+              "ms": 20.571,
+              "B": 122421248
+            },
+            "floor.bun-serve c=256.p50": {
+              "ms": 14.66
+            },
+            "floor.bun-serve c=256.p95": {
+              "ms": 19.155
+            },
+            "floor.bun-serve c=256.p999": {
+              "ms": 20.576
+            },
+            "floor.bun-serve c=256.rss-peak": {
+              "B": 122756792.32
+            },
+            "tax.elysia c=256": {
+              "req/s": 15903.47,
+              "ms": 18.914,
+              "B": 122756792.32
+            },
+            "tax.elysia c=256.p50": {
+              "ms": 13.122
+            },
+            "tax.elysia c=256.p95": {
+              "ms": 18.774
+            },
+            "tax.elysia c=256.p999": {
+              "ms": 18.914
+            },
+            "tax.elysia c=256.rss-peak": {
+              "B": 122756792.32
+            },
+            "tax.raw-endpoint c=256": {
+              "req/s": 10367.62,
+              "ms": 27.474,
+              "B": 123417395.2
+            },
+            "tax.raw-endpoint c=256.p50": {
+              "ms": 22.707
+            },
+            "tax.raw-endpoint c=256.p95": {
+              "ms": 27.388
+            },
+            "tax.raw-endpoint c=256.p999": {
+              "ms": 27.48
+            },
+            "tax.raw-endpoint c=256.rss-peak": {
+              "B": 124067512.32
+            },
+            "tax.no-schema c=256": {
+              "req/s": 12937.22,
+              "ms": 23.722,
+              "B": 124046540.8
+            },
+            "tax.no-schema c=256.p50": {
+              "ms": 18.123
+            },
+            "tax.no-schema c=256.p95": {
+              "ms": 23.097
+            },
+            "tax.no-schema c=256.p999": {
+              "ms": 23.889
+            },
+            "tax.no-schema c=256.rss-peak": {
+              "B": 124298199.04
+            },
+            "tax.validated c=256": {
+              "req/s": 11704.4,
+              "ms": 25.98,
+              "B": 124696657.92
+            },
+            "tax.validated c=256.p50": {
+              "ms": 19.932
+            },
+            "tax.validated c=256.p95": {
+              "ms": 25.623
+            },
+            "tax.validated c=256.p999": {
+              "ms": 26.025
+            },
+            "tax.validated c=256.rss-peak": {
+              "B": 125084631.04
+            },
+            "tax.full-auth-ctx c=256": {
+              "req/s": 11308.64,
+              "ms": 26.216,
+              "B": 125325803.52
+            },
+            "tax.full-auth-ctx c=256.p50": {
+              "ms": 20.568
+            },
+            "tax.full-auth-ctx c=256.p95": {
+              "ms": 25.996
+            },
+            "tax.full-auth-ctx c=256.p999": {
+              "ms": 26.287
+            },
+            "tax.full-auth-ctx c=256.rss-peak": {
+              "B": 125566976
+            },
+            "resource.get c=256": {
+              "req/s": 8085.57,
+              "ms": 37.729,
+              "B": 126091264
+            },
+            "resource.get c=256.p50": {
+              "ms": 29.483
+            },
+            "resource.get c=256.p95": {
+              "ms": 36.551
+            },
+            "resource.get c=256.p999": {
+              "ms": 37.805
+            },
+            "resource.get c=256.rss-peak": {
+              "B": 126353408
+            },
+            "resource.create c=256": {
+              "req/s": 4588.98,
+              "ms": 68.774,
+              "B": 126238064.64
+            },
+            "resource.create c=256.p50": {
+              "ms": 48.929
+            },
+            "resource.create c=256.p95": {
+              "ms": 68.465
+            },
+            "resource.create c=256.p999": {
+              "ms": 75.533
+            },
+            "resource.create c=256.rss-peak": {
+              "B": 126353408
+            },
+            "resource.list c=256": {
+              "req/s": 4792.42,
+              "ms": 68.659,
+              "B": 129352335.36
+            },
+            "resource.list c=256.p50": {
+              "ms": 49.581
+            },
+            "resource.list c=256.p95": {
+              "ms": 68.603
+            },
+            "resource.list c=256.p999": {
+              "ms": 68.662
+            },
+            "resource.list c=256.rss-peak": {
+              "B": 130967142.4
+            },
+            "resource.update c=256": {
+              "req/s": 702.73,
+              "ms": 454.903,
+              "B": 126437294.08
+            },
+            "resource.update c=256.p50": {
+              "ms": 341.975
+            },
+            "resource.update c=256.p95": {
+              "ms": 452.792
+            },
+            "resource.update c=256.p999": {
+              "ms": 601.593
+            },
+            "resource.update c=256.rss-peak": {
+              "B": 130967142.4
+            },
+            "payload.post-1kib c=256": {
+              "req/s": 13463.74,
+              "ms": 20.546,
+              "B": 125556490.24
+            },
+            "payload.post-1kib c=256.p50": {
+              "ms": 16.872
+            },
+            "payload.post-1kib c=256.p95": {
+              "ms": 20.459
+            },
+            "payload.post-1kib c=256.p999": {
+              "ms": 20.562
+            },
+            "payload.post-1kib c=256.rss-peak": {
+              "B": 126405836.8
+            },
+            "payload.post-32kib c=256": {
+              "req/s": 7520.43,
+              "ms": 48.577,
+              "B": 133735383.04
+            },
+            "payload.post-32kib c=256.p50": {
+              "ms": 33.187
+            },
+            "payload.post-32kib c=256.p95": {
+              "ms": 37.483
+            },
+            "payload.post-32kib c=256.p999": {
+              "ms": 56.321
+            },
+            "payload.post-32kib c=256.rss-peak": {
+              "B": 138726604.8
+            },
+            "payload.get-256kib c=256": {
+              "req/s": 2869.44,
+              "ms": 68.728,
+              "B": 182525624.32
+            },
+            "payload.get-256kib c=256.p50": {
+              "ms": 58.196
+            },
+            "payload.get-256kib c=256.p95": {
+              "ms": 67.855
+            },
+            "payload.get-256kib c=256.p999": {
+              "ms": 68.824
+            },
+            "payload.get-256kib c=256.rss-peak": {
+              "B": 228851712
+            },
+            "stream.raw-1mib c=256": {
+              "req/s": 853.35,
+              "ms": 232.775,
+              "B": 305638932.48
+            },
+            "stream.raw-1mib c=256.p50": {
+              "ms": 199.562
+            },
+            "stream.raw-1mib c=256.p95": {
+              "ms": 232.612
+            },
+            "stream.raw-1mib c=256.p999": {
+              "ms": 232.818
+            },
+            "stream.raw-1mib c=256.rss-peak": {
+              "B": 354638888.96
+            },
+            "rtt.synthetic-1-trip c=256": {
+              "req/s": 14326.53,
+              "ms": 24.09,
+              "B": 331916247.04
+            },
+            "rtt.synthetic-1-trip c=256.p50": {
+              "ms": 15.235
+            },
+            "rtt.synthetic-1-trip c=256.p95": {
+              "ms": 24.017
+            },
+            "rtt.synthetic-1-trip c=256.p999": {
+              "ms": 24.106
+            },
+            "rtt.synthetic-1-trip c=256.rss-peak": {
+              "B": 333038223.36
+            },
+            "rtt.synthetic-3-trips c=256": {
+              "req/s": 10737.47,
+              "ms": 27.703,
+              "B": 270574551.04
+            },
+            "rtt.synthetic-3-trips c=256.p50": {
+              "ms": 19.764
+            },
+            "rtt.synthetic-3-trips c=256.p95": {
+              "ms": 27.635
+            },
+            "rtt.synthetic-3-trips c=256.p999": {
+              "ms": 27.709
+            },
+            "rtt.synthetic-3-trips c=256.rss-peak": {
+              "B": 332304220.16
+            },
+            "tail.slow-query c=256": {
+              "req/s": 6917.14,
+              "ms": 41.033,
+              "B": 233161359.36
+            },
+            "tail.slow-query c=256.p50": {
+              "ms": 31.102
+            },
+            "tail.slow-query c=256.p95": {
+              "ms": 40.941
+            },
+            "tail.slow-query c=256.p999": {
+              "ms": 41.034
+            },
+            "tail.slow-query c=256.rss-peak": {
+              "B": 235101224.96
+            },
+            "search.indexed c=256": {
+              "req/s": 56.39,
+              "ms": 7743.906,
+              "B": 203360829.44
+            },
+            "search.indexed c=256.p50": {
+              "ms": 4296.094
+            },
+            "search.indexed c=256.p95": {
+              "ms": 5434.574
+            },
+            "search.indexed c=256.p999": {
+              "ms": 7743.935
+            },
+            "search.indexed c=256.rss-peak": {
+              "B": 235971543.04
+            },
+            "search.filter-unindexed c=256": {
+              "req/s": 866.54,
+              "ms": 364.143,
+              "B": 152913838.08
+            },
+            "search.filter-unindexed c=256.p50": {
+              "ms": 285.297
+            },
+            "search.filter-unindexed c=256.p95": {
+              "ms": 364.094
+            },
+            "search.filter-unindexed c=256.p999": {
+              "ms": 500.825
+            },
+            "search.filter-unindexed c=256.rss-peak": {
+              "B": 179704954.88
+            },
+            "cursor.shallow c=256": {
+              "req/s": 4533.46,
+              "ms": 71.419,
+              "B": 135580876.8
+            },
+            "cursor.shallow c=256.p50": {
+              "ms": 46.06
+            },
+            "cursor.shallow c=256.p95": {
+              "ms": 70.859
+            },
+            "cursor.shallow c=256.p999": {
+              "ms": 71.425
+            },
+            "cursor.shallow c=256.rss-peak": {
+              "B": 135696220.16
+            },
+            "resource.delete c=1": {
+              "req/s": 564.92,
+              "ms": 2.548,
+              "B": 135832535.04
+            },
+            "resource.delete c=1.p50": {
+              "ms": 1.721
+            },
+            "resource.delete c=1.p95": {
+              "ms": 1.88
+            },
+            "resource.delete c=1.p999": {
+              "ms": 3.866
+            },
+            "resource.delete c=1.rss-peak": {
+              "B": 137405399.04
+            },
+            "resource.delete c=16": {
+              "req/s": 606.2,
+              "ms": 50.692,
+              "B": 136314880
+            },
+            "resource.delete c=16.p50": {
+              "ms": 25.068
+            },
+            "resource.delete c=16.p95": {
+              "ms": 32.224
+            },
+            "resource.delete c=16.p999": {
+              "ms": 52.196
+            },
+            "resource.delete c=16.rss-peak": {
+              "B": 136566538.24
+            },
+            "resource.delete c=64": {
+              "req/s": 693.73,
+              "ms": 166.781,
+              "B": 136021278.72
+            },
+            "resource.delete c=64.p50": {
+              "ms": 85.932
+            },
+            "resource.delete c=64.p95": {
+              "ms": 157.323
+            },
+            "resource.delete c=64.p999": {
+              "ms": 171.712
+            },
+            "resource.delete c=64.rss-peak": {
+              "B": 139890524.16
+            },
+            "resource.delete c=256": {
+              "req/s": 625.13,
+              "ms": 547.826,
+              "B": 138128916.48
+            },
+            "resource.delete c=256.p50": {
+              "ms": 424.902
+            },
+            "resource.delete c=256.p95": {
+              "ms": 547.67
+            },
+            "resource.delete c=256.p999": {
+              "ms": 547.837
+            },
+            "resource.delete c=256.rss-peak": {
+              "B": 139492065.28
+            },
+            "cursor.deep": {
+              "req/s": 276.44,
+              "ms": 1155.12,
+              "B": 140582584.32
+            },
+            "cursor.deep.p50": {
+              "ms": 918.786
+            },
+            "cursor.deep.p95": {
+              "ms": 1154.44
+            },
+            "cursor.deep.p999": {
+              "ms": 1156.087
+            },
+            "cursor.deep.rss-peak": {
+              "B": 144168714.24
+            },
+            "scale.list-20-from-100000": {
+              "req/s": 1465.71,
+              "ms": 20.74,
+              "B": 227215933.44
+            },
+            "scale.list-20-from-100000.p50": {
+              "ms": 10.212
+            },
+            "scale.list-20-from-100000.p95": {
+              "ms": 18.946
+            },
+            "scale.list-20-from-100000.p999": {
+              "ms": 21.172
+            },
+            "scale.list-20-from-100000.rss-peak": {
+              "B": 227404677.12
+            },
+            "file.resource.list": {
+              "req/s": 1061.79,
+              "ms": 28.784,
+              "B": 218187694.08
+            },
+            "file.resource.list.p50": {
+              "ms": 14.167
+            },
+            "file.resource.list.p95": {
+              "ms": 16.359
+            },
+            "file.resource.list.p999": {
+              "ms": 29.417
+            },
+            "file.resource.list.rss-peak": {
+              "B": 219309670.4
+            },
+            "sql.count": {
+              "ms": 6.781
+            },
+            "sql.page_no_count": {
+              "ms": 0.173
+            }
+          },
+          "postgres": {
+            "pg.get c=1": {
+              "req/s": 1375.63,
+              "ms": 1.31,
+              "B": 68765614.08
+            },
+            "pg.get c=1.p50": {
+              "ms": 0.658
+            },
+            "pg.get c=1.p95": {
+              "ms": 0.934
+            },
+            "pg.get c=1.p999": {
+              "ms": 5.248
+            },
+            "pg.get c=1.rss-peak": {
+              "B": 72383201.28
+            },
+            "pg.list c=1": {
+              "req/s": 993.08,
+              "ms": 1.613,
+              "B": 76084674.56
+            },
+            "pg.list c=1.p50": {
+              "ms": 0.963
+            },
+            "pg.list c=1.p95": {
+              "ms": 1.284
+            },
+            "pg.list c=1.p999": {
+              "ms": 3.338
+            },
+            "pg.list c=1.rss-peak": {
+              "B": 79524003.84
+            },
+            "pg.create c=1": {
+              "req/s": 763.69,
+              "ms": 2.404,
+              "B": 79261859.84
+            },
+            "pg.create c=1.p50": {
+              "ms": 1.238
+            },
+            "pg.create c=1.p95": {
+              "ms": 1.811
+            },
+            "pg.create c=1.p999": {
+              "ms": 5.823
+            },
+            "pg.create c=1.rss-peak": {
+              "B": 80352378.88
+            },
+            "pg.update c=1": {
+              "req/s": 576.54,
+              "ms": 2.65,
+              "B": 80887152.64
+            },
+            "pg.update c=1.p50": {
+              "ms": 1.672
+            },
+            "pg.update c=1.p95": {
+              "ms": 2.26
+            },
+            "pg.update c=1.p999": {
+              "ms": 4.423
+            },
+            "pg.update c=1.rss-peak": {
+              "B": 81306583.04
+            },
+            "pg.delete c=1": {
+              "req/s": 846.49,
+              "ms": 2.144,
+              "B": 84703969.28
+            },
+            "pg.delete c=1.p50": {
+              "ms": 1.123
+            },
+            "pg.delete c=1.p95": {
+              "ms": 1.485
+            },
+            "pg.delete c=1.p999": {
+              "ms": 3.248
+            },
+            "pg.delete c=1.rss-peak": {
+              "B": 86224404.48
+            },
+            "pg.get c=16": {
+              "req/s": 3364.68,
+              "ms": 38.64,
+              "B": 86025175.04
+            },
+            "pg.get c=16.p50": {
+              "ms": 3.547
+            },
+            "pg.get c=16.p95": {
+              "ms": 6.447
+            },
+            "pg.get c=16.p999": {
+              "ms": 43.853
+            },
+            "pg.get c=16.rss-peak": {
+              "B": 86832578.56
+            },
+            "pg.list c=16": {
+              "req/s": 2790.2,
+              "ms": 9.287,
+              "B": 88657100.8
+            },
+            "pg.list c=16.p50": {
+              "ms": 5.546
+            },
+            "pg.list c=16.p95": {
+              "ms": 7.669
+            },
+            "pg.list c=16.p999": {
+              "ms": 10.672
+            },
+            "pg.list c=16.rss-peak": {
+              "B": 91540684.8
+            },
+            "pg.create c=16": {
+              "req/s": 2241.09,
+              "ms": 11.796,
+              "B": 95609159.68
+            },
+            "pg.create c=16.p50": {
+              "ms": 6.836
+            },
+            "pg.create c=16.p95": {
+              "ms": 10.445
+            },
+            "pg.create c=16.p999": {
+              "ms": 13.464
+            },
+            "pg.create c=16.rss-peak": {
+              "B": 102760448
+            },
+            "pg.update c=16": {
+              "req/s": 1695,
+              "ms": 15.381,
+              "B": 98933145.6
+            },
+            "pg.update c=16.p50": {
+              "ms": 8.73
+            },
+            "pg.update c=16.p95": {
+              "ms": 12.991
+            },
+            "pg.update c=16.p999": {
+              "ms": 18.659
+            },
+            "pg.update c=16.rss-peak": {
+              "B": 102005473.28
+            },
+            "pg.delete c=16": {
+              "req/s": 2785.45,
+              "ms": 10.103,
+              "B": 98031370.24
+            },
+            "pg.delete c=16.p50": {
+              "ms": 5.445
+            },
+            "pg.delete c=16.p95": {
+              "ms": 8.289
+            },
+            "pg.delete c=16.p999": {
+              "ms": 11.607
+            },
+            "pg.delete c=16.rss-peak": {
+              "B": 98744401.92
+            },
+            "pg.get c=64": {
+              "req/s": 4537,
+              "ms": 18.834,
+              "B": 98293514.24
+            },
+            "pg.get c=64.p50": {
+              "ms": 13.403
+            },
+            "pg.get c=64.p95": {
+              "ms": 17.328
+            },
+            "pg.get c=64.p999": {
+              "ms": 20.983
+            },
+            "pg.get c=64.rss-peak": {
+              "B": 99058974.72
+            },
+            "pg.list c=64": {
+              "req/s": 3022.71,
+              "ms": 29.456,
+              "B": 99593748.48
+            },
+            "pg.list c=64.p50": {
+              "ms": 20.165
+            },
+            "pg.list c=64.p95": {
+              "ms": 25.372
+            },
+            "pg.list c=64.p999": {
+              "ms": 32.717
+            },
+            "pg.list c=64.rss-peak": {
+              "B": 100547952.64
+            },
+            "pg.create c=64": {
+              "req/s": 2832.72,
+              "ms": 25.79,
+              "B": 101313413.12
+            },
+            "pg.create c=64.p50": {
+              "ms": 22.308
+            },
+            "pg.create c=64.p95": {
+              "ms": 24.867
+            },
+            "pg.create c=64.p999": {
+              "ms": 26.237
+            },
+            "pg.create c=64.rss-peak": {
+              "B": 101638471.68
+            },
+            "pg.update c=64": {
+              "req/s": 1730.15,
+              "ms": 45.057,
+              "B": 102791905.28
+            },
+            "pg.update c=64.p50": {
+              "ms": 35.478
+            },
+            "pg.update c=64.p95": {
+              "ms": 43.368
+            },
+            "pg.update c=64.p999": {
+              "ms": 50.079
+            },
+            "pg.update c=64.rss-peak": {
+              "B": 104962457.6
+            },
+            "pg.delete c=64": {
+              "req/s": 3072.76,
+              "ms": 24.084,
+              "B": 103305707.52
+            },
+            "pg.delete c=64.p50": {
+              "ms": 20.268
+            },
+            "pg.delete c=64.p95": {
+              "ms": 23.009
+            },
+            "pg.delete c=64.p999": {
+              "ms": 25.226
+            },
+            "pg.delete c=64.rss-peak": {
+              "B": 103400079.36
+            },
+            "pg.get c=256": {
+              "req/s": 5055.17,
+              "ms": 57.813,
+              "B": 104322826.24
+            },
+            "pg.get c=256.p50": {
+              "ms": 43.487
+            },
+            "pg.get c=256.p95": {
+              "ms": 54.435
+            },
+            "pg.get c=256.p999": {
+              "ms": 58.514
+            },
+            "pg.get c=256.rss-peak": {
+              "B": 104805171.2
+            },
+            "pg.list c=256": {
+              "req/s": 3008.13,
+              "ms": 102.227,
+              "B": 104794685.44
+            },
+            "pg.list c=256.p50": {
+              "ms": 68.64
+            },
+            "pg.list c=256.p95": {
+              "ms": 96.63
+            },
+            "pg.list c=256.p999": {
+              "ms": 105.986
+            },
+            "pg.list c=256.rss-peak": {
+              "B": 104941486.08
+            },
+            "pg.create c=256": {
+              "req/s": 2745.01,
+              "ms": 111.878,
+              "B": 106860380.16
+            },
+            "pg.create c=256.p50": {
+              "ms": 82.478
+            },
+            "pg.create c=256.p95": {
+              "ms": 107.619
+            },
+            "pg.create c=256.p999": {
+              "ms": 113.875
+            },
+            "pg.create c=256.rss-peak": {
+              "B": 108926074.88
+            },
+            "pg.update c=256": {
+              "req/s": 1719.13,
+              "ms": 166.977,
+              "B": 107101552.64
+            },
+            "pg.update c=256.p50": {
+              "ms": 133.48
+            },
+            "pg.update c=256.p95": {
+              "ms": 162.474
+            },
+            "pg.update c=256.p999": {
+              "ms": 168.678
+            },
+            "pg.update c=256.rss-peak": {
+              "B": 107594383.36
+            },
+            "pg.delete c=256": {
+              "req/s": 3019,
+              "ms": 99.206,
+              "B": 108370329.6
+            },
+            "pg.delete c=256.p50": {
+              "ms": 71.901
+            },
+            "pg.delete c=256.p95": {
+              "ms": 95.06
+            },
+            "pg.delete c=256.p999": {
+              "ms": 101.805
+            },
+            "pg.delete c=256.rss-peak": {
+              "B": 108905103.36
+            }
+          },
+          "compiler": {
+            "sync": {
+              "req/s": 37008.63934858163,
+              "ms": 0.9340849999999999
+            },
+            "async": {
+              "req/s": 39289.86801056036,
+              "ms": 0.860417
+            },
+            "validated": {
+              "req/s": 25350.677891956977,
+              "ms": 1.36059
+            },
+            "context-auth": {
+              "req/s": 26033.003981209076,
+              "ms": 1.259811
+            },
+            "resource-get": {
+              "req/s": 17019.31266845439,
+              "ms": 2.072037
+            },
+            "resource-list": {
+              "req/s": 10856.963740195868,
+              "ms": 3.460042
+            },
+            "resource-create": {
+              "req/s": 12334.005257049057,
+              "ms": 2.59293
+            },
+            "resource-patch": {
+              "req/s": 9351.608785875358,
+              "ms": 3.6154889999999997
+            },
+            "resource-put": {
+              "req/s": 10968.410674529221,
+              "ms": 3.1539710000000003
+            },
+            "resource-delete": {
+              "req/s": 10486.99,
+              "ms": 3.205
+            }
+          }
+        },
+        "skipped": [
+          "http/pg.crud: no --pg url; set --pg $DATABASE_URL for the network-DB baseline",
+          "http/pg.rtt: no --pg url; see rtt.synthetic-N-trips instead"
+        ],
+        "failures": [],
+        "suiteCounts": {
+          "micro": 3,
+          "prepared": 3,
+          "batch": 3,
+          "startup": 3,
+          "footprint": 3,
+          "http": 3,
+          "postgres": 3,
+          "compiler": 3
+        }
+      },
+      "win32": {
+        "arch": "x64",
+        "cpu": "AMD EPYC 9V74 80-Core Processor",
+        "runtime": "bun-1.4.2",
+        "dirty": false,
+        "measuredAt": "2026-10-08T16:51:12.523Z",
+        "count": 3,
+        "results": {
+          "micro": {
+            "context.minimal": {
+              "ns/op": 437.86,
+              "ops/s": 2283835,
+              "B/op": 0
+            },
+            "context.custom-hook": {
+              "ns/op": 603.56,
+              "ops/s": 1656836.1,
+              "B/op": 0
+            },
+            "context.pre-resolved": {
+              "ns/op": 72.93,
+              "ops/s": 13712718.5,
+              "B/op": 0
+            },
+            "action.empty": {
+              "ns/op": 867.68,
+              "ops/s": 1152498.6,
+              "B/op": 0
+            },
+            "action.async": {
+              "ns/op": 336.26,
+              "ops/s": 2973889.3,
+              "B/op": 0
+            },
+            "action.auth": {
+              "ns/op": 1030,
+              "ops/s": 970873.8,
+              "B/op": 0
+            },
+            "action.context-hook": {
+              "ns/op": 1037.2,
+              "ops/s": 964134.2,
+              "B/op": 0
+            },
+            "validation.small-object": {
+              "ns/op": 79.1,
+              "ops/s": 12642225,
+              "B/op": 0
+            },
+            "validation.20-field": {
+              "ns/op": 74.08,
+              "ops/s": 13498920.1,
+              "B/op": 0
+            },
+            "validation.nested": {
+              "ns/op": 242.72,
+              "ops/s": 4119973.6,
+              "B/op": 0
+            },
+            "validation.arrays": {
+              "ns/op": 278.78,
+              "ops/s": 3587057.9,
+              "B/op": 0
+            },
+            "validation-errors.one-error": {
+              "ns/op": 7081.92,
+              "ops/s": 141204.6,
+              "B/op": 23.51
+            },
+            "validation-errors.many-errors": {
+              "ns/op": 6797.7,
+              "ops/s": 147108.6,
+              "B/op": 5.66
+            },
+            "http-input.get-query": {
+              "ns/op": 5318,
+              "ops/s": 188040.6,
+              "B/op": 0
+            },
+            "http-input.post-body": {
+              "ns/op": 6686.5,
+              "ops/s": 149555.1,
+              "B/op": 0
+            },
+            "coercion.0-fields": {
+              "ns/op": 110.66,
+              "ops/s": 9036852.3,
+              "B/op": 0
+            },
+            "coercion.5-fields": {
+              "ns/op": 427.25,
+              "ops/s": 2340550,
+              "B/op": 0.2
+            },
+            "coercion.20-fields": {
+              "ns/op": 1545.83,
+              "ops/s": 646901.7,
+              "B/op": 0.68
+            },
+            "dispatch.direct-action": {
+              "ns/op": 713.04,
+              "ops/s": 1402445.9,
+              "B/op": 0
+            },
+            "dispatch.getAction": {
+              "ns/op": 473.66,
+              "ops/s": 2111219,
+              "B/op": 0
+            },
+            "dispatch.service-proxy": {
+              "ns/op": 1401.3,
+              "ops/s": 713623.1,
+              "B/op": 0
+            },
+            "cursor.encode": {
+              "ns/op": 505.77,
+              "ops/s": 1977183.3,
+              "B/op": 0
+            },
+            "cursor.decode": {
+              "ns/op": 547.07,
+              "ops/s": 1827919.6,
+              "B/op": 0
+            },
+            "resource-parse.1-param": {
+              "ns/op": 345626.67,
+              "ops/s": 2893.3,
+              "B/op": 0
+            },
+            "resource-parse.5-params": {
+              "ns/op": 2871098.33,
+              "ops/s": 348.3,
+              "B/op": 472.79
+            },
+            "resource-parse.20-params": {
+              "ns/op": 321489,
+              "ops/s": 3110.5,
+              "B/op": 0
+            },
+            "json.serialize-256B": {
+              "ns/op": 165.55,
+              "ops/s": 6040471.2,
+              "B/op": 0
+            },
+            "json.serialize-1KiB": {
+              "ns/op": 392.05,
+              "ops/s": 2550695.1,
+              "B/op": 0
+            },
+            "json.serialize-16KiB": {
+              "ns/op": 3408.05,
+              "ops/s": 293422.9,
+              "B/op": 32.78
+            },
+            "json.serialize-256KiB": {
+              "ns/op": 35329,
+              "ops/s": 28305.4,
+              "B/op": 10485.96
+            },
+            "openapi.10-actions": {
+              "ns/op": 21230,
+              "ops/s": 47103.2,
+              "B/op": 0
+            },
+            "openapi.100-actions": {
+              "ns/op": 231245,
+              "ops/s": 4324.4,
+              "B/op": 50649.65
+            },
+            "openapi.1000-actions": {
+              "ns/op": 2873440,
+              "ops/s": 348,
+              "B/op": 1578033.95
+            },
+            "server-init.10-actions": {
+              "ns/op": 94774,
+              "ops/s": 10551.4,
+              "B/op": 0
+            },
+            "server-init.100-actions": {
+              "ns/op": 457300,
+              "ops/s": 2186.7,
+              "B/op": 0
+            },
+            "server-init.1000-actions": {
+              "ns/op": 4372735,
+              "ops/s": 228.7,
+              "B/op": 573422.85
+            }
+          },
+          "prepared": {
+            "get-by-id.dynamic-drizzle": {
+              "ns/op": 98340
+            },
+            "get-by-id.prepared": {
+              "ns/op": 7610
+            },
+            "get-by-id.raw-sql": {
+              "ns/op": 3180
+            },
+            "list-filter.dynamic-drizzle": {
+              "ns/op": 121540
+            },
+            "list-filter.prepared": {
+              "ns/op": 51400
+            },
+            "list-filter.raw-sql": {
+              "ns/op": 19810
+            },
+            "insert.dynamic-drizzle": {
+              "ns/op": 73780
+            },
+            "insert.prepared": {
+              "ns/op": 28870
+            },
+            "insert.raw-sql": {
+              "ns/op": 37280
+            },
+            "update-by-id.dynamic-drizzle": {
+              "ns/op": 1487570
+            },
+            "update-by-id.prepared": {
+              "ns/op": 1388930
+            },
+            "update-by-id.raw-sql": {
+              "ns/op": 1419430
+            },
+            "delete-by-id.dynamic-drizzle": {
+              "ns/op": 1435090
+            },
+            "delete-by-id.prepared": {
+              "ns/op": 1402220
+            },
+            "delete-by-id.raw-sql": {
+              "ns/op": 1401210
+            }
+          },
+          "batch": {
+            "validations-1M": {
+              "ops/s": 11294203,
+              "ns/op": 88.99999999999999
+            },
+            "jsonl-stream": {
+              "ops/s": 1393978,
+              "ns/op": 714.9999999999999
+            },
+            "bulk.row-by-row": {
+              "ops/s": 16772,
+              "ns/op": 59600
+            },
+            "bulk.chunked-1k": {
+              "ops/s": 64222,
+              "ns/op": 15549.999999999998
+            },
+            "bulk.transaction-prepared": {
+              "ops/s": 49786,
+              "ns/op": 20100
+            },
+            "cpu-transform": {
+              "ops/s": 1929222,
+              "ns/op": 518.0000000000001
+            },
+            "io-transform": {
+              "ops/s": 20076,
+              "ns/op": 49800
+            },
+            "profile.read-heavy": {
+              "ops/s": 530,
+              "ns/op": 1888000
+            },
+            "profile.write-heavy": {
+              "ops/s": 2636,
+              "ns/op": 379000
+            }
+          },
+          "startup": {
+            "10_actions.build": {
+              "ms": 0.526
+            },
+            "10_actions.listen": {
+              "ms": 2.251
+            },
+            "10_actions.first_request": {
+              "ms": 1.848
+            },
+            "10_actions.rss": {
+              "B": 49644830.72
+            },
+            "100_actions.build": {
+              "ms": 1.214
+            },
+            "100_actions.listen": {
+              "ms": 3.185
+            },
+            "100_actions.first_request": {
+              "ms": 2.293
+            },
+            "100_actions.rss": {
+              "B": 55044997.12
+            },
+            "1000_actions.build": {
+              "ms": 6.109
+            },
+            "1000_actions.listen": {
+              "ms": 10.156
+            },
+            "1000_actions.first_request": {
+              "ms": 11.523
+            },
+            "1000_actions.rss": {
+              "B": 90130350.08
+            }
+          },
+          "footprint": {
+            "cold-start": {
+              "ms": 102.97409999999945
+            },
+            "idle-cpu": {
+              "ms": 0,
+              "%": 0
+            }
+          },
+          "bundle": {
+            "server-bundle": {
+              "B": 457602
+            },
+            "server-bundle-gzip": {
+              "B": 133304
+            }
+          },
+          "http": {
+            "floor.bun-serve c=1": {
+              "req/s": 7757.96,
+              "ms": 0.949,
+              "B": 108254986.24
+            },
+            "floor.bun-serve c=1.p50": {
+              "ms": 0.08
+            },
+            "floor.bun-serve c=1.p95": {
+              "ms": 0.146
+            },
+            "floor.bun-serve c=1.p999": {
+              "ms": 4.147
+            },
+            "floor.bun-serve c=1.rss-peak": {
+              "B": 108747816.96
+            },
+            "tax.elysia c=1": {
+              "req/s": 8709.85,
+              "ms": 0.989,
+              "B": 109230161.92
+            },
+            "tax.elysia c=1.p50": {
+              "ms": 0.077
+            },
+            "tax.elysia c=1.p95": {
+              "ms": 0.143
+            },
+            "tax.elysia c=1.p999": {
+              "ms": 2.744
+            },
+            "tax.elysia c=1.rss-peak": {
+              "B": 109628620.8
+            },
+            "tax.raw-endpoint c=1": {
+              "req/s": 7152.61,
+              "ms": 1.046,
+              "B": 109953679.36
+            },
+            "tax.raw-endpoint c=1.p50": {
+              "ms": 0.108
+            },
+            "tax.raw-endpoint c=1.p95": {
+              "ms": 0.176
+            },
+            "tax.raw-endpoint c=1.p999": {
+              "ms": 1.882
+            },
+            "tax.raw-endpoint c=1.rss-peak": {
+              "B": 110247280.64
+            },
+            "tax.no-schema c=1": {
+              "req/s": 8125.55,
+              "ms": 0.994,
+              "B": 110635253.76
+            },
+            "tax.no-schema c=1.p50": {
+              "ms": 0.09
+            },
+            "tax.no-schema c=1.p95": {
+              "ms": 0.156
+            },
+            "tax.no-schema c=1.p999": {
+              "ms": 1.222
+            },
+            "tax.no-schema c=1.rss-peak": {
+              "B": 110897397.76
+            },
+            "tax.validated c=1": {
+              "req/s": 7381.09,
+              "ms": 1.005,
+              "B": 111264399.36
+            },
+            "tax.validated c=1.p50": {
+              "ms": 0.105
+            },
+            "tax.validated c=1.p95": {
+              "ms": 0.173
+            },
+            "tax.validated c=1.p999": {
+              "ms": 1.161
+            },
+            "tax.validated c=1.rss-peak": {
+              "B": 111725772.8
+            },
+            "tax.full-auth-ctx c=1": {
+              "req/s": 7164.8,
+              "ms": 1.06,
+              "B": 111620915.2
+            },
+            "tax.full-auth-ctx c=1.p50": {
+              "ms": 0.105
+            },
+            "tax.full-auth-ctx c=1.p95": {
+              "ms": 0.173
+            },
+            "tax.full-auth-ctx c=1.p999": {
+              "ms": 1.196
+            },
+            "tax.full-auth-ctx c=1.rss-peak": {
+              "B": 111904030.72
+            },
+            "resource.get c=1": {
+              "req/s": 5647.4,
+              "ms": 1.147,
+              "B": 112375889.92
+            },
+            "resource.get c=1.p50": {
+              "ms": 0.135
+            },
+            "resource.get c=1.p95": {
+              "ms": 0.241
+            },
+            "resource.get c=1.p999": {
+              "ms": 1.502
+            },
+            "resource.get c=1.rss-peak": {
+              "B": 112826777.6
+            },
+            "resource.create c=1": {
+              "req/s": 3578.88,
+              "ms": 1.361,
+              "B": 112407347.2
+            },
+            "resource.create c=1.p50": {
+              "ms": 0.232
+            },
+            "resource.create c=1.p95": {
+              "ms": 0.376
+            },
+            "resource.create c=1.p999": {
+              "ms": 1.525
+            },
+            "resource.create c=1.rss-peak": {
+              "B": 112847749.12
+            },
+            "resource.list c=1": {
+              "req/s": 3612.23,
+              "ms": 1.332,
+              "B": 117010595.84
+            },
+            "resource.list c=1.p50": {
+              "ms": 0.228
+            },
+            "resource.list c=1.p95": {
+              "ms": 0.385
+            },
+            "resource.list c=1.p999": {
+              "ms": 2.431
+            },
+            "resource.list c=1.rss-peak": {
+              "B": 119537664
+            },
+            "resource.update c=1": {
+              "req/s": 957.79,
+              "ms": 2.161,
+              "B": 116507279.36
+            },
+            "resource.update c=1.p50": {
+              "ms": 0.991
+            },
+            "resource.update c=1.p95": {
+              "ms": 1.18
+            },
+            "resource.update c=1.p999": {
+              "ms": 2.323
+            },
+            "resource.update c=1.rss-peak": {
+              "B": 119548149.76
+            },
+            "payload.post-1kib c=1": {
+              "req/s": 7377.28,
+              "ms": 1.061,
+              "B": 116538736.64
+            },
+            "payload.post-1kib c=1.p50": {
+              "ms": 0.105
+            },
+            "payload.post-1kib c=1.p95": {
+              "ms": 0.172
+            },
+            "payload.post-1kib c=1.p999": {
+              "ms": 1.163
+            },
+            "payload.post-1kib c=1.rss-peak": {
+              "B": 116654080
+            },
+            "payload.post-32kib c=1": {
+              "req/s": 5906.72,
+              "ms": 1.123,
+              "B": 118730260.48
+            },
+            "payload.post-32kib c=1.p50": {
+              "ms": 0.129
+            },
+            "payload.post-32kib c=1.p95": {
+              "ms": 0.204
+            },
+            "payload.post-32kib c=1.p999": {
+              "ms": 1.218
+            },
+            "payload.post-32kib c=1.rss-peak": {
+              "B": 120009523.2
+            },
+            "payload.get-256kib c=1": {
+              "req/s": 3051.36,
+              "ms": 1.423,
+              "B": 131397058.56
+            },
+            "payload.get-256kib c=1.p50": {
+              "ms": 0.222
+            },
+            "payload.get-256kib c=1.p95": {
+              "ms": 0.935
+            },
+            "payload.get-256kib c=1.p999": {
+              "ms": 2.986
+            },
+            "payload.get-256kib c=1.rss-peak": {
+              "B": 137101312
+            },
+            "stream.raw-1mib c=1": {
+              "req/s": 871.83,
+              "ms": 4.564,
+              "B": 157600972.8
+            },
+            "stream.raw-1mib c=1.p50": {
+              "ms": 0.874
+            },
+            "stream.raw-1mib c=1.p95": {
+              "ms": 2.185
+            },
+            "stream.raw-1mib c=1.p999": {
+              "ms": 5.548
+            },
+            "stream.raw-1mib c=1.rss-peak": {
+              "B": 167059128.32
+            },
+            "rtt.synthetic-1-trip c=1": {
+              "req/s": 230.53,
+              "ms": 5.467,
+              "B": 124161884.16
+            },
+            "rtt.synthetic-1-trip c=1.p50": {
+              "ms": 4.251
+            },
+            "rtt.synthetic-1-trip c=1.p95": {
+              "ms": 4.684
+            },
+            "rtt.synthetic-1-trip c=1.p999": {
+              "ms": 7.917
+            },
+            "rtt.synthetic-1-trip c=1.rss-peak": {
+              "B": 163703685.12
+            },
+            "rtt.synthetic-3-trips c=1": {
+              "req/s": 87.09,
+              "ms": 13.283,
+              "B": 118394716.16
+            },
+            "rtt.synthetic-3-trips c=1.p50": {
+              "ms": 11.402
+            },
+            "rtt.synthetic-3-trips c=1.p95": {
+              "ms": 12.806
+            },
+            "rtt.synthetic-3-trips c=1.p999": {
+              "ms": 13.923
+            },
+            "rtt.synthetic-3-trips c=1.rss-peak": {
+              "B": 121141985.28
+            },
+            "tail.slow-query c=1": {
+              "req/s": 38.3,
+              "ms": 27.438,
+              "B": 110152908.8
+            },
+            "tail.slow-query c=1.p50": {
+              "ms": 26.22
+            },
+            "tail.slow-query c=1.p95": {
+              "ms": 26.727
+            },
+            "tail.slow-query c=1.p999": {
+              "ms": 28.135
+            },
+            "tail.slow-query c=1.rss-peak": {
+              "B": 112344432.64
+            },
+            "search.indexed c=1": {
+              "req/s": 58.99,
+              "ms": 20.038,
+              "B": 106482892.8
+            },
+            "search.indexed c=1.p50": {
+              "ms": 17.387
+            },
+            "search.indexed c=1.p95": {
+              "ms": 18.391
+            },
+            "search.indexed c=1.p999": {
+              "ms": 23.753
+            },
+            "search.indexed c=1.rss-peak": {
+              "B": 109754449.92
+            },
+            "search.filter-unindexed c=1": {
+              "req/s": 1123.49,
+              "ms": 1.974,
+              "B": 102246645.76
+            },
+            "search.filter-unindexed c=1.p50": {
+              "ms": 0.841
+            },
+            "search.filter-unindexed c=1.p95": {
+              "ms": 1.007
+            },
+            "search.filter-unindexed c=1.p999": {
+              "ms": 2.403
+            },
+            "search.filter-unindexed c=1.rss-peak": {
+              "B": 107520983.04
+            },
+            "cursor.shallow c=1": {
+              "req/s": 4276.64,
+              "ms": 1.187,
+              "B": 104522055.68
+            },
+            "cursor.shallow c=1.p50": {
+              "ms": 0.191
+            },
+            "cursor.shallow c=1.p95": {
+              "ms": 0.305
+            },
+            "cursor.shallow c=1.p999": {
+              "ms": 1.624
+            },
+            "cursor.shallow c=1.rss-peak": {
+              "B": 107971870.72
+            },
+            "floor.bun-serve c=16": {
+              "req/s": 19896.38,
+              "ms": 2.724,
+              "B": 103515422.72
+            },
+            "floor.bun-serve c=16.p50": {
+              "ms": 0.447
+            },
+            "floor.bun-serve c=16.p95": {
+              "ms": 1.629
+            },
+            "floor.bun-serve c=16.p999": {
+              "ms": 2.881
+            },
+            "floor.bun-serve c=16.rss-peak": {
+              "B": 103693680.64
+            },
+            "tax.elysia c=16": {
+              "req/s": 18488.12,
+              "ms": 2.938,
+              "B": 103599308.8
+            },
+            "tax.elysia c=16.p50": {
+              "ms": 0.564
+            },
+            "tax.elysia c=16.p95": {
+              "ms": 2.1
+            },
+            "tax.elysia c=16.p999": {
+              "ms": 2.946
+            },
+            "tax.elysia c=16.rss-peak": {
+              "B": 103809024
+            },
+            "tax.raw-endpoint c=16": {
+              "req/s": 14076.58,
+              "ms": 2.588,
+              "B": 104165539.84
+            },
+            "tax.raw-endpoint c=16.p50": {
+              "ms": 1.039
+            },
+            "tax.raw-endpoint c=16.p95": {
+              "ms": 2.488
+            },
+            "tax.raw-endpoint c=16.p999": {
+              "ms": 3.146
+            },
+            "tax.raw-endpoint c=16.rss-peak": {
+              "B": 104836628.48
+            },
+            "tax.no-schema c=16": {
+              "req/s": 18114.83,
+              "ms": 1.876,
+              "B": 104836628.48
+            },
+            "tax.no-schema c=16.p50": {
+              "ms": 0.581
+            },
+            "tax.no-schema c=16.p95": {
+              "ms": 1.632
+            },
+            "tax.no-schema c=16.p999": {
+              "ms": 2.163
+            },
+            "tax.no-schema c=16.rss-peak": {
+              "B": 105256058.88
+            },
+            "tax.validated c=16": {
+              "req/s": 14660.74,
+              "ms": 2.504,
+              "B": 105843261.44
+            },
+            "tax.validated c=16.p50": {
+              "ms": 0.702
+            },
+            "tax.validated c=16.p95": {
+              "ms": 1.816
+            },
+            "tax.validated c=16.p999": {
+              "ms": 2.526
+            },
+            "tax.validated c=16.rss-peak": {
+              "B": 106419978.24
+            },
+            "tax.full-auth-ctx c=16": {
+              "req/s": 12220.79,
+              "ms": 2.545,
+              "B": 106986209.28
+            },
+            "tax.full-auth-ctx c=16.p50": {
+              "ms": 1.159
+            },
+            "tax.full-auth-ctx c=16.p95": {
+              "ms": 2.228
+            },
+            "tax.full-auth-ctx c=16.p999": {
+              "ms": 2.561
+            },
+            "tax.full-auth-ctx c=16.rss-peak": {
+              "B": 107520983.04
+            },
+            "resource.get c=16": {
+              "req/s": 9904.34,
+              "ms": 3.221,
+              "B": 107929927.68
+            },
+            "resource.get c=16.p50": {
+              "ms": 1.347
+            },
+            "resource.get c=16.p95": {
+              "ms": 2.7
+            },
+            "resource.get c=16.p999": {
+              "ms": 3.275
+            },
+            "resource.get c=16.rss-peak": {
+              "B": 108338872.32
+            },
+            "resource.create c=16": {
+              "req/s": 5093.89,
+              "ms": 4.396,
+              "B": 108789760
+            },
+            "resource.create c=16.p50": {
+              "ms": 2.876
+            },
+            "resource.create c=16.p95": {
+              "ms": 4.062
+            },
+            "resource.create c=16.p999": {
+              "ms": 5.37
+            },
+            "resource.create c=16.rss-peak": {
+              "B": 109324533.76
+            },
+            "resource.list c=16": {
+              "req/s": 4903.82,
+              "ms": 7.029,
+              "B": 110404567.04
+            },
+            "resource.list c=16.p50": {
+              "ms": 3.176
+            },
+            "resource.list c=16.p95": {
+              "ms": 5.901
+            },
+            "resource.list c=16.p999": {
+              "ms": 7.105
+            },
+            "resource.list c=16.rss-peak": {
+              "B": 113393008.64
+            },
+            "resource.update c=16": {
+              "req/s": 914.77,
+              "ms": 22.125,
+              "B": 109209190.4
+            },
+            "resource.update c=16.p50": {
+              "ms": 17.167
+            },
+            "resource.update c=16.p95": {
+              "ms": 19.313
+            },
+            "resource.update c=16.p999": {
+              "ms": 31.137
+            },
+            "resource.update c=16.rss-peak": {
+              "B": 110079508.48
+            },
+            "payload.post-1kib c=16": {
+              "req/s": 14587.76,
+              "ms": 2.508,
+              "B": 109177733.12
+            },
+            "payload.post-1kib c=16.p50": {
+              "ms": 0.751
+            },
+            "payload.post-1kib c=16.p95": {
+              "ms": 2.016
+            },
+            "payload.post-1kib c=16.p999": {
+              "ms": 2.577
+            },
+            "payload.post-1kib c=16.rss-peak": {
+              "B": 109282590.72
+            },
+            "payload.post-32kib c=16": {
+              "req/s": 10006.8,
+              "ms": 4.091,
+              "B": 111914516.48
+            },
+            "payload.post-32kib c=16.p50": {
+              "ms": 1.6
+            },
+            "payload.post-32kib c=16.p95": {
+              "ms": 2.711
+            },
+            "payload.post-32kib c=16.p999": {
+              "ms": 4.141
+            },
+            "payload.post-32kib c=16.rss-peak": {
+              "B": 114546442.24
+            },
+            "payload.get-256kib c=16": {
+              "req/s": 3271.23,
+              "ms": 9.214,
+              "B": 137415884.8
+            },
+            "payload.get-256kib c=16.p50": {
+              "ms": 3.887
+            },
+            "payload.get-256kib c=16.p95": {
+              "ms": 7.965
+            },
+            "payload.get-256kib c=16.p999": {
+              "ms": 10.818
+            },
+            "payload.get-256kib c=16.rss-peak": {
+              "B": 156153937.92
+            },
+            "stream.raw-1mib c=16": {
+              "req/s": 834.91,
+              "ms": 27.73,
+              "B": 180795473.92
+            },
+            "stream.raw-1mib c=16.p50": {
+              "ms": 18.655
+            },
+            "stream.raw-1mib c=16.p95": {
+              "ms": 24.856
+            },
+            "stream.raw-1mib c=16.p999": {
+              "ms": 31.35
+            },
+            "stream.raw-1mib c=16.rss-peak": {
+              "B": 193766359.04
+            },
+            "rtt.synthetic-1-trip c=16": {
+              "req/s": 3479.96,
+              "ms": 7.163,
+              "B": 173172326.4
+            },
+            "rtt.synthetic-1-trip c=16.p50": {
+              "ms": 4.589
+            },
+            "rtt.synthetic-1-trip c=16.p95": {
+              "ms": 5.79
+            },
+            "rtt.synthetic-1-trip c=16.p999": {
+              "ms": 7.167
+            },
+            "rtt.synthetic-1-trip c=16.rss-peak": {
+              "B": 189918085.12
+            },
+            "rtt.synthetic-3-trips c=16": {
+              "req/s": 1439.27,
+              "ms": 13.366,
+              "B": 148216217.6
+            },
+            "rtt.synthetic-3-trips c=16.p50": {
+              "ms": 10.873
+            },
+            "rtt.synthetic-3-trips c=16.p95": {
+              "ms": 12.348
+            },
+            "rtt.synthetic-3-trips c=16.p999": {
+              "ms": 13.499
+            },
+            "rtt.synthetic-3-trips c=16.rss-peak": {
+              "B": 160495042.56
+            },
+            "tail.slow-query c=16": {
+              "req/s": 600.48,
+              "ms": 28.184,
+              "B": 142144962.56
+            },
+            "tail.slow-query c=16.p50": {
+              "ms": 26.452
+            },
+            "tail.slow-query c=16.p95": {
+              "ms": 27.921
+            },
+            "tail.slow-query c=16.p999": {
+              "ms": 28.224
+            },
+            "tail.slow-query c=16.rss-peak": {
+              "B": 145521377.28
+            },
+            "search.indexed c=16": {
+              "req/s": 59.45,
+              "ms": 291.27,
+              "B": 128482017.28
+            },
+            "search.indexed c=16.p50": {
+              "ms": 260.176
+            },
+            "search.indexed c=16.p95": {
+              "ms": 288.682
+            },
+            "search.indexed c=16.p999": {
+              "ms": 434.75
+            },
+            "search.indexed c=16.rss-peak": {
+              "B": 140561612.8
+            },
+            "search.filter-unindexed c=16": {
+              "req/s": 1128.99,
+              "ms": 15.958,
+              "B": 114808586.24
+            },
+            "search.filter-unindexed c=16.p50": {
+              "ms": 14.26
+            },
+            "search.filter-unindexed c=16.p95": {
+              "ms": 15.621
+            },
+            "search.filter-unindexed c=16.p999": {
+              "ms": 15.979
+            },
+            "search.filter-unindexed c=16.rss-peak": {
+              "B": 115762790.4
+            },
+            "cursor.shallow c=16": {
+              "req/s": 5013.97,
+              "ms": 6.24,
+              "B": 114902958.08
+            },
+            "cursor.shallow c=16.p50": {
+              "ms": 3.029
+            },
+            "cursor.shallow c=16.p95": {
+              "ms": 4.562
+            },
+            "cursor.shallow c=16.p999": {
+              "ms": 6.306
+            },
+            "cursor.shallow c=16.rss-peak": {
+              "B": 115909591.04
+            },
+            "floor.bun-serve c=64": {
+              "req/s": 15079.86,
+              "ms": 14.199,
+              "B": 114189926.4
+            },
+            "floor.bun-serve c=64.p50": {
+              "ms": 2.957
+            },
+            "floor.bun-serve c=64.p95": {
+              "ms": 14.125
+            },
+            "floor.bun-serve c=64.p999": {
+              "ms": 14.213
+            },
+            "floor.bun-serve c=64.rss-peak": {
+              "B": 115018301.44
+            },
+            "tax.elysia c=64": {
+              "req/s": 16518,
+              "ms": 11.456,
+              "B": 115301416.96
+            },
+            "tax.elysia c=64.p50": {
+              "ms": 2.812
+            },
+            "tax.elysia c=64.p95": {
+              "ms": 10.383
+            },
+            "tax.elysia c=64.p999": {
+              "ms": 11.898
+            },
+            "tax.elysia c=64.rss-peak": {
+              "B": 115605504
+            },
+            "tax.raw-endpoint c=64": {
+              "req/s": 11741.47,
+              "ms": 11.375,
+              "B": 113938268.16
+            },
+            "tax.raw-endpoint c=64.p50": {
+              "ms": 3.987
+            },
+            "tax.raw-endpoint c=64.p95": {
+              "ms": 10.744
+            },
+            "tax.raw-endpoint c=64.p999": {
+              "ms": 11.722
+            },
+            "tax.raw-endpoint c=64.rss-peak": {
+              "B": 115605504
+            },
+            "tax.no-schema c=64": {
+              "req/s": 19492.95,
+              "ms": 4.88,
+              "B": 112879206.4
+            },
+            "tax.no-schema c=64.p50": {
+              "ms": 3.068
+            },
+            "tax.no-schema c=64.p95": {
+              "ms": 4.015
+            },
+            "tax.no-schema c=64.p999": {
+              "ms": 4.918
+            },
+            "tax.no-schema c=64.rss-peak": {
+              "B": 113445437.44
+            },
+            "tax.validated c=64": {
+              "req/s": 17322.86,
+              "ms": 5.048,
+              "B": 114116526.08
+            },
+            "tax.validated c=64.p50": {
+              "ms": 3.441
+            },
+            "tax.validated c=64.p95": {
+              "ms": 4.826
+            },
+            "tax.validated c=64.p999": {
+              "ms": 5.614
+            },
+            "tax.validated c=64.rss-peak": {
+              "B": 114787614.72
+            },
+            "tax.full-auth-ctx c=64": {
+              "req/s": 17423.73,
+              "ms": 5.334,
+              "B": 115500646.4
+            },
+            "tax.full-auth-ctx c=64.p50": {
+              "ms": 3.521
+            },
+            "tax.full-auth-ctx c=64.p95": {
+              "ms": 4.638
+            },
+            "tax.full-auth-ctx c=64.p999": {
+              "ms": 5.344
+            },
+            "tax.full-auth-ctx c=64.rss-peak": {
+              "B": 116203192.32
+            },
+            "resource.get c=64": {
+              "req/s": 11552.47,
+              "ms": 6.808,
+              "B": 116003962.88
+            },
+            "resource.get c=64.p50": {
+              "ms": 5.369
+            },
+            "resource.get c=64.p95": {
+              "ms": 6.726
+            },
+            "resource.get c=64.p999": {
+              "ms": 7.531
+            },
+            "resource.get c=64.rss-peak": {
+              "B": 116203192.32
+            },
+            "resource.create c=64": {
+              "req/s": 5275.79,
+              "ms": 19.798,
+              "B": 117409054.72
+            },
+            "resource.create c=64.p50": {
+              "ms": 12.02
+            },
+            "resource.create c=64.p95": {
+              "ms": 13.497
+            },
+            "resource.create c=64.p999": {
+              "ms": 19.831
+            },
+            "resource.create c=64.rss-peak": {
+              "B": 118279372.8
+            },
+            "resource.list c=64": {
+              "req/s": 5376.81,
+              "ms": 15.334,
+              "B": 120114380.8
+            },
+            "resource.list c=64.p50": {
+              "ms": 11.433
+            },
+            "resource.list c=64.p95": {
+              "ms": 15.091
+            },
+            "resource.list c=64.p999": {
+              "ms": 15.34
+            },
+            "resource.list c=64.rss-peak": {
+              "B": 121058099.2
+            },
+            "resource.update c=64": {
+              "req/s": 651.11,
+              "ms": 181.064,
+              "B": 118468116.48
+            },
+            "resource.update c=64.p50": {
+              "ms": 100.203
+            },
+            "resource.update c=64.p95": {
+              "ms": 102.244
+            },
+            "resource.update c=64.p999": {
+              "ms": 181.12
+            },
+            "resource.update c=64.rss-peak": {
+              "B": 121100042.24
+            },
+            "payload.post-1kib c=64": {
+              "req/s": 15065.55,
+              "ms": 6.102,
+              "B": 114808586.24
+            },
+            "payload.post-1kib c=64.p50": {
+              "ms": 3.944
+            },
+            "payload.post-1kib c=64.p95": {
+              "ms": 5.872
+            },
+            "payload.post-1kib c=64.p999": {
+              "ms": 6.106
+            },
+            "payload.post-1kib c=64.rss-peak": {
+              "B": 114955386.88
+            },
+            "payload.post-32kib c=64": {
+              "req/s": 10984.54,
+              "ms": 10.558,
+              "B": 117618769.92
+            },
+            "payload.post-32kib c=64.p50": {
+              "ms": 5.675
+            },
+            "payload.post-32kib c=64.p95": {
+              "ms": 6.366
+            },
+            "payload.post-32kib c=64.p999": {
+              "ms": 10.848
+            },
+            "payload.post-32kib c=64.rss-peak": {
+              "B": 120282152.96
+            },
+            "payload.get-256kib c=64": {
+              "req/s": 3191.77,
+              "ms": 21.845,
+              "B": 162120335.36
+            },
+            "payload.get-256kib c=64.p50": {
+              "ms": 17.939
+            },
+            "payload.get-256kib c=64.p95": {
+              "ms": 21.249
+            },
+            "payload.get-256kib c=64.p999": {
+              "ms": 22.098
+            },
+            "payload.get-256kib c=64.rss-peak": {
+              "B": 189666426.88
+            },
+            "stream.raw-1mib c=64": {
+              "req/s": 815.06,
+              "ms": 92.649,
+              "B": 259606446.08
+            },
+            "stream.raw-1mib c=64.p50": {
+              "ms": 75.425
+            },
+            "stream.raw-1mib c=64.p95": {
+              "ms": 85.776
+            },
+            "stream.raw-1mib c=64.p999": {
+              "ms": 92.947
+            },
+            "stream.raw-1mib c=64.rss-peak": {
+              "B": 292594647.04
+            },
+            "rtt.synthetic-1-trip c=64": {
+              "req/s": 11169.99,
+              "ms": 7.349,
+              "B": 263612006.4
+            },
+            "rtt.synthetic-1-trip c=64.p50": {
+              "ms": 5.477
+            },
+            "rtt.synthetic-1-trip c=64.p95": {
+              "ms": 7.162
+            },
+            "rtt.synthetic-1-trip c=64.p999": {
+              "ms": 7.364
+            },
+            "rtt.synthetic-1-trip c=64.rss-peak": {
+              "B": 289029488.64
+            },
+            "rtt.synthetic-3-trips c=64": {
+              "req/s": 5047.29,
+              "ms": 14.556,
+              "B": 225789870.08
+            },
+            "rtt.synthetic-3-trips c=64.p50": {
+              "ms": 12.342
+            },
+            "rtt.synthetic-3-trips c=64.p95": {
+              "ms": 14.456
+            },
+            "rtt.synthetic-3-trips c=64.p999": {
+              "ms": 14.586
+            },
+            "rtt.synthetic-3-trips c=64.rss-peak": {
+              "B": 230466519.04
+            },
+            "tail.slow-query c=64": {
+              "req/s": 2175.37,
+              "ms": 29.701,
+              "B": 220704276.48
+            },
+            "tail.slow-query c=64.p50": {
+              "ms": 28.721
+            },
+            "tail.slow-query c=64.p95": {
+              "ms": 29.648
+            },
+            "tail.slow-query c=64.p999": {
+              "ms": 29.75
+            },
+            "tail.slow-query c=64.rss-peak": {
+              "B": 225842298.88
+            },
+            "search.indexed c=64": {
+              "req/s": 57.23,
+              "ms": 1773.519,
+              "B": 180124385.28
+            },
+            "search.indexed c=64.p50": {
+              "ms": 1118.589
+            },
+            "search.indexed c=64.p95": {
+              "ms": 1509.115
+            },
+            "search.indexed c=64.p999": {
+              "ms": 1848.352
+            },
+            "search.indexed c=64.rss-peak": {
+              "B": 224699351.04
+            },
+            "search.filter-unindexed c=64": {
+              "req/s": 1110.39,
+              "ms": 72.556,
+              "B": 157370286.08
+            },
+            "search.filter-unindexed c=64.p50": {
+              "ms": 57.429
+            },
+            "search.filter-unindexed c=64.p95": {
+              "ms": 72.358
+            },
+            "search.filter-unindexed c=64.p999": {
+              "ms": 72.616
+            },
+            "search.filter-unindexed c=64.rss-peak": {
+              "B": 158806835.2
+            },
+            "cursor.shallow c=64": {
+              "req/s": 5216.36,
+              "ms": 16.446,
+              "B": 151351459.84
+            },
+            "cursor.shallow c=64.p50": {
+              "ms": 11.801
+            },
+            "cursor.shallow c=64.p95": {
+              "ms": 16.388
+            },
+            "cursor.shallow c=64.p999": {
+              "ms": 16.454
+            },
+            "cursor.shallow c=64.rss-peak": {
+              "B": 157831659.52
+            },
+            "floor.bun-serve c=256": {
+              "req/s": 7539.19,
+              "ms": 48.301,
+              "B": 137824829.44
+            },
+            "floor.bun-serve c=256.p50": {
+              "ms": 38.76
+            },
+            "floor.bun-serve c=256.p95": {
+              "ms": 48.253
+            },
+            "floor.bun-serve c=256.p999": {
+              "ms": 51.398
+            },
+            "floor.bun-serve c=256.rss-peak": {
+              "B": 150302883.84
+            },
+            "tax.elysia c=256": {
+              "req/s": 7294.25,
+              "ms": 57.368,
+              "B": 131596288
+            },
+            "tax.elysia c=256.p50": {
+              "ms": 37.175
+            },
+            "tax.elysia c=256.p95": {
+              "ms": 50.034
+            },
+            "tax.elysia c=256.p999": {
+              "ms": 57.369
+            },
+            "tax.elysia c=256.rss-peak": {
+              "B": 131711631.36
+            },
+            "tax.raw-endpoint c=256": {
+              "req/s": 7402.44,
+              "ms": 56.238,
+              "B": 132277862.4
+            },
+            "tax.raw-endpoint c=256.p50": {
+              "ms": 37.005
+            },
+            "tax.raw-endpoint c=256.p95": {
+              "ms": 53.166
+            },
+            "tax.raw-endpoint c=256.p999": {
+              "ms": 56.243
+            },
+            "tax.raw-endpoint c=256.rss-peak": {
+              "B": 132634378.24
+            },
+            "tax.no-schema c=256": {
+              "req/s": 9308.61,
+              "ms": 41.514,
+              "B": 132854579.2
+            },
+            "tax.no-schema c=256.p50": {
+              "ms": 26.009
+            },
+            "tax.no-schema c=256.p95": {
+              "ms": 41.045
+            },
+            "tax.no-schema c=256.p999": {
+              "ms": 43.452
+            },
+            "tax.no-schema c=256.rss-peak": {
+              "B": 133064294.4
+            },
+            "tax.validated c=256": {
+              "req/s": 9046.63,
+              "ms": 42.686,
+              "B": 133903155.2
+            },
+            "tax.validated c=256.p50": {
+              "ms": 26.607
+            },
+            "tax.validated c=256.p95": {
+              "ms": 42.648
+            },
+            "tax.validated c=256.p999": {
+              "ms": 44.116
+            },
+            "tax.validated c=256.rss-peak": {
+              "B": 134721044.48
+            },
+            "tax.full-auth-ctx c=256": {
+              "req/s": 9151.01,
+              "ms": 40.424,
+              "B": 135255818.24
+            },
+            "tax.full-auth-ctx c=256.p50": {
+              "ms": 24.709
+            },
+            "tax.full-auth-ctx c=256.p95": {
+              "ms": 40.329
+            },
+            "tax.full-auth-ctx c=256.p999": {
+              "ms": 41.7
+            },
+            "tax.full-auth-ctx c=256.rss-peak": {
+              "B": 135591362.56
+            },
+            "resource.get c=256": {
+              "req/s": 7481.83,
+              "ms": 53.048,
+              "B": 136105164.8
+            },
+            "resource.get c=256.p50": {
+              "ms": 26.084
+            },
+            "resource.get c=256.p95": {
+              "ms": 52.959
+            },
+            "resource.get c=256.p999": {
+              "ms": 53.053
+            },
+            "resource.get c=256.rss-peak": {
+              "B": 136461680.64
+            },
+            "resource.create c=256": {
+              "req/s": 4600.53,
+              "ms": 76.105,
+              "B": 137929687.04
+            },
+            "resource.create c=256.p50": {
+              "ms": 43.765
+            },
+            "resource.create c=256.p95": {
+              "ms": 75.241
+            },
+            "resource.create c=256.p999": {
+              "ms": 76.115
+            },
+            "resource.create c=256.rss-peak": {
+              "B": 138695147.52
+            },
+            "resource.list c=256": {
+              "req/s": 4299.18,
+              "ms": 78.052,
+              "B": 139229921.28
+            },
+            "resource.list c=256.p50": {
+              "ms": 52.517
+            },
+            "resource.list c=256.p95": {
+              "ms": 77.918
+            },
+            "resource.list c=256.p999": {
+              "ms": 78.764
+            },
+            "resource.list c=256.rss-peak": {
+              "B": 141085900.8
+            },
+            "resource.update c=256": {
+              "req/s": 757.07,
+              "ms": 437.145,
+              "B": 125472604.16
+            },
+            "resource.update c=256.p50": {
+              "ms": 198.703
+            },
+            "resource.update c=256.p95": {
+              "ms": 435.965
+            },
+            "resource.update c=256.p999": {
+              "ms": 437.15
+            },
+            "resource.update c=256.rss-peak": {
+              "B": 138621747.2
+            },
+            "payload.post-1kib c=256": {
+              "req/s": 8306.34,
+              "ms": 46.568,
+              "B": 121131499.52
+            },
+            "payload.post-1kib c=256.p50": {
+              "ms": 25.785
+            },
+            "payload.post-1kib c=256.p95": {
+              "ms": 46.511
+            },
+            "payload.post-1kib c=256.p999": {
+              "ms": 47.714
+            },
+            "payload.post-1kib c=256.rss-peak": {
+              "B": 121781616.64
+            },
+            "payload.post-32kib c=256": {
+              "req/s": 6956.53,
+              "ms": 51.803,
+              "B": 128943390.72
+            },
+            "payload.post-32kib c=256.p50": {
+              "ms": 29.172
+            },
+            "payload.post-32kib c=256.p95": {
+              "ms": 50.741
+            },
+            "payload.post-32kib c=256.p999": {
+              "ms": 52.598
+            },
+            "payload.post-32kib c=256.rss-peak": {
+              "B": 132571463.68
+            },
+            "payload.get-256kib c=256": {
+              "req/s": 2847.6,
+              "ms": 69.408,
+              "B": 180166328.32
+            },
+            "payload.get-256kib c=256.p50": {
+              "ms": 55.769
+            },
+            "payload.get-256kib c=256.p95": {
+              "ms": 65.914
+            },
+            "payload.get-256kib c=256.p999": {
+              "ms": 69.466
+            },
+            "payload.get-256kib c=256.rss-peak": {
+              "B": 217107660.8
+            },
+            "stream.raw-1mib c=256": {
+              "req/s": 819.51,
+              "ms": 240.338,
+              "B": 394317004.8
+            },
+            "stream.raw-1mib c=256.p50": {
+              "ms": 234.372
+            },
+            "stream.raw-1mib c=256.p95": {
+              "ms": 239.856
+            },
+            "stream.raw-1mib c=256.p999": {
+              "ms": 242.939
+            },
+            "stream.raw-1mib c=256.rss-peak": {
+              "B": 505172459.52
+            },
+            "rtt.synthetic-1-trip c=256": {
+              "req/s": 10284.83,
+              "ms": 40.17,
+              "B": 463753707.52
+            },
+            "rtt.synthetic-1-trip c=256.p50": {
+              "ms": 24.688
+            },
+            "rtt.synthetic-1-trip c=256.p95": {
+              "ms": 37.882
+            },
+            "rtt.synthetic-1-trip c=256.p999": {
+              "ms": 40.176
+            },
+            "rtt.synthetic-1-trip c=256.rss-peak": {
+              "B": 505172459.52
+            },
+            "rtt.synthetic-3-trips c=256": {
+              "req/s": 7444.81,
+              "ms": 48.421,
+              "B": 373030912
+            },
+            "rtt.synthetic-3-trips c=256.p50": {
+              "ms": 28.16
+            },
+            "rtt.synthetic-3-trips c=256.p95": {
+              "ms": 48.391
+            },
+            "rtt.synthetic-3-trips c=256.p999": {
+              "ms": 49.708
+            },
+            "rtt.synthetic-3-trips c=256.rss-peak": {
+              "B": 464791797.76
+            },
+            "tail.slow-query c=256": {
+              "req/s": 5304.18,
+              "ms": 58.74,
+              "B": 328487403.52
+            },
+            "tail.slow-query c=256.p50": {
+              "ms": 34.472
+            },
+            "tail.slow-query c=256.p95": {
+              "ms": 58.73
+            },
+            "tail.slow-query c=256.p999": {
+              "ms": 58.744
+            },
+            "tail.slow-query c=256.rss-peak": {
+              "B": 345673564.16
+            },
+            "search.indexed c=256": {
+              "req/s": 56.92,
+              "ms": 5941.013,
+              "B": 189226024.96
+            },
+            "search.indexed c=256.p50": {
+              "ms": 3344.812
+            },
+            "search.indexed c=256.p95": {
+              "ms": 5940.953
+            },
+            "search.indexed c=256.p999": {
+              "ms": 6109.469
+            },
+            "search.indexed c=256.rss-peak": {
+              "B": 323160637.44
+            },
+            "search.filter-unindexed c=256": {
+              "req/s": 981.11,
+              "ms": 322.095,
+              "B": 123899740.16
+            },
+            "search.filter-unindexed c=256.p50": {
+              "ms": 167.228
+            },
+            "search.filter-unindexed c=256.p95": {
+              "ms": 321.046
+            },
+            "search.filter-unindexed c=256.p999": {
+              "ms": 322.105
+            },
+            "search.filter-unindexed c=256.rss-peak": {
+              "B": 132267376.64
+            },
+            "cursor.shallow c=256": {
+              "req/s": 4692.08,
+              "ms": 71.864,
+              "B": 123270594.56
+            },
+            "cursor.shallow c=256.p50": {
+              "ms": 46.545
+            },
+            "cursor.shallow c=256.p95": {
+              "ms": 70.918
+            },
+            "cursor.shallow c=256.p999": {
+              "ms": 72.081
+            },
+            "cursor.shallow c=256.rss-peak": {
+              "B": 123962654.72
+            },
+            "resource.delete c=1": {
+              "req/s": 561.7,
+              "ms": 3.108,
+              "B": 120649154.56
+            },
+            "resource.delete c=1.p50": {
+              "ms": 1.719
+            },
+            "resource.delete c=1.p95": {
+              "ms": 1.974
+            },
+            "resource.delete c=1.p999": {
+              "ms": 5.342
+            },
+            "resource.delete c=1.rss-peak": {
+              "B": 124539371.52
+            },
+            "resource.delete c=16": {
+              "req/s": 583.78,
+              "ms": 34.097,
+              "B": 120313610.24
+            },
+            "resource.delete c=16.p50": {
+              "ms": 27.023
+            },
+            "resource.delete c=16.p95": {
+              "ms": 33.022
+            },
+            "resource.delete c=16.p999": {
+              "ms": 34.148
+            },
+            "resource.delete c=16.rss-peak": {
+              "B": 121341214.72
+            },
+            "resource.delete c=64": {
+              "req/s": 737.13,
+              "ms": 159.695,
+              "B": 119579607.04
+            },
+            "resource.delete c=64.p50": {
+              "ms": 74.726
+            },
+            "resource.delete c=64.p95": {
+              "ms": 158.067
+            },
+            "resource.delete c=64.p999": {
+              "ms": 159.798
+            },
+            "resource.delete c=64.rss-peak": {
+              "B": 122494648.32
+            },
+            "resource.delete c=256": {
+              "req/s": 808.47,
+              "ms": 402.709,
+              "B": 121131499.52
+            },
+            "resource.delete c=256.p50": {
+              "ms": 238.087
+            },
+            "resource.delete c=256.p95": {
+              "ms": 401.791
+            },
+            "resource.delete c=256.p999": {
+              "ms": 476.793
+            },
+            "resource.delete c=256.rss-peak": {
+              "B": 123742453.76
+            },
+            "cursor.deep": {
+              "req/s": 327.06,
+              "ms": 967.989,
+              "B": 123134279.68
+            },
+            "cursor.deep.p50": {
+              "ms": 581.084
+            },
+            "cursor.deep.p95": {
+              "ms": 967.908
+            },
+            "cursor.deep.p999": {
+              "ms": 1162.645
+            },
+            "cursor.deep.rss-peak": {
+              "B": 124717629.44
+            },
+            "scale.list-20-from-100000": {
+              "req/s": 1736.47,
+              "ms": 12.512,
+              "B": 209924915.2
+            },
+            "scale.list-20-from-100000.p50": {
+              "ms": 9.069
+            },
+            "scale.list-20-from-100000.p95": {
+              "ms": 10.961
+            },
+            "scale.list-20-from-100000.p999": {
+              "ms": 12.534
+            },
+            "scale.list-20-from-100000.rss-peak": {
+              "B": 210050744.32
+            },
+            "file.resource.list": {
+              "req/s": 1273.51,
+              "ms": 16.355,
+              "B": 180606730.24
+            },
+            "file.resource.list.p50": {
+              "ms": 12.115
+            },
+            "file.resource.list.p95": {
+              "ms": 15.162
+            },
+            "file.resource.list.p999": {
+              "ms": 19.888
+            },
+            "file.resource.list.rss-peak": {
+              "B": 182357852.16
+            },
+            "sql.count": {
+              "ms": 6.225
+            },
+            "sql.page_no_count": {
+              "ms": 0.16
+            }
+          },
+          "compiler": {
+            "sync": {
+              "req/s": 38116.97566192987,
+              "ms": 0.7352
+            },
+            "async": {
+              "req/s": 35195.30579089483,
+              "ms": 1.5991
+            },
+            "validated": {
+              "req/s": 28171.82333111527,
+              "ms": 1.4974
+            },
+            "context-auth": {
+              "req/s": 26693.83743399615,
+              "ms": 1.5234
+            },
+            "resource-get": {
+              "req/s": 23084.835848349252,
+              "ms": 1.9593000000000003
+            },
+            "resource-list": {
+              "req/s": 13094.469262828521,
+              "ms": 2.7268000000000003
+            },
+            "resource-create": {
+              "req/s": 17382.724839461844,
+              "ms": 2.5688
+            },
+            "resource-patch": {
+              "req/s": 13097.757074589761,
+              "ms": 3.0328999999999997
+            },
+            "resource-put": {
+              "req/s": 13253.503066529272,
+              "ms": 2.9898
+            },
+            "resource-delete": {
+              "req/s": 14044.22,
+              "ms": 3.46
+            }
+          }
+        },
+        "skipped": [
+          "http/pg.crud: no --pg url; set --pg $DATABASE_URL for the network-DB baseline",
+          "http/pg.rtt: no --pg url; see rtt.synthetic-N-trips instead",
+          "postgres: Provide --pg URL for a disposable benchmark database"
+        ],
+        "failures": [],
+        "suiteCounts": {
+          "micro": 3,
+          "prepared": 3,
+          "batch": 3,
+          "startup": 3,
+          "footprint": 3,
+          "http": 3,
+          "compiler": 3
+        }
+      }
+    }
   }
 ]
