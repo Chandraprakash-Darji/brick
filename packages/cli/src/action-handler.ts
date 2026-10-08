@@ -193,6 +193,10 @@ export async function executeCompiledRoute(
       }
     }
 
+    if (input === undefined && plan.action.config?.input?.type === "object") {
+      input = {};
+    }
+
     if (plan.hasInput && plan.inputChecker) {
       if (!plan.inputChecker.Check(input)) {
         const errors = Array.from(plan.inputChecker.Errors(input)).map(

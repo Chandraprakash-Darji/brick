@@ -58,7 +58,8 @@ export function createSQLiteDatabase<
   ) => BunSQLiteDatabase<TSchema>;
   try {
     ({ Database } = loadDriver("bun:sqlite"));
-    ({ drizzle } = loadDriver("drizzle-orm/bun-sqlite"));
+    // Keep the adapter lazy for Node imports, but visible to Bun's bundler.
+    ({ drizzle } = require("drizzle-orm/bun-sqlite"));
   } catch (err: any) {
     throw new Error(
       `[Brick-TS DB] SQLite engine requires the Bun runtime ('bun:sqlite' is unavailable here). Original error: ${err?.message ?? err}`,

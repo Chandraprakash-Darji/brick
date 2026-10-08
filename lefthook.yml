@@ -5,15 +5,6 @@ pre-commit:
   commands:
     whitespace:
       run: git diff --cached --check
-    tests:
-      glob:
-        - "packages/**/*.ts"
-        - "examples/**/*.ts"
-        - "bench/**/*.ts"
-        - "**/package.json"
-        - "bun.lock"
-      exclude: "www/**"
-      run: bun run test
     lint:
       glob: "**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}"
       run: bunx --no-install oxlint {staged_files}

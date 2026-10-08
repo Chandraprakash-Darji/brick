@@ -72,6 +72,34 @@ const json = (body: unknown, status = 200) =>
   });
 
 describe("createBrickClient (typed HTTP client)", () => {
+  it("reads plain strings with or without a content type and rejects malformed JSON", async () => {
+    for (const contentType of ["text/plain", undefined]) {
+      const { fetchImpl } = mockFetch(() => {
+        const response = new Response("Echo: local");
+        if (contentType) response.headers.set("content-type", contentType);
+        else response.headers.delete("content-type");
+        return response;
+      });
+      const api = createBrickClient<AppServer>({
+        baseUrl: "http://localhost:4000",
+        fetch: fetchImpl,
+      });
+      expect(await api.billing.charge({ amount: 1 })).toBe("Echo: local");
+    }
+    const api = createBrickClient<AppServer>({
+      baseUrl: "http://localhost:4000",
+      fetch: mockFetch(
+        () =>
+          new Response("invalid", {
+            headers: { "content-type": "application/json" },
+          }),
+      ).fetchImpl,
+    });
+    await expect(api.billing.charge({ amount: 1 })).rejects.toBeInstanceOf(
+      BrickTransportError,
+    );
+  });
+
   it("sends resource list as GET with a query string and returns typed output", async () => {
     const { fetchImpl, calls } = mockFetch(() =>
       json({ pages: [{ id: "pg_1", title: "Hello" }], total: 1 }),

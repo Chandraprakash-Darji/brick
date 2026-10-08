@@ -353,7 +353,7 @@ function isActionValue(value: unknown): value is {
   );
 }
 
-function isResourceValue(value: unknown): value is { name: unknown } {
+function isResourceValue(value: unknown): value is { name: string } {
   return (
     !!value &&
     typeof value === "object" &&
@@ -553,15 +553,21 @@ async function dispatch(
 
   let parsed: unknown;
   const text = await response.text();
-  if (text) {
+  if (response.headers.get("content-type")?.includes("text/plain")) {
+    parsed = text;
+  } else if (text) {
     try {
       parsed = JSON.parse(text);
     } catch (err) {
-      throw new BrickTransportError(`Unparsable response body for ${url}.`, {
-        status: response.status,
-        url,
-        cause: err,
-      });
+      if (!response.headers.has("content-type")) {
+        parsed = text;
+      } else {
+        throw new BrickTransportError(`Unparsable response body for ${url}.`, {
+          status: response.status,
+          url,
+          cause: err,
+        });
+      }
     }
   }
 

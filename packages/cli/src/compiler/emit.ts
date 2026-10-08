@@ -28,6 +28,8 @@ export function emitHandlerFactory(route: RouteIR): string {
     input.push(
       `input = mergeInput(${route.inputPrecedence.map((source) => (source === "query" ? "coercedQuery" : source)).join(", ")});`,
     );
+    if ((route.inputSchema as { type?: string } | undefined)?.type === "object")
+      input.push("input ??= {};");
   }
   const asyncStages = route.context || route.authorize;
   const context = route.context

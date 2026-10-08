@@ -85,6 +85,12 @@ it("builds a deployable server and runs generated handlers without the definitio
     ).json()) as any;
     expect(list.total).toBe(1);
     expect(list.items).toEqual([{ id: "one", title: "Built page" }]);
+    const unfiltered = await fetch(`${base}/v1/page`);
+    expect(unfiltered.status).toBe(200);
+    expect(await unfiltered.json()).toMatchObject({
+      total: 1,
+      items: list.items,
+    });
     const createdResponse = await fetch(`${base}/v1/page`, {
       method: "POST",
       headers: { "content-type": "application/json" },

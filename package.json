@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "prepare": "lefthook install",
-    "check": "bun run lint && bun run fmt:check && bun run build && bun run typecheck && bun run test",
+    "check": "bun run lint && bun run format:check && bun run build && bun run typecheck && bun run test",
     "build": "bun run --filter @brickkit/core build && bun run --filter @brickkit/cli build",
     "release": "bun scripts/release.ts",
     "test": "bun test",
