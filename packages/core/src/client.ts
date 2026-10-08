@@ -1,3 +1,4 @@
+import type { Static, TSchema } from "@sinclair/typebox";
 import type { Action, ActionErrorDefinition, Resource } from "./types";
 import { ActionExecutionError, ValidationError } from "./types";
 
@@ -165,16 +166,20 @@ export function isBrickServerError(err: unknown): err is BrickServerError {
   return err instanceof BrickServerError;
 }
 
-/** Static input type of an action (from its `execute`/`run`/call signature). */
+/** Static input type from the schema, with a fallback for structural actions. */
 export type InferActionInput<A> = A extends {
-  execute(params: { input?: infer I; ctx?: any }): any;
+  config: { input?: infer S extends TSchema };
 }
-  ? I
-  : A extends { run(input?: infer I, ctx?: any): any }
+  ? Static<S>
+  : A extends {
+        execute(params: { input?: infer I; ctx?: any }): any;
+      }
     ? I
-    : A extends (params: { input?: infer I; ctx?: any }) => any
+    : A extends { run(input?: infer I, ctx?: any): any }
       ? I
-      : unknown;
+      : A extends (params: { input?: infer I; ctx?: any }) => any
+        ? I
+        : unknown;
 
 /** Resolved output type of an action. */
 export type InferActionOutput<A> = A extends (

@@ -72,10 +72,9 @@ framework and benchmark tests without requiring the pages Postgres database.
 - `src/collections/pages.ts`: paginated SDK reads for TanStack DB.
 - `src/actions/pages.ts`: optimistic writes through the SDK.
 
-Brick resource actions currently erase their input/output schema types. The web
-app types its CRUD boundary from the Drizzle table; custom actions infer types
-directly from the contract. Backend modules are imported only as types in the
-browser client.
+CRUD and custom action types infer directly from the contract. List rows allow
+omitted columns because resource lists support projection. Backend modules are
+imported only as types in the browser client.
 
 ## Routes
 

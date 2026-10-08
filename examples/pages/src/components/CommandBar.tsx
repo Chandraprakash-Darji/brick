@@ -33,7 +33,11 @@ export function CommandBar({ pages: pagesProp }: { pages?: CommandBarPage[] }) {
   const liveQuery = useLiveQuery((q) => q.from({ page: pageCollection }));
   const pages: CommandBarPage[] =
     pagesProp ??
-    (liveQuery.data as unknown as CommandBarPage[] | undefined) ??
+    liveQuery.data?.map((page) => ({
+      id: page.id,
+      title: page.title ?? "",
+      slug: page.slug ?? "",
+    })) ??
     [];
 
   useEffect(() => {

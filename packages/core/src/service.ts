@@ -94,15 +94,16 @@ export class ServiceImpl<
     return this;
   }
 
-  resource<TTable = any>(
-    config: ResourceConfig<TTable, BaseContext<TDb> & TServiceContext>,
-  ): Resource<TTable, BaseContext<TDb> & TServiceContext> {
+  // The public signature preserves config literals; runtime registration stores
+  // resources with different tables in the same map.
+  resource: Service<TDb, TServiceContext>["resource"] = ((
+    config: ResourceConfig<any, BaseContext<TDb> & TServiceContext>,
+  ) => {
     const resourceInstance = defineResource(this, config);
     this.resources.set(resourceInstance.name, resourceInstance);
     getGlobalRegistry().touch();
-
     return resourceInstance;
-  }
+  }) as Service<TDb, TServiceContext>["resource"];
 
   getResource(
     name: string,

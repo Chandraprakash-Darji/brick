@@ -1,4 +1,4 @@
-import type { TSchema, Static } from "@sinclair/typebox";
+import type { TSchema, Static, TUnsafe } from "@sinclair/typebox";
 import type { BunSQLiteDatabase } from "./db/sqlite";
 import type { DatabaseHandle } from "./db/define";
 
@@ -390,9 +390,152 @@ export interface ResourcePlan<TTable = any> {
   };
 }
 
+/** Options whose literals affect the generated CRUD types. */
+export type ResourceTypeOptions = Pick<
+  ResourceConfig,
+  "name" | "idField" | "ownerField" | "fields" | "errors" | "pluralName"
+>;
+
+type TableColumns<T> = T extends { _: { columns: infer C } } ? C : {};
+type ColumnName<C> = C extends { _: { name: infer N extends string } }
+  ? N
+  : never;
+type FieldKeys<T, F> = {
+  [K in keyof TableColumns<T>]: K extends F
+    ? K
+    : ColumnName<TableColumns<T>[K]> extends F
+      ? K
+      : never;
+}[keyof TableColumns<T>];
+type PrimaryKeys<T> = {
+  [K in keyof TableColumns<T>]: TableColumns<T>[K] extends {
+    _: { isPrimaryKey: true };
+  }
+    ? K
+    : never;
+}[keyof TableColumns<T>];
+type IdField<O> = O extends { idField: infer K extends string } ? K : "id";
+type OwnerField<O> = O extends { ownerField: infer K extends string }
+  ? K
+  : never;
+type TimestampKeys<T> =
+  | FieldKeys<T, "created_at" | "updated_at">
+  | Extract<keyof TableColumns<T>, "createdAt" | "updatedAt">;
+type GeneratedKeys<T, O> =
+  | PrimaryKeys<T>
+  | FieldKeys<T, IdField<O> | OwnerField<O>>
+  | TimestampKeys<T>;
+type FieldSchema<T, O, K> = O extends { fields: infer F }
+  ? K extends keyof F
+    ? F[K]
+    : K extends keyof TableColumns<T>
+      ? ColumnName<TableColumns<T>[K]> extends keyof F
+        ? F[ColumnName<TableColumns<T>[K]>]
+        : never
+      : never
+  : never;
+type FieldValue<T, O, K, V> = [FieldSchema<T, O, K>] extends [never]
+  ? V
+  : FieldSchema<T, O, K> extends TSchema
+    ? Static<FieldSchema<T, O, K>>
+    : V;
+
+/** The same editable columns as the runtime create schema, retaining defaults. */
+export type ResourceCreateInput<T, O = {}> = {
+  [K in keyof Omit<InferTableInsert<T>, GeneratedKeys<T, O>>]: FieldValue<
+    T,
+    O,
+    K,
+    Exclude<InferTableInsert<T>[K & keyof InferTableInsert<T>], null>
+  >;
+};
+export type ResourceIdInput<O = {}> = { [K in IdField<O>]: string };
+export type ResourceUpdateInput<T, O = {}> = ResourceIdInput<O> &
+  Partial<ResourceCreateInput<T, O>>;
+export type ResourceRow<T, O = {}> = {
+  [K in keyof InferTableRow<T>]:
+    | FieldValue<T, O, K, InferTableRow<T>[K]>
+    | Extract<InferTableRow<T>[K], null>;
+};
+export type ResourceListInput<T, O = {}> = Partial<{
+  [K in keyof Omit<ResourceRow<T, O>, TimestampKeys<T>>]: Exclude<
+    ResourceRow<T, O>[K & keyof ResourceRow<T, O>],
+    null
+  >;
+}> & {
+  limit?: number;
+  offset?: number;
+  page?: number;
+  sort?: string;
+  search?: string;
+  select?: string | string[];
+  cursor?: string;
+};
+/** List rows may be projected by select or excludeFromList. */
+export type ResourceListResult<T, O = {}> = {
+  items: Partial<ResourceRow<T, O>>[];
+  total: number;
+  limit: number;
+  offset: number;
+  page?: number;
+  pageCount: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+type ResourceErrors<O> = O extends {
+  errors: infer E extends Record<string, ActionErrorDefinition>;
+}
+  ? E
+  : {};
+export type ResourceActions<T, C extends ActionContext, O = {}> = 0 extends 1 &
+  T
+  ? {
+      list: Action<any, any, any, C>;
+      get: Action<any, any, any, C>;
+      create: Action<any, any, any, C>;
+      update: Action<any, any, any, C>;
+      delete: Action<any, any, any, C>;
+    }
+  : {
+      list: Action<
+        TUnsafe<ResourceListInput<T, O> | undefined>,
+        TUnsafe<ResourceListResult<T, O>>,
+        ResourceErrors<O>,
+        C
+      >;
+      get: Action<
+        TUnsafe<ResourceIdInput<O>>,
+        TUnsafe<ResourceRow<T, O>>,
+        ResourceErrors<O> &
+          Record<"NOT_FOUND" | "FORBIDDEN", ActionErrorDefinition>,
+        C
+      >;
+      create: Action<
+        TUnsafe<ResourceCreateInput<T, O>>,
+        TUnsafe<ResourceRow<T, O>>,
+        ResourceErrors<O> & Record<"CONFLICT", ActionErrorDefinition>,
+        C
+      >;
+      update: Action<
+        TUnsafe<ResourceUpdateInput<T, O>>,
+        TUnsafe<ResourceRow<T, O>>,
+        ResourceErrors<O> &
+          Record<"NOT_FOUND" | "FORBIDDEN", ActionErrorDefinition>,
+        C
+      >;
+      delete: Action<
+        TUnsafe<ResourceIdInput<O>>,
+        TUnsafe<{ success: boolean; id: string | number }>,
+        ResourceErrors<O> &
+          Record<"NOT_FOUND" | "FORBIDDEN", ActionErrorDefinition>,
+        C
+      >;
+    };
+
 export interface Resource<
   TTable = any,
   TCtx extends ActionContext = ActionContext,
+  TOptions = {},
 > {
   readonly name: string;
   readonly serviceName: string;
@@ -402,18 +545,12 @@ export interface Resource<
   readonly pluralName: string;
   readonly config: ResourceConfig<TTable, TCtx>;
   readonly plan?: ResourcePlan<TTable>;
-  readonly actions: {
-    list: Action<any, any, any, TCtx>;
-    get: Action<any, any, any, TCtx>;
-    create: Action<any, any, any, TCtx>;
-    update: Action<any, any, any, TCtx>;
-    delete: Action<any, any, any, TCtx>;
-  };
-  list: Action<any, any, any, TCtx>;
-  get: Action<any, any, any, TCtx>;
-  create: Action<any, any, any, TCtx>;
-  update: Action<any, any, any, TCtx>;
-  delete: Action<any, any, any, TCtx>;
+  readonly actions: ResourceActions<TTable, TCtx, TOptions>;
+  list: ResourceActions<TTable, TCtx, TOptions>["list"];
+  get: ResourceActions<TTable, TCtx, TOptions>["get"];
+  create: ResourceActions<TTable, TCtx, TOptions>["create"];
+  update: ResourceActions<TTable, TCtx, TOptions>["update"];
+  delete: ResourceActions<TTable, TCtx, TOptions>["delete"];
 }
 
 export interface ServiceAuthOptions {
@@ -601,9 +738,13 @@ export interface Service<
     >,
   ): Action<TIn, TOut, TErr, BaseContext<TDb> & TServiceContext>;
 
-  resource<TTable = any>(
-    config: ResourceConfig<TTable, BaseContext<TDb> & TServiceContext>,
-  ): Resource<TTable, BaseContext<TDb> & TServiceContext>;
+  resource<
+    TTable = any,
+    const TOptions extends ResourceTypeOptions = ResourceTypeOptions,
+  >(
+    config: ResourceConfig<TTable, BaseContext<TDb> & TServiceContext> &
+      TOptions,
+  ): Resource<TTable, BaseContext<TDb> & TServiceContext, TOptions>;
 
   registerTable(table: any): this;
   getAction(name: string): Action<any, any, any, any> | undefined;

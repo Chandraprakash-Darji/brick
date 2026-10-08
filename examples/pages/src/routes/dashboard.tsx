@@ -4,7 +4,7 @@ import { Copy, ExternalLink, FileText, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { deletePageAction } from "@/actions/pages";
-import type { Page } from "@/lib/api";
+import type { PageListItem } from "@/lib/api";
 import { pageCollection } from "@/collections/pages";
 import { AppShell } from "@/components/AppShell";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -34,7 +34,7 @@ function DashboardPage() {
   const pages = pagesQuery.data ?? [];
   const isLoading = pagesQuery.isLoading;
 
-  function publicUrl(page: Page): string {
+  function publicUrl(page: PageListItem): string {
     return `${window.location.origin}/p/${page.slug}`;
   }
 
@@ -42,12 +42,12 @@ function DashboardPage() {
     router.history.push(`/editor/${id}`);
   }
 
-  async function copyLink(page: Page) {
+  async function copyLink(page: PageListItem) {
     await navigator.clipboard.writeText(publicUrl(page));
     toast.success("Link copied");
   }
 
-  async function removePage(page: Page) {
+  async function removePage(page: PageListItem) {
     if (!confirm(`Delete "${page.title}"?`)) return;
     await deletePageAction({ id: page.id }).isPersisted.promise;
     toast.success("Page deleted");

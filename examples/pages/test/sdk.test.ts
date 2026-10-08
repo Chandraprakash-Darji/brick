@@ -74,5 +74,25 @@ function _typeAssertions(api: ReturnType<typeof createBrickClient<PagesApi>>) {
   api.pages.echo({ message: 123 });
   // @ts-expect-error Unknown contract actions must fail compilation.
   api.pages.missing({});
-  return echo;
+  const created = api.page.create({
+    title: "Typed",
+    slug: "typed",
+    content: "Body",
+  });
+  // @ts-expect-error CRUD inputs must be required.
+  api.page.create();
+  // @ts-expect-error CRUD inputs must retain required columns.
+  api.page.create({ title: "Typed" });
+  // @ts-expect-error CRUD inputs must retain column types.
+  api.page.create({ title: 123, slug: "typed", content: "Body" });
+  api.page.create({
+    title: "Typed",
+    slug: "typed",
+    content: "Body",
+    // @ts-expect-error Owners are assigned on the server.
+    userId: "forged",
+  });
+  // @ts-expect-error CRUD output must be typed too.
+  created.then((page) => page.missing);
+  return { echo, created };
 }

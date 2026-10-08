@@ -24,9 +24,9 @@ import { buildFtsMatchQuery } from "./db";
 import { t } from "./typebox";
 import { defineAction } from "./action";
 import type {
-  Action,
   Resource,
   ResourceConfig,
+  ResourceTypeOptions,
   ResourcePlan,
   Service,
   ActionContext,
@@ -846,10 +846,11 @@ async function executeDelete(
 export function defineResource<
   TTable = any,
   TCtx extends ActionContext = ActionContext,
+  const TOptions extends ResourceTypeOptions = ResourceTypeOptions,
 >(
   service: Service<any, any>,
-  config: ResourceConfig<TTable, TCtx>,
-): Resource<TTable, TCtx> {
+  config: ResourceConfig<TTable, TCtx> & TOptions,
+): Resource<TTable, TCtx, TOptions> {
   const resourceName = config.name;
   const capitalizedName =
     resourceName.charAt(0).toUpperCase() + resourceName.slice(1);
@@ -1676,7 +1677,16 @@ export function defineResource<
     service.actions.set(`delete${capitalizedName}`, deleteAction);
   }
 
-  const resource: Resource<TTable, TCtx> = {
+  // Runtime schemas are assembled from columns above; expose those same
+  // columns and configuration as static action schemas at this boundary.
+  const actions = {
+    list: listAction,
+    get: getAction,
+    create: createAction,
+    update: updateAction,
+    delete: deleteAction,
+  } as unknown as Resource<TTable, TCtx, TOptions>["actions"];
+  const resource: Resource<TTable, TCtx, TOptions> = {
     name: resourceName,
     serviceName: service.name,
     table,
@@ -1685,18 +1695,8 @@ export function defineResource<
     pluralName,
     config,
     plan,
-    actions: {
-      list: listAction as Action<any, any, any, TCtx>,
-      get: getAction as Action<any, any, any, TCtx>,
-      create: createAction as Action<any, any, any, TCtx>,
-      update: updateAction as Action<any, any, any, TCtx>,
-      delete: deleteAction as Action<any, any, any, TCtx>,
-    },
-    list: listAction as Action<any, any, any, TCtx>,
-    get: getAction as Action<any, any, any, TCtx>,
-    create: createAction as Action<any, any, any, TCtx>,
-    update: updateAction as Action<any, any, any, TCtx>,
-    delete: deleteAction as Action<any, any, any, TCtx>,
+    actions,
+    ...actions,
   };
 
   return resource;
