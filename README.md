@@ -34,7 +34,13 @@ bun run release patch
 The release script bumps versions, builds and tests the packages, then pushes
 `v<version>`, with core and CLI sharing the same version. GitHub Actions publishes
 both packages to npm, then creates one GitHub release with notes grouped by package. The
-**Publish to npm** workflow also supports manual dispatch and a dry-run option.
+**Publish to npm** workflow can also be run manually from `main`. It defaults to
+`patch` (with `minor` and `major` available), runs the same release script, and
+pushes a version commit updating both package manifests, the CLI's core dependency,
+and `bun.lock`. It then publishes that exact commit and creates its GitHub release
+in the same workflow run. `dry_run` previews the bump and validates the tarballs
+without committing, tagging, pushing, or publishing. To retry a failed publish,
+rerun the failed jobs so they reuse the prepared release version.
 
 For token-free publishing, configure a trusted publisher in each npm package's
 settings: owner `Chandraprakash-Darji`, repository `brick`, workflow `publish-npm.yml`, with
