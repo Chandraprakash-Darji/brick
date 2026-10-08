@@ -2,7 +2,7 @@ import { secret, envSource } from "@brickkit/core";
 
 // Single declaration site for every pages env var. Values load from
 // process.env (Bun populates it from .env locally); boot validation in
-// createBrickServer fails fast on missing required secrets.
+// brick() fails fast on missing required secrets.
 
 // PORT defaults to 5174; non-numeric/non-positive values throw at boot.
 export const portSecret = secret("PORT")

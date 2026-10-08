@@ -52,9 +52,6 @@ export {
   createActionHandler,
 } from "./action-handler";
 
-/** @deprecated Use brick() instead. */
-export const createBrickServer = brick;
-
 export function brick(options: CreateServerOptions = {}): BrickApp {
   const prefix = options.prefix ?? options.compilation?.ir.prefix ?? "/api";
   const title = options.title ?? "Brick-TS API Mesh";

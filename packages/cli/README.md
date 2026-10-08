@@ -61,5 +61,3 @@ bun dist/brick/server.js
 
 See [the compilation plan and artifact contract](COMPILER.md) for implemented
 stages, limitations and the next optimizations.
-
-`createBrickServer` remains available as a deprecated alias. Use `brick()` in new code.

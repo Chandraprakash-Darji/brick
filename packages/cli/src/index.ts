@@ -1,4 +1,4 @@
-export { brick, createBrickServer, type CreateServerOptions } from "./server";
+export { brick, type CreateServerOptions } from "./server";
 export { brickFromContract, type BrickFromContractOptions } from "./contract";
 export {
   type BrickApp,
