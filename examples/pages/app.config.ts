@@ -17,8 +17,9 @@
 export const BACKEND_ORIGIN =
   process.env.BACKEND_ORIGIN ?? "http://localhost:5174";
 
-/** Node server output for `bun run build` followed by `bun run start`. */
-export const SERVER_PRESET = "node-server" as const;
+/** Vercel functions in deployment builds; a standalone Node server locally. */
+export const SERVER_PRESET =
+  process.env.VERCEL === "1" ? "vercel" : "node-server";
 
 /**
  * Production runtime host/port.

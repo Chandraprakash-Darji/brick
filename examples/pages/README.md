@@ -45,6 +45,27 @@ public origin; for the combined local web/API server use
 The environment template lives in `.env.example`. Export values
 in your shell or put them in the app's `.env` file before starting it.
 
+## Vercel deployment
+
+Set the Vercel project's Root Directory to `examples/pages` and enable access to
+files outside that directory so the build can read the workspace packages.
+The committed `vercel.json` installs from the repository root and runs
+`pages:build`, rebuilding local Brick packages before building the app.
+Framework changes are included directly in the deployment without an npm publish.
+
+Vercel sets `VERCEL=1`, which selects Nitro's `vercel` preset and generates
+`.vercel/output` with static assets and the combined SSR/API server function.
+The config overrides the static Vite `dist` output setting. Local production
+builds continue to emit `.output` for `bun run start`.
+
+Set the production database and auth environment variables described above in
+Vercel, and apply database migrations separately before using the app.
+To verify the deployment build locally from the app directory:
+
+```sh
+VERCEL=1 bun run --cwd ../.. pages:build
+```
+
 ## Testing
 
 `pages:test` uses `TEST_DATABASE_URL`, defaulting to
