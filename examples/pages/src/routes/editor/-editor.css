@@ -1,0 +1,291 @@
+/* Ported from app/src/routes/editor/[[id]].vue <style scoped>
+   (`:deep(...)` selectors flattened — React has no scoped styles). */
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 1100px;
+  padding: 24px 32px;
+}
+
+.editor-card {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.field-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr 1fr;
+  margin-bottom: 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field--span2 {
+  grid-column: span 2;
+}
+
+/* View mode toggle */
+.view-toggle {
+  align-items: center;
+  background: hsl(var(--muted));
+  border-radius: 6px;
+  display: flex;
+  gap: 1px;
+  padding: 2px;
+}
+
+.view-btn {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  padding: 4px 7px;
+  transition:
+    color 0.15s,
+    background 0.15s;
+}
+
+.view-btn:hover {
+  color: hsl(var(--foreground));
+}
+
+.view-btn--active {
+  background: hsl(var(--background));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  color: hsl(var(--foreground));
+}
+
+/* Split editor/preview */
+.split-pane {
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  display: grid;
+  grid-template-columns: 1fr 1px 1fr;
+  height: 480px;
+  overflow: hidden;
+}
+
+.split-pane[data-view="editor"] {
+  grid-template-columns: 1fr;
+}
+
+.split-pane[data-view="preview"] {
+  grid-template-columns: 1fr;
+}
+
+.split-editor {
+  background: hsl(var(--background));
+  border: none;
+  color: hsl(var(--foreground));
+  font-family: var(--app-font-mono, monospace);
+  font-size: 13px;
+  height: 100%;
+  line-height: 1.65;
+  outline: none;
+  padding: 14px;
+  resize: none;
+  width: 100%;
+}
+
+.split-editor::placeholder {
+  color: hsl(var(--muted-foreground));
+}
+
+.split-divider {
+  background: hsl(var(--border));
+  width: 1px;
+}
+
+.split-preview {
+  background: hsl(var(--background));
+  height: 100%;
+  overflow-y: auto;
+}
+
+.preview-body {
+  color: hsl(var(--foreground));
+  font-size: 14px;
+  line-height: 1.7;
+  max-width: 100%;
+  padding: 14px;
+}
+
+.preview-body h1,
+.preview-body h2,
+.preview-body h3,
+.preview-body h4 {
+  font-weight: 600;
+  margin-bottom: 0.5em;
+  margin-top: 1.2em;
+}
+
+.preview-body h1 {
+  font-size: 1.5em;
+}
+.preview-body h2 {
+  font-size: 1.25em;
+}
+.preview-body h3 {
+  font-size: 1.1em;
+}
+
+.preview-body p {
+  margin-bottom: 0.75em;
+}
+
+.preview-body code {
+  background: hsl(var(--muted));
+  border-radius: 3px;
+  font-family: var(--app-font-mono, monospace);
+  font-size: 0.875em;
+  padding: 0.1em 0.35em;
+}
+
+.preview-body pre {
+  background: hsl(var(--muted));
+  border-radius: 6px;
+  overflow-x: auto;
+  padding: 12px;
+}
+
+.preview-body pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.preview-body ul,
+.preview-body ol {
+  margin-bottom: 0.75em;
+  padding-left: 1.5em;
+}
+
+.preview-body li {
+  margin-bottom: 0.25em;
+}
+
+.preview-body blockquote {
+  border-left: 3px solid hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+  margin: 0.75em 0;
+  padding-left: 1em;
+}
+
+.preview-body a {
+  color: hsl(var(--primary));
+}
+
+.preview-body hr {
+  border: none;
+  border-top: 1px solid hsl(var(--border));
+  margin: 1em 0;
+}
+
+.preview-body table {
+  border-collapse: collapse;
+  font-size: 0.9em;
+  width: 100%;
+}
+
+.preview-body th,
+.preview-body td {
+  border: 1px solid hsl(var(--border));
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.preview-body th {
+  background: hsl(var(--muted));
+  font-weight: 600;
+}
+
+.preview-frame {
+  border: none;
+  height: 100%;
+  width: 100%;
+}
+
+/* Full-screen overlay */
+.fs-overlay {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  left: 0;
+  padding: 24px;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 100;
+}
+
+.fs-panel {
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 90svh;
+  max-width: 1400px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.fs-topbar {
+  align-items: center;
+  border-bottom: 1px solid hsl(var(--border));
+  display: flex;
+  flex-shrink: 0;
+  justify-content: space-between;
+  padding: 12px 16px;
+}
+
+.fs-title {
+  color: hsl(var(--foreground));
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.fs-close {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  display: inline-flex;
+  padding: 4px;
+  transition:
+    color 0.15s,
+    background 0.15s;
+}
+
+.fs-close:hover {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+
+.fs-body {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.fs-prose {
+  margin: 0 auto;
+  max-width: 680px;
+  padding: 32px 24px;
+}

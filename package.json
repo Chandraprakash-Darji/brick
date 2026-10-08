@@ -4,17 +4,17 @@
   "private": true,
   "workspaces": [
     "packages/*",
-    "examples/basic",
     "examples/showcase",
     "examples/extensions",
-    "www"
+    "www",
+    "examples/pages"
   ],
   "scripts": {
     "prepare": "lefthook install",
     "check": "bun run lint && bun run format:check && bun run build && bun run typecheck && bun run test",
     "build": "bun run --filter @brickkit/core build && bun run --filter @brickkit/cli build",
     "release": "bun scripts/release.ts",
-    "test": "bun test",
+    "test": "bun test packages bench",
     "typecheck": "bun run --filter @brickkit/core typecheck && bun run --filter @brickkit/cli typecheck && bun run bench:typecheck",
     "bench": "bun bench/run-all.ts",
     "bench:smoke": "bun bench/run-all.ts --smoke",
@@ -30,7 +30,11 @@
     "lint": "oxlint .",
     "lint:fix": "oxlint --fix .",
     "format": "oxfmt .",
-    "format:check": "oxfmt --check ."
+    "format:check": "oxfmt --check .",
+    "pages:dev": "bun run build && bun run --cwd examples/pages dev",
+    "pages:test": "bun run build && bun run --cwd examples/pages test",
+    "pages:typecheck": "bun run build && bun run --cwd examples/pages typecheck",
+    "pages:build": "bun run build && bun run --cwd examples/pages build"
   },
   "devDependencies": {
     "@types/bun": "latest",

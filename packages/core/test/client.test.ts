@@ -100,6 +100,35 @@ describe("createBrickClient (typed HTTP client)", () => {
     );
   });
 
+  it("reads plain-text string actions and still rejects malformed JSON", async () => {
+    const echo = defineAction({
+      name: "echo",
+      input: t.Object({ message: t.String() }),
+      output: t.String(),
+      execute: async ({ input }) => input.message,
+    });
+    for (const text of ["Echo: hello", "true", "", '"quoted"']) {
+      const api = createBrickClient<{ pages: { echo: typeof echo } }>({
+        baseUrl: "http://localhost:4000",
+        fetch: async () =>
+          new Response(text, {
+            headers: { "content-type": "text/plain; charset=utf-8" },
+          }),
+      });
+      expect(await api.pages.echo({ message: text })).toBe(text);
+    }
+    const malformed = createBrickClient<AppServer>({
+      baseUrl: "http://localhost:4000",
+      fetch: async () =>
+        new Response("invalid JSON", {
+          headers: { "content-type": "application/json" },
+        }),
+    });
+    await expect(malformed.page.list({})).rejects.toBeInstanceOf(
+      BrickTransportError,
+    );
+  });
+
   it("sends resource list as GET with a query string and returns typed output", async () => {
     const { fetchImpl, calls } = mockFetch(() =>
       json({ pages: [{ id: "pg_1", title: "Hello" }], total: 1 }),

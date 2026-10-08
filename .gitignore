@@ -57,3 +57,5 @@ Thumbs.db
 docs/
 !/www/content/docs/
 !/www/src/routes/docs/
+!/examples/pages/src/routes/docs/
+!/examples/pages/src/content/docs/

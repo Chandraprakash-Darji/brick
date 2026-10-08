@@ -10,6 +10,8 @@ export default defineConfig({
   entry: ["src/index.ts", "src/client.ts", "src/pg.ts"],
   format: ["esm"],
   outDir: "dist",
+  // Keep shared declaration chunks from colliding with public entry files.
+  outputOptions: { chunkFileNames: "chunks/[name].js" },
   platform: "node",
   sourcemap: true,
 });

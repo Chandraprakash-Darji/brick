@@ -84,7 +84,7 @@ export interface BrickClientOptions {
     | Record<string, string>
     | (() => Record<string, string> | Promise<Record<string, string>>);
   /** `fetch` implementation. Defaults to `globalThis.fetch`. */
-  fetch?: typeof fetch;
+  fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
   /** Default signal applied to every call (per-call `signal` wins). */
   signal?: AbortSignal;
   /** Default per-call timeout in milliseconds (per-call `timeoutMs` wins). */
@@ -279,7 +279,7 @@ interface ResolvedClientOptions {
   baseUrl: string;
   prefix: string;
   headers?: BrickClientOptions["headers"];
-  fetch: typeof fetch;
+  fetch: NonNullable<BrickClientOptions["fetch"]>;
   signal?: AbortSignal;
   timeoutMs?: number;
 }

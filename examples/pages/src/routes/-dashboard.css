@@ -1,0 +1,231 @@
+/* Ported from app/src/routes/dashboard.vue <style scoped>. */
+.dashboard {
+  padding: 24px 32px;
+  max-width: 800px;
+}
+
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.dashboard-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  letter-spacing: -0.02em;
+}
+
+.dashboard-count {
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+  margin-top: 2px;
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border: none;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+
+.btn-primary:hover {
+  opacity: 0.88;
+}
+
+.dashboard-loading {
+  display: flex;
+  justify-content: center;
+  padding: 48px 0;
+}
+
+.loading-dots {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.loading-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: hsl(var(--muted-foreground));
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.loading-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.loading-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes pulse {
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 0;
+  gap: 0;
+  text-align: center;
+}
+
+.empty-icon {
+  color: hsl(var(--muted-foreground));
+  opacity: 0.4;
+  margin-bottom: 16px;
+}
+
+.empty-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+}
+
+.empty-sub {
+  font-size: 13px;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 20px;
+  line-height: 1.55;
+}
+
+.page-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.page-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid hsl(var(--border));
+  cursor: pointer;
+  transition: background 0.1s;
+  background: hsl(var(--card));
+}
+
+.page-row:last-child {
+  border-bottom: none;
+}
+
+.page-row:hover {
+  background: hsl(var(--muted));
+}
+
+.page-row-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.page-row-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 3px;
+}
+
+.page-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.page-slug {
+  font-family: var(--app-font-mono, monospace);
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  letter-spacing: 0.03em;
+}
+
+.badge--public {
+  background: color-mix(in oklch, hsl(var(--primary)) 12%, transparent);
+  color: hsl(var(--primary));
+}
+
+.badge--private {
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+
+.badge--type {
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  font-family: var(--app-font-mono, monospace);
+}
+
+.page-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    background 0.1s,
+    color 0.1s;
+}
+
+.action-btn:hover {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+
+.action-btn--danger:hover {
+  background: color-mix(in oklch, hsl(var(--destructive)) 10%, transparent);
+  color: hsl(var(--destructive));
+}

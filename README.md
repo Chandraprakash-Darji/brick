@@ -10,6 +10,21 @@ Install the public packages:
 bun add @brickkit/core @brickkit/cli
 ```
 
+The full pages app lives in `examples/pages` and uses local workspace packages,
+including the typed SDK. Try framework changes without publishing to npm:
+
+```sh
+bun install
+bun run pages:dev
+bun run pages:typecheck
+TEST_DATABASE_URL=postgresql://localhost:5432/drafton_test bun run pages:test
+```
+
+Pages requires Postgres; see [its setup and test instructions](examples/pages/README.md).
+`pages:dev` builds the framework and starts the combined web/API server on :5174.
+Rerun it after changing framework code. `bun run test` runs the framework and
+benchmark tests; the Postgres-backed app suite runs separately via `pages:test`.
+
 To release new versions from a clean, up-to-date `main` checkout:
 
 ```sh
@@ -39,8 +54,8 @@ Run `bun run check` for the package checks, or
 `bunx --no-install lefthook run pre-push --all-files` to include website checks.
 
 Every package, example, and the website provides `bun run lint`,
-`bun run lint:fix`, `bun run fmt`, and `bun run fmt:check`. Run these from the
+`bun run lint:fix`, `bun run format`, and `bun run format:check`. Run these from the
 package directory, or from the repository root to check or format everything.
 Shared configuration lives in `.oxlintrc.json` and `.oxfmtrc.json`; the website
 also enables its React and import lint rules. Generated files and build output
-are excluded. Commit hooks report formatting issues; run `bun run fmt` to fix them.
+are excluded. Commit hooks report formatting issues; run `bun run format` to fix them.

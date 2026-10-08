@@ -1,0 +1,152 @@
+import { requireMcpAuth } from "@better-auth/mcp";
+
+import { getAuth, type PagesAuth } from "./auth";
+import { baseUrlSecret, mcpResourceSecret } from "./secrets";
+import { callTool, toolList } from "./services/pages/mcp";
+
+// MCP JSON-RPC transport over HTTP (Go `server/mcp` parity): bearer tokens
+// minted by the better-auth `mcp()` OAuth plugin authorize `tools/call`, and
+// missing/invalid tokens yield a 401 with a `WWW-Authenticate` header
+// pointing at the protected-resource metadata.
+
+const PROTOCOL_VERSION = "2025-06-18";
+const SERVER_INFO = { name: "pages-agent", version: "0.1.0" };
+
+export function mcpResource(): string {
+  return mcpResourceSecret.value() as string;
+}
+
+/** RFC 9728 protected-resource metadata document (Go parity shape). */
+export function protectedResourceMetadata(): {
+  authorization_servers: string[];
+  resource: string;
+} {
+  return {
+    authorization_servers: [baseUrlSecret.value() as string],
+    resource: mcpResource(),
+  };
+}
+
+function jsonRpcResult(id: unknown, result: unknown): Response {
+  return Response.json({ id, jsonrpc: "2.0", result });
+}
+
+function jsonRpcError(id: unknown, code: number, message: string): Response {
+  return Response.json({ error: { code, message }, id, jsonrpc: "2.0" });
+}
+
+function toText(result: unknown): string {
+  return typeof result === "string" ? result : JSON.stringify(result, null, 2);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function handleJsonRpc(
+  request: Request,
+  claims: { sub?: string },
+): Promise<Response> {
+  let body: { id?: unknown; method?: string; params?: any };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return jsonRpcError(null, -32700, "parse error");
+  }
+  const { id = null, method, params } = body ?? {};
+
+  switch (method) {
+    case "initialize":
+      return jsonRpcResult(id, {
+        capabilities: { tools: {} },
+        protocolVersion: PROTOCOL_VERSION,
+        serverInfo: SERVER_INFO,
+      });
+    case "notifications/initialized":
+      return new Response(null, { status: 202 });
+    case "tools/list":
+      return jsonRpcResult(id, { tools: toolList() });
+    case "tools/call": {
+      const name = params?.name;
+      const args = params?.arguments ?? {};
+      const userId = typeof claims?.sub === "string" ? claims.sub : "";
+      try {
+        const result = await callTool(
+          name,
+          args,
+          userId ? { user: { id: userId } } : undefined,
+        );
+        return jsonRpcResult(id, {
+          content: [{ text: toText(result), type: "text" }],
+        });
+      } catch (error) {
+        if (errorMessage(error).startsWith("unknown tool:")) {
+          return jsonRpcError(id, -32602, errorMessage(error));
+        }
+        return jsonRpcResult(id, {
+          content: [{ text: errorMessage(error), type: "text" }],
+          isError: true,
+        });
+      }
+    }
+    default:
+      return jsonRpcError(id, -32601, `method not found: ${method}`);
+  }
+}
+
+/**
+ * Bearer-protecting `/mcp` handler. Verifies the JWT against the
+ * authorization server JWKS (signature, issuer, audience, expiry);
+ * unauthenticated requests get a JSON-RPC 401 with the RFC 9728
+ * `WWW-Authenticate` challenge.
+ */
+export function createMcpHandler(auth: PagesAuth = getAuth()) {
+  return requireMcpAuth(
+    auth,
+    (request, claims) => handleJsonRpc(request, claims),
+    { resource: mcpResource() },
+  );
+}
+
+/** Forward a root discovery request into the better-auth handler. */
+async function forwardToAuth(
+  request: Request,
+  targetPath: string,
+): Promise<Response> {
+  const url = new URL(request.url);
+  url.pathname = targetPath;
+  return getAuth().handler(new Request(url.toString(), request));
+}
+
+function discoveryResponse(request: Request, targetPath: string) {
+  return forwardToAuth(request, targetPath);
+}
+
+/** Mount the MCP transport + OAuth discovery routes (Go `main.go` parity). */
+export function registerMcpRoutes(app: {
+  get(path: string, handler: (ctx: any) => unknown): unknown;
+  post(path: string, handler: (ctx: any) => unknown): unknown;
+}): void {
+  const mcpHandler = createMcpHandler();
+  app.post("/mcp", ({ request }: any) => mcpHandler(request));
+
+  const metadata = () => Response.json(protectedResourceMetadata());
+  app.get("/.well-known/oauth-protected-resource", metadata);
+  app.get("/.well-known/oauth-protected-resource/mcp", metadata);
+
+  // MCP clients discover the AS from the issuer URL and look for metadata at
+  // the root /.well-known paths. Proxy them to the plugin endpoints under
+  // /api/auth.
+  app.get("/jwks", ({ request }: any) =>
+    discoveryResponse(request, "/api/auth/jwks"),
+  );
+  app.get("/.well-known/oauth-authorization-server", ({ request }: any) =>
+    discoveryResponse(
+      request,
+      "/api/auth/.well-known/oauth-authorization-server",
+    ),
+  );
+  app.get("/.well-known/openid-configuration", ({ request }: any) =>
+    discoveryResponse(request, "/api/auth/.well-known/openid-configuration"),
+  );
+}

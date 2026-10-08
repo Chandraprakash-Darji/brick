@@ -90,4 +90,4 @@ With `ownerField: "userId"`:
 - **List** adds `WHERE user_id = ctx.user.id` when a user is present; anonymous callers see unscoped rows.
 - **Get/update/delete** compare the row's owner against `ctx.user.id` and throw `FORBIDDEN` on mismatch (rows with no owner stay readable).
 
-Public surfaces (like the `getPublicPage` reader in `examples/basic`) are separate custom actions with no `authorize` and no owner filtering — they enforce visibility themselves (e.g. `WHERE isPublic = true`).
+Public surfaces (like the `getPublicPage` reader in `examples/pages`) are separate custom actions with no `authorize` and no owner filtering — they enforce visibility themselves (e.g. `WHERE isPublic = true`).
