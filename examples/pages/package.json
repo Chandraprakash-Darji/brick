@@ -12,7 +12,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-    "db:schema": "bun ./node_modules/@better-auth/cli/dist/index.mjs generate --config src/api/auth/cli.ts --output src/api/auth/schema.ts -y && bun scripts/db-schema-fix.ts",
+    "db:schema": "auth generate --config src/api/auth/cli.ts --output src/api/auth/schema.ts -y && bun scripts/db-schema-fix.ts",
     "test": "bun test test"
   },
   "dependencies": {
@@ -22,8 +22,8 @@
     "@brickkit/cli": "workspace:*",
     "@brickkit/core": "workspace:*",
     "bcryptjs": "^3.0.2",
-    "better-auth": "^1.7.5",
-    "drizzle-orm": "0.39.3",
+    "better-auth": "^1.7.7",
+    "drizzle-orm": "0.45.2",
     "postgres": "^3.4.9",
     "@radix-ui/react-dialog": "^1.1.23",
     "@radix-ui/react-label": "^2.1.15",
@@ -49,9 +49,9 @@
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
-    "@better-auth/cli": "^1.4.21",
+    "auth": "^1.7.7",
     "@types/bun": "latest",
-    "drizzle-kit": "0.30.4",
+    "drizzle-kit": "0.31.10",
     "typescript": "~5.9.3",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.1.4",
