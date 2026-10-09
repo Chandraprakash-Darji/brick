@@ -10,11 +10,7 @@ import {
   ActionExecutionError,
   ValidationError,
 } from "@brickkit/core";
-import {
-  createBrickClient,
-  defineAppContract,
-  type BrickClient,
-} from "@brickkit/core/client";
+import { createBrickClient, type BrickClient } from "@brickkit/core/client";
 import { brick } from "../src/server";
 
 const notesTable = sqliteTable("typed_client_notes", {
@@ -45,7 +41,7 @@ describe("Typed client end-to-end (@brickkit/cli)", () => {
     },
   });
 
-  const contract = defineAppContract({
+  const contract = {
     billing: { charge: chargeAction },
     // Resource actions are `Action<any, …>` at the type level; they still
     // exercise the REST URL conventions at runtime.
@@ -56,7 +52,7 @@ describe("Typed client end-to-end (@brickkit/cli)", () => {
       update: null as never,
       delete: null as never,
     },
-  });
+  };
   type AppServer = typeof contract;
 
   beforeEach(() => {

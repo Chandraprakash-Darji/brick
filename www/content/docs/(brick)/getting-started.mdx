@@ -79,15 +79,10 @@ export const pagesResource = pagesService.resource({
 ## Serve it
 
 ```ts
-import { brickFromContract } from "@brickkit/cli";
-import { defineAppContract } from "@brickkit/core/client";
-import { pagesResource } from "./services/pages/service";
+import { brick } from "@brickkit/cli";
+import { pagesService } from "./services/pages/service";
 
-// One contract types the frontend client and builds the server.
-export const contract = defineAppContract({ page: pagesResource });
-export type AppServer = typeof contract;
-
-const app = brickFromContract(contract);
+const app = brick({ services: [pagesService] });
 app.listen(4000);
 console.log("Brick-TS on http://localhost:4000");
 ```

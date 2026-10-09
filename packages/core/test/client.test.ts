@@ -2,7 +2,6 @@ import { describe, it, expect } from "bun:test";
 import { defineAction, t, ActionExecutionError, ValidationError } from "../src";
 import {
   createBrickClient,
-  defineAppContract,
   BrickTransportError,
   BrickServerError,
   type InferActionInput,
@@ -42,10 +41,10 @@ const charge = defineAction({
   execute: async () => ({ ok: true }),
 });
 
-const contract = defineAppContract({
+const contract = {
   page: { list: listPages, create: createPage },
   billing: { charge },
-});
+};
 type AppServer = typeof contract;
 
 interface Captured {

@@ -9,11 +9,7 @@ import {
   syncSchema,
   t,
 } from "../src";
-import {
-  createBrickClient,
-  defineAppContract,
-  type InferActionInput,
-} from "../src/client";
+import { createBrickClient, type InferActionInput } from "../src/client";
 
 const rows = sqliteTable("resource_type_rows", {
   id: text("id").primaryKey(),
@@ -74,7 +70,7 @@ type IsAny<T> = 0 extends 1 & T ? true : false;
 
 function _typeAssertions() {
   const { resource, service } = makeResource();
-  const contract = defineAppContract({ row: resource });
+  const contract = { row: resource };
   const api = createBrickClient<typeof contract>({
     baseUrl: "http://localhost:4000",
   });

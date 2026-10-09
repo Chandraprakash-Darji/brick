@@ -23,7 +23,7 @@ import { ActionExecutionError, ValidationError } from "./types";
  * // server.ts (backend)
  * export const listPages = pagesService.action({ name: "page.list", ... });
  * export const createPage = pagesService.action({ name: "page.create", ... });
- * export const contract = defineAppContract({ page: { list: listPages, create: createPage } });
+ * export const contract = { page: { list: listPages, create: createPage } };
  * export type AppServer = typeof contract;
  * ```
  *
@@ -91,7 +91,7 @@ export interface BrickClientOptions {
   /** Default per-call timeout in milliseconds (per-call `timeoutMs` wins). */
   timeoutMs?: number;
   /**
-   * The runtime contract object (same value `brickFromContract` receives).
+   * Runtime action/resource metadata for exact client routing.
    * When provided, routes resolve from bound metadata — each action's
    * `serviceName`/`name` and each resource's `name` — so contract keys can be
    * named freely. Omit it for pure type-only usage (`import type`), in which
@@ -263,20 +263,6 @@ export type BrickClient<T> =
         : T extends object
           ? { [K in keyof T]: BrickClient<T[K]> }
           : T;
-
-/**
- * Identity helper that preserves literal action types when assembling the
- * shared contract object on the backend:
- * ```ts
- * export const contract = defineAppContract({ page: { list: listPages } });
- * export type AppServer = typeof contract;
- * ```
- */
-export function defineAppContract<T extends Record<string, any>>(
-  contract: T,
-): T {
-  return contract;
-}
 
 const RESOURCE_OPS = new Set(["list", "get", "create", "update", "delete"]);
 
@@ -470,9 +456,10 @@ function planRequest(
     if (!configuredPath.startsWith("/")) {
       throw new Error("[Brick-TS client] Action paths must start with '/'.");
     }
-    const record = { ...((input ?? {}) as Record<string, unknown>) };
+    const source = { ...((input ?? {}) as Record<string, unknown>) };
+    const record = { ...source };
     actionPath = actionPath.replace(/:([^/]+)/g, (_match, key: string) => {
-      const value = Object.hasOwn(record, key) ? record[key] : undefined;
+      const value = Object.hasOwn(source, key) ? source[key] : undefined;
       if (value === undefined || value === null || value === "") {
         throw new Error(`[Brick-TS client] Missing path parameter '${key}'.`);
       }

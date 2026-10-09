@@ -57,29 +57,28 @@ This map is sample data. It does not persist between process restarts. For persi
 Create `src/contract.ts`:
 
 ```ts
-import { defineAppContract } from "@brickkit/core/client";
 import { getUser } from "./users";
 
-export const contract = defineAppContract({
+export const contract = {
   users: { getUser },
-});
+};
 
 export type UsersApi = typeof contract;
 ```
 
 The contract preserves the action's types. Your frontend will import `UsersApi` as a type, which keeps the backend module out of the browser bundle.
 
-The contract describes the client API and identifies participating services. It does not limit which registered actions those services expose. Keep authorization on your action definitions when adding private operations.
+The contract describes the client API. Build the backend directly from services; the contract does not limit which registered actions they expose. Keep authorization on your action definitions when adding private operations.
 
 ## Start the HTTP server
 
 Create `src/server.ts`:
 
 ```ts
-import { brickFromContract } from "@brickkit/cli";
-import { contract } from "./contract";
+import { brick } from "@brickkit/cli";
+import { usersService } from "./users";
 
-const app = brickFromContract(contract, { port: 4000 });
+const app = brick({ services: [usersService], port: 4000 });
 app.listen(4000);
 ```
 

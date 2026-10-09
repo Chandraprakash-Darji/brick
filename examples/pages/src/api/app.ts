@@ -1,8 +1,7 @@
-import { brickFromContract } from "@brickkit/cli";
+import { brick } from "@brickkit/cli";
 import { and, eq } from "@brickkit/core";
 
 import { getAuth } from "./auth";
-import { contract } from "./contract";
 import { registerMcpRoutes } from "./mcp";
 import { portSecret } from "./secrets";
 import {
@@ -21,14 +20,15 @@ const NOT_FOUND_HTML =
 
 // buildApp wires the Brick-TS pages service mesh plus the raw HTML route
 // GET /p/:slug (public page viewer); GET /reference (Scalar API docs) and
-// request logging come from the SDK (brickFromContract options below).
+// request logging come from the SDK (brick options below).
 // CORS headers mirror the Go middleware in server/main.go (owned by A1).
 //
 // Side-effect free: constructs (but never starts) the app, so embedders
 // (TanStack Start server entry) can import this module safely.
 export function buildApp() {
   const port = portSecret.require();
-  const app = brickFromContract(contract, {
+  const app = brick({
+    services: [pagesService],
     description:
       "Publishing workspace engine: pages, themes, and public reading surface",
     port: port,

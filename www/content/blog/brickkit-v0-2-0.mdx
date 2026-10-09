@@ -47,6 +47,8 @@ The rename does not introduce a different server implementation. The existing op
 
 Implementation: [server.ts](https://github.com/brick-org/brick/blob/v0.2.0/packages/cli/src/server.ts), [CLI exports](https://github.com/brick-org/brick/blob/v0.2.0/packages/cli/src/index.ts).
 
+> API update: the contract-based server helpers described below have been removed. Use `brick({ services })` for server construction; see the current Typed Client guide for client setup.
+
 ## 2. A typed HTTP client derived from the server contract
 
 The framework now includes `createBrickClient`, an HTTP client whose input and output types derive from actual action and resource definitions.
