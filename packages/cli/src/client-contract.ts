@@ -204,34 +204,49 @@ class SchemaTypes {
   generate(root: any): string {
     // IDs belong to this schema document. Separate actions may reuse the same ID.
     const ids = new Map<string, any>();
-    const references: string[] = [];
-    const visited = new Set<unknown>();
-    const visit = (schema: any) => {
-      if (!schema || typeof schema !== "object" || visited.has(schema)) return;
-      visited.add(schema);
-      if (schema.$id) ids.set(schema.$id, schema);
-      if (schema.$ref) references.push(schema.$ref);
-      for (const key of [
-        "properties",
-        "patternProperties",
-        "$defs",
-        "definitions",
-      ]) {
-        for (const child of Object.values(schema[key] ?? {})) visit(child);
-      }
-      for (const key of ["anyOf", "oneOf", "allOf", "prefixItems"]) {
-        for (const child of schema[key] ?? []) visit(child);
-      }
-      for (const key of ["items", "additionalProperties", "not"]) {
-        if (Array.isArray(schema[key])) schema[key].forEach(visit);
-        else visit(schema[key]);
+    const references: { ref: string; base: any }[] = [];
+    const resources = new Map<unknown, any>();
+    const active = new Set<unknown>();
+    const visit = (schema: any, base: any) => {
+      if (!schema || typeof schema !== "object" || active.has(schema)) return;
+      const currentBase =
+        typeof schema.$id === "string" && schema.$id ? schema : base;
+      if (!resources.has(schema)) resources.set(schema, currentBase);
+      if (typeof schema.$ref === "string")
+        references.push({ ref: schema.$ref, base: currentBase });
+      active.add(schema);
+      try {
+        if (typeof schema.$id === "string" && schema.$id)
+          ids.set(schema.$id, schema);
+        for (const key of [
+          "properties",
+          "patternProperties",
+          "$defs",
+          "definitions",
+        ]) {
+          for (const child of Object.values(schema[key] ?? {}))
+            visit(child, currentBase);
+        }
+        for (const key of ["anyOf", "oneOf", "allOf", "prefixItems"]) {
+          for (const child of schema[key] ?? []) visit(child, currentBase);
+        }
+        for (const key of ["items", "additionalProperties", "not"]) {
+          if (Array.isArray(schema[key]))
+            schema[key].forEach((child: any) => visit(child, currentBase));
+          else visit(schema[key], currentBase);
+        }
+      } finally {
+        active.delete(schema);
       }
     };
-    visit(root);
+    visit(root, root);
 
-    const resolve = (reference: string): any => {
-      const [id, fragment] = reference.split("#");
-      let target = id ? ids.get(id) : root;
+    const resolve = (reference: string, base: any): any => {
+      const hashIndex = reference.indexOf("#");
+      const id = hashIndex === -1 ? reference : reference.slice(0, hashIndex);
+      const fragment =
+        hashIndex === -1 ? undefined : reference.slice(hashIndex + 1);
+      let target = id ? ids.get(id) : base;
       if (fragment) {
         if (!fragment.startsWith("/")) return undefined;
         try {
@@ -250,36 +265,49 @@ class SchemaTypes {
         : undefined;
     };
     const targets = new Set(
-      references.map(resolve).filter((value) => value !== undefined),
+      references
+        .map(({ ref, base }) => resolve(ref, base))
+        .filter((value) => value !== undefined),
     );
     const names = new Map<any, string>();
-    const emit = (schema: any, inline = false): string => {
+    const emit = (schema: any, inline = false, base: any = root): string => {
       if (schema === undefined || schema === true) return "unknown";
       if (schema === false || (schema.not && !Object.keys(schema.not).length))
         return "never";
+      const currentBase =
+        schema &&
+        typeof schema === "object" &&
+        typeof schema.$id === "string" &&
+        schema.$id
+          ? schema
+          : base;
       if (!inline && targets.has(schema)) {
         const existing = names.get(schema);
         if (existing) return existing;
         // Titles provide readable names; generated TypeBox IDs remain usable fallbacks.
         const hint = schema.title ?? schema.$id ?? "Schema";
-        let base = String(hint).replace(/[^a-zA-Z0-9_$]/g, "_");
-        if (!/^[a-zA-Z_$]/.test(base)) base = `Schema_${base}`;
-        base = `Brick${base}`;
-        let name = base;
+        let nameBase = String(hint).replace(/[^a-zA-Z0-9_$]/g, "_");
+        if (!/^[a-zA-Z_$]/.test(nameBase)) nameBase = `Schema_${nameBase}`;
+        nameBase = `Brick${nameBase}`;
+        let name = nameBase;
         for (let suffix = 2; this.names.has(name); suffix++)
-          name = `${base}_${suffix}`;
+          name = `${nameBase}_${suffix}`;
         this.names.add(name);
         names.set(schema, name);
         // Reserve the alias before its body is rendered, so recursive refs terminate.
         this.aliases.set(name, "");
-        this.aliases.set(name, emit(schema, true));
+        this.aliases.set(name, emit(schema, true, currentBase));
         return name;
       }
       if (schema.$ref) {
-        const target = resolve(schema.$ref);
+        const target = resolve(schema.$ref, currentBase);
         if (target === undefined)
           throw new Error(`unresolved schema reference '${schema.$ref}'`);
-        return emit(target);
+        const targetBase =
+          target && typeof target === "object"
+            ? (resources.get(target) ?? root)
+            : currentBase;
+        return emit(target, false, targetBase);
       }
       if (Object.hasOwn(schema, "const")) return JSON.stringify(schema.const);
       if (schema.enum)
@@ -289,9 +317,9 @@ class SchemaTypes {
             .join(" | ") || "never"
         );
       if (schema.anyOf || schema.oneOf)
-        return `(${(schema.anyOf ?? schema.oneOf).map((child: any) => emit(child)).join(" | ")})`;
+        return `(${(schema.anyOf ?? schema.oneOf).map((child: any) => emit(child, false, currentBase)).join(" | ")})`;
       if (schema.allOf)
-        return `(${schema.allOf.map((child: any) => emit(child)).join(" & ")})`;
+        return `(${schema.allOf.map((child: any) => emit(child, false, currentBase)).join(" & ")})`;
       switch (schema.type) {
         case "string":
           return "string";
@@ -307,18 +335,20 @@ class SchemaTypes {
           return "undefined";
         case "array":
           if (Array.isArray(schema.items))
-            return `[${schema.items.map((child: any) => emit(child)).join(", ")}]`;
-          return `Array<${emit(schema.items)}>`;
+            return `[${schema.items.map((child: any) => emit(child, false, currentBase)).join(", ")}]`;
+          return `Array<${emit(schema.items, false, currentBase)}>`;
         case "object": {
           const properties = Object.entries(schema.properties ?? {}).map(
             ([key, value]) =>
-              `${JSON.stringify(key)}${schema.required?.includes(key) ? "" : "?"}: ${emit(value)};`,
+              `${JSON.stringify(key)}${schema.required?.includes(key) ? "" : "?"}: ${emit(value, false, currentBase)};`,
           );
           const patterns = Object.values(schema.patternProperties ?? {});
           const indexType = patterns.length
-            ? patterns.map((child) => emit(child)).join(" | ")
+            ? patterns
+                .map((child) => emit(child, false, currentBase))
+                .join(" | ")
             : schema.additionalProperties
-              ? emit(schema.additionalProperties)
+              ? emit(schema.additionalProperties, false, currentBase)
               : undefined;
           const object = `{ ${properties.join(" ")} }`;
           if (indexType) {
