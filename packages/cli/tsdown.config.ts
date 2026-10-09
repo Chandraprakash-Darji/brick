@@ -7,7 +7,7 @@ export default defineConfig({
   dts: true,
   fixedExtension: false,
   hash: false,
-  entry: ["src/index.ts", "src/bin.ts", "src/compiler.ts"],
+  entry: ["src/index.ts", "src/bin.ts", "src/compiler.ts", "src/vite.ts"],
   format: ["esm"],
   outDir: "dist",
   platform: "node",

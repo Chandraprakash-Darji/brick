@@ -65,3 +65,32 @@ bun dist/brick/server.js
 
 See [the compilation plan and artifact contract](COMPILER.md) for implemented
 stages, limitations and the next optimizations.
+
+## Vite integration
+
+Use `@brickkit/cli/vite` with an entry module whose default export is a
+`BrickApp`. The filename is unrestricted; the entry constructs the app without
+calling `.listen()`:
+
+```ts
+// src/api/app.ts
+import { brick } from "@brickkit/cli";
+import { pagesService } from "./services";
+
+export default brick({ services: [pagesService] });
+```
+
+```ts
+// vite.config.ts
+import { brickClient } from "@brickkit/cli/vite";
+
+export default defineConfig({
+  plugins: [brickClient({ entry: "./src/api/app.ts" })],
+});
+```
+
+Server code can import the app from `virtual:brick-app`; Vite tracks the entry
+and its dependencies for hot reload. Browser imports of this server module are
+rejected. Add `/// <reference types="@brickkit/cli/vite/client" />` to your
+Vite environment declarations for its TypeScript type. This integration uses
+Vite 8 and is isolated from the normal server entry point.
