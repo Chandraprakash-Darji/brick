@@ -31,6 +31,7 @@ it("emits a frozen IR and a synchronous handler with no input/context/auth stage
   const service = defineService("simple");
   service.action({
     name: "getReady",
+    method: "GET",
     execute: ({ ctx }) => ({ ok: true, request: ctx.requestId }),
   });
   const compilation = compileBrickApplication({ services: [service] });
@@ -60,8 +61,9 @@ it("matches generic route behavior for input precedence, coercion, schema errors
       };
     },
   });
-  service.action({
+  const getValue = service.action({
     name: "getValue",
+    method: "GET",
     path: "/custom/:id",
     input: t.Object({
       id: t.String(),
@@ -81,6 +83,12 @@ it("matches generic route behavior for input precedence, coercion, schema errors
       order.push("execute");
       return input;
     },
+  });
+  service.action({
+    ...getValue.config,
+    name: "getValuePost",
+    method: "POST",
+    path: "/custom-post/:id",
   });
   service.action({
     name: "badOutput",
@@ -117,7 +125,7 @@ it("matches generic route behavior for input precedence, coercion, schema errors
       { "x-user": "alice" },
     ],
     [
-      "/custom/path?count=4&enabled=1&id=query",
+      "/custom-post/path?count=4&enabled=1&id=query",
       "POST",
       { id: "body", count: 3, enabled: false },
       { "x-user": "alice" },
@@ -129,7 +137,7 @@ it("matches generic route behavior for input precedence, coercion, schema errors
       { "x-user": "alice" },
     ],
     ["/custom/path?count=2&enabled=1", "GET"],
-    ["/api/secure/getValue", "POST", {}],
+    ["/custom-post/path", "POST", {}, { "x-user": "alice" }],
     ["/api/secure/badOutput", "POST"],
     ["/api/secure/knownError", "POST"],
     ["/api/secure/broken", "POST"],
@@ -153,6 +161,7 @@ it("isolates request contexts and maps Promise/thenable rejections", async () =>
   });
   service.action({
     name: "getUser",
+    method: "GET",
     execute: async ({ ctx }) => {
       await Bun.sleep(1);
       return { user: ctx.userId };
@@ -161,6 +170,7 @@ it("isolates request contexts and maps Promise/thenable rejections", async () =>
   const plain = defineService("plain");
   plain.action({
     name: "getThenable",
+    method: "GET",
     output: t.Object({ ok: t.Boolean() }),
     execute: () =>
       ({
@@ -170,6 +180,7 @@ it("isolates request contexts and maps Promise/thenable rejections", async () =>
   });
   plain.action({
     name: "getRejected",
+    method: "GET",
     execute: () => Promise.reject(new Error("rejected")),
   });
   const app = brick({ services: [service, plain], requestLogging: false });
@@ -198,6 +209,7 @@ it("loads emitted handler functions and rejects stale schemas rather than using 
   const service = defineService("emitted");
   const action = service.action({
     name: "getItem",
+    method: "GET",
     input: t.Object({ id: t.String() }),
     execute: ({ input }) => input,
   });
@@ -241,13 +253,19 @@ it("reports route collisions and safely quotes names/keys in generated code", as
   const service = defineService("quoted");
   service.action({
     name: "get'Quote",
+    method: "GET",
     path: "/shared",
     input: t.Object({ "odd'key": t.Number() }),
     execute: ({ input }) => input,
   });
-  service.action({ name: "getOther", path: "/shared", execute: () => "other" });
+  service.action({
+    name: "getOther",
+    path: "/shared",
+    method: "GET",
+    execute: () => "other",
+  });
   const compilation = compileBrickApplication({ services: [service] });
-  expect(compilation.ir.diagnostics.length).toBe(2);
+  expect(compilation.ir.diagnostics.length).toBe(1);
   const route = compilation.routes.find(
     (route) => route.ir.path === "/shared" && route.ir.method === "GET",
   )!;

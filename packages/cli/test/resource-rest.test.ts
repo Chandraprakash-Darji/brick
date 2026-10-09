@@ -47,6 +47,7 @@ describe("REST Route Binding for Resources (@brickkit/cli)", () => {
     // Custom action with path parameters
     notesService.action({
       name: "customLookup",
+      method: "GET",
       path: "/api/notes-custom/:noteId",
       input: t.Object({ noteId: t.String() }),
       execute: async ({ input }) => {

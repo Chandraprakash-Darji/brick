@@ -19,7 +19,7 @@ const spec = generateOpenApiSpec({
 });
 ```
 
-Options: `title` (default `"Brick-TS API Mesh"`), `version` (`"1.0.0"`), `description`, `prefix` (`"/api"`), `services`, `registry`. Each action becomes `POST /api/{service}/{action}`; read-like actions (`get*`, `list*`, `find*`, `read*`) also get a `GET` variant with query parameters derived from the input schema. Actions with `authorize` advertise `bearerAuth`; per-action `errors:` entries become named response schemas.
+Options: `title` (default `"Brick-TS API Mesh"`), `version` (`"1.0.0"`), `description`, `prefix` (`"/api"`), `services`, `registry`. Each action exposes one operation at its configured `path` (default `/api/{service}/{action}`) and `method` (default `POST`). Custom paths replace the default action path; action names do not infer extra methods. Path parameters are documented as required parameters; `GET` and `DELETE` use query parameters for the remaining input. Actions with `authorize` advertise `bearerAuth`; per-action `errors:` entries become named response schemas.
 
 ## Served paths
 

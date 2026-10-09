@@ -46,6 +46,19 @@ brick info
 
 Source: <https://github.com/Chandraprakash-Darji/brick>.
 
+## Action routes
+
+Each action exposes exactly one route: `method` defaults to POST, and `path`
+defaults to `/api/{service}/{action}` (or your configured prefix). Explicit
+methods are honored regardless of the action name. A custom `path` includes
+its own prefix and replaces the default path. OpenAPI describes the same
+method and path, including path parameters.
+
+To expose a read action over GET, declare `method: "GET"`. Action names beginning
+with `get`, `list`, `find`, or `read` no longer add a GET alias. Custom paths no
+longer expose default action aliases or an additional method. Resource CRUD
+routes keep their REST methods.
+
 ## Compiler
 
 The server compiles specialized JavaScript handlers for all resource CRUD and

@@ -13,6 +13,7 @@ function makeService() {
 
   const listItems = defineAction({
     name: "listItems",
+    method: "GET",
     output: t.Object({ items: t.Array(t.String()) }),
     execute: async () => ({ items: ["a"] }),
   });
