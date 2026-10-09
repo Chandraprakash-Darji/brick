@@ -76,9 +76,8 @@ describe("pages CRUD (owner-scoped Postgres)", () => {
     await call(createPage, { content: "c", slug: "b-1", title: "B1" }, bob);
     const aliceList = await call(listPages, {}, alice);
     const bobList = await call(listPages, {}, bob);
-    const alicePages =
-      aliceList.pages ?? aliceList.items ?? aliceList.data ?? [];
-    const bobPages = bobList.pages ?? bobList.items ?? bobList.data ?? [];
+    const alicePages = aliceList.items ?? [];
+    const bobPages = bobList.items ?? [];
     expect(aliceList.total ?? alicePages.length).toBe(2);
     expect(bobList.total ?? bobPages.length).toBe(1);
     expect(bobPages[0]!.slug).toBe("b-1");
@@ -174,10 +173,10 @@ describe("pages CRUD (owner-scoped Postgres)", () => {
       alice,
     );
     const all = await call(listPages, {}, alice);
-    expect(all.total ?? all.pages?.length).toBe(3);
+    expect(all.total).toBe(3);
     const pubOnly = await call(listPages, { isPublic: true }, alice);
-    const pages = pubOnly.pages ?? pubOnly.items ?? [];
-    expect(pubOnly.total ?? pages.length).toBe(2);
+    const pages = pubOnly.items ?? [];
+    expect(pubOnly.total).toBe(2);
     for (const p of pages) {
       const isPub = (p as any).isPublic ?? (p as any).is_public;
       expect(isPub).toBe(true);

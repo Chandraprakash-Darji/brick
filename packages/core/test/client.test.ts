@@ -130,7 +130,7 @@ describe("createBrickClient (typed HTTP client)", () => {
 
   it("sends resource list as GET with a query string and returns typed output", async () => {
     const { fetchImpl, calls } = mockFetch(() =>
-      json({ pages: [{ id: "pg_1", title: "Hello" }], total: 1 }),
+      json({ items: [{ id: "pg_1", title: "Hello" }], total: 1 }),
     );
     const api = createBrickClient<AppServer>({
       baseUrl: "http://localhost:4000",
@@ -145,7 +145,7 @@ describe("createBrickClient (typed HTTP client)", () => {
       "http://localhost:4000/api/page?limit=10&sort=-createdAt",
     );
     expect(pages.total).toBe(1);
-    expect(pages.pages[0]!.title).toBe("Hello");
+    expect(pages.items[0]!.title).toBe("Hello");
   });
 
   it("sends resource create as POST with a JSON body", async () => {

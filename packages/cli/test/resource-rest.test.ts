@@ -84,7 +84,7 @@ describe("REST Route Binding for Resources (@brickkit/cli)", () => {
     expect(listRes.status).toBe(200);
     const listData = await listRes.json();
     expect(listData.total).toBe(1);
-    expect(listData.notes[0].title).toBe("My First Note");
+    expect(listData.items[0].title).toBe("My First Note");
 
     // 3. GET /api/note/:id
     const getRes = await app.handle(
