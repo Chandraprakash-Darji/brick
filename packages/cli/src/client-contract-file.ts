@@ -1,5 +1,6 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { generateClientContract } from "./client-contract";
 import type { BrickApp } from "./endpoints";
@@ -25,7 +26,16 @@ export async function writeClientContract(
   });
   if (previous !== source) {
     await mkdir(dirname(output), { recursive: true });
-    await writeFile(output, source);
+    const temporary = join(
+      dirname(output),
+      `.brick-contract-${randomUUID()}.tmp`,
+    );
+    try {
+      await writeFile(temporary, source, { flag: "wx" });
+      await rename(temporary, output);
+    } finally {
+      await rm(temporary, { force: true });
+    }
   }
   return output;
 }

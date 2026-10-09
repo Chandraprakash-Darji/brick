@@ -1,5 +1,5 @@
 import { expect, it } from "bun:test";
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 const cli = resolve(import.meta.dir, "../src/bin.ts");
@@ -24,12 +24,15 @@ it("generates a browser-safe contract with default/custom output and preserves u
     resolve(import.meta.dir, "../.brick-vite-test-cli-"),
   );
   try {
+    await mkdir(join(root, "_brick"));
+    await Bun.write(join(root, "_brick/contract.ts"), "previous contract\n");
     const result = await run(root, entry);
     expect(result.code).toBe(0);
     expect(result.stderr).toBe("");
     const output = join(root, "_brick/contract.ts");
     expect(result.stdout).toContain(output);
     const source = await Bun.file(output).text();
+    expect(await readdir(join(root, "_brick"))).toEqual(["contract.ts"]);
     expect(source).toContain("BrickClientAction<");
     expect(source).toContain("/v2/records/:doctype/value");
     expect(source).not.toContain("private_tool");
@@ -81,6 +84,68 @@ it("rejects invalid arguments/default exports and never overwrites the app entry
     );
     expect(await Bun.file(invalid).text()).toBe("export default {};\n");
     expect((await run(root, join(root, "missing.ts"))).code).toBe(1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("preserves the previous contract and removes temporary files after write or rename failures", async () => {
+  const root = await mkdtemp(
+    resolve(import.meta.dir, "../.brick-vite-test-cli-"),
+  );
+  try {
+    const directory = join(root, "output");
+    await mkdir(directory);
+    const output = join(directory, "contract.ts");
+    await Bun.write(output, "previous contract\n");
+    for (const operation of ["writeFile", "rename"]) {
+      const preload = join(root, "failure.ts");
+      await Bun.write(
+        preload,
+        `
+import { mock } from "bun:test";
+import * as fs from "node:fs/promises";
+const originalWrite = fs.writeFile;
+const originalRename = fs.rename;
+mock.module("node:fs/promises", () => ({
+  ...fs,
+  ${operation}: async (path, ...args) => {
+    if (String(path).includes(".brick-contract-")) {
+      if (${JSON.stringify(operation)} === "writeFile") await originalWrite(path, "partial write");
+      throw new Error("Injected ${operation} failure");
+    }
+    return ${operation === "writeFile" ? "originalWrite" : "originalRename"}(path, ...args);
+  },
+}));
+`,
+      );
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          "--preload",
+          preload,
+          cli,
+          "gen",
+          "client",
+          entry,
+          "--output",
+          output,
+        ],
+        {
+          cwd: root,
+          stdout: "ignore",
+          stderr: "pipe",
+        },
+      );
+      const [code, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stderr).text(),
+      ]);
+      expect(code).toBe(1);
+      expect(stderr).toContain(`Injected ${operation} failure`);
+      expect(await Bun.file(output).text()).toBe("previous contract\n");
+      expect(await readdir(directory)).toEqual(["contract.ts"]);
+    }
   } finally {
     await rm(root, { recursive: true, force: true });
   }
