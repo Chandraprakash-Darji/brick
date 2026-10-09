@@ -472,7 +472,7 @@ function planRequest(
     }
     const record = { ...((input ?? {}) as Record<string, unknown>) };
     actionPath = actionPath.replace(/:([^/]+)/g, (_match, key: string) => {
-      const value = (input as Record<string, unknown> | undefined)?.[key];
+      const value = Object.hasOwn(record, key) ? record[key] : undefined;
       if (value === undefined || value === null || value === "") {
         throw new Error(`[Brick-TS client] Missing path parameter '${key}'.`);
       }
