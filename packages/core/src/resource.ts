@@ -759,7 +759,6 @@ function formatListResult(
       });
   }
   const result = {
-    [plan.pluralName]: rows,
     items: rows,
     total,
     limit,
@@ -1138,15 +1137,14 @@ export function defineResource<
     description: `List ${pluralName}`,
     input: listSchema,
     output: t.Object({
-      [pluralName]: t.Array(listItemSchema),
-      items: t.Optional(t.Array(listItemSchema)),
+      items: t.Array(listItemSchema),
       total: t.Number(),
-      limit: t.Optional(t.Number()),
-      offset: t.Optional(t.Number()),
+      limit: t.Number(),
+      offset: t.Number(),
       page: t.Optional(t.Number()),
-      pageCount: t.Optional(t.Number()),
-      hasMore: t.Optional(t.Boolean()),
-      nextCursor: t.Optional(t.Union([t.String(), t.Null()])),
+      pageCount: t.Number(),
+      hasMore: t.Boolean(),
+      nextCursor: t.Union([t.String(), t.Null()]),
     }),
     errors: config.errors,
     execute: async ({ input = {}, ctx }) => {

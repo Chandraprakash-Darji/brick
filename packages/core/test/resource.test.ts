@@ -128,7 +128,7 @@ describe("Service-Level Resources & User-Owned Schema (@brickkit/core)", () => {
       },
     });
     expect(aliceList.total).toBe(1);
-    expect(aliceList.articles[0].slug).toBe("alice-post");
+    expect(aliceList.items[0].slug).toBe("alice-post");
 
     // 4. Bob tries to get Alice's article: should be 403 FORBIDDEN
     expect(
