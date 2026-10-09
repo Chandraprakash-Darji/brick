@@ -46,6 +46,13 @@ segments are URL-encoded from input and removed from the remaining payload.
 GET and DELETE send remaining input as query parameters; POST, PUT, and PATCH
 send JSON. The default custom action method is POST.
 
+For a type-only frontend, omit `contract` so no backend implementation is
+bundled. This mode uses conventional service and action names. Configured
+custom action paths and methods require runtime action metadata; the current
+client does not provide a metadata-only contract object. Do not import the
+backend contract value into the browser unless that runtime dependency is
+acceptable.
+
 Missing path parameters reject before sending a request. Without the runtime
 contract, the client uses its conventional resource and action routes.
 
