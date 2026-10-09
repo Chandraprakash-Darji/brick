@@ -1,6 +1,6 @@
 {
   "name": "@brickkit/cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "CLI and server engine for Brick-TS",
   "type": "module",
   "main": "./dist/index.js",
@@ -48,7 +48,7 @@
     "format:check": "oxfmt --check ."
   },
   "dependencies": {
-    "@brickkit/core": "^0.2.0",
+    "@brickkit/core": "^0.2.1",
     "@sinclair/typebox": "^0.34.0",
     "elysia": "^1.2.0"
   },
