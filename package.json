@@ -36,6 +36,9 @@
     "pages:typecheck": "bun run build && bun run --cwd examples/pages typecheck",
     "pages:build": "bun run build && bun run --cwd examples/pages build"
   },
+  "overrides": {
+    "drizzle-orm": "0.45.2"
+  },
   "devDependencies": {
     "@types/bun": "latest",
     "elysia": "^1.2.0",

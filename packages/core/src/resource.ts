@@ -547,14 +547,15 @@ function writeShape(
   for (let index = 0; index < writes.columns.length; index++) {
     const [key, column] = writes.columns[index]!;
     if (operation === "insert" && column.shouldDisableInsert()) continue;
+    // Drizzle evaluates update callbacks while building SQL, even for supplied values.
+    if (operation === "update" && column.onUpdateFn !== undefined) return;
     const value = data[key];
     if (value === undefined) {
       // Drizzle evaluates these JS functions while building SQL. Never freeze their result.
       if (
-        operation === "update"
-          ? column.onUpdateFn !== undefined
-          : column.default == null &&
-            (column.defaultFn !== undefined || column.onUpdateFn !== undefined)
+        operation === "insert" &&
+        column.default == null &&
+        (column.defaultFn !== undefined || column.onUpdateFn !== undefined)
       )
         return;
       continue;
