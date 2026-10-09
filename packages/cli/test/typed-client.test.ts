@@ -129,6 +129,31 @@ describe("Typed client end-to-end (@brickkit/cli)", () => {
     }
   });
 
+  it("calls configured action paths with encoded parameters and each HTTP method", async () => {
+    for (const method of ["GET", "POST", "PUT", "PATCH", "DELETE"] as const) {
+      const service = defineService(`custom_${method.toLowerCase()}`);
+      const lookup = service.action({
+        name: "lookup",
+        path: "/v2/records/:doctype/value",
+        method,
+        input: t.Object({ doctype: t.String(), field: t.String() }),
+        output: t.String(),
+        execute: ({ input }) => `${input.doctype}:${input.field}`,
+      });
+      const contract = { records: { lookup } };
+      const server = brick({ prefix: "/v2", services: [service] });
+      const client = createBrickClient<typeof contract>({
+        baseUrl: "http://localhost:4000",
+        prefix: "/v2",
+        contract,
+        fetch: (url, init) => server.handle(new Request(url, init)),
+      });
+      expect(
+        await client.records.lookup({ doctype: "CRM Deal", field: "name" }),
+      ).toBe("CRM Deal:name");
+    }
+  });
+
   it("surfaces server-side input validation as ValidationError", async () => {
     try {
       // content is required by the generated create schema.

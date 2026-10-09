@@ -350,6 +350,7 @@ interface PlannedRequest {
 function isActionValue(value: unknown): value is {
   serviceName?: unknown;
   name?: unknown;
+  config: Action<any, any, any, any>["config"];
 } & Function {
   return (
     typeof value === "function" &&
@@ -384,6 +385,7 @@ function planRequest(
     );
   }
   const leaf = path[path.length - 1]!;
+  const actionConfig = isActionValue(target) ? target.config : undefined;
   // Exact mode: the runtime contract reveals the bound resource name.
   const resource =
     RESOURCE_OPS.has(leaf) && path.length >= 2 && isResourceValue(parent)
@@ -391,7 +393,11 @@ function planRequest(
       : path.length >= 2
         ? path[path.length - 2]!
         : undefined;
-  if (RESOURCE_OPS.has(leaf) && resource !== undefined) {
+  if (
+    RESOURCE_OPS.has(leaf) &&
+    resource !== undefined &&
+    (!actionConfig || isResourceValue(parent))
+  ) {
     const collection = `${baseUrl}${prefix}/${encodeURIComponent(resource)}`;
     switch (leaf) {
       case "list":
@@ -454,11 +460,33 @@ function planRequest(
     isActionValue(target) && typeof target.name === "string" && target.name
       ? target.name
       : path.slice(1).join(".");
+  const method = actionConfig?.method ?? "POST";
+  const configuredPath = actionConfig?.path;
+  let actionPath =
+    configuredPath ??
+    `${prefix}/${encodeURIComponent(service)}/${action.split(".").map(encodeURIComponent).join(".")}`;
+  let remaining = input;
+  if (configuredPath !== undefined) {
+    if (!configuredPath.startsWith("/")) {
+      throw new Error("[Brick-TS client] Action paths must start with '/'.");
+    }
+    const record = { ...((input ?? {}) as Record<string, unknown>) };
+    actionPath = actionPath.replace(/:([^/]+)/g, (_match, key: string) => {
+      const value = Object.hasOwn(record, key) ? record[key] : undefined;
+      if (value === undefined || value === null || value === "") {
+        throw new Error(`[Brick-TS client] Missing path parameter '${key}'.`);
+      }
+      delete record[key];
+      return encodeURIComponent(String(value));
+    });
+    remaining = input === undefined ? undefined : record;
+  }
+  const queryOnly = method === "GET" || method === "DELETE";
   return {
-    method: "POST",
-    url: `${baseUrl}${prefix}/${encodeURIComponent(service)}/${action.split(".").map(encodeURIComponent).join(".")}`,
-    body: input,
-    hasBody: input !== undefined,
+    method,
+    url: `${baseUrl}${actionPath}${queryOnly ? toQueryString(remaining) : ""}`,
+    body: queryOnly ? undefined : remaining,
+    hasBody: !queryOnly && remaining !== undefined,
   };
 }
 

@@ -215,6 +215,88 @@ describe("createBrickClient (typed HTTP client)", () => {
     expect(JSON.parse(calls[0]!.init.body as string)).toEqual({ amount: 500 });
   });
 
+  it("interpolates custom paths without duplicating the prefix or mutating input", async () => {
+    const action = defineAction({
+      name: "get_value",
+      path: "/v2/records/:doctype/value/:doctype",
+      method: "POST",
+      input: t.Object({ doctype: t.String(), fields: t.Array(t.String()) }),
+      execute: ({ input }) => input.doctype,
+    });
+    const contract = { records: { get_value: action } };
+    const { fetchImpl, calls } = mockFetch(() => json("ok"));
+    const api = createBrickClient<typeof contract>({
+      baseUrl: "http://localhost:4000",
+      prefix: "/v2",
+      contract,
+      fetch: fetchImpl,
+    });
+    const input = { doctype: "CRM/Deal #1", fields: ["name"] };
+    await api.records.get_value(input);
+    expect(calls[0]!.url).toBe(
+      "http://localhost:4000/v2/records/CRM%2FDeal%20%231/value/CRM%2FDeal%20%231",
+    );
+    expect(calls[0]!.init.method).toBe("POST");
+    expect(JSON.parse(calls[0]!.init.body as string)).toEqual({
+      fields: ["name"],
+    });
+    expect(input.doctype).toBe("CRM/Deal #1");
+    await expect(api.records.get_value({ fields: [] } as any)).rejects.toThrow(
+      "Missing path parameter 'doctype'",
+    );
+    expect(calls).toHaveLength(1);
+  });
+
+  it("honors action methods on default paths, including CRUD-like action names", async () => {
+    for (const method of ["GET", "POST", "PUT", "PATCH", "DELETE"] as const) {
+      const action = defineAction({
+        name: "get",
+        method,
+        input: t.Object({ term: t.String() }),
+        execute: ({ input }) => input.term,
+      });
+      const contract = { search: { get: action } };
+      const { fetchImpl, calls } = mockFetch(() => json("ok"));
+      const api = createBrickClient<typeof contract>({
+        baseUrl: "http://localhost:4000",
+        contract,
+        fetch: fetchImpl,
+      });
+      await api.search.get({ term: "hello world" });
+      const queryOnly = method === "GET" || method === "DELETE";
+      expect(calls[0]!.init.method).toBe(method);
+      expect(calls[0]!.url).toBe(
+        `http://localhost:4000/api/search/get${queryOnly ? "?term=hello+world" : ""}`,
+      );
+      expect(calls[0]!.init.body).toBe(
+        queryOnly ? undefined : JSON.stringify({ term: "hello world" }),
+      );
+    }
+  });
+
+  it("sends remaining custom GET input as query parameters", async () => {
+    const action = defineAction({
+      name: "lookup",
+      path: "/v2/:id",
+      method: "GET",
+      input: t.Object({ id: t.String(), fields: t.Array(t.String()) }),
+      execute: () => "ok",
+    });
+    const contract = { records: { lookup: action } };
+    const { fetchImpl, calls } = mockFetch(() => json("ok"));
+    const api = createBrickClient<typeof contract>({
+      baseUrl: "http://localhost:4000",
+      contract,
+      fetch: fetchImpl,
+    });
+    await api.records.lookup({ id: "a/b", fields: ["name", "title"] });
+    expect(calls[0]!.url).toBe(
+      "http://localhost:4000/v2/a%2Fb?fields=name&fields=title",
+    );
+    expect(calls[0]!.init.method).toBe("GET");
+    expect(calls[0]!.init.body).toBeUndefined();
+  });
+
   it("rethrows declared domain failures as ActionExecutionError with code and status", async () => {
     const { fetchImpl } = mockFetch(() =>
       json(
