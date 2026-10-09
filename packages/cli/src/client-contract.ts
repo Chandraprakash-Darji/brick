@@ -344,18 +344,31 @@ class SchemaTypes {
             return `[${schema.items.map((child: any) => emit(child, false, currentBase)).join(", ")}]`;
           return `Array<${emit(schema.items, false, currentBase)}>`;
         case "object": {
-          const properties = Object.entries(schema.properties ?? {}).map(
+          const entries = Object.entries(schema.properties ?? {});
+          const properties = entries.map(
             ([key, value]) =>
               `${JSON.stringify(key)}${schema.required?.includes(key) ? "" : "?"}: ${emit(value, false, currentBase)};`,
           );
-          const patterns = Object.values(schema.patternProperties ?? {});
+          // additionalProperties applies to keys matched by neither properties
+          // nor patternProperties, so union it instead of discarding it.
+          const indexParts = Object.values(schema.patternProperties ?? {}).map(
+            (child) => emit(child, false, currentBase),
+          );
+          if (schema.additionalProperties) {
+            indexParts.push(
+              emit(schema.additionalProperties, false, currentBase),
+            );
+          }
           let indexType: string | undefined;
-          if (patterns.length) {
-            indexType = patterns
-              .map((child) => emit(child, false, currentBase))
-              .join(" | ");
-          } else if (schema.additionalProperties) {
-            indexType = emit(schema.additionalProperties, false, currentBase);
+          if (indexParts.length) {
+            // TS index signatures must also cover declared keys, so widen
+            // with their types; otherwise the intersection below rejects
+            // valid values. Over-approximating is safe: the server validates.
+            for (const [, value] of entries) {
+              const propType = emit(value, false, currentBase);
+              if (!indexParts.includes(propType)) indexParts.push(propType);
+            }
+            indexType = indexParts.join(" | ");
           }
           const object = `{ ${properties.join(" ")} }`;
           if (indexType) {
