@@ -165,6 +165,11 @@ export function endpointPaths(defs: EndpointDefinition[]): Record<string, any> {
 
 /** The app object returned by `brick`: Elysia plus `endpoint()`. */
 export type BrickApp = Elysia<any, any, any, any, any, any, any> & {
+  /** Service definitions and prefix selected when this app was constructed. */
+  readonly definition: {
+    readonly services: readonly Service<any, any>[];
+    readonly prefix: string;
+  };
   /** Register a raw endpoint (outside the JSON action mesh). */
   endpoint(def: EndpointDefinition): void;
   /** All endpoints registered via `endpoint()` (declaration order). */

@@ -1,5 +1,5 @@
 import { createBrickClient } from "@brickkit/core/client";
-import type { PagesApi } from "../api/contract";
+import { contract } from "../../_brick/contract";
 
 function resolveBaseUrl(): string {
   const configured = import.meta.env.VITE_API_BASE as string | undefined;
@@ -8,8 +8,9 @@ function resolveBaseUrl(): string {
   return process.env.BACKEND_ORIGIN ?? "http://localhost:5174";
 }
 
-// Backend imports above are erased: only the browser-safe SDK is bundled.
-export const api = createBrickClient<PagesApi>({
+// Generated metadata contains no backend implementations.
+export const api = createBrickClient({
+  contract,
   baseUrl: resolveBaseUrl(),
   fetch: (input, init) => fetch(input, { ...init, credentials: "include" }),
 });

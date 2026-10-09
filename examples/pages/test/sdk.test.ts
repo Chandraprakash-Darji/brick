@@ -3,9 +3,15 @@ import { createBrickClient } from "@brickkit/core/client";
 
 import { buildApp } from "../src/api/app";
 import { getAuth } from "../src/api/auth";
-import type { PagesApi } from "../src/api/contract";
+import type { AppContract as PagesApi } from "../_brick/contract";
+import { generateClientContract } from "@brickkit/cli";
 import { appDb, appSql } from "../src/api/db";
 import { prepareTestDatabase } from "./database";
+
+// Exercise the generated metadata even when this test runs without a Vite server.
+const contractFile = new URL("../_brick/contract.ts", import.meta.url);
+await Bun.write(contractFile, generateClientContract(buildApp()));
+const { contract } = await import(contractFile.href);
 
 describe("local Brick SDK", () => {
   it("reuses the app-owned postgres client", () => {
@@ -29,6 +35,7 @@ describe("local Brick SDK", () => {
 
     const app = buildApp();
     const api = createBrickClient<PagesApi>({
+      contract,
       baseUrl: "http://localhost:3333",
       headers: { cookie: cookie! },
       fetch: (input, init) =>
@@ -60,6 +67,7 @@ describe("local Brick SDK", () => {
     expect((await api.page.list({})).items).toHaveLength(0);
 
     const anonymous = createBrickClient<PagesApi>({
+      contract,
       baseUrl: "http://localhost:3333",
       fetch: (input, init) =>
         Promise.resolve(app.fetch(new Request(input, init))),

@@ -27,3 +27,5 @@ export {
   type CompiledApplication,
 } from "./compiler";
 export { buildApplication, type BuildApplicationOptions } from "./build";
+
+export { generateClientContract } from "./client-contract";

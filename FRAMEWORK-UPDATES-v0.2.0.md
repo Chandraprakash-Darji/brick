@@ -41,7 +41,7 @@ The rename does not introduce a different server implementation. The existing op
 
 Implementation: [server.ts](packages/cli/src/server.ts), [CLI exports](packages/cli/src/index.ts).
 
-> API update: the contract-based server helpers described below have been removed. Use `brick({ services })` for server construction; see the current Typed Client guide for client setup.
+> API update: the contract-based helpers from the original release have been removed. Use `brick({ services })` for server construction; follow the current [Typed Client guide](<www/content/docs/(brick)/typed-client.mdx>) for generated-client setup.
 
 ## 2. A typed HTTP client derived from the server contract
 
@@ -146,27 +146,23 @@ New typing helpers include `BrickClient`, `BrickActionCaller`, `BrickResourceCli
 
 Implementation: [client.ts](packages/core/src/client.ts). Guide: [Typed Client](<www/content/docs/(brick)/typed-client.mdx>).
 
-## 3. Build the HTTP server from the same contract
+## 3. Build the HTTP server from registered services
 
-`brickFromContract` is a new CLI helper that derives the participating services from the contract:
+Construct the server directly with `brick({ services })`:
 
 ```ts
-import { brickFromContract } from "@brickkit/cli";
-import { contract } from "./contract";
+import { brick } from "@brickkit/cli";
+import { pagesService, billingService } from "./services";
 
-const app = brickFromContract(contract, { port: 4000 });
+const app = brick({ services: [pagesService, billingService] });
 app.listen(4000);
 ```
 
-It accepts the normal server options except `services`, which it resolves using the definitions' bound service names and the global registry.
+The server mounts the HTTP actions registered on the selected services. MCP-only tools remain absent from HTTP routes and OpenAPI unless explicitly enabled for HTTP.
 
-Contracts can contain actions, resources, services, and nested namespaces. Definitions must be bound to registered services. Invalid or empty contracts, unbound actions, and unknown services produce explanatory errors.
+For generated-client setup, follow the current [Typed Client guide](<www/content/docs/(brick)/typed-client.mdx>). The Vite plugin reads a default-exported `BrickApp` and generates `_brick/contract.ts` from its selected services; no manually maintained server contract is required. Export the app without calling `.listen()` in that definition module.
 
-**Important behavior:** the contract identifies participating services. The resulting server mounts the HTTP actions registered on those services. Selecting one action in a contract is not an allowlist that hides other HTTP actions on the same service.
-
-MCP-only tools can identify a participating service without becoming HTTP routes. Tool-only services are supported; their tools remain absent from routes and OpenAPI unless explicitly enabled for HTTP.
-
-Implementation: [contract.ts](packages/cli/src/contract.ts).
+Implementation: [server.ts](packages/cli/src/server.ts).
 
 ## 4. Resource CRUD types no longer erase the table schema
 
@@ -320,7 +316,7 @@ Or attach an existing tool as an HTTP action:
 crm.action(whoami);
 ```
 
-Both preserve MCP registration while enabling normal HTTP routing and OpenAPI generation. Merely referencing a tool or service in `brickFromContract` does not opt that tool into HTTP.
+Both preserve MCP registration while enabling normal HTTP routing and OpenAPI generation. Including a service in `brick({ services })` does not opt its tools into HTTP.
 
 Services expose separate `tools`, `getTool(name)`, and `listTools()` APIs. Ordinary `.action()` definitions are not automatically exposed as MCP tools.
 
@@ -408,13 +404,13 @@ Implementation: [openapi.ts](packages/core/src/openapi.ts).
 
 1. Upgrade `@brickkit/core` and `@brickkit/cli` together to `0.2.0`.
 2. Replace `createBrickServer` imports and calls with `brick`.
-3. Define a contract and use `brickFromContract` if you want a shared server/client contract; explicit `brick({ services })` remains supported.
-4. Use `@brickkit/core/client` in browser code and import the backend contract only as a type.
+3. Construct servers with `brick({ services })`; remove calls to the obsolete contract-based app builders.
+4. Follow the current [Typed Client guide](<www/content/docs/(brick)/typed-client.mdx>) for automatic Vite generation, and use `@brickkit/core/client` with the generated browser-safe contract.
 5. Remove CRUD wrappers that only supplied missing input/output types. Let the resource and SDK infer them.
 6. Handle projected list rows as partial values instead of assuming a complete record.
 7. Supply `client` to a Postgres definition when the application already owns a postgres-js client. Keep client configuration and shutdown with its owner.
 8. Convert intended MCP definitions to `.tool()` and place annotations with them.
-9. Explicitly opt tools into HTTP when needed; include only HTTP-enabled tools in browser contracts.
+9. Explicitly opt tools into HTTP when needed; generated browser contracts include only HTTP-enabled tools.
 10. Replace repeated MCP list/dispatch/JSON-RPC switches with the registry and handler, keeping authentication in the app.
 
 ## 10. Validation and traceability

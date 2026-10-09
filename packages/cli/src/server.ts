@@ -221,6 +221,9 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
   }
 
   const brickApp = app as unknown as BrickApp;
+  Object.defineProperty(brickApp, "definition", {
+    value: Object.freeze({ services: Object.freeze([...services]), prefix }),
+  });
   brickApp.endpoint = (def: EndpointDefinition) => {
     mountEndpoint(def);
   };

@@ -1,75 +1,104 @@
 ---
 title: Typed Client
-description: Eden-style end-to-end typed HTTP client inferred from your contract
+description: Automatically generated browser-safe types and routes from your Brick app
 ---
 
-The typed client lets a frontend call your API with full autocomplete and compile-time payload checking — no `/openapi.json` export, no `@hey-api/openapi-ts` codegen step. The frontend imports only the contract **type**, so no backend implementation ever lands in the frontend bundle.
+The typed client provides autocomplete and compile-time input/output checking.
+The Vite plugin derives its contract from your app's registered services, so
+you define actions once and never maintain a second action list.
 
-## Define the contract once (backend)
+## Export your app
 
-Assemble your actions, resources, and services into one contract object. Each `service.action(...)` call preserves its input/output/error literal types, which is what makes the client precise:
+Any entry filename works; its default export must be a `BrickApp`. Use
+`brick({ services })` directly. The entry constructs the app without calling
+`.listen()`:
 
 ```ts
-// server.ts
+// src/api/app.ts
 import { brick } from "@brickkit/cli";
+import { records, users } from "./services";
 
-export const listPages = pagesService.action({
-  name: "page.list",
-  input: t.Object({ limit: t.Optional(t.Number()) }),
-  output: t.Object({ pages: t.Array(PageSchema), total: t.Number() }),
-  execute: async ({ input, ctx }) => {
-    /* ... */
-  },
-});
-
-export const contract = {
-  page: { list: listPages, create: createPage },
-  billing: { charge: chargeAction },
-  notes: notesResource, // resources and whole services work too
-};
-export type AppServer = typeof contract;
-
-// Server construction uses services directly.
-export const app = brick({
-  services: [pagesService, billingService],
-  port: 4000,
-});
+export default brick({ prefix: "/v2", services: [records, users] });
 ```
 
-`brick({ services })` builds the server directly from registered services; the client contract is not needed for server construction.
-
-## Call it (frontend)
+## Add the Vite plugin
 
 ```ts
-// frontend — `import type` is erased at build: zero backend code bundled
-import { createBrickClient } from "@brickkit/core/client";
-import type { AppServer } from "./server";
+import { defineConfig } from "vite";
+import { brickClient } from "@brickkit/cli/vite";
 
-const api = createBrickClient<AppServer>({ baseUrl: "http://localhost:4000" });
-
-const pages = await api.page.list({ limit: 10, sort: "-createdAt" });
-const created = await api.page.create({ title: "Hello", content: "World" });
+export default defineConfig({
+  plugins: [
+    brickClient({ entry: "./src/api/app.ts" }),
+    // Your framework plugins follow.
+  ],
+});
 ```
 
-Wrong payloads fail at compile time (`title: 123`, missing required fields, unknown namespaces), and `pages`/`created` are typed from the action output schemas.
+The plugin generates `_brick/contract.ts` at development startup, before the
+frontend loads, and during production builds. It reads the app's selected
+services and prefix. Changes to the app or its dependencies regenerate the
+contract, and Vite reloads its frontend consumers. Unchanged metadata leaves
+the generated file untouched, avoiding update loops.
 
-### Routing
+Add `_brick/` to `.gitignore`. Set `output` in the plugin options if you need
+another location. Generation evaluates the app entry, so configuration needed
+to construct the app must be available at startup and build time. This plugin
+uses Vite 8; no separate code-generation command is needed.
+Keep startup jobs and connection-opening initialization outside the app
+definition module, for example in request handlers or the server bootstrap.
 
-The client path maps onto the same routes the server compiler mounts:
+## Call your API
 
-| Client call                        | HTTP request                                |
-| ---------------------------------- | ------------------------------------------- |
-| `api.page.list(input)`             | `GET /api/page?...` (query)                 |
-| `api.page.create(input)`           | `POST /api/page` (JSON body)                |
-| `api.page.get({ id })`             | `GET /api/page/:id` (rest as query)         |
-| `api.page.update({ id, ...rest })` | `PATCH /api/page/:id` (JSON body of `rest`) |
-| `api.page.delete({ id })`          | `DELETE /api/page/:id`                      |
-| `api.billing.charge(input)`        | `POST /api/billing/charge` (JSON body)      |
+```ts
+// src/lib/api.ts
+import { createBrickClient } from "@brickkit/core/client";
+import { contract } from "../../_brick/contract";
 
-Two resolution modes:
+export const api = createBrickClient({
+  baseUrl: "http://localhost:8085",
+  contract,
+});
 
-- **Key convention (default, type-only safe).** Contract keys must match backend names: the leading segment equals the service name, and the segment above a resource operation equals the resource name.
-- **Exact mode.** Pass the runtime contract — `createBrickClient<AppServer>({ baseUrl, contract })` — and routing uses each action's bound `serviceName`/`name` and each resource's `name`, so keys become purely organizational. Use this when backend and frontend share a runtime (monorepo, same-process tests).
+await api.records.get_value({ doctype: "CRMDeal", fields: ["name"] });
+// For the action path /v2/records/:doctype/value and method POST:
+// POST /v2/records/CRMDeal/value with { fields: ["name"] }
+```
+
+The client infers its types directly from the generated contract. The file
+contains transport types and route metadata, with no runtime imports, backend
+handlers, service instances, or database code. It also exports `AppContract`
+when you need to refer to the complete contract type explicitly.
+
+Custom HTTP actions are grouped by service name; dotted names become nested
+namespaces. Resources use their names at the root (`api.page.create`,
+`api.page.list`, etc.) with their normal REST methods. MCP-only tools are absent;
+opt in with `http: true` or `service.action(tool)` to expose them over HTTP.
+Raw endpoints are outside the generated action client.
+
+Schemas determine JSON transport types. Absent input/output schemas yield
+`unknown`; unresolved schema references and non-JSON transport types fail
+explicitly. Missing path parameters reject before sending a request. Parameter
+names follow the server's full-segment syntax, and values are URL-encoded.
+
+## Embedded servers such as TanStack Start
+
+The same app runs inside your framework server. Import it through Vite's
+server-only module and forward the API requests your app owns:
+
+```ts
+import app from "virtual:brick-app";
+
+export function handleBrickRequest(request: Request) {
+  return app.fetch(request);
+}
+```
+
+Add `/// <reference types="@brickkit/cli/vite/client" />` to `vite-env.d.ts` for
+its type declaration. The module tracks the app and its dependencies for hot
+reload and rejects browser imports. The Pages example keeps one TanStack Start
+app, with no separate API listener; its existing server entry forwards Brick
+paths and lets Start handle SSR and assets.
 
 ### Errors
 
@@ -87,7 +116,7 @@ try {
   await api.page.create(input);
 } catch (err) {
   if (err instanceof ActionExecutionError) {
-    err.code; // "SLUG_EXISTS" | "CONFLICT" | "NOT_FOUND" | ...
+    err.code; // The declared server error code.
   } else if (err instanceof ValidationError) {
     err.errors; // [{ path, message }] — same shape as local execution
   } else if (err instanceof BrickServerError) {
@@ -100,26 +129,25 @@ try {
 }
 ```
 
-`InferActionErrorCodes<typeof createPage>` gives the declared code union for a single action when you need it in a type position.
+`InferActionErrorCodes<AppContract["page"]["create"]>` gives the declared code union for a generated action when you need it in a type position.
 
 ### Options
 
 ```ts
-const api = createBrickClient<AppServer>({
+const api = createBrickClient({
   baseUrl: "http://localhost:4000",
-  prefix: "/v1", // must match brick({ prefix })
-  headers: () => ({ authorization: `Bearer ${getToken()}` }), // re-evaluated per call
-  timeoutMs: 5000, // implemented with AbortSignal.timeout
-  fetch: customFetch, // override (tests route into app.handle)
+  contract,
+  headers: () => ({ authorization: `Bearer ${getToken()}` }),
+  timeoutMs: 5000,
+  fetch: customFetch,
 });
 
-// Per call:
 await api.page.list(
   { limit: 10 },
   { signal, headers: { "x-trace-id": "tr_1" } },
 );
 ```
 
-MCP tools stay outside HTTP by default. Opt in with `http: true` or `service.action(tool)` before including a tool in a browser contract. See [MCP Tools](/docs/tools).
-
-Related: [Getting Started](/docs/getting-started) for the service/resource setup, [OpenAPI](/docs/openapi) for the spec/ docs endpoints (still available when you need raw REST or third-party SDKs).
+The generated contract already includes the app's prefix. Without a runtime
+contract, the low-level client's conventional resource/action routes remain
+available, but custom paths cannot be inferred from types alone.

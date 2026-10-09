@@ -73,8 +73,13 @@ export function registerMcpRoutes(app: {
   get(path: string, handler: (ctx: any) => unknown): unknown;
   post(path: string, handler: (ctx: any) => unknown): unknown;
 }): void {
-  const mcpHandler = createMcpHandler();
-  app.post("/mcp", ({ request }: any) => mcpHandler(request));
+  // Initialize auth on the first request so loading app definitions for client
+  // generation does not open a database connection.
+  let mcpHandler: ReturnType<typeof createMcpHandler> | undefined;
+  app.post("/mcp", ({ request }: any) => {
+    mcpHandler ??= createMcpHandler();
+    return mcpHandler(request);
+  });
 
   const metadata = () => Response.json(protectedResourceMetadata());
   app.get("/.well-known/oauth-protected-resource", metadata);
