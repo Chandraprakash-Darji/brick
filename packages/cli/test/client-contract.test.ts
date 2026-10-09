@@ -8,6 +8,52 @@ import { brick } from "../src/server";
 
 beforeEach(resetGlobalRegistry);
 
+async function checkTypes(dir: string, types: string): Promise<void> {
+  const root = resolve(import.meta.dir, "../../..");
+  await Bun.write(join(dir, "types.ts"), types);
+  await Bun.write(
+    join(dir, "tsconfig.json"),
+    JSON.stringify({
+      extends: join(root, "tsconfig.json"),
+      compilerOptions: { noEmit: true },
+      include: ["*.ts"],
+    }),
+  );
+  const proc = Bun.spawn(
+    [
+      process.execPath,
+      "x",
+      "--no-install",
+      "tsc",
+      "-p",
+      join(dir, "tsconfig.json"),
+    ],
+    { cwd: root, stdout: "pipe", stderr: "pipe" },
+  );
+  const [code, out, err] = await Promise.all([
+    proc.exited,
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+  expect(out + err).toBe("");
+  expect(code).toBe(0);
+}
+
+async function checkContractTypes(
+  source: string,
+  types: string,
+): Promise<void> {
+  const root = resolve(import.meta.dir, "../../../.brick");
+  await mkdir(root, { recursive: true });
+  const dir = await mkdtemp(join(root, "contract-types-"));
+  try {
+    await Bun.write(join(dir, "contract.ts"), source);
+    await checkTypes(dir, types);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 it("generates a typed browser contract from two services without an action list", async () => {
   const root = resolve(import.meta.dir, "../../..");
   await mkdir(join(root, ".brick"), { recursive: true });
@@ -37,8 +83,8 @@ it("generates a typed browser contract from two services without an action list"
     expect(browserSource).not.toContain("defineService");
     expect(browserSource).not.toContain("bun:sqlite");
 
-    await Bun.write(
-      join(dir, "types.ts"),
+    await checkTypes(
+      dir,
       `
 import { createBrickClient, type InferActionErrorCodes } from "@brickkit/core/client";
 import { contract, type AppContract } from "./contract";
@@ -64,32 +110,6 @@ api.records.private_tool();
 api.users.missing();
 `,
     );
-    await Bun.write(
-      join(dir, "tsconfig.json"),
-      JSON.stringify({
-        extends: join(root, "tsconfig.json"),
-        compilerOptions: { noEmit: true },
-        include: ["*.ts"],
-      }),
-    );
-    const typecheck = Bun.spawn(
-      [
-        Bun.which("bun")!,
-        "x",
-        "--no-install",
-        "tsc",
-        "-p",
-        join(dir, "tsconfig.json"),
-      ],
-      { cwd: root, stdout: "pipe", stderr: "pipe" },
-    );
-    const [typeCode, typeOut, typeErr] = await Promise.all([
-      typecheck.exited,
-      new Response(typecheck.stdout).text(),
-      new Response(typecheck.stderr).text(),
-    ]);
-    expect(typeOut + typeErr).toBe("");
-    expect(typeCode).toBe(0);
 
     const calls: { url: string; init?: RequestInit }[] = [];
     const api = createBrickClient<any>({
@@ -215,14 +235,9 @@ it("resolves recursive TypeBox schemas and local references without weakening cl
   expect(source).toContain("export type BrickT0 =");
   expect(source.split("export type AppContract")[0]).not.toContain("unknown");
 
-  const root = resolve(import.meta.dir, "../../..");
-  await mkdir(join(root, ".brick"), { recursive: true });
-  const dir = await mkdtemp(join(root, ".brick/recursive-client-test-"));
-  try {
-    await Bun.write(join(dir, "contract.ts"), source);
-    await Bun.write(
-      join(dir, "types.ts"),
-      `
+  await checkContractTypes(
+    source,
+    `
 import { createBrickClient } from "@brickkit/core/client";
 import { contract } from "./contract";
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
@@ -245,36 +260,7 @@ async function check() {
   const text: string | undefined = local.next?.next?.next?.value;
 }
 `,
-    );
-    await Bun.write(
-      join(dir, "tsconfig.json"),
-      JSON.stringify({
-        extends: join(root, "tsconfig.json"),
-        compilerOptions: { noEmit: true },
-        include: ["*.ts"],
-      }),
-    );
-    const proc = Bun.spawn(
-      [
-        Bun.which("bun")!,
-        "x",
-        "--no-install",
-        "tsc",
-        "-p",
-        join(dir, "tsconfig.json"),
-      ],
-      { cwd: root, stdout: "pipe", stderr: "pipe" },
-    );
-    const [code, out, err] = await Promise.all([
-      proc.exited,
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-    ]);
-    expect(out + err).toBe("");
-    expect(code).toBe(0);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+  );
 }, 20000);
 
 it("reports missing local reference targets with the action name", () => {
@@ -289,4 +275,155 @@ it("reports missing local reference targets with the action name", () => {
   expect(() => generateClientContract(app)).toThrow(
     "Brick client: cannot generate 'refs.missing': unresolved schema reference '#/$defs/Missing'",
   );
+});
+
+it("shares profitable transport shapes across actions while preserving exact filter types", async () => {
+  const operator = t.Union(
+    [
+      "=",
+      "!=",
+      ">",
+      ">=",
+      "<",
+      "<=",
+      "like",
+      "not like",
+      "in",
+      "not in",
+      "is",
+      "between",
+    ].map((value) => t.Literal(value)),
+  );
+  const condition = (bounded: boolean) => {
+    const scalar = t.Union([
+      t.String(bounded ? { maxLength: 140 } : {}),
+      t.Null(),
+    ]);
+    const operand = t.Union([
+      scalar,
+      t.Array(scalar),
+      t.Literal("set"),
+      t.Literal("not set"),
+    ]);
+    return t.Union([scalar, t.Tuple([operator, operand])]);
+  };
+  const service = defineService("filters");
+  for (let i = 0; i < 12; i++) {
+    service.action({
+      name: `query${i}`,
+      input: t.Object({
+        name: t.Optional(condition(false)),
+        creation: condition(true),
+        choice: t.Union([
+          t.Object({ kind: t.Literal("text"), value: t.String() }),
+          t.Object({ kind: t.Literal("count"), value: t.Number() }),
+        ]),
+      }),
+      output: t.Array(condition(i % 2 === 0)),
+      execute: () => [],
+    });
+  }
+  const app = brick({ services: [service], requestLogging: false });
+  const source = generateClientContract(app);
+  expect(generateClientContract(app)).toBe(source);
+  expect(source.match(/"not like"/g)).toHaveLength(1);
+  expect(source).toContain("export type BrickSchema_");
+  expect(source).not.toMatch(/export type \w+ = (string|number|null);/);
+  expect(source).not.toContain("\0");
+  // A literal that resembles source or an internal marker must remain a literal.
+  const odd = service.action({
+    name: "odd",
+    output: t.Literal("BrickSchema_abc | string\0"),
+    execute: () => "BrickSchema_abc | string\0" as const,
+  });
+  expect(generateClientContract(app)).toContain(
+    JSON.stringify(odd.config.output!.const),
+  );
+  await checkContractTypes(
+    source,
+    `
+import type { InferActionInput, InferActionOutput } from "@brickkit/core/client";
+import type { AppContract } from "./contract";
+type Operator = "=" | "!=" | ">" | ">=" | "<" | "<=" | "like" | "not like" | "in" | "not in" | "is" | "between";
+type Scalar = string | null;
+type Condition = Scalar | [Operator, Scalar | Scalar[] | "set" | "not set"];
+type Expected = {
+  name?: Condition;
+  creation: Condition;
+  choice: { kind: "text"; value: string } | { kind: "count"; value: number };
+};
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
+type Assert<T extends true> = T;
+type Input = Assert<Equal<InferActionInput<AppContract["filters"]["query0"]>, Expected>>;
+type Output = Assert<Equal<InferActionOutput<AppContract["filters"]["query11"]>, Condition[]>>;
+`,
+  );
+}, 20000);
+
+it("keeps small fragments inline and generated alias names stable as unrelated actions are added", () => {
+  const service = defineService("small");
+  service.action({
+    name: "one",
+    input: t.Object({
+      a: t.String(),
+      b: t.String(),
+      c: t.Union([t.Null(), t.String()]),
+    }),
+    execute: () => true,
+  });
+  const app = brick({ services: [service], requestLogging: false });
+  expect(generateClientContract(app)).not.toContain("export type BrickSchema_");
+  const large = t.Object(
+    Object.fromEntries(
+      Array.from({ length: 20 }, (_, i) => [`field${i}`, t.String()]),
+    ),
+  );
+  service.action({
+    name: "large",
+    input: large,
+    output: large,
+    execute: () => ({}) as any,
+  });
+  const before = generateClientContract(app).match(
+    /export type (BrickSchema_\w+)/g,
+  );
+  service.action({
+    name: "unrelated",
+    output: t.Array(t.Boolean()),
+    execute: () => [],
+  });
+  expect(
+    generateClientContract(app).match(/export type (BrickSchema_\w+)/g),
+  ).toEqual(before);
+});
+
+it("does not share identical reference spellings from different document scopes", () => {
+  const service = defineService("scopes");
+  const app = brick({ services: [service], requestLogging: false });
+  for (const [name, type] of [
+    ["text", "string"],
+    ["count", "number"],
+  ] as const) {
+    const action = service.action({
+      name,
+      output: t.String(),
+      execute: () => "ok",
+    });
+    action.config.output = {
+      type: "object",
+      properties: Object.fromEntries(
+        Array.from({ length: 10 }, (_, i) => [
+          `field${i}`,
+          { $ref: "#/$defs/Value" },
+        ]),
+      ),
+      required: ["field0"],
+      $defs: { Value: { type } },
+    } as any;
+  }
+  const source = generateClientContract(app);
+  expect(source).toContain("export type BrickSchema = string;");
+  expect(source).toContain("export type BrickSchema_2 = number;");
+  expect(source).toContain('"field0": BrickSchema;');
+  expect(source).toContain('"field0": BrickSchema_2;');
 });

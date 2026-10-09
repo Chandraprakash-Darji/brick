@@ -146,6 +146,13 @@ The app's selected services and prefix determine its contents, just as with the
 Vite plugin. The command evaluates the entry without calling `.listen()`; keep
 the listener in a separate server bootstrap. Vite is not required or loaded.
 
+Repeated transport type fragments are emitted as shared `BrickSchema_*` aliases
+when the declarations reduce source size. Names are derived from the emitted
+shape, so runtime-only constraints such as string length bounds do not prevent
+sharing. Scalars stay inline, and reference targets retain document-scoped
+aliases; equivalent recursive graphs in separate documents remain separate.
+This applies to both standalone and Vite generation.
+
 Run generation before your frontend's development server, build, and type check,
 and rerun after changing backend definitions. You can add a package script:
 
