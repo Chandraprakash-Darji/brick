@@ -234,6 +234,7 @@ function main(): Promise<{ results: MicroResult[]; path: string }> {
       const { service } = makeBenchFixture("micro-http");
       service.action({
         name: "getInput",
+        method: "GET",
         input: Type.Object({ slug: Type.String(), count: Type.Number() }),
         execute: ({ input }) => input,
       });
