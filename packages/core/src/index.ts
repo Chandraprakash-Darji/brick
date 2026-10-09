@@ -14,7 +14,6 @@ export { createServiceProxy } from "./rpc";
 // Typed HTTP Client (also importable as `@brickkit/core/client` for frontends)
 export {
   createBrickClient,
-  defineAppContract,
   BrickTransportError,
   BrickServerError,
   isBrickTransportError,

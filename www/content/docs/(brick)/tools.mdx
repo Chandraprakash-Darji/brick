@@ -132,6 +132,6 @@ Or register an existing tool as an HTTP action:
 crm.action(whoami);
 ```
 
-Both keep the definition in the MCP registry and also register it for normal HTTP routing and OpenAPI generation. Referencing an MCP-only tool or its service in `brickFromContract` does not opt it into HTTP. Include only HTTP-enabled tools in the contract you expose to a browser's [Typed Client](/docs/typed-client).
+Both keep the definition in the MCP registry and also register it for normal HTTP routing and OpenAPI generation. Passing a tool-only service to `brick()` does not opt its tools into HTTP. Include only HTTP-enabled tools in the contract you expose to a browser's [Typed Client](/docs/typed-client).
 
 Related: [Access Control](/docs/access-control), [Input/Output Validation](/docs/validate-hook), and [OpenAPI](/docs/openapi).

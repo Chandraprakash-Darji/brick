@@ -57,7 +57,7 @@ Missing path parameters reject before sending a request. Without the runtime
 contract, the client uses its conventional resource and action routes.
 
 See `www/content/docs/(brick)/typed-client.mdx` for the contract-first setup
-(`defineAppContract` + `brickFromContract`), routing, and error handling.
+routing and error handling.
 
 ## MCP tools
 
@@ -96,7 +96,7 @@ const handleMcp = createMcpHandler({
 
 Tools use action validation, authorization, and service context. They are stored
 separately from HTTP actions and stay out of routes and OpenAPI by default,
-including when a service or tool is referenced in `brickFromContract`. Add
+including when their service is passed to `brick()`. Add
 `http: true` to a tool definition, or register it with `crm.action(whoami)`, to
 expose it over HTTP as well.
 

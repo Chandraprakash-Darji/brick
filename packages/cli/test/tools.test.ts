@@ -1,12 +1,12 @@
 import { expect, it } from "bun:test";
 import { defineService } from "@brickkit/core";
-import { brickFromContract } from "../src/contract";
+import { brick } from "../src/server";
 
-it("keeps tool-only services and contract leaves out of routes and OpenAPI", async () => {
+it("keeps tool-only services out of routes and OpenAPI", async () => {
   const service = defineService("hidden_tools");
-  const tool = service.tool({ name: "hidden", execute: () => "secret" });
-  for (const contract of [{ service }, { tool }]) {
-    const app = brickFromContract(contract);
+  service.tool({ name: "hidden", execute: () => "secret" });
+  {
+    const app = brick({ services: [service] });
     const request = new Request("http://localhost/api/hidden_tools/hidden", {
       method: "POST",
     });
@@ -20,7 +20,7 @@ it("keeps tool-only services and contract leaves out of routes and OpenAPI", asy
 
 it("serves opted-in tools through HTTP with OpenAPI entries", async () => {
   const service = defineService("http_tools");
-  const optedIn = service.tool({
+  service.tool({
     name: "visible",
     http: true,
     execute: () => "visible",
@@ -30,7 +30,7 @@ it("serves opted-in tools through HTTP with OpenAPI entries", async () => {
     execute: () => "registered",
   });
   service.action(registered);
-  const app = brickFromContract({ optedIn, registered });
+  const app = brick({ services: [service] });
   for (const name of ["visible", "registered"]) {
     const response = await app.handle(
       new Request(`http://localhost/api/http_tools/${name}`, {

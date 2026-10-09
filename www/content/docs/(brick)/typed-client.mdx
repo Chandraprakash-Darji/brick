@@ -11,8 +11,7 @@ Assemble your actions, resources, and services into one contract object. Each `s
 
 ```ts
 // server.ts
-import { defineAppContract } from "@brickkit/core/client";
-import { brickFromContract } from "@brickkit/cli";
+import { brick } from "@brickkit/cli";
 
 export const listPages = pagesService.action({
   name: "page.list",
@@ -23,18 +22,21 @@ export const listPages = pagesService.action({
   },
 });
 
-export const contract = defineAppContract({
+export const contract = {
   page: { list: listPages, create: createPage },
   billing: { charge: chargeAction },
   notes: notesResource, // resources and whole services work too
-});
+};
 export type AppServer = typeof contract;
 
-// The server derives from the same object: services are declared once.
-export const app = brickFromContract(contract, { port: 4000 });
+// Server construction uses services directly.
+export const app = brick({
+  services: [pagesService, billingService],
+  port: 4000,
+});
 ```
 
-`brickFromContract(contract, options)` accepts everything `brick()` does except `services`, which it resolves through the registry from each action's bound `serviceName`. Every action in the contract must be bound to a service (define it via `service.action(...)`) — unbound actions, unknown services, and empty contracts throw errors naming the culprit.
+`brick({ services })` builds the server directly from registered services; the client contract is not needed for server construction.
 
 ## Call it (frontend)
 
