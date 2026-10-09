@@ -1,6 +1,19 @@
 import { brick } from "../../src/server";
 import { defineService, t } from "@brickkit/core";
 
+const jsonValue = t.Recursive(
+  (self) =>
+    t.Union([
+      t.Null(),
+      t.Boolean(),
+      t.Number(),
+      t.String(),
+      t.Array(self),
+      t.Record(t.String(), self),
+    ]),
+  { title: "JsonValue" },
+);
+
 export const records = defineService("records");
 records.tool({
   name: "get_value",
@@ -19,7 +32,11 @@ records.tool({
   name: "search",
   http: true,
   method: "POST",
-  input: t.Object({ term: t.String(), limit: t.Optional(t.Number()) }),
+  input: t.Object({
+    term: t.String(),
+    limit: t.Optional(t.Number()),
+    filters: t.Optional(jsonValue),
+  }),
   output: t.Array(t.String()),
   execute: ({ input }) => [input.term],
 });
