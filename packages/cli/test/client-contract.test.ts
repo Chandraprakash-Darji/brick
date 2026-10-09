@@ -8,6 +8,52 @@ import { brick } from "../src/server";
 
 beforeEach(resetGlobalRegistry);
 
+async function checkTypes(dir: string, types: string): Promise<void> {
+  const root = resolve(import.meta.dir, "../../..");
+  await Bun.write(join(dir, "types.ts"), types);
+  await Bun.write(
+    join(dir, "tsconfig.json"),
+    JSON.stringify({
+      extends: join(root, "tsconfig.json"),
+      compilerOptions: { noEmit: true },
+      include: ["*.ts"],
+    }),
+  );
+  const proc = Bun.spawn(
+    [
+      process.execPath,
+      "x",
+      "--no-install",
+      "tsc",
+      "-p",
+      join(dir, "tsconfig.json"),
+    ],
+    { cwd: root, stdout: "pipe", stderr: "pipe" },
+  );
+  const [code, out, err] = await Promise.all([
+    proc.exited,
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+  expect(out + err).toBe("");
+  expect(code).toBe(0);
+}
+
+async function checkContractTypes(
+  source: string,
+  types: string,
+): Promise<void> {
+  const root = resolve(import.meta.dir, "../../../.brick");
+  await mkdir(root, { recursive: true });
+  const dir = await mkdtemp(join(root, "contract-types-"));
+  try {
+    await Bun.write(join(dir, "contract.ts"), source);
+    await checkTypes(dir, types);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 it("generates a typed browser contract from two services without an action list", async () => {
   const root = resolve(import.meta.dir, "../../..");
   await mkdir(join(root, ".brick"), { recursive: true });
@@ -37,8 +83,8 @@ it("generates a typed browser contract from two services without an action list"
     expect(browserSource).not.toContain("defineService");
     expect(browserSource).not.toContain("bun:sqlite");
 
-    await Bun.write(
-      join(dir, "types.ts"),
+    await checkTypes(
+      dir,
       `
 import { createBrickClient, type InferActionErrorCodes } from "@brickkit/core/client";
 import { contract, type AppContract } from "./contract";
@@ -64,32 +110,6 @@ api.records.private_tool();
 api.users.missing();
 `,
     );
-    await Bun.write(
-      join(dir, "tsconfig.json"),
-      JSON.stringify({
-        extends: join(root, "tsconfig.json"),
-        compilerOptions: { noEmit: true },
-        include: ["*.ts"],
-      }),
-    );
-    const typecheck = Bun.spawn(
-      [
-        Bun.which("bun")!,
-        "x",
-        "--no-install",
-        "tsc",
-        "-p",
-        join(dir, "tsconfig.json"),
-      ],
-      { cwd: root, stdout: "pipe", stderr: "pipe" },
-    );
-    const [typeCode, typeOut, typeErr] = await Promise.all([
-      typecheck.exited,
-      new Response(typecheck.stdout).text(),
-      new Response(typecheck.stderr).text(),
-    ]);
-    expect(typeOut + typeErr).toBe("");
-    expect(typeCode).toBe(0);
 
     const calls: { url: string; init?: RequestInit }[] = [];
     const api = createBrickClient<any>({
@@ -215,14 +235,9 @@ it("resolves recursive TypeBox schemas and local references without weakening cl
   expect(source).toContain("export type BrickT0 =");
   expect(source.split("export type AppContract")[0]).not.toContain("unknown");
 
-  const root = resolve(import.meta.dir, "../../..");
-  await mkdir(join(root, ".brick"), { recursive: true });
-  const dir = await mkdtemp(join(root, ".brick/recursive-client-test-"));
-  try {
-    await Bun.write(join(dir, "contract.ts"), source);
-    await Bun.write(
-      join(dir, "types.ts"),
-      `
+  await checkContractTypes(
+    source,
+    `
 import { createBrickClient } from "@brickkit/core/client";
 import { contract } from "./contract";
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
@@ -245,36 +260,7 @@ async function check() {
   const text: string | undefined = local.next?.next?.next?.value;
 }
 `,
-    );
-    await Bun.write(
-      join(dir, "tsconfig.json"),
-      JSON.stringify({
-        extends: join(root, "tsconfig.json"),
-        compilerOptions: { noEmit: true },
-        include: ["*.ts"],
-      }),
-    );
-    const proc = Bun.spawn(
-      [
-        Bun.which("bun")!,
-        "x",
-        "--no-install",
-        "tsc",
-        "-p",
-        join(dir, "tsconfig.json"),
-      ],
-      { cwd: root, stdout: "pipe", stderr: "pipe" },
-    );
-    const [code, out, err] = await Promise.all([
-      proc.exited,
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-    ]);
-    expect(out + err).toBe("");
-    expect(code).toBe(0);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+  );
 }, 20000);
 
 it("reports missing local reference targets with the action name", () => {
@@ -353,14 +339,9 @@ it("shares profitable transport shapes across actions while preserving exact fil
   expect(generateClientContract(app)).toContain(
     JSON.stringify(odd.config.output!.const),
   );
-  const root = resolve(import.meta.dir, "../../..");
-  await mkdir(join(root, ".brick"), { recursive: true });
-  const dir = await mkdtemp(join(root, ".brick/shared-client-test-"));
-  try {
-    await Bun.write(join(dir, "contract.ts"), source);
-    await Bun.write(
-      join(dir, "types.ts"),
-      `
+  await checkContractTypes(
+    source,
+    `
 import type { InferActionInput, InferActionOutput } from "@brickkit/core/client";
 import type { AppContract } from "./contract";
 type Operator = "=" | "!=" | ">" | ">=" | "<" | "<=" | "like" | "not like" | "in" | "not in" | "is" | "between";
@@ -376,36 +357,7 @@ type Assert<T extends true> = T;
 type Input = Assert<Equal<InferActionInput<AppContract["filters"]["query0"]>, Expected>>;
 type Output = Assert<Equal<InferActionOutput<AppContract["filters"]["query11"]>, Condition[]>>;
 `,
-    );
-    await Bun.write(
-      join(dir, "tsconfig.json"),
-      JSON.stringify({
-        extends: join(root, "tsconfig.json"),
-        compilerOptions: { noEmit: true },
-        include: ["*.ts"],
-      }),
-    );
-    const proc = Bun.spawn(
-      [
-        Bun.which("bun")!,
-        "x",
-        "--no-install",
-        "tsc",
-        "-p",
-        join(dir, "tsconfig.json"),
-      ],
-      { cwd: root, stdout: "pipe", stderr: "pipe" },
-    );
-    const [code, out, err] = await Promise.all([
-      proc.exited,
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-    ]);
-    expect(out + err).toBe("");
-    expect(code).toBe(0);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+  );
 }, 20000);
 
 it("keeps small fragments inline and generated alias names stable as unrelated actions are added", () => {
