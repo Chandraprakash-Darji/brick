@@ -143,24 +143,9 @@ export function analyzeApplication(
       }
     }
     for (const action of service.listActions()) {
-      const path = `${prefix}/${service.name}/${action.name}`;
-      add(service, action, "POST", path, "action");
-      if (/^(get|list|find|read)/.test(action.name))
-        add(service, action, "GET", path, "action");
-      if (action.config.path) {
-        if (action.config.method)
-          add(
-            service,
-            action,
-            action.config.method,
-            action.config.path,
-            "action",
-          );
-        else {
-          add(service, action, "GET", action.config.path, "action");
-          add(service, action, "POST", action.config.path, "action");
-        }
-      }
+      const path =
+        action.config.path ?? `${prefix}/${service.name}/${action.name}`;
+      add(service, action, action.config.method ?? "POST", path, "action");
     }
   }
   const reads = services.flatMap((service) =>

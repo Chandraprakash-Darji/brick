@@ -45,8 +45,8 @@ JSON response (ValidationError → its status; ActionExecutionError → its stat
 `brick` mounts three route families (from `packages/cli/src/server.ts`):
 
 - **REST** — `GET/POST /api/{resource}`, `GET/PATCH/PUT/DELETE /api/{resource}/:id` per enabled operation.
-- **Action mesh** — `POST /api/{service}/{action}` for every action, plus `GET` for read-like actions (names starting `get`/`list`/`find`/`read`).
-- **Custom action paths** — an action with `path: "/api/public/pages/:slug"` (and optional `method`) is mounted at that path instead of/in addition to the mesh path:
+- **Action mesh** — `/api/{service}/{action}` with the configured `method` (default `POST`). Declare `method: "GET"` for read actions; names do not infer methods.
+- **Custom action paths** — an action with `path: "/api/public/pages/:slug"` (and optional `method`) is mounted only at that path, replacing the default mesh path. `method` defaults to `POST`:
 
 ```ts
 export const getPublicPage = pagesService.action({

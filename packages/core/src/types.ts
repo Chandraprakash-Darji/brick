@@ -138,7 +138,9 @@ export interface BaseActionConfig<
 > {
   name: string;
   description?: string;
+  /** Effective HTTP path, including the prefix; replaces the default action path. */
   path?: string;
+  /** Single HTTP method exposed for this action (default POST). */
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   input?: TInputSchema;
   output?: TOutputSchema;

@@ -123,7 +123,15 @@ it("builds a deployable server and runs generated handlers without the definitio
     ).toBe(400);
     expect((await fetch(`${base}/docs`)).status).toBe(200);
     const spec = (await (await fetch(`${base}/openapi.json`)).json()) as any;
-    expect(spec.paths["/v1/built/getPage"]).toBeDefined();
+    expect(spec.paths["/v1/built/getPage"]).toBeUndefined();
+    expect(Object.keys(spec.paths["/api/public/pages/{slug}"])).toEqual([
+      "get",
+    ]);
+    expect((await fetch(`${base}/v1/built/getPage`)).status).toBe(404);
+    expect(
+      (await fetch(`${base}/api/public/pages/hello`, { method: "POST" }))
+        .status,
+    ).toBe(404);
     server.kill("SIGTERM");
     expect(await server.exited).toBe(0);
   } finally {

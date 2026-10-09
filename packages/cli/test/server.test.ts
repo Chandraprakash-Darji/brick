@@ -41,6 +41,7 @@ describe("@brickkit/cli Server Engine", () => {
 
     const listDeals = defineAction({
       name: "listDeals",
+      method: "GET",
       output: t.Object({
         deals: t.Array(
           t.Object({

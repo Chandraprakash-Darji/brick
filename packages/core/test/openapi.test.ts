@@ -48,6 +48,7 @@ describe("OpenAPI 3.1 Specification Generator", () => {
     // 2. Read-like GET action with query parameters
     const getPage = defineAction({
       name: "getPage",
+      method: "GET",
       description: "Get page by id",
       input: t.Object({
         id: t.String({ description: "Target page ID" }),
@@ -119,10 +120,10 @@ describe("OpenAPI 3.1 Specification Generator", () => {
     expect(spec.components.securitySchemes.bearerAuth.type).toBe("http");
     expect(spec.components.securitySchemes.bearerAuth.scheme).toBe("bearer");
 
-    // 4. GET & POST /api/pages/getPage
+    // 4. GET only /api/pages/getPage
     const getPath = spec.paths["/api/pages/getPage"];
     expect(getPath).toBeDefined();
-    expect(getPath.post).toBeDefined();
+    expect(getPath.post).toBeUndefined();
     expect(getPath.get).toBeDefined();
     expect(getPath.get.operationId).toBe("pages_getPage_get");
     expect(getPath.get.parameters).toBeDefined();

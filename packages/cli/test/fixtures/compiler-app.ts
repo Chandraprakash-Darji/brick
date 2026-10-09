@@ -13,6 +13,7 @@ const service = defineService("built", {
 });
 service.action({
   name: "getPage",
+  method: "GET",
   path: "/api/public/pages/:slug",
   input: t.Object({ slug: t.String({ minLength: 2 }) }),
   output: t.Object({ slug: t.String() }),
@@ -20,7 +21,11 @@ service.action({
   execute: async ({ input }) => input,
 });
 const plain = defineService("plain");
-plain.action({ name: "getReady", execute: () => ({ ok: true }) });
+plain.action({
+  name: "getReady",
+  method: "GET",
+  execute: () => ({ ok: true }),
+});
 
 const pages = sqliteTable("built_read_pages", {
   id: text("page_id").primaryKey(),

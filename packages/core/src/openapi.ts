@@ -33,16 +33,16 @@ export function generateOpenApiSpec(
     tagsSet.add(service.name);
 
     for (const action of service.listActions()) {
-      const actionPath = `${prefix}/${service.name}/${action.name}`;
-      if (!paths[actionPath]) {
-        paths[actionPath] = {};
-      }
-
-      const isGetLike =
-        action.name.startsWith("get") ||
-        action.name.startsWith("list") ||
-        action.name.startsWith("find") ||
-        action.name.startsWith("read");
+      const routePath =
+        action.config.path ?? `${prefix}/${service.name}/${action.name}`;
+      const method = (action.config.method ?? "POST").toLowerCase();
+      const pathParams = [...routePath.matchAll(/:([^/]+)/g)].map(
+        (match) => match[1]!,
+      );
+      const actionPath = routePath.replace(/:([^/]+)/g, "{$1}");
+      if (!paths[actionPath]) paths[actionPath] = {};
+      // Match the compiler's first-registration-wins policy for route collisions.
+      if (paths[actionPath][method]) continue;
 
       const hasAuth = Boolean(action.config.authorize);
       if (hasAuth) {
@@ -133,9 +133,8 @@ export function generateOpenApiSpec(
         description: "Internal server error",
       };
 
-      // 1. Build POST Operation
-      const postOperation: Record<string, any> = {
-        operationId: `${service.name}_${action.name}_post`,
+      const operation: Record<string, any> = {
+        operationId: `${service.name}_${action.name}_${method}`,
         summary: `${service.name}.${action.name}`,
         description:
           action.config.description ??
@@ -147,67 +146,48 @@ export function generateOpenApiSpec(
         responses,
       };
 
-      if (action.config.input) {
-        postOperation.requestBody = {
+      const inputSchema = action.config.input;
+      const properties = inputSchema?.properties ?? {};
+      const parameters: any[] = [...new Set(pathParams)].map((key) => ({
+        name: key,
+        in: "path",
+        required: true,
+        schema: properties[key] ?? { type: "string" },
+      }));
+      const queryOnly = method === "get" || method === "delete";
+      if (queryOnly) {
+        for (const [key, schema] of Object.entries(properties)) {
+          if (pathParams.includes(key)) continue;
+          parameters.push({
+            name: key,
+            in: "query",
+            required: inputSchema?.required?.includes(key) ?? false,
+            schema,
+          });
+        }
+      } else if (inputSchema) {
+        const bodySchema =
+          pathParams.length && inputSchema.properties
+            ? {
+                ...inputSchema,
+                properties: Object.fromEntries(
+                  Object.entries(properties).filter(
+                    ([key]) => !pathParams.includes(key),
+                  ),
+                ),
+                required: (inputSchema.required ?? []).filter(
+                  (key: string) => !pathParams.includes(key),
+                ),
+              }
+            : inputSchema;
+        operation.requestBody = {
           required: true,
-          content: {
-            "application/json": {
-              schema: action.config.input,
-            },
-          },
+          content: { "application/json": { schema: bodySchema } },
         };
       }
-
-      if (hasAuth) {
-        postOperation.security = [{ bearerAuth: [] }];
-      }
-
-      paths[actionPath].post = postOperation;
-
-      // 2. Build GET Operation for read-like actions
-      if (isGetLike) {
-        const getOperation: Record<string, any> = {
-          operationId: `${service.name}_${action.name}_get`,
-          summary: `${service.name}.${action.name}`,
-          description:
-            action.config.description ??
-            `Read-like query action '${action.name}' on service '${service.name}'`,
-          tags:
-            action.config.tags && action.config.tags.length > 0
-              ? action.config.tags
-              : [service.name],
-          responses,
-        };
-
-        if (action.config.input && typeof action.config.input === "object") {
-          const inputSchema = action.config.input as any;
-          if (inputSchema.properties) {
-            const parameters: any[] = [];
-            const requiredFields: string[] = inputSchema.required || [];
-
-            for (const [key, propSchema] of Object.entries(
-              inputSchema.properties,
-            )) {
-              parameters.push({
-                name: key,
-                in: "query",
-                required: requiredFields.includes(key),
-                schema: propSchema,
-              });
-            }
-
-            if (parameters.length > 0) {
-              getOperation.parameters = parameters;
-            }
-          }
-        }
-
-        if (hasAuth) {
-          getOperation.security = [{ bearerAuth: [] }];
-        }
-
-        paths[actionPath].get = getOperation;
-      }
+      if (parameters.length) operation.parameters = parameters;
+      if (hasAuth) operation.security = [{ bearerAuth: [] }];
+      paths[actionPath][method] = operation;
     }
   }
 
