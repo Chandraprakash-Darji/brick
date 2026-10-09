@@ -40,6 +40,15 @@ const api = createBrickClient<AppServer>({ baseUrl: "http://localhost:4000" });
 const pages = await api.page.list({ limit: 10 });
 ```
 
+Custom actions use their configured `path` and `method` when you pass the runtime
+`contract`. Paths are absolute server paths, including the prefix. `:parameter`
+segments are URL-encoded from input and removed from the remaining payload.
+GET and DELETE send remaining input as query parameters; POST, PUT, and PATCH
+send JSON. The default custom action method is POST.
+
+Missing path parameters reject before sending a request. Without the runtime
+contract, the client uses its conventional resource and action routes.
+
 See `www/content/docs/(brick)/typed-client.mdx` for the contract-first setup
 (`defineAppContract` + `brickFromContract`), routing, and error handling.
 
