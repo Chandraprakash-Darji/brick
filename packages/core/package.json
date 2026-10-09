@@ -1,6 +1,6 @@
 {
   "name": "@brickkit/core",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Core engine primitives for the Brick-TS framework",
   "license": "MIT",
   "type": "module",
