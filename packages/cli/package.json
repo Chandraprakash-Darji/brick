@@ -2,6 +2,7 @@
   "name": "@brickkit/cli",
   "version": "0.2.1",
   "description": "CLI and server engine for Brick-TS",
+  "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
