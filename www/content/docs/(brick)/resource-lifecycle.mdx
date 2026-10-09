@@ -52,6 +52,7 @@ JSON response (ValidationError → its status; ActionExecutionError → its stat
 export const getPublicPage = pagesService.action({
   name: "getPublicPage",
   path: "/api/public/pages/:slug",
+  method: "GET",
   input: t.Object({ slug: t.String() }),
   execute: async ({ input, ctx, error }) => {
     const [page] = await ctx.db
