@@ -48,6 +48,26 @@ uses Vite 8; no separate code-generation command is needed.
 Keep startup jobs and connection-opening initialization outside the app
 definition module, for example in request handlers or the server bootstrap.
 
+## Generate without Vite
+
+For another frontend framework or build tool, use the standalone Bun CLI with
+the same default-exported app:
+
+```sh
+brick gen client src/api/app.ts
+# Or choose an output location:
+brick gen client src/api/app.ts --output frontend/src/contract.ts
+```
+
+The default output is `_brick/contract.ts` relative to the working directory.
+Vite is not required. Run generation before your frontend development server,
+production build, or type check, and rerun after backend definition edits.
+For example, add `"gen:client": "brick gen client src/api/app.ts"` to your
+package scripts and run `bun run gen:client` before your frontend command.
+The CLI uses the app's selected services and prefix, creates missing output
+directories, and skips rewriting unchanged contents. The same entry-evaluation
+and schema requirements described above apply.
+
 ## Call your API
 
 ```ts

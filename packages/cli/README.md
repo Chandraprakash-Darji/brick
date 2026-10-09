@@ -32,6 +32,7 @@ The `brick` binary ships in this package for local dev and inspection:
 ```sh
 brick dev --port 4000
 brick gen openapi --output openapi.json
+brick gen client src/app.ts
 brick info
 ```
 
@@ -130,3 +131,32 @@ schema references and non-JSON transport types fail generation explicitly.
 This integration requires Vite 8; the normal server entry point has no Vite
 runtime dependency. `generateClientContract(app)` exposes the source generator
 for non-Vite tooling.
+
+## Generate a typed client without Vite
+
+Use the standalone Bun CLI with any module whose default export is a `BrickApp`:
+
+```sh
+brick gen client src/app.ts
+brick gen client src/app.ts --output frontend/src/contract.ts
+```
+
+The default output is `_brick/contract.ts`, relative to the working directory.
+The app's selected services and prefix determine its contents, just as with the
+Vite plugin. The command evaluates the entry without calling `.listen()`; keep
+the listener in a separate server bootstrap. Vite is not required or loaded.
+
+Run generation before your frontend's development server, build, and type check,
+and rerun after changing backend definitions. You can add a package script:
+
+```json
+{
+  "scripts": {
+    "gen:client": "brick gen client src/app.ts"
+  }
+}
+```
+
+Import the generated `contract` with `createBrickClient({ baseUrl, contract })`
+as shown above. The command creates parent directories and leaves an unchanged
+contract file untouched. Add the generated output to `.gitignore`.

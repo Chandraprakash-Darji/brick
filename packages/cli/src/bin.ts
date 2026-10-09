@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { startDevServer } from "./runner";
 import { buildApplication } from "./build";
+import { writeClientContract } from "./client-contract-file";
 import { getGlobalRegistry, generateOpenApiSpec } from "@brickkit/core";
 
 const args = process.argv.slice(2);
@@ -51,6 +52,22 @@ async function main() {
 
     case "gen": {
       const subCommand = args[1];
+      if (subCommand === "client") {
+        const entry = args[2];
+        if (!entry || entry.startsWith("-"))
+          throw new Error("Usage: brick gen client <entry> [--output <file>]");
+        if (
+          args.length > 3 &&
+          (args[3] !== "--output" ||
+            !args[4] ||
+            args[4].startsWith("-") ||
+            args.length > 5)
+        )
+          throw new Error("Usage: brick gen client <entry> [--output <file>]");
+        const output = await writeClientContract(entry, args[4]);
+        console.log(`Client contract written to ${output}`);
+        break;
+      }
       if (subCommand === "openapi") {
         const outIdx = args.indexOf("--output");
         const outputFile = outIdx !== -1 ? args[outIdx + 1] : undefined;
@@ -66,7 +83,9 @@ async function main() {
         }
         break;
       }
-      console.error(`Unknown generator: ${subCommand}. Available: openapi`);
+      console.error(
+        `Unknown generator: ${subCommand}. Available: openapi, client`,
+      );
       process.exit(1);
       break;
     }
@@ -87,6 +106,7 @@ Usage:
   brick start [entry]                   Start production server
   brick build <entry> [--outdir <dir>]  Compile definitions into a Bun server
   brick gen openapi [--output <file>]    Generate OpenAPI 3.1 JSON specification
+  brick gen client <entry> [--output <file>] Generate a typed browser client contract
   brick info                            Export architecture JSON schema
 `);
       process.exit(0);
