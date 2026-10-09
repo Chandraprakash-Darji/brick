@@ -66,18 +66,18 @@ bun dist/brick/server.js
 See [the compilation plan and artifact contract](COMPILER.md) for implemented
 stages, limitations and the next optimizations.
 
-## Vite integration
+## Automatic typed client with Vite
 
-Use `@brickkit/cli/vite` with an entry module whose default export is a
-`BrickApp`. The filename is unrestricted; the entry constructs the app without
-calling `.listen()`:
+Add `brickClient` before your framework plugins. Its entry can be any module
+whose default export is a `BrickApp`; construct the app without calling
+`.listen()` there:
 
 ```ts
 // src/api/app.ts
 import { brick } from "@brickkit/cli";
 import { pagesService } from "./services";
 
-export default brick({ services: [pagesService] });
+export default brick({ prefix: "/v2", services: [pagesService] });
 ```
 
 ```ts
@@ -85,12 +85,48 @@ export default brick({ services: [pagesService] });
 import { brickClient } from "@brickkit/cli/vite";
 
 export default defineConfig({
-  plugins: [brickClient({ entry: "./src/api/app.ts" })],
+  plugins: [
+    brickClient({ entry: "./src/api/app.ts" }),
+    // TanStack Start, React, or other framework plugins
+  ],
 });
 ```
 
-Server code can import the app from `virtual:brick-app`; Vite tracks the entry
-and its dependencies for hot reload. Browser imports of this server module are
-rejected. Add `/// <reference types="@brickkit/cli/vite/client" />` to your
-Vite environment declarations for its TypeScript type. This integration uses
-Vite 8 and is isolated from the normal server entry point.
+Vite creates `_brick/contract.ts` before loading the frontend and before
+production builds. The prefix and selected services come from the app. Backend
+edits regenerate the file; unchanged metadata does not rewrite it. There is no
+separate generation command or manually maintained action list.
+
+```ts
+// src/client.ts
+import { createBrickClient } from "@brickkit/core/client";
+import { contract } from "../_brick/contract";
+
+export const api = createBrickClient({
+  baseUrl: "http://localhost:8085",
+  contract,
+});
+```
+
+The generated file contains transport types and route metadata, with no runtime
+imports or backend handlers. HTTP actions are grouped by service name; dotted
+action names become nested namespaces. Resources use their names at the root
+and their normal REST routes. MCP-only tools are excluded. Add `_brick/` to
+`.gitignore`; customize its location with `output` in the plugin options.
+
+For TanStack Start or another embedded server, import the app from
+`virtual:brick-app` in server code and forward requests to `app.fetch(request)`.
+Vite tracks the entry and its dependencies for backend hot reload. Browser
+imports of this server module are rejected. Add
+`/// <reference types="@brickkit/cli/vite/client" />` to your Vite environment
+declarations. See `examples/pages` for a complete Start integration.
+
+Generation evaluates the app entry, so the configuration it needs to construct
+the app must be available in development and at build time. Keep startup jobs
+and connection-opening initialization in request handlers or your server
+bootstrap, outside the app definition module. Input/output types
+come from JSON transport schemas; absent schemas produce `unknown`. Unresolved
+schema references and non-JSON transport types fail generation explicitly.
+This integration requires Vite 8; the normal server entry point has no Vite
+runtime dependency. `generateClientContract(app)` exposes the source generator
+for non-Vite tooling.

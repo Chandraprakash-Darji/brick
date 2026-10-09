@@ -22,6 +22,7 @@ export {
 export type {
   BrickClient,
   BrickClientOptions,
+  BrickClientAction,
   BrickCallOptions,
   BrickActionCaller,
   BrickResourceClient,

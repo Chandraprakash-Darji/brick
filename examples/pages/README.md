@@ -117,3 +117,17 @@ shared `createMcpRegistry({ services: [pagesService] })` lists and dispatches th
 so no separate annotations map or tool array is needed. Echo and the public
 metadata tool opt into HTTP with `http: true`. The shared `createMcpHandler()`
 handles JSON-RPC; Better Auth still verifies tokens in the app's MCP wrapper.
+
+## Generated client contract
+
+The Brick Vite plugin loads the default `BrickApp` export from `src/api/app.ts`
+and generates `_brick/contract.ts` automatically during `dev` and `build`.
+There is no manually maintained backend contract. `src/lib/api.ts` imports the
+browser-safe generated metadata, and `src/server/brick.ts` imports
+`virtual:brick-app` to forward API requests inside the Start server.
+
+Backend edits regenerate route/schema metadata and participate in Vite hot
+reload. `_brick/` is ignored by Git. The `typecheck` script initializes Vite to
+produce the contract before running TypeScript, so it also works on a clean
+checkout. App initialization configuration (including required secrets) must
+be available when generation runs.

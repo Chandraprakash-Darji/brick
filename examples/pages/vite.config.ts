@@ -1,6 +1,8 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { brickClient } from "@brickkit/cli/vite";
+
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import react from "@vitejs/plugin-react";
@@ -13,6 +15,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [
+    brickClient({ entry: "./src/api/app.ts" }),
     tailwindcss(),
     // MUST come before react()
     tanstackStart(startOptions),

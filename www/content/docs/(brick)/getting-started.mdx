@@ -21,6 +21,7 @@ using the local framework and typed SDK, see `examples/pages` and run
 `bun run pages:dev` from the repository root.
 
 ```ts
+// src/services/pages/service.ts
 import {
   defineService,
   defineDatabase,
@@ -78,11 +79,20 @@ export const pagesResource = pagesService.resource({
 
 ## Serve it
 
+Export the app separately from the listener so Vite can read its definitions:
+
 ```ts
+// src/app.ts
 import { brick } from "@brickkit/cli";
 import { pagesService } from "./services/pages/service";
 
-const app = brick({ services: [pagesService] });
+export default brick({ services: [pagesService] });
+```
+
+```ts
+// src/index.ts
+import app from "./app";
+
 app.listen(4000);
 console.log("Brick-TS on http://localhost:4000");
 ```
@@ -105,16 +115,46 @@ bun run src/index.ts
 
 ## Call it from a typed frontend
 
-No OpenAPI export or codegen step — import the contract type and call with autocomplete and compile-time payload checking:
+In your Vite frontend, add the Brick plugin before your framework plugins:
+
+```bash
+bun add --dev vite@^8
+```
 
 ```ts
-import { createBrickClient } from "@brickkit/core/client";
-import type { AppServer } from "./server"; // type-only: no backend code bundled
+// vite.config.ts
+import { defineConfig } from "vite";
+import { brickClient } from "@brickkit/cli/vite";
 
-const api = createBrickClient<AppServer>({ baseUrl: "http://localhost:4000" });
+export default defineConfig({
+  plugins: [brickClient({ entry: "./src/app.ts" })],
+});
+```
+
+Run Vite with Bun for this SQLite example:
+
+```bash
+bunx --bun vite
+```
+
+The plugin generates `_brick/contract.ts` from the default-exported app before
+the frontend loads and before production builds, and regenerates it on backend
+edits. Add `_brick/` to `.gitignore`. Import the generated contract for
+autocomplete and compile-time payload checking:
+
+```ts
+// src/client.ts
+import { createBrickClient } from "@brickkit/core/client";
+import { contract } from "../_brick/contract";
+
+const api = createBrickClient({ baseUrl: "http://localhost:4000", contract });
 
 const pages = await api.page.list({ limit: 10 });
-const created = await api.page.create({ title: "Hello", content: "World" });
+const created = await api.page.create({
+  slug: "hello",
+  title: "Hello",
+  content: "World",
+});
 ```
 
 See [Typed Client](/docs/typed-client) for routing, error handling (`ActionExecutionError` codes, `ValidationError`, transport/server failures, cancellation), auth headers, and timeouts.

@@ -37,6 +37,7 @@ coverage/
 
 # Brick-TS local dev cache & state
 .brick/
+_brick/
 *.db
 *.sqlite
 *.sqlite-journal

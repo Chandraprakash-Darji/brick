@@ -1,21 +1,16 @@
 // Brick API mount for TanStack Start.
 //
 // The pages backend (Elysia app in src/api) runs in-process inside
-// the Start server via the custom entry in `src/server.ts`. One singleton
-// per server process, so the Postgres pool and auth instances are shared.
+// the Start server via the custom entry in `src/server.ts`. The Vite plugin
+// loads its default export and tracks backend dependencies for hot reload.
 //
 // Owned paths are forwarded verbatim (full URL preserved, so Elysia routes
 // on the original pathname). Everything else falls through to Start.
 // NOTE: brick's `/docs` is deliberately NOT mounted — `/docs/*` is the
 // web docs UI. API docs stay on `/reference` (+ `/swagger`).
-import { buildApp } from "../api/app";
+import app from "virtual:brick-app";
 
-type BrickApp = ReturnType<typeof buildApp>;
-
-let app: BrickApp | null = null;
-
-export function getBrickApp(): BrickApp {
-  if (!app) app = buildApp();
+export function getBrickApp() {
   return app;
 }
 
