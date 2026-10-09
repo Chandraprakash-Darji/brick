@@ -20,8 +20,16 @@ const args = parseArgs(process.argv.slice(2));
 if (args.server) {
   resetGlobalRegistry();
   const service = defineService("compile_bench");
-  service.action({ name: "getSync", execute: () => ({ ok: true }) });
-  service.action({ name: "getAsync", execute: async () => ({ ok: true }) });
+  service.action({
+    name: "getSync",
+    method: "GET",
+    execute: () => ({ ok: true }),
+  });
+  service.action({
+    name: "getAsync",
+    method: "GET",
+    execute: async () => ({ ok: true }),
+  });
   const input = t.Object({
     slug: t.String({ minLength: 2 }),
     count: t.Number({ minimum: 0 }),
