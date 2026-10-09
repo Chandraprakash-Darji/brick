@@ -192,8 +192,12 @@ function namespaceType(node: Record<string, any>): string {
 
 // Emit transport types from schemas, rather than importing backend callbacks or databases.
 class SchemaTypes {
-  private aliases = new Map<string, string>();
-  private names = new Set(["AppContract", "BrickClientAction", "contract"]);
+  private readonly aliases = new Map<string, string>();
+  private readonly names = new Set([
+    "AppContract",
+    "BrickClientAction",
+    "contract",
+  ]);
 
   declarations(): string {
     return [...this.aliases]
@@ -251,7 +255,7 @@ class SchemaTypes {
         if (!fragment.startsWith("/")) return undefined;
         try {
           for (const part of decodeURIComponent(fragment).slice(1).split("/")) {
-            const key = part.replace(/~1/g, "/").replace(/~0/g, "~");
+            const key = part.replaceAll("~1", "/").replaceAll("~0", "~");
             if (!target || !Object.hasOwn(target, key)) return undefined;
             target = target[key];
           }
@@ -290,12 +294,14 @@ class SchemaTypes {
         if (!/^[a-zA-Z_$]/.test(nameBase)) nameBase = `Schema_${nameBase}`;
         nameBase = `Brick${nameBase}`;
         let name = nameBase;
-        for (let suffix = 2; this.names.has(name); suffix++)
+        let suffix = 2;
+        while (this.names.has(name)) {
           name = `${nameBase}_${suffix}`;
+          suffix += 1;
+        }
         this.names.add(name);
         names.set(schema, name);
-        // Reserve the alias before its body is rendered, so recursive refs terminate.
-        this.aliases.set(name, "");
+        // names is reserved before the body is rendered, so recursive refs terminate.
         this.aliases.set(name, emit(schema, true, currentBase));
         return name;
       }
@@ -343,13 +349,14 @@ class SchemaTypes {
               `${JSON.stringify(key)}${schema.required?.includes(key) ? "" : "?"}: ${emit(value, false, currentBase)};`,
           );
           const patterns = Object.values(schema.patternProperties ?? {});
-          const indexType = patterns.length
-            ? patterns
-                .map((child) => emit(child, false, currentBase))
-                .join(" | ")
-            : schema.additionalProperties
-              ? emit(schema.additionalProperties, false, currentBase)
-              : undefined;
+          let indexType: string | undefined;
+          if (patterns.length) {
+            indexType = patterns
+              .map((child) => emit(child, false, currentBase))
+              .join(" | ");
+          } else if (schema.additionalProperties) {
+            indexType = emit(schema.additionalProperties, false, currentBase);
+          }
           const object = `{ ${properties.join(" ")} }`;
           if (indexType) {
             const index = `{ [key: string]: ${indexType} }`;
