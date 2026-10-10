@@ -1,4 +1,4 @@
-import { brick } from "@brickkit/cli";
+import { brick } from "@brickkit/core";
 import { usersService } from "./services/users";
 
 const app = brick({ services: [usersService] });

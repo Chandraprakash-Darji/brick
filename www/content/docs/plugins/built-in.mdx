@@ -3,7 +3,7 @@ title: Built-in Capabilities
 description: Request logging, docs, health, and architecture export from brick
 ---
 
-These ship with `@brickkit/cli` — no install step, just `brick()`
+These ship with `@brickkit/core` — no install step, just `brick()`
 options. They are framework behavior, not add-on packages.
 
 ## Request logging
@@ -11,7 +11,7 @@ options. They are framework behavior, not add-on packages.
 On by default. Every route is timed and logged via the `requestLoggingPlugin`:
 
 ```ts
-import { brick } from "@brickkit/cli";
+import { brick } from "@brickkit/core";
 
 const app = brick({ requestLogging: true });
 ```

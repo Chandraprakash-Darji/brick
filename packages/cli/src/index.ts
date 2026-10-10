@@ -1,31 +1,35 @@
-export { brick, type CreateServerOptions } from "./server";
+/**
+ * Runtime re-exports for backwards compatibility (deprecated).
+ * New code should import `brick`, `BrickApp`, and the compiler runtime
+ * from `@brickkit/core`. This package is build-time tooling only.
+ */
 export {
+  brick,
+  type CreateServerOptions,
   type BrickApp,
   type EndpointContext,
   type EndpointDefinition,
   type EndpointLogger,
   type EndpointMethod,
-} from "./endpoints";
-export { startDevServer, type DevServerOptions } from "./runner";
-export {
   requestLoggingPlugin,
   type RequestLoggingOptions,
-} from "./request-logger";
-export {
   scalarDocsHTML,
   referencePlugin,
   registerReferenceRoute,
   type ReferenceOptions,
-} from "./docs";
-
-export {
   compileBrickApplication,
   bindCompiledApplication,
-  emitCompiledApplication,
+  loadCompiledBrickApp,
   type BrickIR,
   type RouteIR,
+  type RouteMethod,
   type CompiledApplication,
-} from "./compiler";
-export { buildApplication, type BuildApplicationOptions } from "./build";
+  type CompiledRoute,
+  type CompiledHandler,
+  type HandlerFactory,
+} from "@brickkit/core";
 
+export { startDevServer, type DevServerOptions } from "./runner";
+export { buildApplication, type BuildApplicationOptions } from "./build";
 export { generateClientContract } from "./client-contract";
+export { emitCompiledApplication, emitHandlerFactory } from "./compiler/emit";

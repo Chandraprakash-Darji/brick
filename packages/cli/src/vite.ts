@@ -9,7 +9,7 @@ import {
   type EnvironmentModuleNode,
 } from "vite";
 import { generateClientContract } from "./client-contract";
-import type { BrickApp } from "./endpoints";
+import type { BrickApp } from "@brickkit/core";
 import { ModuleRunner } from "vite/module-runner";
 
 export interface BrickClientPluginOptions {

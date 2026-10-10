@@ -1,3 +1,4 @@
+// Service & resource plugins (e.g. `@brickkit/crud`).
 export {
   defineServicePlugin,
   defineResourcePlugin,
@@ -17,6 +18,51 @@ export type {
   PluginRouteMethod,
   PluginEndpointContext,
 } from "./plugin";
+// HTTP Runtime (Elysia app): bundled to user apps, never the CLI.
+export { brick, type CreateServerOptions } from "./server";
+export {
+  type BrickApp,
+  type EndpointContext,
+  type EndpointDefinition,
+  type EndpointLogger,
+  type EndpointMethod,
+  resolveEndpointDb,
+  createEndpointHandler,
+  toOpenApiPath,
+  endpointPaths,
+} from "./endpoints";
+export {
+  compileRoutePlan,
+  executeCompiledRoute,
+  createActionHandler,
+} from "./action-handler";
+export { isBrickApp, requireBrickApp } from "./app-entry";
+export {
+  requestLoggingPlugin,
+  type RequestLoggingOptions,
+} from "./request-logger";
+export {
+  scalarDocsHTML,
+  swaggerDocsHTML,
+  referencePlugin,
+  registerReferenceRoute,
+  type ReferenceOptions,
+} from "./docs";
+export {
+  compileBrickApplication,
+  bindCompiledApplication,
+  loadCompiledBrickApp,
+  type BrickIR,
+  type RouteIR,
+  type RouteMethod,
+  type CompiledApplication,
+  type CompiledRoute,
+  type CompiledHandler,
+  type HandlerFactory,
+} from "./compiler";
+export { emitHandlerFactory } from "./compiler/emit";
+export { compilerRuntime } from "./compiler/runtime";
+
 // Core Primitives
 export { defineService, ServiceImpl } from "./service";
 export { defineAction, buildErrorHelpers } from "./action";

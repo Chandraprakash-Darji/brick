@@ -51,7 +51,7 @@ How paths are built:
 - The live route merges raw endpoint paths: `{ ...spec.paths, ...endpointPaths(endpointDefs) }`, so `app.endpoint()` definitions appear alongside the action mesh.
 
 ```typescript
-import { brick } from "@brickkit/cli";
+import { brick } from "@brickkit/core";
 
 const app = brick({
   title: "My API",

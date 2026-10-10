@@ -44,7 +44,7 @@ export async function buildApplication(options: BuildApplicationOptions) {
       join(staging, "routes.js"),
       emitCompiledApplication(compilation.ir),
     );
-    const source = `import { loadCompiledBrickApp } from "@brickkit/cli/compiler";
+    const source = `import { loadCompiledBrickApp } from "@brickkit/core";
 import { ir, bind } from "./routes.js";
 export const app = await loadCompiledBrickApp(() => import(${JSON.stringify(entry)}), ir, bind);
 if (import.meta.main) {

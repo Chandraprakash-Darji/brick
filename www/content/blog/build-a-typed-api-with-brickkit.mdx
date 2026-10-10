@@ -75,7 +75,7 @@ The contract describes the client API. Build the backend directly from services;
 Create `src/server.ts`:
 
 ```ts
-import { brick } from "@brickkit/cli";
+import { brick } from "@brickkit/core";
 import { usersService } from "./users";
 
 const app = brick({ services: [usersService], port: 4000 });
