@@ -3,6 +3,8 @@ import { compileBrickApplication, type CompiledApplication } from "./compiler";
 import {
   type Service,
   getGlobalRegistry,
+  getPluginActionRoute,
+  getPluginEndpoints,
   generateOpenApiSpec,
   resolveSecrets,
   type SecretSource,
@@ -140,11 +142,12 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
         prefix,
         services,
       });
-      // Raw endpoints show up in the spec alongside the action mesh.
-      return {
-        ...spec,
-        paths: { ...spec.paths, ...endpointPaths(endpointDefs) },
-      };
+      const paths = { ...spec.paths };
+      for (const [path, operations] of Object.entries(
+        endpointPaths(endpointDefs),
+      ))
+        paths[path] = { ...paths[path], ...operations };
+      return { ...spec, paths };
     };
     app.get(
       openApiPath,
@@ -177,15 +180,34 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
   }
 
   // Dedicated Route Registry
-  const registeredRoutes = new Set<string>();
+  const registeredRoutes = new Map<string, boolean>();
+  const routeKey = (method: string, path: string) =>
+    `${method} ${path.replace(/:[^/]+/g, ":param")}`;
+  registeredRoutes.set(routeKey("GET", "/_health"), false);
+  registeredRoutes.set(routeKey("GET", "/_brick/services"), false);
+  if (enableDocs) {
+    for (const path of [openApiPath, docsPath, swaggerPath])
+      registeredRoutes.set(routeKey("GET", path), false);
+  }
+  if (reference !== false)
+    registeredRoutes.set(
+      routeKey(
+        "GET",
+        reference === true ? "/reference" : (reference.path ?? "/reference"),
+      ),
+      false,
+    );
 
   const mountRoute = (
     method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
     path: string,
     handler: any,
+    plugin = false,
   ) => {
-    const routeKey = `${method} ${path}`;
-    if (registeredRoutes.has(routeKey)) {
+    const key = routeKey(method, path);
+    if (registeredRoutes.has(key)) {
+      if (plugin || registeredRoutes.get(key))
+        throw new Error(`Brick: duplicate plugin route '${method} ${path}'`);
       return;
     }
     switch (method) {
@@ -205,15 +227,25 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
         app.delete(path, handler);
         break;
     }
-    registeredRoutes.add(routeKey);
+    registeredRoutes.set(key, plugin);
   };
 
   // Raw endpoints (outside the JSON action mesh).
-  const mountEndpoint = (def: EndpointDefinition) => {
-    mountRoute(def.method, def.path, createEndpointHandler(def, services));
+  const mountEndpoint = (def: EndpointDefinition, plugin = false) => {
+    mountRoute(
+      def.method,
+      def.path,
+      createEndpointHandler(def, services),
+      plugin,
+    );
     endpointDefs.push(def);
     endpointRevision++;
   };
+
+  for (const service of services) {
+    for (const def of getPluginEndpoints(service, prefix))
+      mountEndpoint(def, true);
+  }
 
   for (const def of options.endpoints ?? []) {
     mountEndpoint(def);
@@ -244,8 +276,20 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
       "Brick compiler: server services/prefix differ from the bound compilation",
     );
   }
-  for (const route of compilation.routes)
-    mountRoute(route.ir.method, route.ir.path, route.handler);
+  for (const route of compilation.routes) {
+    const service = services.find(
+      (candidate) => candidate.name === route.ir.service,
+    )!;
+    const action = service
+      .listActions()
+      .find((candidate) => candidate.name === route.ir.action)!;
+    mountRoute(
+      route.ir.method,
+      route.ir.path,
+      route.handler,
+      getPluginActionRoute(action, prefix) !== undefined,
+    );
+  }
 
   return brickApp;
 }

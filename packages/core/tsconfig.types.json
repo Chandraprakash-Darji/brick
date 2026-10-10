@@ -1,5 +1,9 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": { "noEmit": true },
-  "include": ["test/resource-types.test.ts", "test/tool.test.ts"]
+  "include": [
+    "test/resource-types.test.ts",
+    "test/tool.test.ts",
+    "test/plugin.test.ts"
+  ]
 }

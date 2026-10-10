@@ -1,3 +1,8 @@
+import {
+  installPlugin,
+  isInstallingPlugin,
+  type ServicePlugin,
+} from "./plugin";
 import type { TSchema } from "@sinclair/typebox";
 import type { BunSQLiteDatabase } from "./db/sqlite";
 import type {
@@ -62,6 +67,10 @@ export class ServiceImpl<
     this.database = options.database;
   }
 
+  use<A>(plugin: ServicePlugin<this, A>): A {
+    return installPlugin(this, undefined, plugin) as A;
+  }
+
   get db(): TDb | undefined {
     return this.getDb();
   }
@@ -75,6 +84,8 @@ export class ServiceImpl<
    * Per-request paths perform O(1) lookups against these immutable plans.
    */
   build(): this {
+    if (isInstallingPlugin(this))
+      throw new Error("Cannot build a service during plugin setup");
     if (this._isBuilt) return this;
     for (const resource of this.resources.values()) {
       if (!(resource as any).plan) {
@@ -104,6 +115,8 @@ export class ServiceImpl<
   resource: Service<TDb, TServiceContext>["resource"] = ((
     config: ResourceConfig<any, BaseContext<TDb> & TServiceContext>,
   ) => {
+    if (isInstallingPlugin(this) && this.resources.has(config.name))
+      throw new Error(`Duplicate plugin resource: ${config.name}`);
     const resourceInstance = defineResource(this, config);
     this.resources.set(resourceInstance.name, resourceInstance);
     getGlobalRegistry().touch();
@@ -169,6 +182,12 @@ export class ServiceImpl<
       actionInstance = defineAction(actionOrConfig);
     }
 
+    if (
+      isInstallingPlugin(this) &&
+      this.actions.has(actionInstance.name) &&
+      this.actions.get(actionInstance.name) !== actionInstance
+    )
+      throw new Error(`Duplicate plugin action: ${actionInstance.name}`);
     if (isTool(actionInstance)) actionInstance.config.http = true;
     actionInstance.serviceName = this.name;
     (actionInstance as any).service = this;

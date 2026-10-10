@@ -1,3 +1,4 @@
+import { installPlugin } from "./plugin";
 import type { TSchema } from "@sinclair/typebox";
 import {
   getTableColumns,
@@ -1686,6 +1687,10 @@ export function defineResource<
     delete: deleteAction,
   } as unknown as Resource<TTable, TCtx, TOptions>["actions"];
   const resource: Resource<TTable, TCtx, TOptions> = {
+    use(plugin) {
+      return installPlugin(service, this, plugin) as typeof this &
+        ReturnType<typeof plugin.setup>;
+    },
     name: resourceName,
     serviceName: service.name,
     table,

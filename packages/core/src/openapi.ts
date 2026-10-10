@@ -1,3 +1,4 @@
+import { getPluginActionRoute } from "./plugin";
 import type { ServiceRegistry } from "./registry";
 import { getGlobalRegistry } from "./registry";
 import type { Service, ActionErrorDefinition } from "./types";
@@ -33,9 +34,17 @@ export function generateOpenApiSpec(
     tagsSet.add(service.name);
 
     for (const action of service.listActions()) {
+      const pluginRoute = getPluginActionRoute(action, prefix);
+      if (pluginRoute === false) continue;
       const routePath =
-        action.config.path ?? `${prefix}/${service.name}/${action.name}`;
-      const method = (action.config.method ?? "POST").toLowerCase();
+        pluginRoute?.path ??
+        action.config.path ??
+        `${prefix}/${service.name}/${action.name}`;
+      const method = (
+        pluginRoute?.method ??
+        action.config.method ??
+        "POST"
+      ).toLowerCase();
       const pathParams = [...routePath.matchAll(/:([^/]+)/g)].map(
         (match) => match[1]!,
       );
