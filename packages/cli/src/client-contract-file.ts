@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 import { generateClientContract } from "./client-contract";
-import type { BrickApp } from "./endpoints";
+import { loadBrickApp } from "./app-entry";
 
 /** Generate a client contract without loading Vite or starting a server. */
 export async function writeClientContract(
@@ -14,12 +13,8 @@ export async function writeClientContract(
   const output = resolve(outputPath ?? "_brick/contract.ts");
   if (entry === output)
     throw new Error("Brick: contract output must not overwrite the app entry.");
-  const { default: app } = await import(pathToFileURL(entry).href);
-  if (!app || typeof app.endpoint !== "function" || !app.definition)
-    throw new Error(
-      "Brick: the entry module must default-export a BrickApp created by brick().",
-    );
-  const source = generateClientContract(app as BrickApp);
+  const app = await loadBrickApp(entry);
+  const source = generateClientContract(app);
   const previous = await readFile(output, "utf8").catch((error) => {
     if (error.code !== "ENOENT") throw error;
     return undefined;

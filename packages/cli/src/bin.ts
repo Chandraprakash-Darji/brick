@@ -23,7 +23,11 @@ async function main() {
       const entry = args[1] && !args[1].startsWith("-") ? args[1] : undefined;
       if (!entry)
         throw new Error(
-          "Usage: brick build <definitions.ts> [--outdir <directory>] [--prefix <path>] [--port <number>] [--no-aot]",
+          "Usage: brick build <app.ts> [--outdir <directory>] [--port <number>] [--no-aot]",
+        );
+      if (args.includes("--prefix") || args.includes("--no-request-logging"))
+        throw new Error(
+          "Brick: configure prefix and requestLogging in your default-exported brick() app instead of build flags.",
         );
       const value = (flag: string) => {
         const index = args.indexOf(flag);
@@ -36,9 +40,7 @@ async function main() {
       const result = await buildApplication({
         entry,
         outdir: value("--outdir"),
-        prefix: value("--prefix"),
         port: port === undefined ? undefined : Number(port),
-        requestLogging: !args.includes("--no-request-logging"),
         aot: !args.includes("--no-aot"),
       });
       for (const warning of result.ir.diagnostics)
@@ -105,7 +107,7 @@ async function main() {
 Usage:
   brick dev [entry] [--port <number>]    Start development server with live reload
   brick start [entry]                   Start production server
-  brick build <entry> [--outdir <dir>] [--no-aot]  Compile definitions into a Bun server
+  brick build <app.ts> [--outdir <dir>] [--no-aot]  Compile a default-exported BrickApp into a Bun server
   brick gen openapi [--output <file>]    Generate OpenAPI 3.1 JSON specification
   brick gen client <entry> [--output <file>] Generate a typed browser client contract
   brick info                            Export architecture JSON schema

@@ -56,17 +56,26 @@ const app = brick({ services: [pagesService] });
 app.listen(4000);
 ```
 
-For an application build, use a definitions module that registers services and
-resources without starting a server:
+For an application build, default-export your app without starting a server:
+
+```ts
+// src/app.ts
+import { brick } from "@brickkit/cli";
+import { pagesService } from "./services";
+
+export default brick({ services: [pagesService], prefix: "/v1" });
+```
 
 ```sh
-brick build src/definitions.ts --outdir dist/brick --port 4000
+brick build src/app.ts --outdir dist/brick --port 4000
 bun dist/brick/server.js
 # Override the built default port:
 PORT=8080 bun dist/brick/server.js
 ```
 
-Other build options: `--prefix /v1` and `--no-request-logging`.
+Use the same entry as `brick gen client src/app.ts`. Configure the prefix,
+request logging, docs, and endpoints on the app itself. The build preserves
+the exported app, including custom Elysia routes and hooks.
 
 ### Elysia v2 beta AOT
 
@@ -83,7 +92,7 @@ branch. Direct `brick()` calls and development remain runtime compiled.
 Elysia v1 and v2 are not interchangeable dependencies: v2 changes the hook API,
 so this branch targets v2 while `main` retains the stable dependency.
 
-The AOT plugin dry-runs the generated app at build time. Definitions must be
+The AOT plugin dry-runs the generated app at build time. The app entry must be
 safe to import during a build; database initialization and other module side
 effects run there. Register the same routes and hooks at build and runtime.
 Elysia v2 seals route registration at the first request, `listen()`, or
@@ -103,11 +112,11 @@ The output directory contains:
 - `server.js` / `server.js.map`: runnable bundle, including application callbacks.
 
 `routes.js` uses `@brickkit/cli/compiler` when used independently. `server.js`
-bundles these handlers and their imports; the source definitions are not needed
+bundles these handlers and their imports; the source app module is not needed
 at deployment. File-backed databases, assets and environment variables used by
 application code remain deployment requirements.
 
-The build **imports and evaluates your definitions module**. Top-level user code
+The build **imports and evaluates your app entry**. Top-level user code
 runs during build and again at runtime. Current compilation is not static AST
 analysis, and it does not sandbox user code or guarantee a build without database
 initialization. Keep migrations, seeding, demo execution and server startup in
