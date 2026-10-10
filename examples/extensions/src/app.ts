@@ -5,7 +5,7 @@ import {
   sqliteTable,
   text,
 } from "@brickkit/core";
-import { brick } from "@brickkit/cli";
+import { brick } from "@brickkit/core";
 import { commentsTable, comments } from "./extensions/comments";
 const pages = sqliteTable("pages", { id: text("id").primaryKey() });
 const database = defineDatabase({ tables: { pages, comments: commentsTable } });

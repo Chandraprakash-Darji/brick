@@ -20,12 +20,12 @@ The full repository comparison contains 14 commits. Website redesigns, example-a
 
 ## 1. The server entry point is now `brick()`
 
-The CLI package's server factory is now named `brick`. The old `createBrickServer` export has been removed.
+The core package's server factory is now named `brick`. The old `createBrickServer` export has been removed.
 
 Before:
 
 ```ts
-import { createBrickServer } from "@brickkit/cli";
+import { createBrickServer } from "@brickkit/core";
 
 const app = createBrickServer({ services: [pagesService] });
 ```
@@ -33,7 +33,7 @@ const app = createBrickServer({ services: [pagesService] });
 After:
 
 ```ts
-import { brick } from "@brickkit/cli";
+import { brick } from "@brickkit/core";
 
 const app = brick({ services: [pagesService] });
 app.listen(4000);
@@ -154,10 +154,10 @@ Implementation: [client.ts](https://github.com/brick-org/brick/blob/v0.2.0/packa
 
 ## 3. Build the HTTP server from the same contract
 
-`brickFromContract` is a new CLI helper that derives the participating services from the contract:
+`brickFromContract` is a new core helper that derives the participating services from the contract:
 
 ```ts
-import { brickFromContract } from "@brickkit/cli";
+import { brickFromContract } from "@brickkit/core";
 import { contract } from "./contract";
 
 const app = brickFromContract(contract, { port: 4000 });

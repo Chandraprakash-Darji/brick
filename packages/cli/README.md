@@ -9,7 +9,7 @@ bun add @brickkit/cli @brickkit/core
 ```
 
 ```ts
-import { brick } from "@brickkit/cli";
+import { brick } from "@brickkit/core";
 
 const app = brick({ title: "Pages API", version: "1.0.0" });
 app.listen(3333);
@@ -18,7 +18,7 @@ app.listen(3333);
 Build the backend directly from registered services:
 
 ```ts
-import { brick } from "@brickkit/cli";
+import { brick } from "@brickkit/core";
 import { pagesService, billingService } from "./services";
 
 const app = brick({ services: [pagesService, billingService] });
@@ -82,7 +82,7 @@ whose default export is a `BrickApp`; construct the app without calling
 
 ```ts
 // src/api/app.ts
-import { brick } from "@brickkit/cli";
+import { brick } from "@brickkit/core";
 import { pagesService } from "./services";
 
 export default brick({ prefix: "/v2", services: [pagesService] });
