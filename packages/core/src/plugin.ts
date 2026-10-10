@@ -92,6 +92,25 @@ export interface ResourcePluginContext<
   routes: PluginRouteRegistrar<ContextOf<S>>;
 }
 
+/** Plugins may specialize their returned API for the installation host. */
+export interface ResourcePluginTypes {
+  readonly table: unknown;
+  readonly context: unknown;
+  readonly resource: unknown;
+  readonly api: object;
+}
+export type ResourcePluginAPI<P, T, C, R = unknown> = P extends {
+  readonly types: infer H extends ResourcePluginTypes;
+}
+  ? (H & {
+      readonly table: T;
+      readonly context: C;
+      readonly resource: R;
+    })["api"]
+  : P extends ResourcePlugin<any, any, infer A>
+    ? A
+    : never;
+
 const pluginKind = Symbol("Brick plugin");
 export interface ServicePlugin<S extends Service<any, any>, A> {
   readonly [pluginKind]: "service";
@@ -213,6 +232,14 @@ interface PluginState {
 }
 const states = new WeakMap<object, PluginState>();
 const actionBindings = new WeakMap<Action<any, any, any, any>, Binding>();
+/**
+ * Cross-copy binding protocol. Bundler SSR runtimes (Vite, Nitro, Vitest)
+ * may load a second copy of core that owns a different WeakMap, while the
+ * action objects themselves cross the boundary by reference. The binding
+ * travels on the action under a process-global symbol so route lookups
+ * (including disabled-route suppression) keep working there.
+ */
+const actionBindingKey = Symbol.for("brickkit.plugin.actionBinding");
 function stateOf(service: Service<any, any>): PluginState {
   let state = states.get(service);
   if (!state) {
@@ -242,7 +269,10 @@ export function getPluginActionRoute(
   action: Action<any, any, any, any>,
   prefix = "/api",
 ) {
-  const binding = actionBindings.get(action);
+  const binding =
+    (action as unknown as Record<symbol, Binding | undefined>)[
+      actionBindingKey
+    ] ?? actionBindings.get(action);
   if (!binding) return undefined;
   if (!binding.enabled) return false;
   return {
@@ -299,6 +329,7 @@ export function installPlugin(
     tools: new Map(service.tools),
     tables: new Map(service.tables),
     resources: new Map(service.resources),
+    preparations: new Map(service.preparations),
     hosts: new Map(
       [...state.hosts].map(([key, installations]) => [
         key,
@@ -378,6 +409,9 @@ export function installPlugin(
       ownedActions.add(action);
       state.actions.set(action, binding);
       actionBindings.set(action, binding);
+      // Same object travels across bundler module copies; see actionBindingKey.
+      (action as unknown as Record<symbol, Binding>)[actionBindingKey] =
+        binding;
       return action;
     },
     endpoint(config) {
@@ -446,11 +480,15 @@ export function installPlugin(
     return resource ?? api;
   } catch (error) {
     for (const action of state.actions.keys())
-      if (!snapshots.bindings.has(action)) actionBindings.delete(action);
+      if (!snapshots.bindings.has(action)) {
+        actionBindings.delete(action);
+        delete (action as unknown as Record<symbol, unknown>)[actionBindingKey];
+      }
     restoreMap(service.actions, snapshots.actions);
     restoreMap(service.tools, snapshots.tools);
     restoreMap(service.tables, snapshots.tables);
     restoreMap(service.resources, snapshots.resources);
+    restoreMap(service.preparations, snapshots.preparations);
     state.hosts = snapshots.hosts;
     state.actions = snapshots.bindings;
     state.endpoints = snapshots.endpoints;

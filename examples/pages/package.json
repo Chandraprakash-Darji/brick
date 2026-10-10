@@ -21,6 +21,7 @@
     "@better-auth/oauth-provider": "^1.7.7",
     "@brickkit/cli": "workspace:*",
     "@brickkit/core": "workspace:*",
+    "@brickkit/crud": "workspace:*",
     "bcryptjs": "^3.0.2",
     "better-auth": "^1.7.7",
     "drizzle-orm": "0.45.2",

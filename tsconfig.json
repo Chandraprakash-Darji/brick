@@ -11,6 +11,7 @@
     "sourceMap": true,
     "types": ["bun"],
     "paths": {
+      "@brickkit/crud": ["./packages/crud/src"],
       "@brickkit/core": ["./packages/core/src"],
       "@brickkit/core/*": ["./packages/core/src/*"],
       "@brickkit/cli": ["./packages/cli/src"],

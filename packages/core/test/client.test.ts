@@ -15,10 +15,10 @@ const listPages = defineAction({
     sort: t.Optional(t.String()),
   }),
   output: t.Object({
-    pages: t.Array(t.Object({ id: t.String(), title: t.String() })),
+    items: t.Array(t.Object({ id: t.String(), title: t.String() })),
     total: t.Number(),
   }),
-  execute: async () => ({ pages: [], total: 0 }),
+  execute: async () => ({ items: [], total: 0 }),
 });
 
 const createPage = defineAction({
@@ -128,13 +128,23 @@ describe("createBrickClient (typed HTTP client)", () => {
     );
   });
 
-  it("sends resource list as GET with a query string and returns typed output", async () => {
+  it("uses explicit GET route metadata with a query string and typed output", async () => {
     const { fetchImpl, calls } = mockFetch(() =>
       json({ items: [{ id: "pg_1", title: "Hello" }], total: 1 }),
     );
     const api = createBrickClient<AppServer>({
       baseUrl: "http://localhost:4000",
       fetch: fetchImpl,
+      contract: {
+        page: {
+          list: {
+            kind: "action",
+            name: "list",
+            serviceName: "content",
+            config: { method: "GET", path: "/api/page" },
+          },
+        },
+      },
     });
 
     const pages = await api.page.list({ limit: 10, sort: "-createdAt" });
@@ -148,13 +158,23 @@ describe("createBrickClient (typed HTTP client)", () => {
     expect(pages.items[0]!.title).toBe("Hello");
   });
 
-  it("sends resource create as POST with a JSON body", async () => {
+  it("uses explicit POST route metadata with a JSON body", async () => {
     const { fetchImpl, calls } = mockFetch(() =>
       json({ id: "pg_2", title: "Hello" }),
     );
     const api = createBrickClient<AppServer>({
       baseUrl: "http://localhost:4000/",
       fetch: fetchImpl,
+      contract: {
+        page: {
+          create: {
+            kind: "action",
+            name: "create",
+            serviceName: "content",
+            config: { method: "POST", path: "/api/page" },
+          },
+        },
+      },
     });
 
     const created = await api.page.create({ title: "Hello", content: "World" });
@@ -186,7 +206,23 @@ describe("createBrickClient (typed HTTP client)", () => {
         update: typeof listPages;
         delete: typeof listPages;
       };
-    }>({ baseUrl: "http://localhost:4000", fetch: fetchImpl });
+    }>({
+      baseUrl: "http://localhost:4000",
+      fetch: fetchImpl,
+      contract: {
+        page: Object.fromEntries(
+          ["GET", "PATCH", "DELETE"].map((method, index) => [
+            ["get", "update", "delete"][index]!,
+            {
+              kind: "action",
+              name: "item",
+              serviceName: "content",
+              config: { method, path: "/api/page/:id" },
+            },
+          ]),
+        ),
+      },
+    });
 
     await api.page.get({ id: "pg_1" } as any);
     await api.page.update({ id: "pg_1", title: "Renamed" } as any);
@@ -425,15 +461,16 @@ describe("createBrickClient (typed HTTP client)", () => {
       execute: async () => ({ ok: true }),
     });
     (chargeAction as any).serviceName = "payments";
-    const fakeResource = {
-      name: "article",
-      serviceName: "content",
-      actions: { list: chargeAction },
-    };
     const runtimeContract = {
-      // Keys deliberately differ from backend names.
       money: { settle: chargeAction },
-      posts: fakeResource,
+      posts: {
+        list: {
+          kind: "action",
+          name: "list",
+          serviceName: "content",
+          config: { method: "GET", path: "/api/article" },
+        },
+      },
     };
     const { fetchImpl, calls } = mockFetch(() => json({ ok: true }));
     const api = createBrickClient<{

@@ -3,7 +3,7 @@
 // npm publish and GitHub release via the publish-npm.yml workflow.
 //
 //   bun run release [patch|minor|major|beta] [--dry-run]
-// Both packages use the same version and ship under one v<version> tag.
+// All packages use the same version and ship under one v<version> tag.
 //
 // Prerequisites (checked up front):
 //   - clean tracked tree, on main (stable) or beta, in sync with origin
@@ -23,6 +23,7 @@ const [bump = "patch"] = args;
 
 const CORE_PKG = join(ROOT, "packages/core/package.json");
 const CLI_PKG = join(ROOT, "packages/cli/package.json");
+const CRUD_PKG = join(ROOT, "packages/crud/package.json");
 
 function sh(cmd: string[], cwd = ROOT): string {
   if (DRY) {
@@ -112,15 +113,21 @@ try {
 // --- compute new versions ---
 const coreJson = readJson(CORE_PKG);
 const cliJson = readJson(CLI_PKG);
-if (coreJson.version !== cliJson.version)
-  fail("core and cli versions must match");
+const crudJson = readJson(CRUD_PKG);
+if (
+  coreJson.version !== cliJson.version ||
+  coreJson.version !== crudJson.version
+)
+  fail("core, cli and crud versions must match");
 const version = bumpVersion(coreJson.version, bump);
 const tag = `v${version}`;
 const releases = [
   { file: CORE_PKG, data: coreJson },
   { file: CLI_PKG, data: cliJson },
+  { file: CRUD_PKG, data: crudJson },
 ];
 cliJson.dependencies["@brickkit/core"] = `^${version}`;
+crudJson.dependencies["@brickkit/core"] = `^${version}`;
 const exists = execFileSync(
   "git",
   ["ls-remote", "origin", `refs/tags/${tag}`],
@@ -148,7 +155,7 @@ for (const r of releases) {
 }
 sh(["bun", "install"]);
 sh(["bun", "run", "build"]);
-sh(["bun", "test", "packages/core", "packages/cli"]);
+sh(["bun", "test", "packages/core", "packages/crud", "packages/cli"]);
 
 const msg = `chore(release): ${tag}`;
 sh([
@@ -156,13 +163,14 @@ sh([
   "add",
   "packages/core/package.json",
   "packages/cli/package.json",
+  "packages/crud/package.json",
   "bun.lock",
 ]);
 sh(["git", "commit", "-m", msg]);
 sh(["git", "tag", tag]);
 sh(["git", "push", "--atomic", "origin", releaseBranch, tag]);
 console.log(
-  `  queued ${tag}; GitHub Actions publishes both packages, then creates one release`,
+  `  queued ${tag}; GitHub Actions publishes all packages, then creates one release`,
 );
 
 console.log("\nshipped. The publish workflow now publishes via OIDC:");

@@ -7,7 +7,7 @@ Powered by **Bun (Rust core)** + **Elysia (AOT routing)** + **Better Auth** + **
 Install the public packages:
 
 ```sh
-bun add @brickkit/core @brickkit/cli
+bun add @brickkit/core @brickkit/cli @brickkit/crud
 ```
 
 The full pages app lives in `examples/pages` and uses local workspace packages,

@@ -321,20 +321,39 @@ function main(): Promise<{ results: MicroResult[]; path: string }> {
       const { service, db } = makeBenchFixture("micro-list");
       await seedRows(db, smoke ? 200 : 1000);
       const res = (service as any).getResource("item");
-      const q1 = { input: { limit: 20, sort: "-updatedAt" }, ctx: silentCtx };
-      const q5 = {
+      const q1 = {
         input: {
           limit: 20,
-          sort: "-updatedAt",
-          status: "published",
-          search: "title",
-          select: "id,slug",
-          views: 5,
+          orderBy: [{ field: "updatedAt", direction: "desc" }],
         },
         ctx: silentCtx,
       };
-      const q20: any = { limit: 20, sort: "-updatedAt" };
-      for (let i = 0; i < 17; i++) q20[`extra${i}`] = "x";
+      const q5 = {
+        input: {
+          limit: 20,
+          orderBy: [{ field: "updatedAt", direction: "desc" }],
+          where: {
+            and: [
+              { field: "status", op: "eq", value: "published" },
+              { field: "title", op: "contains", value: "title" },
+              { field: "views", op: "eq", value: 5 },
+            ],
+          },
+          select: ["id", "slug"],
+        },
+        ctx: silentCtx,
+      };
+      const q20: any = {
+        limit: 20,
+        orderBy: [{ field: "updatedAt", direction: "desc" }],
+      };
+      q20.where = {
+        and: Array.from({ length: 17 }, () => ({
+          field: "views",
+          op: "gte",
+          value: 0,
+        })),
+      };
       await run("resource-parse", "1-param", () => res.list(q1), 300);
       await run("resource-parse", "5-params", () => res.list(q5), 300);
       await run(

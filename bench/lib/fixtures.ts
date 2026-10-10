@@ -1,3 +1,4 @@
+import { crud } from "../../packages/crud/src";
 /**
  * Shared fixtures for the Brick benchmark lab.
  * One service shape reused by micro / http / prepared / batch suites so
@@ -29,6 +30,56 @@ export const benchTable = sqliteTable("bench_items", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
+
+export const benchCrudOptions = {
+  fields: {
+    id: { read: true, filter: ["eq", "in"] },
+    slug: {
+      read: true,
+      create: true,
+      update: true,
+      filter: ["eq", "contains"],
+      sort: true,
+    },
+    title: {
+      read: true,
+      create: true,
+      update: true,
+      filter: ["eq", "contains"],
+      sort: true,
+    },
+    content: { read: true, create: true, update: true },
+    status: { read: true, create: true, update: true, filter: ["eq"] },
+    views: {
+      read: true,
+      create: true,
+      update: true,
+      filter: ["eq", "gte"],
+      sort: true,
+    },
+    authorId: { read: true, filter: ["eq"] },
+    createdAt: { read: true, sort: true },
+    updatedAt: { read: true, sort: true },
+  },
+  hooks: {
+    beforeCreate: ({
+      data,
+      ctx,
+    }: {
+      data: Record<string, unknown>;
+      ctx: any;
+    }) => {
+      data.id = crypto.randomUUID();
+      data.authorId = ctx.user?.id ?? null;
+      data.createdAt = data.updatedAt = new Date().toISOString();
+    },
+    beforeUpdate: ({ data }: { data: Record<string, unknown> }) => {
+      data.updatedAt = new Date().toISOString();
+    },
+  },
+  defaultLimit: 20,
+  maxLimit: 100,
+} as const;
 
 let fixtureSeq = 0;
 
@@ -63,12 +114,9 @@ export function makeBenchFixture(tag = "bench"): BenchFixture {
     context: async () => ({ tenantId: "tenant_bench" }),
   });
 
-  const resource = service.resource({
-    name: "item",
-    table: benchTable,
-    ownerField: "authorId",
-    operations: { list: { defaultLimit: 20, maxLimit: 100 } },
-  });
+  const resource = service
+    .resource({ name: "item", table: benchTable, id: benchTable.id })
+    .use(crud(benchCrudOptions));
 
   const noop = defineAction({
     name: "noop",

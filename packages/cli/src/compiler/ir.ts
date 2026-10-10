@@ -1,9 +1,7 @@
 import {
   type Service,
   type Action,
-  describeResourceReads,
   getPluginActionRoute,
-  type ResourceReadQueries,
 } from "@brickkit/core";
 
 export type RouteMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -12,7 +10,7 @@ export interface RouteIR {
   readonly path: string;
   readonly service: string;
   readonly action: string;
-  readonly kind: "action" | "resource";
+  readonly kind: "action";
   readonly input: boolean;
   readonly output: boolean;
   readonly context: boolean;
@@ -32,7 +30,11 @@ export interface BrickIR {
   readonly prefix: string;
   readonly services: readonly string[];
   readonly routes: readonly RouteIR[];
-  readonly reads: readonly ResourceReadQueries[];
+  readonly preparations: readonly {
+    service: string;
+    name: string;
+    metadata: unknown;
+  }[];
   readonly diagnostics: readonly string[];
 }
 export interface RouteBinding {
@@ -133,21 +135,6 @@ export function analyzeApplication(
     bindings.push({ service, action });
   };
   for (const service of services) {
-    for (const resource of service.listResources()) {
-      const collection = `${prefix}/${resource.name}`;
-      const item = `${collection}/:id`;
-      for (const [operation, method, path] of [
-        ["list", "GET", collection],
-        ["create", "POST", collection],
-        ["get", "GET", item],
-        ["update", "PATCH", item],
-        ["update", "PUT", item],
-        ["delete", "DELETE", item],
-      ] as const) {
-        const action = resource.actions[operation];
-        if (action) add(service, action, method, path, "resource");
-      }
-    }
     for (const action of service.listActions()) {
       const pluginRoute = getPluginActionRoute(action, prefix);
       if (pluginRoute === false) continue;
@@ -164,11 +151,12 @@ export function analyzeApplication(
       );
     }
   }
-  const reads = services.flatMap((service) =>
-    service.listResources().flatMap((resource) => {
-      const queries = describeResourceReads(service, resource);
-      return queries ? [queries] : [];
-    }),
+  const preparations = services.flatMap((service) =>
+    service.listPreparations().map((contribution) => ({
+      service: service.name,
+      name: contribution.name,
+      metadata: schemaSnapshot(contribution.describe?.()),
+    })),
   );
   const ir: BrickIR = freezeIR({
     version: 1,
@@ -176,7 +164,7 @@ export function analyzeApplication(
     prefix,
     services: [...names],
     routes,
-    reads,
+    preparations,
     diagnostics,
   });
   return { ir, bindings };

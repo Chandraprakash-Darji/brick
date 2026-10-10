@@ -1,3 +1,4 @@
+import { crud } from "@brickkit/crud";
 import {
   defineService,
   t,
@@ -36,7 +37,14 @@ const database = defineDatabase({ tables: [pages] });
 syncSchema(database.tables, database.getDb());
 database.getDb().insert(pages).values({ id: "one", title: "Built page" }).run();
 const store = defineService("store", { database });
-store.resource({ name: "page", table: pages, defaultSort: "id" });
+store.resource({ name: "page", table: pages }).use(
+  crud({
+    fields: {
+      id: { read: true, create: true },
+      title: { read: true, create: true, update: true },
+    },
+  }),
+);
 
 const excluded = defineService("excluded");
 excluded.action({ name: "hello", method: "GET", execute: () => "excluded" });

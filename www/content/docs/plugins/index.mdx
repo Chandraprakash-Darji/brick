@@ -41,8 +41,8 @@ local actions callable. Plugins do not create or migrate database tables.
 ## Other extension points
 
 Resource hooks, `service.action()`, `app.endpoint()`, and `createServiceProxy()`
-remain available for application code. Built-in resource CRUD stays available
-through `service.resource()`.
+remain available for application code. Resources are generic table hosts.
+Install `@brickkit/crud` with `resource.use(crud({fields: ...}))` for CRUD.
 
 ## Where to go next
 
@@ -51,5 +51,5 @@ through `service.resource()`.
 - [Built-in capabilities](/docs/plugins/built-in) describes `brick()` options.
 - [Audit-trail pattern](/docs/plugins/audit) shows resource hooks writing audit rows.
 - [Comments pattern](/docs/plugins/comments) shows an application composition
-  pattern using a comments table and existing CRUD resources.
+  pattern using a comments table and resource plugin composition.
 - [Best practices](/docs/plugins/best-practices) covers scoping and testing.

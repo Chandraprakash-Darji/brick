@@ -19,6 +19,28 @@ function isNonEmpty(obj: any): boolean {
   return false;
 }
 
+// Generic pre-validation nesting cap for parsed HTTP input. Compiled input
+// validators recurse, so unbounded nesting (e.g. a 20k-deep filter object)
+// would throw RangeError (HTTP 500) instead of failing validation with a
+// 400. The walk is iterative and far above legitimate depths (a max-depth
+// CRUD filter is ~45 levels of JSON).
+const MAX_INPUT_DEPTH = 128;
+function inputTooDeep(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const stack: { node: unknown; depth: number }[] = [{ node: value, depth: 0 }];
+  while (stack.length > 0) {
+    const { node, depth } = stack.pop()!;
+    if (depth > MAX_INPUT_DEPTH) return true;
+    if (node && typeof node === "object") {
+      const children = Array.isArray(node) ? node : Object.values(node);
+      for (const child of children)
+        if (child && typeof child === "object")
+          stack.push({ node: child, depth: depth + 1 });
+    }
+  }
+  return false;
+}
+
 export function compileRoutePlan(
   service: Service,
   action: Action,
@@ -198,6 +220,12 @@ export async function executeCompiledRoute(
     }
 
     if (plan.hasInput && plan.inputChecker) {
+      if (inputTooDeep(input)) {
+        throw new ValidationError(
+          `Validation failed for action '${plan.actionName}' input`,
+          [{ path: "", message: "Input exceeds maximum nesting depth" }],
+        );
+      }
       if (!plan.inputChecker.Check(input)) {
         const errors = Array.from(plan.inputChecker.Errors(input)).map(
           (err: any) => ({

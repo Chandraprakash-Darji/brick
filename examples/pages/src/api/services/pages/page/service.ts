@@ -1,4 +1,5 @@
-import { defineService, eq } from "@brickkit/core";
+import { crud } from "@brickkit/crud";
+import { ActionExecutionError, defineService, eq } from "@brickkit/core";
 
 import { getAuth } from "../../../auth";
 import { appDb } from "../../../db";
@@ -22,38 +23,67 @@ export const pagesService = defineService("pages", {
   database: appDb,
 });
 
-// 3. Attach Resource at Service Level (Automatic CRUD & Schema Registration)
-export const pagesResource = pagesService.resource({
-  hooks: {
-    beforeCreate: async ({ data, ctx, error }) => {
-      // Validate unique slug before writing
-      const exists = await ctx.db
-        .select()
-        .from(pagesTable)
-        .where(eq(pagesTable.slug, data.slug));
-      if (exists.length > 0) {
-        error.CONFLICT(`Slug '${data.slug}' is already taken`);
-      }
-    },
-  },
-  name: "page",
-  operations: {
-    create: true,
-    delete: true,
-    get: true,
-    list: { defaultLimit: 20, maxLimit: 100 },
-    update: true,
-  },
-  ownerField: "userId",
-  table: pagesTable,
-});
-
-// Go OwnerAccess parity: every CRUD op requires sign-in. The framework's
-// ServiceOptions.auth is introspection-only (no enforcement), and resources
-// take no authorize option, so attach the guard to the generated actions.
-// defineAction reads config.authorize at execution time, so late binding works.
-const requireSignedIn = ({ user }: { user?: { id?: string } | null }) =>
-  !!user?.id;
-for (const action of Object.values(pagesResource.actions)) {
-  (action.config as { authorize?: unknown }).authorize = requireSignedIn;
-}
+export const pagesResource = pagesService
+  .resource({
+    name: "page",
+    table: pagesTable,
+    id: pagesTable.id,
+  })
+  .use(
+    crud({
+      fields: {
+        id: { read: true, filter: ["eq", "in"] },
+        slug: {
+          read: true,
+          create: true,
+          update: true,
+          filter: ["eq", "contains"],
+          sort: true,
+        },
+        title: {
+          read: true,
+          create: true,
+          update: true,
+          filter: ["eq", "contains"],
+          sort: true,
+        },
+        content: { read: true, create: true, update: true },
+        contentType: { read: true, create: true, update: true },
+        theme: { read: true, create: true, update: true },
+        isPublic: { read: true, create: true, update: true, filter: ["eq"] },
+        userId: { read: true },
+        createdAt: { read: true, sort: true },
+        updatedAt: { read: true, sort: true },
+      },
+      defaultLimit: 20,
+      maxLimit: 100,
+      access: {
+        authorize: ({ ctx }) =>
+          !!(ctx as { user?: { id?: string } | null }).user?.id,
+        scope: ({ operation, ctx }) =>
+          operation === "create"
+            ? undefined
+            : eq(pagesTable.userId, (ctx as { user: { id: string } }).user.id),
+      },
+      hooks: {
+        beforeCreate: async ({ data, ctx }) => {
+          const exists = await ctx.db
+            .select()
+            .from(pagesTable)
+            .where(eq(pagesTable.slug, String(data.slug)));
+          if (exists.length)
+            throw new ActionExecutionError(
+              "CONFLICT",
+              `Slug '${data.slug}' is already taken`,
+              409,
+            );
+          data.id = crypto.randomUUID();
+          data.userId = (ctx as { user: { id: string } }).user.id;
+          data.createdAt = data.updatedAt = new Date().toISOString();
+        },
+        beforeUpdate: ({ data }) => {
+          data.updatedAt = new Date().toISOString();
+        },
+      },
+    }),
+  );

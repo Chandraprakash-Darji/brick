@@ -1,104 +1,107 @@
 ---
-title: Resources
-description: Defining CRUD resources in Brick-TS
+title: Resources and CRUD
+description: Declare a table host and install CRUD with explicit field policies
 ---
 
-Resources are the core of a Brick-TS app. Each resource maps a Drizzle table to full CRUD actions, REST routes, owner scoping, hooks, and OpenAPI entries.
-
-## Declaration
+Core resources declare identity and a table. They register no actions. Install
+`crud()` from `@brickkit/crud` to add operations and HTTP routes.
 
 ```ts
 import {
-  defineService,
   defineDatabase,
+  defineService,
   sqliteTable,
   text,
-  integer,
-  eq,
-  t,
 } from "@brickkit/core";
+import { crud } from "@brickkit/crud";
 
-export const pagesTable = sqliteTable("pages", {
-  id: text("id").primaryKey(),
-  slug: text("slug").notNull().unique(),
+const pages = sqliteTable("pages", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
   title: text("title").notNull(),
-  content: text("content").notNull(),
-  contentType: text("content_type")
-    .$type<"markdown" | "html">()
-    .notNull()
-    .default("markdown"),
-  isPublic: integer("is_public", { mode: "boolean" }).notNull().default(false),
-  userId: text("user_id"),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
+  email: text("email"),
+  internalNotes: text("internal_notes"),
 });
-
-export const pagesDb = defineDatabase({
-  path: "./data/pages.db",
-  tables: { pagesTable },
-});
-
-export const pagesService = defineService("pages", { database: pagesDb });
-
-export const pagesResource = pagesService.resource({
-  name: "page",
-  table: pagesTable,
-  ownerField: "userId",
-  operations: {
-    list: { defaultLimit: 20, maxLimit: 100 },
-    get: true,
-    create: true,
-    update: true,
-    delete: true,
-  },
-  hooks: {
-    beforeCreate: async ({ data, ctx, error }) => {
-      const exists = await ctx.db
-        .select()
-        .from(pagesTable)
-        .where(eq(pagesTable.slug, data.slug));
-      if (exists.length > 0) {
-        error.CONFLICT(`Slug '${data.slug}' is already taken`);
-      }
+const database = defineDatabase({ tables: { pages } });
+const service = defineService("pages", { database });
+const page = service.resource({ name: "page", table: pages, id: pages.id }).use(
+  crud({
+    fields: {
+      id: { read: true, filter: ["eq", "in"] },
+      title: {
+        read: true,
+        create: true,
+        update: true,
+        filter: ["eq", "contains"],
+        sort: true,
+      },
+      email: {
+        read: true,
+        create: true,
+        update: true,
+        scrub: ({ value }) =>
+          value === null ? null : value.replace(/^(.).*(@.*)$/, "$1***$2"),
+      },
     },
-  },
-});
-
-// CRUD actions generated automatically by the resource
-export const {
-  create: createPage,
-  get: getPage,
-  list: listPages,
-  update: updatePage,
-  delete: deletePage,
-} = pagesResource.actions;
+  }),
+);
 ```
 
-## Config reference
+The application owns schema creation and migrations. Neither declaration nor
+plugin installation creates tables. Unlisted fields and omitted permissions are
+disabled. `read`, `create`, `update`, allowed `filter` operators, and `sort` are
+independent. `schema` overrides validation for a field. `scrub` changes returned
+values, including local calls and write results, without changing stored values.
+Scrubbers must handle nullable values. Filtering a masked field requires an
+explicit filter permission.
 
-| Option                                    | Meaning                                                                                                                        |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `name`                                    | Singular resource name; drives action names (`page.create`), REST paths (`/api/page`), and the plural (`pages`)                |
-| `table`                                   | Drizzle table (`sqliteTable` / `pgTable`). Its columns derive the row, create, update, get, delete, and list schemas           |
-| `ownerField`                              | Drizzle-key column holding the owner's user id. Enables owner scoping on list and ownership checks on get/update/delete        |
-| `idField`                                 | PK column key (default `"id"`)                                                                                                 |
-| `idPrefix` / `idGenerator`                | ID minting for creates (default `pg_<rand>` for a `page` resource) — see [Primary Keys](/docs/primary-keys)                    |
-| `pluralName`                              | Override the derived plural used in list responses                                                                             |
-| `operations`                              | `list` (`{ defaultLimit, maxLimit, searchable, sortable, defaultSort }` or boolean), `get`/`create`/`update`/`delete` booleans |
-| `hooks`                                   | `beforeCreate`, `afterCreate`, `beforeUpdate`, `afterUpdate`, `beforeDelete`, `afterDelete` — see [Hooks](/docs/hooks)         |
-| `fields`                                  | Per-column TypeBox overrides keyed by Drizzle key or DB column name                                                            |
-| `searchable` / `sortable` / `defaultSort` | Search and sort behavior for list — see [Resource Lifecycle](/docs/resource-lifecycle)                                         |
-| `excludeFromList`                         | Columns excluded from the default list projection (default `["content"]`)                                                      |
-| `errors`                                  | Extra named error definitions merged into every CRUD action                                                                    |
+```ts
+await page.list({
+  input: {
+    select: ["id", "title"],
+    where: { field: "title", op: "contains", value: "Hello" },
+    orderBy: [{ field: "title", direction: "asc" }],
+    limit: 20,
+    offset: 0,
+    includeTotal: true,
+  },
+});
+await page.update({ input: { id: "page-1", data: { title: "Updated" } } });
+```
 
-## What you get
+List returns `{ items, limit, offset, total? }`. Totals execute only when requested.
+`where` supports nested `and` and `or` arrays. Operators must be enabled for the
+field and compatible with the column type. Unknown projections, writes, filters
+and ordering fail validation. Local list/findOne projections infer selected keys;
+serialized browser contracts describe projected rows with optional properties.
 
-Each enabled operation registers an action on the service (`page.create`, `page.get`, `page.list`, `page.update`, `page.delete`, plus camelCase aliases like `createPage`) and REST routes via `brick`:
+Local vs HTTP row precision: local `list`/`get` actions are typed
+`Selected<T, F, S>` — the `select` projection narrows the return type. Over
+HTTP every readable key is optional in the row schema because `select`
+projections omit keys, so validate presence client-side when using `select`.
 
-- `GET /api/page` → `page.list`
-- `POST /api/page` → `page.create`
-- `GET /api/page/:id` → `page.get`
-- `PATCH` / `PUT /api/page/:id` → `page.update`
-- `DELETE /api/page/:id` → `page.delete`
+| Method | Path                 | Action  |
+| ------ | -------------------- | ------- |
+| POST   | `/api/page/query`    | list    |
+| GET    | `/api/page/:id`      | get     |
+| POST   | `/api/page`          | create  |
+| PATCH  | `/api/page/:id`      | update  |
+| DELETE | `/api/page/:id`      | delete  |
+| POST   | `/api/page/find-one` | findOne |
+| POST   | `/api/page/count`    | count   |
+| POST   | `/api/page/exists`   | exists  |
 
-Create input excludes the PK, owner, and timestamp columns (they are auto-populated). Update input requires the id and treats every other editable field as optional. The create/update/get/delete inputs and the full row output are TypeBox schemas derived from the table — override individual columns with `fields` when you need stricter validation (e.g. a slug pattern).
+`get` returns NOT_FOUND for a missing key; `findOne` returns null. Count returns
+`{count}` and exists returns `{exists}`. The configured app prefix replaces `/api`.
+There is no GET list or PUT replacement route.
+
+Use `operations: false` or `operations: {delete:false}` to remove capabilities.
+Use `routes: false` or `routes: {list:false}` to retain local actions without HTTP,
+OpenAPI, or generated browser exposure. Named route overrides accept `path` and
+`scope`, for example `routes: {count:{path:"/page-count",scope:"app"}}`. App scope
+still respects the app prefix. See [plugins](/docs/plugins/build-plugin).
+
+CRUD also accepts `defaultLimit`, `maxLimit`, `access`, and lifecycle `hooks`.
+No field-name conventions generate IDs, timestamps, owner values or projections.
+Use database defaults or explicit trusted hooks.

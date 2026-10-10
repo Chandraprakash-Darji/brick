@@ -21,7 +21,7 @@ const previous =
     .split("\n")
     .find((candidate) => candidate !== `core-v${version}`);
 
-for (const pkg of ["core", "cli"]) {
+for (const pkg of ["core", "crud", "cli"]) {
   console.log(`## @brickkit/${pkg}\n`);
   const commits = git(
     "log",

@@ -1,162 +1,63 @@
 ---
-title: Getting Started
-description: Install and create your first Brick-TS app
+title: Getting started
+description: Install core, CLI, and the optional CRUD plugin
 ---
 
-## Prerequisites
-
-- [Bun](https://bun.sh/) 1.0+
-- No database server needed for local dev (SQLite is Bun-native, `:memory:` by default)
-
-## Install
-
-```bash
-bun add @brickkit/core @brickkit/cli
+```sh
+bun add @brickkit/core @brickkit/cli @brickkit/crud
 ```
 
-## Define the table, database, service, and resource
-
-The following minimal SQLite example introduces the API. For a full Postgres app
-using the local framework and typed SDK, see `examples/pages` and run
-`bun run pages:dev` from the repository root.
-
 ```ts
-// src/services/pages/service.ts
 import {
-  defineService,
   defineDatabase,
+  defineService,
   sqliteTable,
   text,
-  integer,
-  eq,
-  t,
 } from "@brickkit/core";
+import { crud } from "@brickkit/crud";
 
-// 1. Pure Drizzle table — the single source of truth
-export const pagesTable = sqliteTable("pages", {
-  id: text("id").primaryKey(),
-  slug: text("slug").notNull().unique(),
+const pages = sqliteTable("pages", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
   title: text("title").notNull(),
-  content: text("content").notNull(),
-  userId: text("user_id"),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
+  email: text("email"),
+  internalNotes: text("internal_notes"),
 });
-
-// 2. SQLite database (Bun-only). Omit path for :memory:.
-export const pagesDb = defineDatabase({
-  path: "./data/pages.db",
-  tables: { pagesTable },
-});
-
-// 3. Service + resource (automatic CRUD + schema registration)
-export const pagesService = defineService("pages", { database: pagesDb });
-
-export const pagesResource = pagesService.resource({
-  name: "page",
-  table: pagesTable,
-  ownerField: "userId",
-  operations: {
-    list: { defaultLimit: 20, maxLimit: 100 },
-    get: true,
-    create: true,
-    update: true,
-    delete: true,
-  },
-  hooks: {
-    beforeCreate: async ({ data, ctx, error }) => {
-      const exists = await ctx.db
-        .select()
-        .from(pagesTable)
-        .where(eq(pagesTable.slug, data.slug));
-      if (exists.length > 0) {
-        error.CONFLICT(`Slug '${data.slug}' is already taken`);
-      }
+const database = defineDatabase({ tables: { pages } });
+const service = defineService("pages", { database });
+const page = service.resource({ name: "page", table: pages, id: pages.id }).use(
+  crud({
+    fields: {
+      id: { read: true, filter: ["eq", "in"] },
+      title: {
+        read: true,
+        create: true,
+        update: true,
+        filter: ["eq", "contains"],
+        sort: true,
+      },
+      email: {
+        read: true,
+        create: true,
+        update: true,
+        scrub: ({ value }) =>
+          value === null ? null : value.replace(/^(.).*(@.*)$/, "$1***$2"),
+      },
     },
-  },
-});
+  }),
+);
 ```
 
-## Serve it
-
-Export the app separately from the listener so Vite can read its definitions:
+Apply your application's schema with your migration tooling before requests.
+For disposable local SQLite examples, explicitly call `syncSchema(database.tables,
+database.getDb())`; do not run schema synchronization automatically in production.
 
 ```ts
-// src/app.ts
 import { brick } from "@brickkit/cli";
-import { pagesService } from "./services/pages/service";
-
-export default brick({ services: [pagesService] });
+export default brick({ services: [service], prefix: "/api" });
 ```
 
-```ts
-// src/index.ts
-import app from "./app";
-
-app.listen(4000);
-console.log("Brick-TS on http://localhost:4000");
-```
-
-```bash
-bun run src/index.ts
-```
-
-## Verify
-
-| URL                                     | What                                  |
-| --------------------------------------- | ------------------------------------- |
-| `http://localhost:4000/_health`         | `{ status: "ok", uptime, timestamp }` |
-| `http://localhost:4000/_brick/services` | Live architecture introspection       |
-| `http://localhost:4000/openapi.json`    | Generated OpenAPI 3.1 spec            |
-| `http://localhost:4000/docs`            | Scalar API reference                  |
-| `http://localhost:4000/swagger`         | Swagger UI                            |
-| `GET http://localhost:4000/api/page`    | List pages                            |
-| `POST http://localhost:4000/api/page`   | Create a page                         |
-
-## Call it from a typed frontend
-
-In your Vite frontend, add the Brick plugin before your framework plugins:
-
-```bash
-bun add --dev vite@^8
-```
-
-```ts
-// vite.config.ts
-import { defineConfig } from "vite";
-import { brickClient } from "@brickkit/cli/vite";
-
-export default defineConfig({
-  plugins: [brickClient({ entry: "./src/app.ts" })],
-});
-```
-
-Run Vite with Bun for this SQLite example:
-
-```bash
-bunx --bun vite
-```
-
-The plugin generates `_brick/contract.ts` from the default-exported app before
-the frontend loads and before production builds, and regenerates it on backend
-edits. Add `_brick/` to `.gitignore`. Import the generated contract for
-autocomplete and compile-time payload checking:
-
-```ts
-// src/client.ts
-import { createBrickClient } from "@brickkit/core/client";
-import { contract } from "../_brick/contract";
-
-const api = createBrickClient({ baseUrl: "http://localhost:4000", contract });
-
-const pages = await api.page.list({ limit: 10 });
-const created = await api.page.create({
-  slug: "hello",
-  title: "Hello",
-  content: "World",
-});
-```
-
-See [Typed Client](/docs/typed-client) for routing, error handling (`ActionExecutionError` codes, `ValidationError`, transport/server failures, cancellation), auth headers, and timeouts.
-
-Postgres instead of SQLite? Pass `engine: "postgres"` with `tables` and a `url` — see [Schema Management](/docs/migrations). Need a signed-in user on every CRUD op? See [Access Control](/docs/access-control) for the context-resolver + `authorize` pattern.
+Local actions use `{input,ctx?}`. Browser client calls pass the input directly.
+Generate the browser contract with the CLI build instead of importing server
+implementation modules into frontend bundles.

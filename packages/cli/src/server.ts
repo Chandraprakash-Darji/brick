@@ -286,12 +286,24 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
     mountRoute(
       route.ir.method,
       route.ir.path,
-      route.handler,
+      (context: any) => {
+        const result = route.handler(context);
+        return result &&
+          typeof (result as PromiseLike<unknown>).then === "function"
+          ? Promise.resolve(result).then(jsonActionResult)
+          : jsonActionResult(result);
+      },
       getPluginActionRoute(action, prefix) !== undefined,
     );
   }
 
   return brickApp;
+}
+
+function jsonActionResult(value: unknown): unknown {
+  return value === null
+    ? new Response("null", { headers: { "content-type": "application/json" } })
+    : value;
 }
 
 function htmlResponse(html: string): Response {

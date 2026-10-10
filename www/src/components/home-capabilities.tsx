@@ -87,9 +87,9 @@ export function HomeCapabilities() {
             Your rules come with it.
           </h2>
           <p>
-            Define a Drizzle table and register a resource. Brick supplies CRUD
-            routes, list filters, pagination, and typed hooks. Add custom
-            actions for everything beyond CRUD.
+            Define a Drizzle table and install the CRUD resource plugin. It
+            supplies CRUD routes, list filters, pagination, and typed hooks. Add
+            custom actions for everything beyond CRUD.
           </p>
           <div
             className="resource-route-list"

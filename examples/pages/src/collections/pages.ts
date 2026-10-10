@@ -11,16 +11,21 @@ export const pageCollection = createCollection(
     queryKey: ["pages"],
     queryFn: async () => {
       const pages: PageListItem[] = [];
-      let page = 1;
+      let offset = 0;
       let total = 0;
       do {
-        const result = await pageApi.list({ page: page++, limit: 100 });
+        const result = await pageApi.list({
+          offset,
+          limit: 100,
+          includeTotal: true,
+        });
         for (const item of result.items) {
           if (typeof item.id !== "string")
             throw new Error("Page list item is missing its ID");
           pages.push({ ...item, id: item.id });
         }
-        total = result.total;
+        offset += result.items.length;
+        total = result.total ?? pages.length;
         if (result.items.length === 0) break;
       } while (pages.length < total);
       return pages;

@@ -29,7 +29,7 @@ export const updatePageAction = createOptimisticAction<
   { id: string } & PageUpdateInput
 >({
   mutationFn: async ({ id, ...body }) => {
-    await pageApi.update({ id, ...body });
+    await pageApi.update({ id, data: body });
     await pageCollection.utils.refetch();
   },
   onMutate: ({ id, ...body }) => {

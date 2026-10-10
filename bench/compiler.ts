@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { crud } from "../packages/crud/src";
 /** Paired compiler/general-handler comparison. External oha; server processes stay separate. */
 import {
   defineService,
@@ -69,12 +70,24 @@ if (args.server) {
     database,
     context: () => ({ logger: silent }),
   });
-  store.resource({
-    name: "item",
-    table,
-    defaultSort: "id",
-    idGenerator: () => `created-${sequence++}`,
-  });
+  store
+    .resource({
+      name: "item",
+      table,
+    })
+    .use(
+      crud({
+        fields: {
+          id: { read: true, filter: ["eq"] },
+          title: { read: true, create: true, update: true },
+        },
+        hooks: {
+          beforeCreate: ({ data }) => {
+            data.id = `created-${sequence++}`;
+          },
+        },
+      }),
+    );
   const reset = (count: number, deletion: boolean) => {
     sequence = 0;
     client.exec("DELETE FROM compiler_items");
@@ -156,8 +169,9 @@ if (args.server) {
     },
     {
       name: "resource-list",
-      path: "/api/item?limit=20",
-      method: "GET",
+      path: "/api/item/query",
+      method: "POST",
+      body: '{"limit":20}',
       resource: true,
     },
     {
@@ -171,14 +185,7 @@ if (args.server) {
       name: "resource-patch",
       path: "/api/item/seed-0",
       method: "PATCH",
-      body: '{"title":"Changed"}',
-      resource: true,
-    },
-    {
-      name: "resource-put",
-      path: "/api/item/seed-0",
-      method: "PUT",
-      body: '{"title":"Changed"}',
+      body: '{"data":{"title":"Changed"}}',
       resource: true,
     },
     // DELETE needs unique URLs: use the Bun loader because oha samples URL/body files randomly.
