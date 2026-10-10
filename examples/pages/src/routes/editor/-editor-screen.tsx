@@ -74,12 +74,12 @@ export function EditorScreen({ pageId }: EditorScreenProps) {
   // Populate the form once the page loads (mirrors watch(pageId, immediate)).
   useEffect(() => {
     if (!page) return;
-    setContent(page.content ?? "");
-    setContentType(page.contentType ?? "markdown");
-    setIsPublic(page.isPublic ?? false);
-    setSlug(page.slug ?? "");
-    setTheme(page.theme ?? "github-dark");
-    setTitle(page.title ?? "");
+    setContent(page.content);
+    setContentType(page.contentType);
+    setIsPublic(page.isPublic);
+    setSlug(page.slug);
+    setTheme(page.theme);
+    setTitle(page.title);
   }, [page]);
 
   // New page (no id) -> reset the form (mirrors watch(pageId, immediate)

@@ -355,11 +355,26 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
         includeTotal: t.Optional(t.Boolean()),
       };
       const querySchema = object(queryProperties);
-      const rowSchema = object(
+      const rowFields = Object.fromEntries(
+        readable.map((key) => [
+          key,
+          fields[key].scrub ? t.Unknown() : schemas[key],
+        ]),
+      );
+      // Strict contract row: every readable field is required. Nullable
+      // columns already carry `| null` via columnSchema, so they stay
+      // `T | null` — never `| undefined`. This is what ships in
+      // `config.output` for the browser contract and OpenAPI.
+      const rowSchema = object({ ...rowFields });
+      // Runtime validation must still accept subset projections (`select`),
+      // which return only the requested keys. The loose variant permits
+      // omission; it is wired via `outputValidationSchema` below and never
+      // leaks into generated types.
+      const rowSchemaLoose = object(
         Object.fromEntries(
-          readable.map((key) => [
+          Object.entries(rowFields).map(([key, schema]) => [
             key,
-            t.Optional(fields[key].scrub ? t.Unknown() : schemas[key]),
+            t.Optional(schema),
           ]),
         ),
       );
@@ -401,6 +416,22 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
         get: rowSchema,
         create: rowSchema,
         update: rowSchema,
+        delete: object({ success: t.Literal(true) }),
+        count: object({ count: t.Integer() }),
+        exists: object({ exists: t.Boolean() }),
+      };
+      // Runtime-only outputs: same shape but rows may be subset projections.
+      const looseOutputs: Record<Operation, TSchema> = {
+        list: object({
+          items: t.Array(rowSchemaLoose),
+          total: t.Optional(t.Integer()),
+          limit: t.Integer(),
+          offset: t.Integer(),
+        }),
+        findOne: t.Union([rowSchemaLoose, t.Null()]),
+        get: rowSchemaLoose,
+        create: rowSchemaLoose,
+        update: rowSchemaLoose,
         delete: object({ success: t.Literal(true) }),
         count: object({ count: t.Integer() }),
         exists: object({ exists: t.Boolean() }),
@@ -762,6 +793,9 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
         // Pre-validation depth guard: action input validation runs before
         // execute()/condition(), so reject over-nested `where` here instead
         // of recursing inside the compiled TypeBox check.
+        // Runtime output validation accepts subset projections while the
+        // published `config.output` stays strict for contracts/OpenAPI.
+        action.outputValidationSchema = looseOutputs[operation];
         const innerValidateInput = action.validateInput.bind(action);
         action.validateInput = (rawInput: unknown) =>
           whereDepthExceeded(rawInput)

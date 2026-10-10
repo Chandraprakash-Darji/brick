@@ -64,8 +64,14 @@ export function compileRoutePlan(
   const inputChecker = inputSchema
     ? (getCompiledCheck(inputSchema) as any)
     : undefined;
-  const outputChecker = outputSchema
-    ? (getCompiledCheck(outputSchema) as any)
+  // Prefer a runtime-only output schema when the action provides one (CRUD
+  // subset projections validate loosely at runtime while `config.output`
+  // stays strict for contracts/OpenAPI).
+  const runtimeOutputSchema =
+    (action as { outputValidationSchema?: typeof outputSchema })
+      .outputValidationSchema ?? outputSchema;
+  const outputChecker = runtimeOutputSchema
+    ? (getCompiledCheck(runtimeOutputSchema) as any)
     : undefined;
 
   let coercions:
