@@ -1,3 +1,4 @@
+import type { ServicePlugin, ResourcePlugin } from "./plugin";
 import type { TSchema, Static, TUnsafe } from "@sinclair/typebox";
 import type { BunSQLiteDatabase } from "./db/sqlite";
 import type { DatabaseHandle } from "./db/define";
@@ -586,6 +587,13 @@ export interface Resource<
   TCtx extends ActionContext = ActionContext,
   TOptions = {},
 > {
+  use<A extends object>(
+    plugin: ResourcePlugin<
+      Service<TCtx["db"], Omit<TCtx, keyof BaseContext>>,
+      this,
+      A
+    >,
+  ): this & A;
   readonly name: string;
   readonly serviceName: string;
   readonly table: TTable;
@@ -742,6 +750,8 @@ export interface Service<
   >;
   readonly db?: TDb;
   readonly isBuilt?: boolean;
+
+  use<A>(plugin: ServicePlugin<this, A>): A;
 
   build(): this;
 

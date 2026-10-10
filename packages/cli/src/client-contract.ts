@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Service } from "@brickkit/core";
+import { getPluginActionRoute, type Service } from "@brickkit/core";
 import type { BrickClientAction } from "@brickkit/core/client";
 import type { BrickApp } from "./endpoints";
 
@@ -111,6 +111,8 @@ function addServiceActions(
   types[service.name] = namespaceTypes;
   for (const action of service.listActions()) {
     if (resourceActions.has(action)) continue;
+    const pluginRoute = getPluginActionRoute(action, prefix);
+    if (pluginRoute === false) continue;
     const { input, output, errors, path, method } = action.config;
     let inputType: string;
     let outputType: string;
@@ -127,15 +129,19 @@ function addServiceActions(
       name: action.name,
       serviceName: service.name,
       config: {
-        path: path ?? `${prefix}/${service.name}/${action.name}`,
-        method: method ?? "POST",
+        path:
+          pluginRoute?.path ??
+          path ??
+          `${prefix}/${service.name}/${action.name}`,
+        method: pluginRoute?.method ?? method ?? "POST",
       },
     };
     insertAction(
-      namespace,
-      namespaceTypes,
+      pluginRoute?.clientPath ? contract : namespace,
+      pluginRoute?.clientPath ? types : namespaceTypes,
       metadata,
       actionType(inputType, outputType, errors),
+      pluginRoute?.clientPath,
     );
   }
 }
@@ -145,8 +151,9 @@ function insertAction(
   typeNode: Record<string, any>,
   metadata: BrickClientAction,
   type: string,
+  clientPath?: readonly string[],
 ) {
-  const segments = metadata.name.split(".");
+  const segments = clientPath ?? metadata.name.split(".");
   for (const segment of segments.slice(0, -1)) {
     if (
       Object.hasOwn(typeNode, segment) &&

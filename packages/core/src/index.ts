@@ -1,3 +1,20 @@
+export {
+  defineServicePlugin,
+  defineResourcePlugin,
+  getPluginActionRoute,
+  getPluginEndpoints,
+} from "./plugin";
+export type {
+  ServicePlugin,
+  ResourcePlugin,
+  ServicePluginContext,
+  ResourcePluginContext,
+  PluginRouteRegistrar,
+  PluginRoutes,
+  PluginRouteScope,
+  PluginRouteMethod,
+  PluginEndpointContext,
+} from "./plugin";
 // Core Primitives
 export { defineService, ServiceImpl } from "./service";
 export { defineAction, buildErrorHelpers } from "./action";

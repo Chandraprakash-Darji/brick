@@ -2,6 +2,7 @@ import {
   type Service,
   type Action,
   describeResourceReads,
+  getPluginActionRoute,
   type ResourceReadQueries,
 } from "@brickkit/core";
 
@@ -66,7 +67,7 @@ export function analyzeApplication(
   }
   const routes: RouteIR[] = [];
   const bindings: RouteBinding[] = [];
-  const registered = new Map<string, string>();
+  const registered = new Map<string, { name: string; plugin: boolean }>();
   const diagnostics: string[] = [];
   const add = (
     service: Service<any, any>,
@@ -77,11 +78,16 @@ export function analyzeApplication(
   ) => {
     if (!path.startsWith("/"))
       throw new Error(`Brick compiler: invalid route '${method} ${path}'`);
-    const key = `${method} ${path}`;
+    const plugin = getPluginActionRoute(action, prefix) !== undefined;
+    const key = `${method} ${path.replace(/:[^/]+/g, ":param")}`;
     const previous = registered.get(key);
     if (previous) {
+      if (plugin || previous.plugin)
+        throw new Error(
+          `Brick compiler: duplicate plugin route '${method} ${path}'`,
+        );
       diagnostics.push(
-        `${key}: '${service.name}.${action.name}' shadowed by '${previous}' (first registration wins)`,
+        `${key}: '${service.name}.${action.name}' shadowed by '${previous.name}' (first registration wins)`,
       );
       return;
     }
@@ -89,7 +95,7 @@ export function analyzeApplication(
       throw new Error(
         `Brick compiler: '${service.name}.${action.name}' has no execute handler`,
       );
-    registered.set(key, `${service.name}.${action.name}`);
+    registered.set(key, { name: `${service.name}.${action.name}`, plugin });
     const readLike =
       method === "GET" ||
       action.name.startsWith("get") ||
@@ -143,9 +149,19 @@ export function analyzeApplication(
       }
     }
     for (const action of service.listActions()) {
+      const pluginRoute = getPluginActionRoute(action, prefix);
+      if (pluginRoute === false) continue;
       const path =
-        action.config.path ?? `${prefix}/${service.name}/${action.name}`;
-      add(service, action, action.config.method ?? "POST", path, "action");
+        pluginRoute?.path ??
+        action.config.path ??
+        `${prefix}/${service.name}/${action.name}`;
+      add(
+        service,
+        action,
+        pluginRoute?.method ?? action.config.method ?? "POST",
+        path,
+        "action",
+      );
     }
   }
   const reads = services.flatMap((service) =>
