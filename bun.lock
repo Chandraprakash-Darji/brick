@@ -93,12 +93,12 @@
     },
     "packages/cli": {
       "name": "@brickkit/cli",
-      "version": "0.3.0-beta.0",
+      "version": "0.3.0-beta.1",
       "bin": {
         "brick": "dist/bin.js",
       },
       "dependencies": {
-        "@brickkit/core": "^0.2.4",
+        "@brickkit/core": "^0.3.0-beta.1",
         "@sinclair/typebox": "^0.34.0",
         "elysia": "2.0.0-beta.29",
       },
@@ -119,7 +119,7 @@
     },
     "packages/core": {
       "name": "@brickkit/core",
-      "version": "0.3.0-beta.0",
+      "version": "0.3.0-beta.1",
       "dependencies": {
         "@sinclair/typebox": "^0.34.0",
         "drizzle-orm": "^0.45.2",
