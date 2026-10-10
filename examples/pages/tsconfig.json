@@ -15,6 +15,7 @@
     "types": ["vite/client", "node", "bun"],
     "paths": {
       "@/*": ["./src/*"],
+      "@brickkit/crud": ["../../packages/crud/src/index.ts"],
       "@brickkit/core": ["../../packages/core/src/index.ts"],
       "@brickkit/core/*": ["../../packages/core/src/*"],
       "@brickkit/cli": ["../../packages/cli/src/index.ts"],

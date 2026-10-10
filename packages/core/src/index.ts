@@ -9,6 +9,8 @@ export type {
   ResourcePlugin,
   ServicePluginContext,
   ResourcePluginContext,
+  ResourcePluginTypes,
+  ResourcePluginAPI,
   PluginRouteRegistrar,
   PluginRoutes,
   PluginRouteScope,
@@ -18,14 +20,7 @@ export type {
 // Core Primitives
 export { defineService, ServiceImpl } from "./service";
 export { defineAction, buildErrorHelpers } from "./action";
-export {
-  defineResource,
-  buildResourcePlan,
-  describeResourceReads,
-  prepareResourceReads,
-  prepareResourceWrites,
-  type ResourceReadQueries,
-} from "./resource";
+export { defineResource } from "./resource";
 export { createServiceProxy } from "./rpc";
 
 // Typed HTTP Client (also importable as `@brickkit/core/client` for frontends)
@@ -42,7 +37,6 @@ export type {
   BrickClientAction,
   BrickCallOptions,
   BrickActionCaller,
-  BrickResourceClient,
   InferActionInput,
   InferActionOutput,
   InferActionErrorCodes,

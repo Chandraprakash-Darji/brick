@@ -1,94 +1,19 @@
 ---
-title: Resource Lifecycle
-description: How Brick-TS processes requests through the resource lifecycle
+title: Resource lifecycle
+description: Registration, preparation, and action execution
 ---
 
-Every CRUD request passes through a shared pipeline. Understanding it helps you hook into the right stage.
+A resource declaration records its table and identifier. `.use(crud(options))`
+registers enabled actions and route metadata during synchronous setup. Service
+build closes registration. Core does not generate CRUD plans.
 
-## The pipeline
+The compiler reads generic action bindings and preparation contributions. CRUD
+contributes schema descriptions and prepares stable query shapes. SQLite query
+caches are bounded and tied to the database instance. Parameter values remain
+bound rather than embedded in SQL. Scoped queries and dynamic defaults take the
+safe dynamic path. Both compiler modes run the same policies and scrubbers.
 
-```
-HTTP request
-    │
-    ▼
-Elysia route → query coercion (numbers/booleans) → input merge (params + body + query)
-    │
-    ▼
-Input validation (TypeBox) → ValidationError → 400
-    │
-    ▼
-resolveContext — service context resolver runs once per request
-(request, db, logger, traceId merged with your { user, session })
-    │
-    ▼
-authorize hook → false → 403 (UNAUTHORIZED)
-    │
-    ▼
-before* hook (abort via error.CONFLICT / NOT_FOUND / FORBIDDEN / BAD_REQUEST, which throws)
-    │
-    ▼
-Drizzle operation (sequential insert→select / select / update / delete —
-no transaction wrapper around hook + write)
-    │
-    ▼
-after* hook (observation, audit logs, notifications)
-    │
-    ▼
-Output validation (TypeBox) → ValidationError → 500
-    │
-    ▼
-JSON response (ValidationError → its status; ActionExecutionError → its status)
-```
-
-## Route map
-
-`brick` mounts three route families (from `packages/cli/src/server.ts`):
-
-- **REST** — `GET/POST /api/{resource}`, `GET/PATCH/PUT/DELETE /api/{resource}/:id` per enabled operation.
-- **Action mesh** — `/api/{service}/{action}` with the configured `method` (default `POST`). Declare `method: "GET"` for read actions; names do not infer methods.
-- **Custom action paths** — an action with `path: "/api/public/pages/:slug"` (and optional `method`) is mounted only at that path, replacing the default mesh path. `method` defaults to `POST`:
-
-```ts
-export const getPublicPage = pagesService.action({
-  name: "getPublicPage",
-  path: "/api/public/pages/:slug",
-  method: "GET",
-  input: t.Object({ slug: t.String() }),
-  execute: async ({ input, ctx, error }) => {
-    const [page] = await ctx.db
-      .select()
-      .from(pagesTable)
-      .where(
-        and(eq(pagesTable.slug, input.slug), eq(pagesTable.isPublic, true)),
-      );
-    if (!page)
-      error.NOT_FOUND(
-        `Published page '/${input.slug}' not found or is private`,
-      );
-    return page;
-  },
-});
-```
-
-- **Raw endpoints** — `app.endpoint({ method, path, handler, service })` for anything outside the JSON mesh (see [Single-Row Patterns](/docs/singletons)).
-- **Diagnostics** — `GET /_health`, `GET /_brick/services`.
-- **Docs** — `GET /openapi.json`, `GET /docs` (Scalar), `GET /swagger`.
-
-## Stage details
-
-1. **Elysia coerce.** `brick` coerces query strings to the input schema's `number`/`integer`/`boolean` types, then merges route params, JSON body, and query into one `input` object.
-2. **Input validation.** `defineAction` validates `input` against the action's TypeBox schema before anything else runs. Resource create/update/get/delete/list schemas are derived from the Drizzle table (see [Resources](/docs/resources)); custom constraints come from `fields` overrides or your own `input: t.Object(...)` on custom actions.
-3. **Context resolution.** `service.resolveContext()` builds the `BaseContext` (`request`, `db`, `logger`, `traceId`, `requestId`, `services`, `metadata`) and awaits your `context` resolver once per request. The canonical pattern loads the Better Auth session and returns `{ user, session }` — see [Access Control](/docs/access-control).
-4. **Authorization.** If the action declares `authorize({ user, input, ctx })`, a falsy result throws `ActionExecutionError("UNAUTHORIZED", …, 403)`. Generated CRUD actions carry no `authorize` by default — attach your own (the pages example late-binds a `requireSignedIn` guard onto every generated action).
-5. **Hooks + owner checks.** `beforeCreate`/`beforeUpdate`/`beforeDelete` run before the write; get/update/delete also verify `ownerField` ownership when `ctx.user.id` is present. Hooks abort by calling an `error.*` helper, which throws immediately.
-6. **Drizzle op.** The write itself is a plain Drizzle call (`insert().values()`, `update().set()`, `delete()`), followed by a re-select for create/update. There is no transaction wrapping hook + write — design hooks accordingly.
-7. **Output validation + JSON.** Results are validated against the `output` schema, then returned as JSON. `ValidationError` maps to its status (400 in, 500 out); `ActionExecutionError` maps to its declared status.
-
-## List query surface
-
-`?limit ?offset ?page ?sort ?search ?select ?cursor` plus exact-match filters for any other column key:
-
-- Owner scoping: `WHERE ownerField = ctx.user.id` when `ownerField` is set and a user is present.
-- Default projection excludes the `content` column (override with `excludeFromList`, or request columns explicitly with `?select=`).
-- Search: SQLite uses FTS5 `MATCH` with a `LIKE` fallback; Postgres uses `ilike` (plus `pg_trgm` indexes when created).
-- Keyset cursor: `base64url([sortVal, id])` bound to the sort string; returns `{ pages, items, total, limit, offset, page, pageCount, hasMore, nextCursor }` (plural key follows the resource name).
+Execution validates input, resolves context, authorizes the operation, combines
+trusted row scope with caller filters, executes SQL, scrubs readable fields, and
+validates output. Write hooks can supply internal values without enabling caller
+writes. Query totals are optional. Nothing applies a migration or schema change.

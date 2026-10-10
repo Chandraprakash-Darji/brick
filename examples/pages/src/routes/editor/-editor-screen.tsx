@@ -7,7 +7,7 @@ import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
 import { createPageAction, updatePageAction } from "@/actions/pages";
-import { pageApi, type PageCreateInput, type Page } from "@/lib/api";
+import { pageApi, type PageCreateInput } from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
@@ -69,17 +69,17 @@ export function EditorScreen({ pageId }: EditorScreenProps) {
     queryFn: () => pageApi.get({ id: pageId as string }),
     queryKey: ["page", pageId],
   });
-  const page: Page | undefined = pageQuery.data;
+  const page = pageQuery.data;
 
   // Populate the form once the page loads (mirrors watch(pageId, immediate)).
   useEffect(() => {
     if (!page) return;
-    setContent(page.content);
+    setContent(page.content ?? "");
     setContentType(page.contentType ?? "markdown");
     setIsPublic(page.isPublic ?? false);
-    setSlug(page.slug);
+    setSlug(page.slug ?? "");
     setTheme(page.theme ?? "github-dark");
-    setTitle(page.title);
+    setTitle(page.title ?? "");
   }, [page]);
 
   // New page (no id) -> reset the form (mirrors watch(pageId, immediate)

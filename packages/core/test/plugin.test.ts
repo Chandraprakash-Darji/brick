@@ -170,6 +170,23 @@ describe("plugin installation", () => {
       clientPath: ["other", "hello"],
     });
   });
+  it("stores bindings on the action for bundler-duplicated core copies", async () => {
+    // SSR runtimes (Vite, Nitro) may load a second copy of core whose
+    // WeakMaps miss; the binding travels on the action via a global symbol.
+    const key = Symbol.for("brickkit.plugin.actionBinding");
+    const service = makeHost();
+    const api = service.use(greeting());
+    const stored = (
+      api.hello as unknown as Record<symbol, { enabled: boolean }>
+    )[key];
+    expect(stored?.enabled).toBe(true);
+    const disabled = defineService("muted").use(greeting({ hello: false }));
+    expect(
+      (disabled.hello as unknown as Record<symbol, { enabled: boolean }>)[key]
+        ?.enabled,
+    ).toBe(false);
+    expect(getPluginActionRoute(disabled.hello)).toBe(false);
+  });
   it("rolls back registrations, dependencies, and resource contributions when setup fails", () => {
     const service = makeHost();
     const resource = service.resource({ name: "page", table: pages });

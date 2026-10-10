@@ -159,15 +159,17 @@ async function main() {
       },
       {
         benchmark: "resource.list",
-        method: "GET",
-        url: `${B}/api/item?limit=20`,
+        method: "POST",
+        url: `${B}/api/item/query`,
+        headers: JSON_H,
+        body: JSON.stringify({ limit: 20 }),
       },
       {
         benchmark: "resource.update",
         method: "PATCH",
         url: `${B}/api/item/${sampleId}`,
         headers: JSON_H,
-        body: JSON.stringify({ title: "Updated by bench" }),
+        body: JSON.stringify({ data: { title: "Updated by bench" } }),
       },
       {
         benchmark: "payload.post-1kib",
@@ -462,7 +464,10 @@ async function main() {
       for (const c of [1, 16]) {
         const r = await load({
           name: `file.resource.list c=${c}`,
-          url: `${FB}/api/item?limit=20`,
+          url: `${FB}/api/item/query`,
+          method: "POST",
+          headers: JSON_H,
+          body: JSON.stringify({ limit: 20 }),
           concurrency: c,
           requests: Math.min(requests, 500),
         });

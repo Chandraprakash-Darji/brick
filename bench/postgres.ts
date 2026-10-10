@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { crud } from "../packages/crud/src";
 /** Optional PostgreSQL lane. Uses only a uniquely named benchmark table. */
 import {
   defineDatabase,
@@ -56,7 +57,19 @@ async function main() {
         logger: { info() {}, warn() {}, error() {}, debug() {} },
       }),
     });
-    service.resource({ name: "item", table, defaultSort: "id" });
+    service.resource({ name: "item", table, id: table.id }).use(
+      crud({
+        fields: {
+          id: { read: true, filter: ["eq"] },
+          title: { read: true, create: true, update: true },
+        },
+        hooks: {
+          beforeCreate: ({ data }) => {
+            data.id = crypto.randomUUID();
+          },
+        },
+      }),
+    );
     app = brick({ services: [service], docs: false, requestLogging: false });
     app.listen(0);
     const base = `http://127.0.0.1:${app.server!.port}/api/item`;
@@ -69,9 +82,14 @@ async function main() {
     )) {
       for (const [op, method, path, body] of [
         ["get", "GET", "/seed_0", undefined],
-        ["list", "GET", "?limit=20", undefined],
+        ["list", "POST", "/query", JSON.stringify({ limit: 20 })],
         ["create", "POST", "", JSON.stringify({ title: "Created" })],
-        ["update", "PATCH", "/seed_0", JSON.stringify({ title: "Updated" })],
+        [
+          "update",
+          "PATCH",
+          "/seed_0",
+          JSON.stringify({ data: { title: "Updated" } }),
+        ],
       ] as const) {
         if (args.filter && !new RegExp(String(args.filter)).test(`pg.${op}`))
           continue;

@@ -1,8 +1,4 @@
-import {
-  type Service,
-  prepareResourceReads,
-  prepareResourceWrites,
-} from "@brickkit/core";
+import { type Service } from "@brickkit/core";
 import { compileRoutePlan, executeCompiledRoute } from "./action-handler";
 import {
   analyzeApplication,
@@ -104,8 +100,7 @@ export function compileBrickApplication(options: {
         );
   if (options.mode !== "generic")
     for (const service of options.services) {
-      prepareResourceReads(service);
-      prepareResourceWrites(service);
+      service.prepareContributions();
     }
   return bindAnalyzed(ir, bindings, factories);
 }
@@ -126,8 +121,7 @@ export function bindCompiledApplication(
       "Brick compiler: application definitions differ from the compiled IR; rebuild the application",
     );
   for (const service of services) {
-    prepareResourceReads(service);
-    prepareResourceWrites(service);
+    service.prepareContributions();
   }
   return bindAnalyzed(ir, analyzed.bindings, factories);
 }

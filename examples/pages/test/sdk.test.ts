@@ -51,11 +51,12 @@ describe("local Brick SDK", () => {
     expect(created.userId).toBeDefined();
     expect(created.contentType).toBe("markdown");
     expect((await api.page.list({ limit: 100 })).items).toHaveLength(1);
-    expect((await api.page.get({ id: created.id })).content).toContain(
+    expect((await api.page.get({ id: created.id! })).content).toContain(
       "workspace",
     );
     expect(
-      (await api.page.update({ id: created.id, title: "Updated" })).title,
+      (await api.page.update({ id: created.id!, data: { title: "Updated" } }))
+        .title,
     ).toBe("Updated");
     expect(await api.pages.echo({ message: "local" })).toContain("Echo: local");
     const publicPage = await app.fetch(
@@ -63,7 +64,7 @@ describe("local Brick SDK", () => {
     );
     expect(publicPage.status).toBe(200);
     expect(await publicPage.text()).toContain("Hello from the workspace");
-    await api.page.delete({ id: created.id });
+    await api.page.delete({ id: created.id! });
     expect((await api.page.list({})).items).toHaveLength(0);
 
     const anonymous = createBrickClient<PagesApi>({

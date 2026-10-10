@@ -197,6 +197,18 @@ effects and arbitrary user-object mutations are outside that transaction.
 Setup must be synchronous, and installation must finish before service build.
 Route registrars close after setup.
 
-The existing runnable comments composition in `examples/extensions` continues
-to use `registerComments(service)`. Comments and CRUD plugin design will be
-handled in a separate increment.
+## CRUD and table behavior
+
+`@brickkit/crud` is a resource plugin. Pass field permissions, hooks, access
+policies and route controls to `crud()`; the core resource declaration accepts
+only name, table and identifier. Plugins own the policies for their own table.
+
+The runnable `examples/extensions` comments factory is installed with
+`resource.use(comments({table}))` and returns a `comments` namespace. It uses
+the parent identifier to validate targets and installs CRUD on its explicit
+comment table. There is no published comments package.
+
+Plugins can specialize returned types for a host with the exported
+`ResourcePluginTypes` and `ResourcePluginAPI` protocol. Ordinary descriptors
+infer concrete setup return values without that protocol. The CRUD package uses
+the protocol to preserve table-specific field and operation types.

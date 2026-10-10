@@ -71,7 +71,7 @@ for (const aot of [true, false]) {
       expect(
         ir.routes.some((r: any) => r.path === "/api/public/pages/:slug"),
       ).toBe(true);
-      expect(ir.reads[0].get).toContain('"page_id"');
+      expect(ir.preparations[0].service).toBe("store");
       expect(await Bun.file(join(dir, "routes.js")).text()).toContain(
         "function bindAction",
       );
@@ -142,11 +142,19 @@ globalThis.Function = new Proxy(Function, {
         title: "Built page",
       });
       const list = (await (
-        await fetch(`${base}/v1/page?limit=10`)
+        await fetch(`${base}/v1/page/query`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ limit: 10, includeTotal: true }),
+        })
       ).json()) as any;
       expect(list.total).toBe(1);
       expect(list.items).toEqual([{ id: "one", title: "Built page" }]);
-      const unfiltered = await fetch(`${base}/v1/page`);
+      const unfiltered = await fetch(`${base}/v1/page/query`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: '{"includeTotal":true}',
+      });
       expect(unfiltered.status).toBe(200);
       expect(await unfiltered.json()).toMatchObject({
         total: 1,
@@ -155,7 +163,7 @@ globalThis.Function = new Proxy(Function, {
       const createdResponse = await fetch(`${base}/v1/page`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: '{"title":"Created in deployed bundle"}',
+        body: '{"id":"created","title":"Created in deployed bundle"}',
       });
       expect(createdResponse.status).toBe(200);
       const created = (await createdResponse.json()) as any;
@@ -163,7 +171,7 @@ globalThis.Function = new Proxy(Function, {
       const changed = await fetch(`${base}/v1/page/${created.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: '{"title":"Updated in deployed bundle"}',
+        body: '{"data":{"title":"Updated in deployed bundle"}}',
       });
       expect(changed.status).toBe(200);
       expect(await changed.json()).toEqual({

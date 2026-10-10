@@ -278,3 +278,34 @@ it("reports route collisions and safely quotes names/keys in generated code", as
   });
   expect(value).toEqual({ "odd'key": 2 });
 });
+
+it("runs generic preparation contributions only for specialized compilation and snapshots metadata", async () => {
+  const service = defineService("prepared_action");
+  let preparations = 0;
+  const metadata = { revision: 1 };
+  service.contributePreparation({
+    name: "example/prepared-query",
+    describe: () => metadata,
+    prepare: () => {
+      preparations++;
+    },
+  });
+  service.action({ name: "ready", execute: () => ({ ready: true }) });
+  const generic = compileBrickApplication({
+    services: [service],
+    mode: "generic",
+  });
+  expect(preparations).toBe(0);
+  expect(generic.ir.preparations).toEqual([
+    {
+      service: "prepared_action",
+      name: "example/prepared-query",
+      metadata: { revision: 1 },
+    },
+  ]);
+  const compiled = compileBrickApplication({ services: [service] });
+  expect(preparations).toBe(1);
+  expect(Object.isFrozen(compiled.ir.preparations[0]!.metadata)).toBe(true);
+  metadata.revision = 2;
+  expect(compiled.ir.preparations[0]!.metadata).toEqual({ revision: 1 });
+});

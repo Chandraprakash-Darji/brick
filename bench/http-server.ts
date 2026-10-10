@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { crud } from "../packages/crud/src";
 /**
  * Benchmark HTTP server
  *
@@ -22,7 +23,7 @@ import {
   type Service,
 } from "../packages/core/src/index";
 import { brick } from "../packages/cli/src/server";
-import { benchTable } from "./lib/fixtures";
+import { benchTable, benchCrudOptions } from "./lib/fixtures";
 import { seedRows } from "./lib/fixtures";
 import { parseArgs, argInt, argStr } from "./lib/stats";
 
@@ -98,12 +99,9 @@ export async function startBrickServer(opts: {
     },
   });
 
-  service.resource({
-    name: "item",
-    table: benchTable,
-    ownerField: "authorId",
-    operations: { list: { defaultLimit: 20, maxLimit: 100 } },
-  });
+  service
+    .resource({ name: "item", table: benchTable, id: benchTable.id })
+    .use(crud(benchCrudOptions));
 
   service.action(
     defineAction({ name: "noop", execute: async () => ({ ok: true }) }),

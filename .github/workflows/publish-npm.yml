@@ -1,6 +1,6 @@
 # Publish @brickkit/* to the npmjs public registry.
 #
-# Push v<version> to publish both packages and create one combined release.
+# Push v<version> to publish all packages and create one combined release.
 # Package versions must match each other and the tag. Manual dispatch bumps
 # versions, commits and tags them, then publishes in the same workflow run.
 # dry_run previews the bump and packs without changing refs or publishing.
@@ -66,6 +66,8 @@ jobs:
         working-directory: packages/core
       - run: npm pack --dry-run
         working-directory: packages/cli
+      - run: npm pack --dry-run
+        working-directory: packages/crud
 
   prepare:
     if: github.event_name != 'pull_request'
@@ -137,7 +139,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pkg: [core, cli]
+        pkg: [core, crud, cli]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -163,7 +165,7 @@ jobs:
         working-directory: .
 
       - name: Test packages
-        run: bun test packages/core packages/cli
+        run: bun test packages/core packages/crud packages/cli
 
       - name: Resolve name and version
         id: meta
@@ -182,8 +184,9 @@ jobs:
           esac
           core_version="$(node -p "require('../core/package.json').version")"
           cli_version="$(node -p "require('../cli/package.json').version")"
-          if [[ "$core_version" != "$cli_version" ]]; then
-            echo "::error::core and cli versions must match"
+          crud_version="$(node -p "require('../crud/package.json').version")"
+          if [[ "$core_version" != "$cli_version" || "$core_version" != "$crud_version" ]]; then
+            echo "::error::core, cli and crud versions must match"
             exit 1
           fi
           expected="${RELEASE_TAG#v}"
