@@ -1,6 +1,6 @@
 {
   "name": "@brickkit/crud",
-  "version": "0.3.0-beta.4",
+  "version": "0.3.0-beta.5",
   "description": "Opt-in resource CRUD plugin for Brick",
   "repository": {
     "type": "git",
@@ -24,7 +24,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@brickkit/core": "^0.3.0-beta.4",
+    "@brickkit/core": "^0.3.0-beta.5",
     "@sinclair/typebox": "^0.34.0",
     "drizzle-orm": "^0.45.2"
   },
