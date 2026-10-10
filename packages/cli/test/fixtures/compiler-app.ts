@@ -6,6 +6,7 @@ import {
   sqliteTable,
   text,
 } from "@brickkit/core";
+import { brick } from "@brickkit/cli";
 const service = defineService("built", {
   context: (ctx) => ({
     user: ctx.request.headers.get("x-user") ? { id: "alice" } : null,
@@ -36,3 +37,23 @@ syncSchema(database.tables, database.getDb());
 database.getDb().insert(pages).values({ id: "one", title: "Built page" }).run();
 const store = defineService("store", { database });
 store.resource({ name: "page", table: pages, defaultSort: "id" });
+
+const excluded = defineService("excluded");
+excluded.action({ name: "hello", method: "GET", execute: () => "excluded" });
+
+const app = brick({
+  services: [service, plain, store],
+  prefix: "/v1",
+  title: "Compiled app",
+  version: "3.2.1",
+  openApiPath: "/spec.json",
+  docsPath: "/api-docs",
+  reference: { path: "/reference", title: "App reference" },
+  requestLogging: false,
+});
+app.afterHandle("global", ({ set }) => {
+  set.headers["x-app-hook"] = "preserved";
+});
+app.endpoint({ method: "GET", path: "/raw", handler: () => ({ raw: true }) });
+app.get("/custom", () => ({ custom: true }));
+export default app;
