@@ -1,4 +1,4 @@
-import { brick } from "@brickkit/cli";
+import { brick } from "@brickkit/core";
 import { and, eq } from "@brickkit/core";
 
 import { getAuth } from "./auth";
@@ -47,7 +47,7 @@ export function buildApp() {
   });
 
   // Preflight short-circuit (Go: 204 No Content).
-  app.onBeforeHandle(({ request }: any) => {
+  app.beforeHandle(({ request }: any) => {
     if (request.method === "OPTIONS") {
       return new Response(null, {
         headers: corsHeaders(request.headers.get("origin")),
@@ -58,14 +58,14 @@ export function buildApp() {
 
   // CORS response headers (owned by A1). Request logging (Go: method path →
   // status (latency)) is handled by the SDK requestLogging plugin above.
-  app.onAfterHandle(({ request, set }: any) => {
+  app.afterHandle(({ request, set }: any) => {
     const headers = corsHeaders(request.headers.get("origin"));
     for (const [key, value] of Object.entries(headers)) {
       (set.headers as Record<string, string>)[key] = value;
     }
   });
 
-  app.onError(({ request, set }: any) => {
+  app.error(({ request, set }: any) => {
     const headers = corsHeaders(request?.headers?.get?.("origin") ?? null);
     for (const [key, value] of Object.entries(headers)) {
       (set.headers as Record<string, string>)[key] = value;
@@ -75,7 +75,9 @@ export function buildApp() {
 
   // better-auth handler (email/password, session, OAuth/MCP plugins).
   // Mounted before the raw routes so /api/auth/* never hits the action mesh.
-  app.all("/api/auth/*", ({ request }) => getAuth().handler(request));
+  app.all("/api/auth/*", ({ request }: { request: Request }) =>
+    getAuth().handler(request),
+  );
 
   // Public page viewer: raw HTML endpoint (not part of the JSON action mesh).
   // Port of the Go GET /p/:slug handler with its cache headers.

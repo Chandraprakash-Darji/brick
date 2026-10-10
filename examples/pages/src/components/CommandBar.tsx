@@ -35,8 +35,8 @@ export function CommandBar({ pages: pagesProp }: { pages?: CommandBarPage[] }) {
     pagesProp ??
     liveQuery.data?.map((page) => ({
       id: page.id,
-      title: page.title ?? "",
-      slug: page.slug ?? "",
+      title: page.title,
+      slug: page.slug,
     })) ??
     [];
 

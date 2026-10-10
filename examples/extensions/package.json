@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@brickkit/core": "workspace:*",
+    "@brickkit/crud": "workspace:*",
     "@brickkit/cli": "workspace:*"
   },
   "devDependencies": {

@@ -1,137 +1,117 @@
-import { describe, it, expect, beforeEach } from "bun:test";
+import { beforeEach, expect, it } from "bun:test";
 import {
   defineService,
   defineDatabase,
   syncSchema,
   sqliteTable,
   text,
-  integer,
-  t,
+  resetGlobalRegistry,
 } from "@brickkit/core";
+import { crud } from "@brickkit/crud";
 import { brick } from "../src/server";
-
-const notesTable = sqliteTable("notes", {
+beforeEach(resetGlobalRegistry);
+const table = sqliteTable("rest_notes", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
-  content: text("content").notNull(),
-  isPinned: integer("is_pinned", { mode: "boolean" }).notNull().default(false),
-  userId: text("user_id"),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
+});
+it("mounts plugin CRUD routes and read helpers without GET collection or PUT aliases", async () => {
+  const database = defineDatabase({ tables: [table] }),
+    db = database.getDb();
+  syncSchema(database.tables, db);
+  const service = defineService("notes", { database });
+  service.resource({ name: "note", table }).use(
+    crud({
+      fields: {
+        id: { read: true, create: true, filter: ["eq"] },
+        title: {
+          read: true,
+          create: true,
+          update: true,
+          filter: ["contains"],
+        },
+      },
+    }),
+  );
+  const app = brick({ services: [service], requestLogging: false });
+  const call = (method: string, path: string, body?: unknown) =>
+    app.handle(
+      new Request("http://localhost/api/note" + path, {
+        method,
+        headers: { "content-type": "application/json" },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
+    );
+  try {
+    expect(
+      await (await call("POST", "", { id: "one", title: "Hello" })).json(),
+    ).toEqual({ id: "one", title: "Hello" });
+    expect((await call("GET", "/one")).status).toBe(200);
+    expect((await call("GET", "")).status).toBe(404);
+    expect((await call("PUT", "/one", { title: "Replacement" })).status).toBe(
+      404,
+    );
+    expect(
+      (await (await call("POST", "/query", { includeTotal: true })).json())
+        .items,
+    ).toEqual([{ id: "one", title: "Hello" }]);
+    expect(
+      await (
+        await call("POST", "/find-one", {
+          where: { field: "id", op: "eq", value: "missing" },
+        })
+      ).json(),
+    ).toBeNull();
+    expect(await (await call("POST", "/count", {})).json()).toEqual({
+      count: 1,
+    });
+    expect(await (await call("POST", "/exists", {})).json()).toEqual({
+      exists: true,
+    });
+    expect(
+      await (await call("PATCH", "/one", { data: { title: "Edited" } })).json(),
+    ).toEqual({ id: "one", title: "Edited" });
+    expect(await (await call("DELETE", "/one")).json()).toEqual({
+      success: true,
+    });
+    expect((await call("GET", "/one")).status).toBe(404);
+  } finally {
+    db.$client.close();
+  }
 });
 
-describe("REST Route Binding for Resources (@brickkit/cli)", () => {
-  let notesService: import("@brickkit/core").Service;
-  let app: ReturnType<typeof brick>;
-
-  beforeEach(() => {
-    const database = defineDatabase({ tables: [notesTable] });
-    syncSchema(database.tables, database.getDb());
-    notesService = defineService("notes_svc", {
-      database,
-    });
-
-    notesService.resource({
-      name: "note",
-      table: notesTable,
-      ownerField: "userId",
-      operations: {
-        list: { defaultLimit: 20, maxLimit: 100 },
-        get: true,
-        create: true,
-        update: true,
-        delete: true,
+it("rejects over-nested filters over HTTP with 400 instead of hanging", async () => {
+  const database = defineDatabase({ tables: [table] }),
+    db = database.getDb();
+  syncSchema(database.tables, db);
+  const service = defineService("notes-deep", { database });
+  service.resource({ name: "note", table }).use(
+    crud({
+      fields: {
+        id: { read: true, create: true, filter: ["eq"] },
+        title: { read: true, create: true, filter: ["eq"] },
       },
-    });
-
-    // Custom action with path parameters
-    notesService.action({
-      name: "customLookup",
-      method: "GET",
-      path: "/api/notes-custom/:noteId",
-      input: t.Object({ noteId: t.String() }),
-      execute: async ({ input }) => {
-        return { customNoteId: input.noteId, handled: true };
-      },
-    });
-
-    app = brick({ services: [notesService] });
-  });
-
-  it("should mount /api/note (POST, GET) and /api/note/:id (GET, PATCH, DELETE)", async () => {
-    // 1. POST /api/note
-    const postRes = await app.handle(
-      new Request("http://localhost:4000/api/note", {
+    }),
+  );
+  const app = brick({ services: [service], requestLogging: false });
+  const postQuery = (body: unknown) =>
+    app.handle(
+      new Request("http://localhost/api/note/query", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: "My First Note",
-          content: "Remember the milk",
-          isPinned: true,
-        }),
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
       }),
     );
-    expect(postRes.status).toBe(200);
-    const createdNote = await postRes.json();
-    expect(createdNote.id).toBeDefined();
-    expect(createdNote.title).toBe("My First Note");
-    expect(createdNote.isPinned).toBe(true);
-
-    // 2. GET /api/note (list with query coercion)
-    const listRes = await app.handle(
-      new Request("http://localhost:4000/api/note?isPinned=true&limit=5"),
-    );
-    expect(listRes.status).toBe(200);
-    const listData = await listRes.json();
-    expect(listData.total).toBe(1);
-    expect(listData.items[0].title).toBe("My First Note");
-
-    // 3. GET /api/note/:id
-    const getRes = await app.handle(
-      new Request(`http://localhost:4000/api/note/${createdNote.id}`),
-    );
-    expect(getRes.status).toBe(200);
-    const fetched = await getRes.json();
-    expect(fetched.id).toBe(createdNote.id);
-    expect(fetched.content).toBe("Remember the milk");
-
-    // 4. PATCH /api/note/:id
-    const patchRes = await app.handle(
-      new Request(`http://localhost:4000/api/note/${createdNote.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content: "Remember oat milk",
-        }),
-      }),
-    );
-    expect(patchRes.status).toBe(200);
-    const updated = await patchRes.json();
-    expect(updated.content).toBe("Remember oat milk");
-
-    // 5. Custom route with path param: /api/notes-custom/:noteId
-    const customRes = await app.handle(
-      new Request(`http://localhost:4000/api/notes-custom/${createdNote.id}`),
-    );
-    expect(customRes.status).toBe(200);
-    const customData = await customRes.json();
-    expect(customData.customNoteId).toBe(createdNote.id);
-    expect(customData.handled).toBe(true);
-
-    // 6. DELETE /api/note/:id
-    const deleteRes = await app.handle(
-      new Request(`http://localhost:4000/api/note/${createdNote.id}`, {
-        method: "DELETE",
-      }),
-    );
-    expect(deleteRes.status).toBe(200);
-    const deleteData = await deleteRes.json();
-    expect(deleteData.success).toBe(true);
-
-    // 7. Verify deletion via GET /api/note/:id -> 404
-    const notFoundRes = await app.handle(
-      new Request(`http://localhost:4000/api/note/${createdNote.id}`),
-    );
-    expect(notFoundRes.status).toBe(404);
-  });
+  const deepWhere = (depth: number): unknown => {
+    let node: unknown = { field: "title", op: "eq", value: "x" };
+    for (let i = 0; i < depth; i++) node = { and: [node] };
+    return node;
+  };
+  try {
+    // Past the 20-level CRUD bound: validated by schema, rejected in execute.
+    expect((await postQuery({ where: deepWhere(30) })).status).toBe(400);
+    // Past the generic HTTP nesting cap: rejected before validation recurses.
+    expect((await postQuery({ where: deepWhere(500) })).status).toBe(400);
+  } finally {
+    db.$client.close();
+  }
 });

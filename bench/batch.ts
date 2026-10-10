@@ -318,7 +318,10 @@ async function main() {
           });
         } else {
           await res.list({
-            input: { limit: 20, search: "Benchmark" },
+            input: {
+              limit: 20,
+              where: { field: "title", op: "contains", value: "Benchmark" },
+            },
             ctx: silentCtx,
           });
         }
@@ -348,7 +351,7 @@ async function main() {
           });
         } else if (m < 8) {
           await res.update({
-            input: { id: `seed_${i % 500}`, title: `WU ${i}` },
+            input: { id: `seed_${i % 500}`, data: { title: `WU ${i}` } },
             ctx: silentCtx,
           });
         } else {

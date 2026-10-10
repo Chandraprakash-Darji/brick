@@ -90,11 +90,14 @@ describe("pages CRUD (owner-scoped Postgres)", () => {
       alice,
     );
     await expect(
-      call(updatePage, { id: created.id, title: "Hacked" }, bob),
+      call(updatePage, { id: created.id, data: { title: "Hacked" } }, bob),
     ).rejects.toThrow(/access denied|not.*(found|exist)|forbidden/i);
     const updated = await call(
       updatePage,
-      { id: created.id, isPublic: true, theme: "nord", title: "Final" },
+      {
+        id: created.id,
+        data: { isPublic: true, theme: "nord", title: "Final" },
+      },
       alice,
     );
     expect(updated.title).toBe("Final");
@@ -172,9 +175,16 @@ describe("pages CRUD (owner-scoped Postgres)", () => {
       { content: "c", isPublic: false, slug: "d-1", title: "D1" },
       alice,
     );
-    const all = await call(listPages, {}, alice);
+    const all = await call(listPages, { includeTotal: true }, alice);
     expect(all.total).toBe(3);
-    const pubOnly = await call(listPages, { isPublic: true }, alice);
+    const pubOnly = await call(
+      listPages,
+      {
+        includeTotal: true,
+        where: { field: "isPublic", op: "eq", value: true },
+      },
+      alice,
+    );
     const pages = pubOnly.items ?? [];
     expect(pubOnly.total).toBe(2);
     for (const p of pages) {

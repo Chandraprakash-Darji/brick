@@ -136,7 +136,10 @@ export function defineAction(config: any): any {
   };
 
   actionFn.validateOutput = (output: unknown) => {
-    return validateWithSchema(config.output, output);
+    const runtimeSchema =
+      (actionFn as { outputValidationSchema?: TSchema })
+        .outputValidationSchema ?? config.output;
+    return validateWithSchema(runtimeSchema, output);
   };
 
   actionFn.run = async (input?: any, ctx?: any) => {
@@ -203,7 +206,10 @@ export function defineAction(config: any): any {
     });
 
     // 4. Validate Output
-    if (config.output) {
+    const runtimeOutputSchema =
+      (actionFn as { outputValidationSchema?: TSchema })
+        .outputValidationSchema ?? config.output;
+    if (runtimeOutputSchema) {
       const outputValidation = actionFn.validateOutput(result);
       if (!outputValidation.success) {
         throw new ValidationError(

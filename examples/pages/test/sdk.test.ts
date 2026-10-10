@@ -55,7 +55,8 @@ describe("local Brick SDK", () => {
       "workspace",
     );
     expect(
-      (await api.page.update({ id: created.id, title: "Updated" })).title,
+      (await api.page.update({ id: created.id, data: { title: "Updated" } }))
+        .title,
     ).toBe("Updated");
     expect(await api.pages.echo({ message: "local" })).toContain("Echo: local");
     const publicPage = await app.fetch(

@@ -1,57 +1,34 @@
 ---
-title: Primary Keys
-description: ID generation and custom primary key columns
+title: Primary keys
+description: Use actual columns and database defaults
 ---
 
-Resources auto-mint string ids on create. The strategy has two knobs — no autonaming framework, no templated series.
+Pass `id: table.name` for a Frappe-style string key or `id: table.id` for a numeric
+key. The column must belong to the resource table. When omitted, core infers a
+single primary key; missing or ambiguous identifiers fail declaration.
 
-## Default generation
-
-When the create payload omits the id column, the resource fills it in:
-
-1. `idGenerator()` when provided — full control, e.g. `() => randomUUID()`.
-2. Otherwise `` `${idPrefix ?? defaultPrefix}_${rand}` `` where `defaultPrefix` is `"pg"` for a resource named `page`, else the first three letters of the resource name (`deal` → `dea_xxxxxxxx`).
-
-```ts
-import { randomUUID } from "node:crypto";
-
-pagesService.resource({
-  name: "page",
-  table: pagesTable,
-  idPrefix: "pg", // pg_a1b2c3d4 (explicit; same as default here)
-  idGenerator: () => `pg_${randomUUID()}`, // or take over completely
-  // ...
-});
-```
-
-Column defaults (`col.default`) and `created_at` / `updated_at` timestamps are populated the same way when omitted.
-
-## Custom PK column
-
-Point the resource at a different primary-key column with `idField` (Drizzle key or DB column name):
+CRUD input selectors consistently use `{id}` even when the stored column has a
+different name. Updates separate `{id,data}`. The identifier cannot be updated.
+Database-generated identifiers and `$defaultFn` values remain database concerns;
+CRUD does not generate a prefixed string ID automatically.
 
 ```ts
-export const ticketsTable = sqliteTable("tickets", {
-  ticketNo: text("ticket_no").primaryKey(),
-  subject: text("subject").notNull(),
-  userId: text("user_id"),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
+const tickets = sqliteTable("tickets", {
+  number: integer("number").primaryKey({ autoIncrement: true }),
+  title: text("title").notNull(),
 });
-
-ticketsService.resource({
-  name: "ticket",
-  table: ticketsTable,
-  idField: "ticketNo",
-  idGenerator: () => `TICKET-${Date.now()}`,
-  operations: {
-    get: true,
-    create: true,
-    update: true,
-    delete: true,
-    list: true,
-  },
-});
+const ticket = service
+  .resource({ name: "ticket", table: tickets, id: tickets.number })
+  .use(
+    crud({
+      fields: {
+        number: { read: true },
+        title: { read: true, create: true, update: true },
+      },
+    }),
+  );
+await ticket.get({ input: { id: 42 } });
 ```
 
-`idField` drives the get/update/delete input shape (`{ ticketNo }`), the REST `:id` binding, and the keyset-cursor tiebreak. Meaningful human-readable keys work fine — enforce the format with a `fields` TypeBox override or a `beforeCreate` uniqueness check (see [Hooks](/docs/hooks)).
+This fragment uses `sqliteTable`, `integer`, and `text` from core, `crud` from
+`@brickkit/crud`, and an application's configured `service`.

@@ -1,60 +1,53 @@
 ---
-title: Overview
-description: TypeScript resource-based CRUD framework on Elysia and Drizzle
+title: Brick-TS
+description: Services, actions, and optional CRUD plugins
 ---
 
-Brick-TS is a TypeScript framework that gives developers **resource-based CRUD + auth out of the box**, built on [Elysia](https://elysiajs.com/), [Drizzle ORM](https://orm.drizzle.team/), and [Better Auth](https://www.better-auth.com/).
+Define typed services and actions with `@brickkit/core`. Attach optional
+capabilities through service and resource plugins. `@brickkit/crud` provides
+field-controlled reads and writes; `@brickkit/core` serves and compiles actions, and `@brickkit/cli` is the dev/build tool.
 
 ```ts
-import { defineService, defineDatabase } from "@brickkit/core";
-import { brick } from "@brickkit/cli";
-import { pagesTable } from "./services/pages/service";
+import {
+  defineDatabase,
+  defineService,
+  sqliteTable,
+  text,
+} from "@brickkit/core";
+import { crud } from "@brickkit/crud";
 
-export const pagesDb = defineDatabase({
-  path: "./data/pages.db",
-  tables: { pagesTable },
+const pages = sqliteTable("pages", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  title: text("title").notNull(),
+  email: text("email"),
+  internalNotes: text("internal_notes"),
 });
-
-export const pagesService = defineService("pages", { database: pagesDb });
-
-pagesService.resource({
-  name: "page",
-  table: pagesTable,
-  ownerField: "userId",
-  operations: {
-    list: { defaultLimit: 20, maxLimit: 100 },
-    get: true,
-    create: true,
-    update: true,
-    delete: true,
-  },
-});
-
-const app = brick({ port: 4000, services: [pagesService] });
-app.listen(4000);
+const database = defineDatabase({ tables: { pages } });
+const service = defineService("pages", { database });
+const page = service.resource({ name: "page", table: pages, id: pages.id }).use(
+  crud({
+    fields: {
+      id: { read: true, filter: ["eq", "in"] },
+      title: {
+        read: true,
+        create: true,
+        update: true,
+        filter: ["eq", "contains"],
+        sort: true,
+      },
+      email: {
+        read: true,
+        create: true,
+        update: true,
+        scrub: ({ value }) =>
+          value === null ? null : value.replace(/^(.).*(@.*)$/, "$1***$2"),
+      },
+    },
+  }),
+);
 ```
 
-Starts on `:4000` — health check at `/_health`, live OpenAPI at `/openapi.json`, Scalar docs at `/docs`, Swagger UI at `/swagger`, architecture introspection at `/_brick/services`.
-
-## Why Brick-TS
-
-- **Zero boilerplate CRUD** — declare a resource, get list/get/create/update/delete with filtering, sorting, pagination, search, and keyset cursors
-- **Auth-ready context** — a per-request `context` resolver (typically Better Auth session loading) injects `user`/`session` for every action
-- **Type-safe end to end** — Drizzle tables are the single source of truth; TypeBox input/output schemas validate at runtime and infer static types
-- **No codegen step** — no DSL, no emitted files; `Static<typeof schema>` and `$inferSelect`/`$inferInsert` give you types directly
-- **Schema stays caller-owned** — `syncSchema()` is an explicit dev/test helper for SQLite; Postgres schema is managed by your own migrations
-
-## Modules
-
-| Package          | Contents                                                                                                                                                 |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@brickkit/core` | `defineService`, `defineAction`, `defineResource`, `defineDatabase`, `generateOpenApiSpec`, `secret`/`resolveSecrets`, `createServiceProxy`, TypeBox `t` |
-| `@brickkit/cli`  | `brick` (Elysia app), raw `app.endpoint()`, `/openapi.json`, `/docs`, `/swagger`, `/_health`, `/_brick/services`                                         |
-| `examples/pages` | Workspace app with Postgres, Better Auth, and the local typed SDK (`examples/pages/src/api/contract.ts`)                                                 |
-
-## Next steps
-
-- [Getting Started](/docs/getting-started) — install and boot your first service
-- [Resources](/docs/resources) — declare tables and resources
-- [MCP Tools](/docs/tools) — define tools, annotations, and JSON-RPC transport
-- [Resource Lifecycle](/docs/resource-lifecycle) — how a request flows through the mesh
+Start with [getting started](/docs/brick/getting-started), then read
+[resources](/docs/brick/resources) and [plugin authoring](/docs/plugins/build-plugin).

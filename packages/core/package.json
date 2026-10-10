@@ -1,6 +1,6 @@
 {
   "name": "@brickkit/core",
-  "version": "0.2.4",
+  "version": "0.3.0-beta.5",
   "description": "Core engine primitives for the Brick-TS framework",
   "license": "MIT",
   "type": "module",
@@ -44,6 +44,7 @@
   "dependencies": {
     "@sinclair/typebox": "^0.34.0",
     "drizzle-orm": "^0.45.2",
+    "elysia": "2.0.0-beta.29",
     "postgres": "^3.4.7"
   },
   "devDependencies": {

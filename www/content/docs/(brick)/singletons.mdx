@@ -1,104 +1,13 @@
 ---
-title: Single-Row Patterns Without Singletons
-description: Get-or-default actions and raw endpoints for settings-style rows
+title: Singleton records
+description: Model singleton constraints in the database
 ---
 
-Brick-TS has **no singleton primitive**: no one-row-per-table declaration, no name-addressed routes (`GET /api/settings/slack`). Settings-style state is a regular table plus a manual get-or-default action and, optionally, a raw endpoint.
+Use database uniqueness constraints to express one record per application or
+owner. CRUD does not infer singleton behavior from names. Install CRUD with
+explicit field policies and use `findOne` for lookup, which returns null when no
+record matches. Configure trusted access scopes for per-user records.
 
-## The pattern: regular table + get-or-default action
-
-```ts
-import { eq, t } from "@brickkit/core";
-export const settingsTable = sqliteTable("settings", {
-  id: text("id").primaryKey(),
-  key: text("key").notNull().unique(),
-  value: text("value").notNull(),
-  userId: text("user_id"),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
-});
-
-settingsService.resource({
-  name: "setting",
-  table: settingsTable,
-  ownerField: "userId",
-  operations: {
-    list: { defaultLimit: 20, maxLimit: 100 },
-    get: true,
-    create: true,
-    update: true,
-    delete: true,
-  },
-});
-
-const DEFAULTS: Record<string, string> = { theme: "github-dark", locale: "en" };
-
-export const getSetting = settingsService.action({
-  name: "getSetting",
-  input: t.Object({ key: t.String() }),
-  output: t.Object({ key: t.String(), value: t.String() }),
-  execute: async ({ input, ctx }) => {
-    const [row] = await ctx.db
-      .select()
-      .from(settingsTable)
-      .where(eq(settingsTable.key, input.key))
-      .limit(1);
-    return { key: input.key, value: row?.value ?? DEFAULTS[input.key] ?? "" };
-  },
-});
-```
-
-Enforce "one row per key" with a `UNIQUE` column (as above) plus a `beforeCreate` conflict check; per-user or per-team scoping is just `ownerField` (or a team column) with exact-match list filters.
-
-## Name-addressed HTTP via app.endpoint
-
-For `GET /settings/:key` style routes, register a raw endpoint outside the action mesh:
-
-```ts
-const app = brick({ services: [settingsService] });
-
-app.endpoint({
-  method: "GET",
-  path: "/settings/:key",
-  service: settingsService,
-  handler: async ({ params, db }) => {
-    const [row] = await db
-      .select()
-      .from(settingsTable)
-      .where(eq(settingsTable.key, params.key))
-      .limit(1);
-    return { key: params.key, value: row?.value ?? DEFAULTS[params.key] ?? "" };
-  },
-});
-
-app.endpoint({
-  method: "PATCH",
-  path: "/settings/:key",
-  service: settingsService,
-  handler: async ({ params, body, db }) => {
-    const { value } = body as { value: string };
-    const [existing] = await db
-      .select()
-      .from(settingsTable)
-      .where(eq(settingsTable.key, params.key))
-      .limit(1);
-    if (!existing) {
-      await db.insert(settingsTable).values({
-        id: `st_${Math.random().toString(36).slice(2, 10)}`,
-        key: params.key,
-        value,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-    } else {
-      await db
-        .update(settingsTable)
-        .set({ value, updatedAt: new Date().toISOString() })
-        .where(eq(settingsTable.key, params.key));
-    }
-    return { key: params.key, value };
-  },
-});
-```
-
-Raw endpoints receive `{ params, query, body, headers, request, set, db, logger, traceId, requestId }`, share the mesh's error mapping, and appear in `/openapi.json` alongside actions.
+A unique constraint remains necessary when concurrent requests create rows.
+A before-create lookup alone cannot enforce uniqueness. More specialized
+singleton behavior can be packaged as a resource plugin.

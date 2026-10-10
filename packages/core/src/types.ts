@@ -1,4 +1,5 @@
-import type { TSchema, Static, TUnsafe } from "@sinclair/typebox";
+import type { ServicePlugin, ResourcePlugin } from "./plugin";
+import type { TSchema, Static } from "@sinclair/typebox";
 import type { BunSQLiteDatabase } from "./db/sqlite";
 import type { DatabaseHandle } from "./db/define";
 
@@ -225,6 +226,14 @@ export interface Action<
   name: string;
   serviceName?: string;
   config: ActionConfig<TInputSchema, TOutputSchema, TErrors, TContext>;
+  /**
+   * Optional runtime-only output schema. When present, `validateOutput` and
+   * HTTP output checking validate against it instead of `config.output`,
+   * while `config.output` remains the published contract (client types,
+   * OpenAPI). Lets projected/subset responses validate at runtime without
+   * leaking optionality into the generated contract.
+   */
+  outputValidationSchema?: TSchema;
   run(
     input?: TInputSchema extends TSchema ? Static<TInputSchema> : any,
     ctx?: Partial<TContext>,
@@ -297,20 +306,11 @@ export interface Tool<
     | ToolConfigWithoutAuthorize<I, O, E, C>;
 }
 
-export interface ResourceOperationsConfig {
-  list?:
-    | boolean
-    | {
-        defaultLimit?: number;
-        maxLimit?: number;
-        searchable?: string[];
-        sortable?: string[];
-        defaultSort?: string;
-      };
-  get?: boolean;
-  create?: boolean;
-  update?: boolean;
-  delete?: boolean;
+/** A resource declares identity and a table; plugins supply behavior. */
+export interface ResourceConfig<TTable = any, _TCtx = any> {
+  name: string;
+  table: TTable;
+  id?: import("drizzle-orm").Column;
 }
 
 export type InferTableRow<TTable> = TTable extends { $inferSelect: infer S }
@@ -319,287 +319,50 @@ export type InferTableRow<TTable> = TTable extends { $inferSelect: infer S }
 export type InferTableInsert<TTable> = TTable extends { $inferInsert: infer S }
   ? S
   : any;
+export type ResourceTypeOptions = Pick<ResourceConfig, "name" | "id">;
 
-export interface ResourceHooks<
-  TRow = any,
-  TInsert = any,
-  TCtx = any,
-  TErrors extends Record<string, ActionErrorDefinition> = Record<
-    string,
-    ActionErrorDefinition
-  >,
-> {
-  beforeCreate?: (params: {
-    data: TInsert;
-    ctx: TCtx;
-    error: ErrorBuilder<TErrors>;
-  }) => Promise<void> | void;
-  afterCreate?: (params: {
-    data: TInsert;
-    result: TRow;
-    ctx: TCtx;
-  }) => Promise<void> | void;
-  beforeUpdate?: (params: {
-    id: string | number;
-    data: Partial<TInsert>;
-    existing: TRow;
-    ctx: TCtx;
-    error: ErrorBuilder<TErrors>;
-  }) => Promise<void> | void;
-  afterUpdate?: (params: {
-    id: string | number;
-    data: Partial<TInsert>;
-    result: TRow;
-    ctx: TCtx;
-  }) => Promise<void> | void;
-  beforeDelete?: (params: {
-    id: string | number;
-    existing: TRow;
-    ctx: TCtx;
-    error: ErrorBuilder<TErrors>;
-  }) => Promise<void> | void;
-  afterDelete?: (params: {
-    id: string | number;
-    existing: TRow;
-    ctx: TCtx;
-    error: ErrorBuilder<TErrors>;
-  }) => Promise<void> | void;
-}
-
-export interface ResourceConfig<
-  TTable = any,
-  TCtx = any,
-  TErrors extends Record<string, ActionErrorDefinition> = Record<
-    string,
-    ActionErrorDefinition
-  >,
-> {
-  name: string;
-  table: TTable;
-  ownerField?: string;
-  idField?: string;
-  idPrefix?: string;
-  idGenerator?: () => string;
-  pluralName?: string;
-  operations?: ResourceOperationsConfig;
-  hooks?: ResourceHooks<
-    InferTableRow<TTable>,
-    InferTableInsert<TTable>,
-    TCtx,
-    TErrors
-  >;
-  fields?: Record<string, TSchema>;
-  errors?: TErrors;
-  searchable?: string[];
-  sortable?: string[];
-  defaultSort?: string;
-  /** Columns excluded from default list projection (Go pageMeta parity: content). */
-  excludeFromList?: string[];
-}
-
-export interface ResourcePlan<TTable = any> {
-  readonly resourceName: string;
-  readonly pluralName: string;
-  readonly table: TTable;
-  readonly idField: string;
-  readonly idCol: any;
-  readonly ownerField?: string;
-  readonly ownerCol?: any;
-  readonly ownerColName?: string;
-  readonly columnMap: Map<string, any>;
-  readonly columns: Record<string, any>;
-  readonly defaultColumns: ReadonlyArray<{ key: string; default: any }>;
-  readonly timestampColumns: {
-    readonly createdAtKey: string | null;
-    readonly updatedAtKey: string | null;
-  };
-  readonly searchable: {
-    readonly fields?: string[];
-    readonly columns: any[];
-  };
-  readonly sortable: {
-    readonly fields: Set<string>;
-    readonly defaultSort: string;
-    readonly defaultSortEntries: ReadonlyArray<{
-      field: string;
-      dir: "asc" | "desc";
-    }>;
-    readonly fallbackEntries: ReadonlyArray<{
-      field: string;
-      dir: "asc" | "desc";
-    }>;
-    readonly tiebreakCol: any;
-  };
-  readonly projections: {
-    readonly defaultProjection?: Record<string, any>;
-  };
-  readonly routeTargets: {
-    readonly listPath: string;
-    readonly itemPath: string;
-  };
-}
-
-/** Options whose literals affect the generated CRUD types. */
-export type ResourceTypeOptions = Pick<
-  ResourceConfig,
-  "name" | "idField" | "ownerField" | "fields" | "errors" | "pluralName"
->;
-
-type TableColumns<T> = T extends { _: { columns: infer C } } ? C : {};
-type ColumnName<C> = C extends { _: { name: infer N extends string } }
-  ? N
-  : never;
-type FieldKeys<T, F> = {
-  [K in keyof TableColumns<T>]: K extends F
-    ? K
-    : ColumnName<TableColumns<T>[K]> extends F
-      ? K
-      : never;
-}[keyof TableColumns<T>];
-type PrimaryKeys<T> = {
-  [K in keyof TableColumns<T>]: TableColumns<T>[K] extends {
-    _: { isPrimaryKey: true };
-  }
-    ? K
-    : never;
-}[keyof TableColumns<T>];
-type IdField<O> = O extends { idField: infer K extends string } ? K : "id";
-type OwnerField<O> = O extends { ownerField: infer K extends string }
-  ? K
-  : never;
-type TimestampKeys<T> =
-  | FieldKeys<T, "created_at" | "updated_at">
-  | Extract<keyof TableColumns<T>, "createdAt" | "updatedAt">;
-type GeneratedKeys<T, O> =
-  | PrimaryKeys<T>
-  | FieldKeys<T, IdField<O> | OwnerField<O>>
-  | TimestampKeys<T>;
-type FieldSchema<T, O, K> = O extends { fields: infer F }
-  ? K extends keyof F
-    ? F[K]
-    : K extends keyof TableColumns<T>
-      ? ColumnName<TableColumns<T>[K]> extends keyof F
-        ? F[ColumnName<TableColumns<T>[K]>]
-        : never
-      : never
-  : never;
-type FieldValue<T, O, K, V> = [FieldSchema<T, O, K>] extends [never]
-  ? V
-  : FieldSchema<T, O, K> extends TSchema
-    ? Static<FieldSchema<T, O, K>>
-    : V;
-
-/** The same editable columns as the runtime create schema, retaining defaults. */
-export type ResourceCreateInput<T, O = {}> = {
-  [K in keyof Omit<InferTableInsert<T>, GeneratedKeys<T, O>>]: FieldValue<
-    T,
-    O,
-    K,
-    Exclude<InferTableInsert<T>[K & keyof InferTableInsert<T>], null>
-  >;
-};
-export type ResourceIdInput<O = {}> = { [K in IdField<O>]: string };
-export type ResourceUpdateInput<T, O = {}> = ResourceIdInput<O> &
-  Partial<ResourceCreateInput<T, O>>;
-export type ResourceRow<T, O = {}> = {
-  [K in keyof InferTableRow<T>]:
-    | FieldValue<T, O, K, InferTableRow<T>[K]>
-    | Extract<InferTableRow<T>[K], null>;
-};
-export type ResourceListInput<T, O = {}> = Partial<{
-  [K in keyof Omit<ResourceRow<T, O>, TimestampKeys<T>>]: Exclude<
-    ResourceRow<T, O>[K & keyof ResourceRow<T, O>],
-    null
-  >;
-}> & {
-  limit?: number;
-  offset?: number;
-  page?: number;
-  sort?: string;
-  search?: string;
-  select?: string | string[];
-  cursor?: string;
-};
-/** List rows may be projected by select or excludeFromList. */
-export type ResourceListResult<T, O = {}> = {
-  items: Partial<ResourceRow<T, O>>[];
-  total: number;
-  limit: number;
-  offset: number;
-  page?: number;
-  pageCount: number;
-  hasMore: boolean;
-  nextCursor: string | null;
-};
-type ResourceErrors<O> = O extends {
-  errors: infer E extends Record<string, ActionErrorDefinition>;
-}
-  ? E
-  : {};
-export type ResourceActions<T, C extends ActionContext, O = {}> = 0 extends 1 &
-  T
+type PrimaryColumn<T> = T extends { _: { columns: infer C } }
   ? {
-      list: Action<any, any, any, C>;
-      get: Action<any, any, any, C>;
-      create: Action<any, any, any, C>;
-      update: Action<any, any, any, C>;
-      delete: Action<any, any, any, C>;
-    }
-  : {
-      list: Action<
-        TUnsafe<ResourceListInput<T, O> | undefined>,
-        TUnsafe<ResourceListResult<T, O>>,
-        ResourceErrors<O>,
-        C
-      >;
-      get: Action<
-        TUnsafe<ResourceIdInput<O>>,
-        TUnsafe<ResourceRow<T, O>>,
-        ResourceErrors<O> &
-          Record<"NOT_FOUND" | "FORBIDDEN", ActionErrorDefinition>,
-        C
-      >;
-      create: Action<
-        TUnsafe<ResourceCreateInput<T, O>>,
-        TUnsafe<ResourceRow<T, O>>,
-        ResourceErrors<O> & Record<"CONFLICT", ActionErrorDefinition>,
-        C
-      >;
-      update: Action<
-        TUnsafe<ResourceUpdateInput<T, O>>,
-        TUnsafe<ResourceRow<T, O>>,
-        ResourceErrors<O> &
-          Record<"NOT_FOUND" | "FORBIDDEN", ActionErrorDefinition>,
-        C
-      >;
-      delete: Action<
-        TUnsafe<ResourceIdInput<O>>,
-        TUnsafe<{ success: boolean; id: string | number }>,
-        ResourceErrors<O> &
-          Record<"NOT_FOUND" | "FORBIDDEN", ActionErrorDefinition>,
-        C
-      >;
-    };
+      [K in keyof C]: C[K] extends { _: { isPrimaryKey: true } } ? C[K] : never;
+    }[keyof C]
+  : import("drizzle-orm").Column;
+export type ResourceIdentity<T, O> = O & {
+  id: O extends { id: infer I extends import("drizzle-orm").Column }
+    ? I
+    : PrimaryColumn<T>;
+};
+
+/** Generic preparation declarations consumed by the application compiler. */
+export interface PreparationContribution {
+  readonly name: string;
+  describe(): unknown;
+  prepare(): void;
+}
 
 export interface Resource<
   TTable = any,
   TCtx extends ActionContext = ActionContext,
   TOptions = {},
 > {
+  use<
+    P extends ResourcePlugin<
+      Service<TCtx["db"], Omit<TCtx, keyof BaseContext>>,
+      this,
+      any
+    >,
+  >(
+    plugin: P,
+  ): this & import("./plugin").ResourcePluginAPI<P, TTable, TCtx, this>;
   readonly name: string;
   readonly serviceName: string;
   readonly table: TTable;
-  readonly ownerField?: string;
+  readonly id: TOptions extends {
+    id: infer I extends import("drizzle-orm").Column;
+  }
+    ? I
+    : import("drizzle-orm").Column;
   readonly idField: string;
-  readonly pluralName: string;
-  readonly config: ResourceConfig<TTable, TCtx>;
-  readonly plan?: ResourcePlan<TTable>;
-  readonly actions: ResourceActions<TTable, TCtx, TOptions>;
-  list: ResourceActions<TTable, TCtx, TOptions>["list"];
-  get: ResourceActions<TTable, TCtx, TOptions>["get"];
-  create: ResourceActions<TTable, TCtx, TOptions>["create"];
-  update: ResourceActions<TTable, TCtx, TOptions>["update"];
-  delete: ResourceActions<TTable, TCtx, TOptions>["delete"];
+  readonly config: ResourceConfig<TTable, TCtx> & TOptions;
 }
 
 export interface ServiceAuthOptions {
@@ -687,11 +450,7 @@ export interface ServiceSchema {
     tables: string[];
   };
   actions: ActionSchema[];
-  resources?: {
-    name: string;
-    ownerField?: string;
-    operations: string[];
-  }[];
+  resources?: { name: string }[];
 }
 
 export interface ArchitectureSchema {
@@ -742,6 +501,8 @@ export interface Service<
   >;
   readonly db?: TDb;
   readonly isBuilt?: boolean;
+
+  use<A>(plugin: ServicePlugin<this, A>): A;
 
   build(): this;
 
@@ -836,9 +597,18 @@ export interface Service<
     const TOptions extends ResourceTypeOptions = ResourceTypeOptions,
   >(
     config: ResourceConfig<TTable, BaseContext<TDb> & TServiceContext> &
-      TOptions,
-  ): Resource<TTable, BaseContext<TDb> & TServiceContext, TOptions>;
+      TOptions &
+      Record<Exclude<keyof TOptions, keyof ResourceConfig>, never>,
+  ): Resource<
+    TTable,
+    BaseContext<TDb> & TServiceContext,
+    ResourceIdentity<TTable, TOptions>
+  >;
 
+  readonly preparations: Map<string, PreparationContribution>;
+  contributePreparation(contribution: PreparationContribution): void;
+  listPreparations(): PreparationContribution[];
+  prepareContributions(): void;
   registerTable(table: any): this;
   getAction(name: string): Action<any, any, any, any> | undefined;
   listActions(): Action<any, any, any, any>[];

@@ -75,7 +75,14 @@ describe("benchmark lab", () => {
         expect(res.status).toBe(200);
         expect(await res.json()).toEqual({ ok: true });
       }
-      const list = await fetch(base + "/api/item?search=Benchmark&limit=20");
+      const list = await fetch(base + "/api/item/query", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          where: { field: "title", op: "contains", value: "Benchmark" },
+          limit: 20,
+        }),
+      });
       expect(list.status).toBe(200);
       expect(((await list.json()) as { items: unknown[] }).items.length).toBe(
         20,
@@ -89,7 +96,12 @@ describe("benchmark lab", () => {
     try {
       await seedRows(bench.db, 25, { prefix: "scale100000_98000" });
       const response = await fetch(
-        `http://127.0.0.1:${bench.app.server.port}/api/item?limit=20`,
+        `http://127.0.0.1:${bench.app.server.port}/api/item/query`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ limit: 20, includeTotal: true }),
+        },
       );
       expect(response.status).toBe(200);
       const body = (await response.json()) as {

@@ -9,7 +9,7 @@ bun add @brickkit/cli @brickkit/core
 ```
 
 ```ts
-import { brick } from "@brickkit/cli";
+import { brick } from "@brickkit/core";
 
 const app = brick({ title: "Pages API", version: "1.0.0" });
 app.listen(3333);
@@ -18,7 +18,7 @@ app.listen(3333);
 Build the backend directly from registered services:
 
 ```ts
-import { brick } from "@brickkit/cli";
+import { brick } from "@brickkit/core";
 import { pagesService, billingService } from "./services";
 
 const app = brick({ services: [pagesService, billingService] });
@@ -57,15 +57,22 @@ The server compiles specialized JavaScript handlers for all resource CRUD and
 custom actions at startup, pre-renders documentation, and caches OpenAPI and
 architecture JSON with definition/endpoint invalidation. Health retains live
 uptime and timestamps. Build a
-definitions module into a runnable Bun server with:
+module whose default export is a `BrickApp` into a runnable Bun server with:
 
 ```sh
-brick build src/definitions.ts --outdir dist/brick
+brick build src/app.ts --outdir dist/brick
 bun dist/brick/server.js
 ```
 
-See [the compilation plan and artifact contract](COMPILER.md) for implemented
-stages, limitations and the next optimizations.
+Use the same app entry as `brick gen client`. The build preserves its selected
+services, prefix, docs settings, endpoints, and Elysia hooks. Keep `.listen()`
+in a separate server bootstrap.
+
+This beta branch pins Elysia `2.0.0-beta.29`. `brick build` also precompiles
+Elysia's HTTP handlers with its Bun AOT plugin and removes the runtime HTTP
+compiler. Use `brick build src/app.ts --no-aot` for a regular bundle.
+Development and direct `brick()` calls still use runtime HTTP compilation;
+both modes share the same services and Brick handlers.
 
 ## Automatic typed client with Vite
 
@@ -75,7 +82,7 @@ whose default export is a `BrickApp`; construct the app without calling
 
 ```ts
 // src/api/app.ts
-import { brick } from "@brickkit/cli";
+import { brick } from "@brickkit/core";
 import { pagesService } from "./services";
 
 export default brick({ prefix: "/v2", services: [pagesService] });

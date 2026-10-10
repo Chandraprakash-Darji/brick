@@ -1,93 +1,39 @@
 ---
-title: Access Control
-description: Guard resources with authorization hooks and owner scoping
+title: Access control
+description: Authorize operations and constrain rows on the server
 ---
 
-Brick-TS access control is two mechanisms: per-action `authorize` hooks plus `ownerField` row scoping. There is no SQL guard-injection framework — ownership is enforced with explicit `WHERE ownerField = ctx.user.id` (list) and ownership comparisons (get/update/delete).
-
-`ServiceOptions.auth` is introspection-only metadata — it performs no enforcement. Say it plainly: if you set `auth` and nothing else, every route stays open.
-
-## The context resolver
-
-The service `context` resolver runs once per request and supplies `user`/`session` to every action. The `examples/pages` app loads it from Better Auth:
+CRUD accepts `access.authorize({operation,input,ctx})` and
+`access.scope({operation,ctx})`. Authorization runs for both HTTP and local calls.
+A scope returns a trusted Drizzle SQL predicate combined with user filters using
+AND. Get, list, findOne, count, exists, update and delete use the same scope.
+Rows outside the scope behave as missing for key operations.
 
 ```ts
-import { defineService } from "@brickkit/core";
-import { getAuth } from "../../../auth";
-import { appDb } from "../../../db";
-
-export const pagesService = defineService("pages", {
-  context: async ({ request }) => {
-    const session = await getAuth().api.getSession({
-      headers: request.headers,
-    });
-    return {
-      session: session?.session ?? null,
-      user: session?.user ?? null,
-    };
+crud({
+  fields: {
+    id: { read: true },
+    title: { read: true, create: true, update: true },
   },
-  database: appDb,
-});
-```
-
-## authorize on actions
-
-Custom actions declare `authorize` inline — it receives `{ user, input, ctx }` and returns a boolean (or promise). Falsy → `403`:
-
-```ts
-import { defineAction, eq, t } from "@brickkit/core";
-
-export const publishPage = defineAction({
-  name: "publishPage",
-  input: t.Object({ id: t.String() }),
-  authorize: async ({ user, input, ctx }) => {
-    if (!user?.id) return false;
-    const [page] = await ctx.db
-      .select()
-      .from(pagesTable)
-      .where(eq(pagesTable.id, input.id))
-      .limit(1);
-    return page?.userId === user.id;
+  access: {
+    authorize: ({ ctx }) => Boolean(ctx.user?.id),
+    scope: ({ operation, ctx }) =>
+      operation === "create" ? undefined : eq(pagesTable.userId, ctx.user.id),
   },
-  execute: async ({ input, ctx }) => {
-    // ...ctx.user is narrowed to non-null when authorize is declared
+  hooks: {
+    beforeCreate: ({ data, ctx }) => {
+      data.userId = ctx.user.id;
+    },
   },
 });
 ```
 
-## Guarding generated CRUD
+The fragment assumes a service context with authenticated `user`, `pagesTable`
+containing `userId`, and `eq` imported from core. A reusable plugin can annotate
+its context constraints. INSERT has no WHERE scope. A nonempty create scope is
+rejected; use explicit create authorization and a trusted hook that assigns the
+owner. Never allow a caller to submit ownership just to satisfy a scope.
 
-Resources take no `authorize` option, and generated CRUD actions ship without one. Late-bind a guard onto every generated action — this is the `examples/pages` pattern:
-
-```ts
-export const pagesResource = pagesService.resource({
-  name: "page",
-  table: pagesTable,
-  ownerField: "userId",
-  operations: {
-    create: true,
-    delete: true,
-    get: true,
-    list: { defaultLimit: 20, maxLimit: 100 },
-    update: true,
-  },
-});
-
-// Every CRUD op requires sign-in. defineAction reads config.authorize
-// at execution time, so late binding works.
-const requireSignedIn = ({ user }: { user?: { id?: string } | null }) =>
-  !!user?.id;
-for (const action of Object.values(pagesResource.actions)) {
-  (action.config as { authorize?: unknown }).authorize = requireSignedIn;
-}
-```
-
-## ownerField scoping
-
-With `ownerField: "userId"`:
-
-- **Create** injects `ctx.user.id` into the owner column (or `null` when anonymous).
-- **List** adds `WHERE user_id = ctx.user.id` when a user is present; anonymous callers see unscoped rows.
-- **Get/update/delete** compare the row's owner against `ctx.user.id` and throw `FORBIDDEN` on mismatch (rows with no owner stay readable).
-
-Public surfaces (like the `getPublicPage` reader in `examples/pages`) are separate custom actions with no `authorize` and no owner filtering — they enforce visibility themselves (e.g. `WHERE isPublic = true`).
+Field read permissions and response masking supplement row policies. They do
+not replace authorization. Service auth metadata alone does not enforce access;
+configure the CRUD policy or ordinary action authorization explicitly.

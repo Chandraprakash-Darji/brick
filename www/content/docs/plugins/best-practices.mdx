@@ -1,84 +1,19 @@
 ---
-title: Best Practices
-description: Scoping, errors, idempotency, and testing for extensions
+title: Plugin best practices
+description: Explicit tables, policies, names, and lifecycle
 ---
 
-## 1. Scope by ownerField
+Keep schemas and migrations under application control. Plugins register
+capabilities synchronously before build and do not open connections or mutate
+schema during setup. Use resource plugins for behavior attached to a table.
 
-Always set `ownerField` on resources that hold user data:
+Configure CRUD fields explicitly. Hidden fields are not selectable by callers;
+masking is a separate output transformation. Use operation authorization and
+trusted row scope for local and HTTP access. Custom routes need their own policies.
 
-```ts
-service.resource({ name: "page", table: pagesTable, ownerField: "userId" });
-```
+Use stable plugin and route names. Reuse the exact descriptor to reinstall on
+one host. A different descriptor with the same name on that host fails; the same
+descriptor on separate resources creates independent instances.
 
-List/get/update/delete are then scoped to `ctx.user.id` at the SQL level.
-Resources without it are effectively public — reserve that for audit logs or
-intentionally shared tables.
-
-## 2. Abort writes with error.\*
-
-Inside `beforeCreate` / `beforeUpdate` / `beforeDelete`, call the error
-builder instead of throwing raw errors:
-
-```ts
-hooks: {
-  beforeCreate: async ({ data, ctx, error }) => {
-    if (!ctx.user?.id) error.UNAUTHORIZED("Sign in required");
-    const taken = await slugTaken(ctx.db, data.slug);
-    if (taken) error.CONFLICT(`Slug '${data.slug}' is already taken`);
-  },
-}
-```
-
-Each call throws an `ActionExecutionError` with the right status, aborts the
-write, and serializes consistently through the mesh and raw endpoints.
-
-## 3. Keep handlers idempotent
-
-Retries happen. Design actions and endpoint handlers so repeating them is
-safe:
-
-- Check-then-write on natural keys (slug, `(targetType, targetId, userId)`).
-- Prefer upserts over blind inserts for toggle/reaction style actions.
-- Return the existing row instead of erroring when the desired state already
-  holds, unless callers need the `CONFLICT`.
-
-## 4. Authorize explicitly
-
-`ownerField` covers CRUD scoping, but custom actions need their own
-`authorize`:
-
-```ts
-service.action({
-  name: "page.publish",
-  authorize: ({ user }) => !!user?.id,
-  execute: async ({ input, ctx }) => {
-    /* ... */
-  },
-});
-```
-
-Compare resource authors against `ctx.user.id` for author-only mutations;
-never trust a client-supplied `userId` — overwrite it from `ctx.user` in
-`beforeCreate`.
-
-## 5. Test against real SQLite / Postgres with syncSchema
-
-Follow the project convention: no DB mocks. Spin up a real database,
-`syncSchema()` your tables, and exercise actions end to end:
-
-```ts
-import { defineDatabase, syncSchema } from "@brickkit/core";
-
-const db = defineDatabase({ engine: "sqlite", tables: { pagesTable } });
-await syncSchema(db);
-
-const row = await service.getAction("page.create")!.execute({
-  input: { slug: "hello", title: "Hello" },
-  ctx: { user: { id: "u_1" }, db: db.getDb() },
-});
-```
-
-Run the same suite against Postgres in CI. Mocks hide SQL-dialect bugs
-(`ilike` vs `lower()` + `like`, FTS `MATCH`, timestamp formats) that only
-real databases surface.
+Test real local and HTTP calls, disabled routes, app prefix overrides,
+collisions, multiple hosts, failed-installation rollback, and inferred APIs.

@@ -1,53 +1,55 @@
 ---
-title: Extensions
-description: Extension points in brick-ts — hooks, actions, raw endpoints, and service proxies
+title: Plugins
+description: Install service and resource plugins with typed APIs and scoped routes
 ---
 
-brick-ts has no plugin interface and no `app.Use()`. You extend a service by
-composing the primitives below — all TypeScript, in your own service files.
-
-## Extension points
-
-| Extension point       | API                                                                                                                      | Use it for                                                                   |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
-| Resource hooks        | `beforeCreate` / `afterCreate` / `beforeUpdate` / `afterUpdate` / `beforeDelete` / `afterDelete` on `service.resource()` | Audit trails, slug validation, denormalized counters                         |
-| Custom actions        | `service.action()` with optional `path` / `method`                                                                       | Domain operations that are not CRUD (publish, render, invite)                |
-| Raw endpoints         | `app.endpoint({ method, path, handler, service, database, summary, description, tags })`                                 | HTML pages, webhooks, MCP transports — anything outside the JSON action mesh |
-| Service proxy         | `createServiceProxy()`                                                                                                   | Call another service's actions with typed dispatch                           |
-| Built-in capabilities | `brick()` options                                                                                                        | Request logging, Scalar / Swagger docs, OpenAPI, health, architecture export |
-
-## Endpoint context
-
-Raw endpoint handlers receive an `EndpointContext`:
+Use `defineServicePlugin()` to package service capabilities and install them with
+`service.use(plugin)`. Use `defineResourcePlugin()` to attach a named API to an
+existing resource with `resource.use(plugin)`.
 
 ```ts
-interface EndpointContext {
-  params: Record<string, string>;
-  query: Record<string, string | undefined>;
-  body: unknown;
-  headers: Record<string, string>;
-  request: Request;
-  set: { status?: number; headers: Record<string, string> };
-  db: any; // Drizzle db from `service` (or first service with one)
-  logger: {
-    info: (...a: any[]) => void;
-    warn: (...a: any[]) => void;
-    error: (...a: any[]) => void;
-    debug: (...a: any[]) => void;
-  };
-  traceId: string;
-  requestId: string;
-}
+import { defineService, defineServicePlugin, t } from "@brickkit/core";
+
+const greeting = defineServicePlugin({
+  name: "example/greeting",
+  setup({ routes }) {
+    const hello = routes.action({
+      name: "hello",
+      method: "GET",
+      path: "/hello",
+      input: t.Object({ name: t.String() }),
+      output: t.String(),
+      execute: ({ input }) => `Hello ${input.name}`,
+    });
+    return { hello };
+  },
+});
+
+const service = defineService("greetings");
+const api = service.use(greeting);
+await api.hello({ input: { name: "Ada" } });
 ```
 
-Errors map the same way as the action mesh: throwing `ValidationError` or
-`ActionExecutionError` (or any error with a numeric `status`) sets the HTTP
-status; anything else becomes a 500.
+With the default app prefix, the HTTP route is `GET /api/greetings/hello`.
+The generated browser API is `api.greetings.hello`. Local actions use the
+same schemas, authorization and execution context as HTTP requests.
+
+A plugin may register raw endpoints for HTML, streams or webhooks. Consumers
+can override route paths and scopes or disable HTTP exposure while keeping
+local actions callable. Plugins do not create or migrate database tables.
+
+## Other extension points
+
+Resource hooks, `service.action()`, `app.endpoint()`, and `createServiceProxy()`
+remain available for application code. Resources are generic table hosts.
+Install `@brickkit/crud` with `resource.use(crud({fields: ...}))` for CRUD.
 
 ## Where to go next
 
-- [Built-in capabilities](/docs/plugins/built-in) — what `brick()` gives you for free.
-- [Audit-trail pattern](/docs/plugins/audit) — `afterCreate` / `afterUpdate` / `afterDelete` hooks writing audit rows.
-- [Comments pattern](/docs/plugins/comments) — a comments table + resource with author checks.
-- [Build an extension](/docs/plugins/build-plugin) — runnable comments module with CRUD, hooks and a custom action.
-- [Best practices](/docs/plugins/best-practices) — scoping, errors, idempotency, testing.
+- [Build a plugin](/docs/plugins/build-plugin) explains descriptors, typed APIs,
+  raw endpoints and route controls.
+- [Built-in capabilities](/docs/plugins/built-in) describes `brick()` options.
+- [Audit-trail pattern](/docs/plugins/audit) shows resource hooks writing audit rows.
+- [Comments pattern](/docs/plugins/comments) shows an application composition
+  pattern using a comments table and resource plugin composition.
+- [Best practices](/docs/plugins/best-practices) covers scoping and testing.

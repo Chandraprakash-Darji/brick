@@ -1,3 +1,8 @@
+import {
+  installPlugin,
+  isInstallingPlugin,
+  type ServicePlugin,
+} from "./plugin";
 import type { TSchema } from "@sinclair/typebox";
 import type { BunSQLiteDatabase } from "./db/sqlite";
 import type {
@@ -20,7 +25,8 @@ import { defineTool, isTool } from "./tool";
 import { defineAction } from "./action";
 import { getGlobalRegistry } from "./registry";
 import { getTableName, isDatabaseHandle, type DatabaseHandle } from "./db";
-import { defineResource, buildResourcePlan } from "./resource";
+import { defineResource } from "./resource";
+import type { PreparationContribution } from "./types";
 
 const defaultLogger: Logger = {
   info: (...args) => console.log("[INFO]", ...args),
@@ -47,6 +53,7 @@ export class ServiceImpl<
     string,
     Resource<any, BaseContext<TDb> & TServiceContext>
   >();
+  readonly preparations = new Map<string, PreparationContribution>();
   private database?: DatabaseHandle<TDb>;
   private _isBuilt = false;
 
@@ -62,6 +69,10 @@ export class ServiceImpl<
     this.database = options.database;
   }
 
+  use<A>(plugin: ServicePlugin<this, A>): A {
+    return installPlugin(this, undefined, plugin) as A;
+  }
+
   get db(): TDb | undefined {
     return this.getDb();
   }
@@ -71,19 +82,31 @@ export class ServiceImpl<
   }
 
   /**
-   * Precomputes and freezes execution plans for all registered resources and route targets once.
-   * Per-request paths perform O(1) lookups against these immutable plans.
+   * Closes declarations after plugins have registered their actions and preparations.
    */
   build(): this {
+    if (isInstallingPlugin(this))
+      throw new Error("Cannot build a service during plugin setup");
     if (this._isBuilt) return this;
-    for (const resource of this.resources.values()) {
-      if (!(resource as any).plan) {
-        (resource as any).plan = buildResourcePlan(this, resource.config);
-      }
-      Object.freeze((resource as any).plan);
-    }
     this._isBuilt = true;
     return this;
+  }
+
+  contributePreparation(contribution: PreparationContribution): void {
+    if (this._isBuilt)
+      throw new Error("Preparations must be registered before service build");
+    if (this.preparations.has(contribution.name))
+      throw new Error(`Duplicate preparation '${contribution.name}'`);
+    this.preparations.set(contribution.name, contribution);
+    getGlobalRegistry().touch();
+  }
+
+  listPreparations(): PreparationContribution[] {
+    return [...this.preparations.values()];
+  }
+  prepareContributions(): void {
+    for (const contribution of this.preparations.values())
+      contribution.prepare();
   }
 
   registerTable(table: any): this {
@@ -104,6 +127,10 @@ export class ServiceImpl<
   resource: Service<TDb, TServiceContext>["resource"] = ((
     config: ResourceConfig<any, BaseContext<TDb> & TServiceContext>,
   ) => {
+    if (this._isBuilt)
+      throw new Error("Resources must be registered before service build");
+    if (this.resources.has(config.name))
+      throw new Error(`Duplicate plugin resource: ${config.name}`);
     const resourceInstance = defineResource(this, config);
     this.resources.set(resourceInstance.name, resourceInstance);
     getGlobalRegistry().touch();
@@ -169,6 +196,12 @@ export class ServiceImpl<
       actionInstance = defineAction(actionOrConfig);
     }
 
+    if (
+      isInstallingPlugin(this) &&
+      this.actions.has(actionInstance.name) &&
+      this.actions.get(actionInstance.name) !== actionInstance
+    )
+      throw new Error(`Duplicate plugin action: ${actionInstance.name}`);
     if (isTool(actionInstance)) actionInstance.config.http = true;
     actionInstance.serviceName = this.name;
     (actionInstance as any).service = this;
@@ -349,8 +382,6 @@ export class ServiceImpl<
       })),
       resources: this.listResources().map((res) => ({
         name: res.name,
-        ownerField: res.ownerField,
-        operations: Object.keys(res.actions),
       })),
     };
   }
