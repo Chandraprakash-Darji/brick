@@ -15,7 +15,7 @@ Any entry filename works; its default export must be a `BrickApp`. Use
 
 ```ts
 // src/api/app.ts
-import { brick } from "@brickkit/cli";
+import { brick } from "@brickkit/core";
 import { records, users } from "./services";
 
 export default brick({ prefix: "/v2", services: [records, users] });

@@ -7,7 +7,7 @@ import {
   sqliteTable,
   text,
 } from "@brickkit/core";
-import { brick } from "@brickkit/cli";
+import { brick } from "@brickkit/core";
 const service = defineService("built", {
   context: (ctx) => ({
     user: ctx.request.headers.get("x-user") ? { id: "alice" } : null,

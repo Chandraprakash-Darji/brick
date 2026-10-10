@@ -96,7 +96,7 @@ console.log(JSON.stringify(getGlobalRegistry().exportArchitecture(), null, 2));
 Every server built with `brick` exposes the same export at runtime:
 
 ```typescript
-import { brick } from "@brickkit/cli";
+import { brick } from "@brickkit/core";
 
 const app = brick({ port: 4000 });
 app.listen(4000);

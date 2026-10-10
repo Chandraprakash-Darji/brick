@@ -14,12 +14,12 @@ The full repository comparison contains 14 commits. Website redesigns, example-a
 
 ## 1. The server entry point is now `brick()`
 
-The CLI package's server factory is now named `brick`. The old `createBrickServer` export has been removed.
+The core package's server factory is now named `brick`. The old `createBrickServer` export has been removed.
 
 Before:
 
 ```ts
-import { createBrickServer } from "@brickkit/cli";
+import { createBrickServer } from "@brickkit/core";
 
 const app = createBrickServer({ services: [pagesService] });
 ```
@@ -27,7 +27,7 @@ const app = createBrickServer({ services: [pagesService] });
 After:
 
 ```ts
-import { brick } from "@brickkit/cli";
+import { brick } from "@brickkit/core";
 
 const app = brick({ services: [pagesService] });
 app.listen(4000);
@@ -39,7 +39,7 @@ The rename does not introduce a different server implementation. The existing op
 
 **Migration:** replace imports and calls to `createBrickServer` with `brick`. Code still importing the old name will need updating before it can use `0.2.0`.
 
-Implementation: [server.ts](packages/cli/src/server.ts), [CLI exports](packages/cli/src/index.ts).
+Implementation: [server.ts](packages/core/src/server.ts), [core exports](packages/core/src/index.ts).
 
 > API update: the contract-based helpers from the original release have been removed. Use `brick({ services })` for server construction; follow the current [Typed Client guide](<www/content/docs/(brick)/typed-client.mdx>) for generated-client setup.
 
@@ -151,7 +151,7 @@ Implementation: [client.ts](packages/core/src/client.ts). Guide: [Typed Client](
 Construct the server directly with `brick({ services })`:
 
 ```ts
-import { brick } from "@brickkit/cli";
+import { brick } from "@brickkit/core";
 import { pagesService, billingService } from "./services";
 
 const app = brick({ services: [pagesService, billingService] });
@@ -162,7 +162,7 @@ The server mounts the HTTP actions registered on the selected services. MCP-only
 
 For generated-client setup, follow the current [Typed Client guide](<www/content/docs/(brick)/typed-client.mdx>). The Vite plugin reads a default-exported `BrickApp` and generates `_brick/contract.ts` from its selected services; no manually maintained server contract is required. Export the app without calling `.listen()` in that definition module.
 
-Implementation: [server.ts](packages/cli/src/server.ts).
+Implementation: [server.ts](packages/core/src/server.ts).
 
 ## 4. Resource CRUD types no longer erase the table schema
 
@@ -384,7 +384,7 @@ When a route expects an object input schema and a request has no assembled input
 
 The generated compiler handler follows the same rule. This fixes requests such as an unfiltered resource list in a built server. Required fields still undergo normal schema validation; supplying `{}` does not make a required payload valid.
 
-Implementation: [runtime action handler](packages/cli/src/action-handler.ts), [emitted handlers](packages/cli/src/compiler/emit.ts).
+Implementation: [runtime action handler](packages/core/src/action-handler.ts), [emitted handlers](packages/cli/src/compiler/emit.ts).
 
 ### Published client declarations
 

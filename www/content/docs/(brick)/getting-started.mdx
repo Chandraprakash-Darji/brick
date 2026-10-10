@@ -54,7 +54,7 @@ For disposable local SQLite examples, explicitly call `syncSchema(database.table
 database.getDb())`; do not run schema synchronization automatically in production.
 
 ```ts
-import { brick } from "@brickkit/cli";
+import { brick } from "@brickkit/core";
 export default brick({ services: [service], prefix: "/api" });
 ```
 

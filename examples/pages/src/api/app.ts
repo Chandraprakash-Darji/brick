@@ -1,4 +1,4 @@
-import { brick } from "@brickkit/cli";
+import { brick } from "@brickkit/core";
 import { and, eq } from "@brickkit/core";
 
 import { getAuth } from "./auth";

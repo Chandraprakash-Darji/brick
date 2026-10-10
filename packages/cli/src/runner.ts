@@ -1,7 +1,6 @@
 import { existsSync } from "fs";
 import { resolve } from "path";
-import { getGlobalRegistry } from "@brickkit/core";
-import { brick } from "./server";
+import { getGlobalRegistry, brick } from "@brickkit/core";
 
 export interface DevServerOptions {
   port?: number;
