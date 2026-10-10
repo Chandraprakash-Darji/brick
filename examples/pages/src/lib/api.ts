@@ -21,4 +21,4 @@ export type PageCreateInput = Parameters<typeof pageApi.create>[0];
 export type PageUpdateInput = Parameters<typeof pageApi.update>[0]["data"];
 export type PageListItem = Awaited<
   ReturnType<typeof pageApi.list>
->["items"][number] & { id: string };
+>["items"][number];

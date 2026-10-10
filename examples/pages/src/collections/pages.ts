@@ -20,9 +20,7 @@ export const pageCollection = createCollection(
           includeTotal: true,
         });
         for (const item of result.items) {
-          if (typeof item.id !== "string")
-            throw new Error("Page list item is missing its ID");
-          pages.push({ ...item, id: item.id });
+          pages.push(item);
         }
         offset += result.items.length;
         total = result.total ?? pages.length;
