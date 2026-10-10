@@ -67,6 +67,12 @@ bun dist/brick/server.js
 See [the compilation plan and artifact contract](COMPILER.md) for implemented
 stages, limitations and the next optimizations.
 
+This beta branch pins Elysia `2.0.0-beta.29`. `brick build` also precompiles
+Elysia's HTTP handlers with its Bun AOT plugin and removes the runtime HTTP
+compiler. Use `brick build src/definitions.ts --no-aot` for a regular bundle.
+Development and direct `brick()` calls still use runtime HTTP compilation;
+both modes share the same services and Brick handlers.
+
 ## Automatic typed client with Vite
 
 Add `brickClient` before your framework plugins. Its entry can be any module

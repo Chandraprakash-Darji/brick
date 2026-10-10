@@ -23,7 +23,7 @@ async function main() {
       const entry = args[1] && !args[1].startsWith("-") ? args[1] : undefined;
       if (!entry)
         throw new Error(
-          "Usage: brick build <definitions.ts> [--outdir <directory>] [--prefix <path>] [--port <number>]",
+          "Usage: brick build <definitions.ts> [--outdir <directory>] [--prefix <path>] [--port <number>] [--no-aot]",
         );
       const value = (flag: string) => {
         const index = args.indexOf(flag);
@@ -39,6 +39,7 @@ async function main() {
         prefix: value("--prefix"),
         port: port === undefined ? undefined : Number(port),
         requestLogging: !args.includes("--no-request-logging"),
+        aot: !args.includes("--no-aot"),
       });
       for (const warning of result.ir.diagnostics)
         console.warn(`[Brick compiler] ${warning}`);
@@ -104,7 +105,7 @@ async function main() {
 Usage:
   brick dev [entry] [--port <number>]    Start development server with live reload
   brick start [entry]                   Start production server
-  brick build <entry> [--outdir <dir>]  Compile definitions into a Bun server
+  brick build <entry> [--outdir <dir>] [--no-aot]  Compile definitions into a Bun server
   brick gen openapi [--output <file>]    Generate OpenAPI 3.1 JSON specification
   brick gen client <entry> [--output <file>] Generate a typed browser client contract
   brick info                            Export architecture JSON schema

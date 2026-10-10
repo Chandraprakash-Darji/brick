@@ -68,6 +68,34 @@ PORT=8080 bun dist/brick/server.js
 
 Other build options: `--prefix /v1` and `--no-request-logging`.
 
+### Elysia v2 beta AOT
+
+On the `beta` branch, Elysia is pinned to `2.0.0-beta.29`.
+Application builds run `elysia/plugin/aot/bun` against the generated exported
+`app`, after Brick emits its specialized handlers. The plugin precompiles the
+HTTP wrappers and strips Elysia's runtime handler compiler (`strip: true`).
+The standalone server therefore reconstructs those wrappers at startup.
+Brick's schema validation and service callbacks remain part of the bundle.
+
+Use `--no-aot` (or `buildApplication({ entry, aot: false })`) to keep Elysia's
+runtime compiler in the bundle. This lets AOT and regular builds live in one
+branch. Direct `brick()` calls and development remain runtime compiled.
+Elysia v1 and v2 are not interchangeable dependencies: v2 changes the hook API,
+so this branch targets v2 while `main` retains the stable dependency.
+
+The AOT plugin dry-runs the generated app at build time. Definitions must be
+safe to import during a build; database initialization and other module side
+effects run there. Register the same routes and hooks at build and runtime.
+Elysia v2 seals route registration at the first request, `listen()`, or
+`compile()` in both modes. Add endpoints before that point. The stripped bundle
+also requires the runtime route set to match the build; rebuild when definitions
+change. AOT build errors
+are reported rather than silently falling back to runtime compilation.
+
+See [Elysia's AOT announcement](https://elysiajs.com/blog/elysia-20#ahead-of-time-compilation)
+for the upstream build-time behavior. No performance improvement is claimed
+until Brick's benchmarks have been measured with this beta.
+
 The output directory contains:
 
 - `brick-ir.json`: route metadata, schema projections, resource read SQL and diagnostics.
