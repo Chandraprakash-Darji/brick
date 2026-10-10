@@ -293,9 +293,24 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
         throw new Error("Invalid CRUD pagination limits");
       const fieldLiteral = (keys: string[]) =>
         keys.length ? t.Union(keys.map((key) => t.Literal(key))) : t.Never();
-      const leafSchemas: TSchema[] = [];
-      for (const [field, policy] of Object.entries(fields))
-        for (const op of policy.filter ?? []) {
+      // Named where leaves: one union schema per filterable field plus named
+      // `and`/`or` branches. The client-contract generator only emits aliases
+      // for schemas reached via $ref (using `title ?? $id`), so anonymous
+      // leaves degrade to hash names. Each field union is imported by $ref
+      // from a module: TypeBox hoists every $id subschema into a shared
+      // check function, so compilation stays linear. Union nesting is
+      // associative, so validation accepts exactly the same inputs.
+      const whereId = `CrudWhere:${resource.name}`;
+      const whereTitle = (suffix: string) => `Where:${resource.name}:${suffix}`;
+      const whereFields: Record<string, TSchema> = {};
+      for (const [field, policy] of Object.entries(fields)) {
+        const operators = policy.filter ?? [];
+        if (!operators.length) continue;
+        if (field === "and" || field === "or")
+          throw new Error(
+            `CRUD filter field '${field}' on '${resource.name}' collides with the '${field}' branch`,
+          );
+        const fieldLeaves = operators.map((op) => {
           const valueSchema = Type.Exclude(schemas[field], t.Null());
           const value: Record<string, TSchema> = [
             "isNull",
@@ -309,28 +324,47 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
                     ? t.Tuple([valueSchema, valueSchema])
                     : valueSchema,
               };
-          leafSchemas.push(
-            object({ field: t.Literal(field), op: t.Literal(op), ...value }),
-          );
-        }
+          return object({
+            field: t.Literal(field),
+            op: t.Literal(op),
+            ...value,
+          });
+        });
+        whereFields[`${whereId}:${field}`] = t.Union(fieldLeaves, {
+          title: whereTitle(field),
+        });
+      }
+      const whereModule = t.Module({
+        ...whereFields,
+        [`${whereId}:and`]: t.Object(
+          { and: t.Array(t.Ref(whereId), { minItems: 1, maxItems: 50 }) },
+          { additionalProperties: false, title: whereTitle("and") },
+        ),
+        [`${whereId}:or`]: t.Object(
+          { or: t.Array(t.Ref(whereId), { minItems: 1, maxItems: 50 }) },
+          { additionalProperties: false, title: whereTitle("or") },
+        ),
+      });
       // Recursive rather than depth-inlined: TypeCompiler expands shared
       // inlined subschemas exponentially, stalling first validation for
-      // seconds. Runtime `condition()` still rejects nesting beyond 20, and
-      // the `validateInput` wrapper below rejects it before validation runs.
+      // seconds. Each $id member above compiles to one shared function, so
+      // the recursion through the module $refs stays linear. Runtime
+      // `condition()` still rejects nesting beyond 20, and the
+      // `validateInput` wrapper below rejects it before validation runs.
+      // The Recursive callback ignores Self on purpose: recursion flows
+      // through the named module $refs back to this root $id.
       const whereSchema: TSchema =
-        leafSchemas.length > 0
+        Object.keys(whereFields).length > 0
           ? t.Recursive(
-              (Self) =>
+              () =>
                 t.Union([
-                  ...leafSchemas,
-                  object({
-                    and: t.Array(Self, { minItems: 1, maxItems: 50 }),
-                  }),
-                  object({
-                    or: t.Array(Self, { minItems: 1, maxItems: 50 }),
-                  }),
+                  ...Object.keys(whereFields).map((id) =>
+                    whereModule.Import(id),
+                  ),
+                  whereModule.Import(`${whereId}:and`),
+                  whereModule.Import(`${whereId}:or`),
                 ]),
-              { $id: `CrudWhere:${resource.name}` },
+              { $id: whereId },
             )
           : t.Never();
       const selection = t.Optional(
