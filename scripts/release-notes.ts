@@ -7,22 +7,26 @@ const version = JSON.parse(
   readFileSync(join(root, "packages/core/package.json"), "utf8"),
 ).version;
 const tag = `v${version}`;
-const repo = "https://github.com/Chandraprakash-Darji/brick";
+const repo = "https://github.com/brick-org/brick";
 const git = (...args: string[]) =>
   execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 const previous =
-  git("tag", "--list", "v*", "--sort=-version:refname")
+  git("tag", "--merged", "HEAD", "--list", "v*", "--sort=-version:refname")
     .split("\n")
     .find(
-      (candidate) => /^v\d+\.\d+\.\d+$/.test(candidate) && candidate !== tag,
+      (candidate) =>
+        (version.includes("-")
+          ? /^v\d+\.\d+\.\d+(?:-beta\.\d+)?$/
+          : /^v\d+\.\d+\.\d+$/
+        ).test(candidate) && candidate !== tag,
     ) ??
   // The first combined release follows the former per-package releases.
-  git("tag", "--list", "core-v*", "--sort=-version:refname")
+  git("tag", "--merged", "HEAD", "--list", "core-v*", "--sort=-version:refname")
     .split("\n")
     .find((candidate) => candidate !== `core-v${version}`);
 
+let hasChanges = false;
 for (const pkg of ["core", "crud", "cli"]) {
-  console.log(`## @brickkit/${pkg}\n`);
   const commits = git(
     "log",
     "--format=%H\t%s",
@@ -31,15 +35,17 @@ for (const pkg of ["core", "crud", "cli"]) {
     `packages/${pkg}`,
   )
     .split("\n")
-    .filter(Boolean);
+    .filter((line) =>
+      /^(?:feat|fix|perf|refactor)(?:\([^)]*\))?!?:/.test(line.split("\t")[1]),
+    );
+  if (!commits.length) continue;
+  hasChanges = true;
+  console.log(`## @brickkit/${pkg}\n`);
   for (const [heading, pattern] of [
-    ["Features", /^feat(?:\([^)]*\))?:/],
-    ["Bug Fixes", /^fix(?:\([^)]*\))?:/],
-    ["Performance", /^perf(?:\([^)]*\))?:/],
-    [
-      "Other Changes",
-      /^(?!perf(?:\([^)]*\))?:|feat(?:\([^)]*\))?:|fix(?:\([^)]*\))?:)/,
-    ],
+    ["Features", /^feat(?:\([^)]*\))?!?:/],
+    ["Bug Fixes", /^fix(?:\([^)]*\))?!?:/],
+    ["Performance", /^perf(?:\([^)]*\))?!?:/],
+    ["Refactors", /^refactor(?:\([^)]*\))?!?:/],
   ] as const) {
     const entries = commits.filter((line) => pattern.test(line.split("\t")[1]));
     if (!entries.length) continue;
@@ -47,7 +53,7 @@ for (const pkg of ["core", "crud", "cli"]) {
     for (const entry of entries) {
       const [sha, subject] = entry.split("\t");
       const description = subject.replace(
-        /^(?:feat|fix|perf|docs|refactor|chore)(?:\([^)]*\))?:\s*/,
+        /^(?:feat|fix|perf|refactor)(?:\([^)]*\))?:\s*/,
         "",
       );
       console.log(
@@ -56,8 +62,9 @@ for (const pkg of ["core", "crud", "cli"]) {
     }
     console.log();
   }
-  if (!commits.length) console.log("- No package-specific changes.\n");
 }
+
+if (!hasChanges) console.log("No user-facing package changes.\n");
 
 console.log(
   previous
