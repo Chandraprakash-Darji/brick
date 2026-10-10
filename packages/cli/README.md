@@ -53,9 +53,6 @@ routes keep their REST methods.
 
 ## Compiler
 
-Start with [the compiler quickstart](COMPILER-QUICKSTART.md) to add a compiled API
-to an existing app.
-
 The server compiles specialized JavaScript handlers for all resource CRUD and
 custom actions at startup, pre-renders documentation, and caches OpenAPI and
 architecture JSON with definition/endpoint invalidation. Health retains live
@@ -70,9 +67,6 @@ bun dist/brick/server.js
 Use the same app entry as `brick gen client`. The build preserves its selected
 services, prefix, docs settings, endpoints, and Elysia hooks. Keep `.listen()`
 in a separate server bootstrap.
-
-See [the compilation plan and artifact contract](COMPILER.md) for implemented
-stages, limitations and the next optimizations.
 
 This beta branch pins Elysia `2.0.0-beta.29`. `brick build` also precompiles
 Elysia's HTTP handlers with its Bun AOT plugin and removes the runtime HTTP
