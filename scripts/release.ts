@@ -2,11 +2,11 @@
 // One-command release: bump version(s) -> commit -> tag -> push ->
 // npm publish and GitHub release via the publish-npm.yml workflow.
 //
-//   bun run release [patch|minor|major] [--dry-run]
+//   bun run release [patch|minor|major|beta] [--dry-run]
 // Both packages use the same version and ship under one v<version> tag.
 //
 // Prerequisites (checked up front):
-//   - clean tracked tree, on main, in sync with origin/main
+//   - clean tracked tree, on main (stable) or beta, in sync with origin
 //   - target tag(s) don't already exist on origin
 //   - `gh` authenticated (for GitHub access)
 //   - npm trust mappings configured per package (one-time, browser):
@@ -50,6 +50,11 @@ function writeJson(p: string, data: any): void {
 }
 
 function bumpVersion(v: string, kind: string): string {
+  if (kind === "beta") {
+    const prerelease = /^(\d+\.\d+\.\d+)-beta\.(\d+)$/.exec(v);
+    if (prerelease) return `${prerelease[1]}-beta.${Number(prerelease[2]) + 1}`;
+    return `${bumpVersion(v, "minor")}-beta.0`;
+  }
   const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(v);
   if (!m) fail(`non-semver version "${v}" — bump it by hand`);
   let [major, minor, patch] = [Number(m[1]), Number(m[2]), Number(m[3])];
@@ -66,8 +71,8 @@ function bumpVersion(v: string, kind: string): string {
   return `${major}.${minor}.${patch}`;
 }
 
-if (args.length > 1 || !["patch", "minor", "major"].includes(bump))
-  fail("usage: bun run release [patch|minor|major] [--dry-run]");
+if (args.length > 1 || !["patch", "minor", "major", "beta"].includes(bump))
+  fail("usage: bun run release [patch|minor|major|beta] [--dry-run]");
 
 // --- preconditions ---
 const dirty = execFileSync("git", ["status", "--porcelain"], {
@@ -78,27 +83,26 @@ const dirty = execFileSync("git", ["status", "--porcelain"], {
   .filter((l) => l && !l.startsWith("??"));
 if (dirty.length)
   fail(`tracked tree not clean:\n${dirty.join("\n")}\ncommit or stash first`);
-if (
-  execFileSync("git", ["branch", "--show-current"], {
-    cwd: ROOT,
-    encoding: "utf-8",
-  }).trim() !== "main"
-)
-  fail("must run on main");
+const branch = execFileSync("git", ["branch", "--show-current"], {
+  cwd: ROOT,
+  encoding: "utf-8",
+}).trim();
+const releaseBranch = bump === "beta" ? "beta" : "main";
+if (branch !== releaseBranch) fail(`must run on ${releaseBranch}`);
 execFileSync("git", ["fetch", "origin"], {
   cwd: ROOT,
   stdio: DRY ? "ignore" : "inherit",
 });
 const behind = execFileSync(
   "git",
-  ["rev-list", "--count", "HEAD..origin/main"],
+  ["rev-list", "--count", `HEAD..origin/${releaseBranch}`],
   {
     cwd: ROOT,
     encoding: "utf-8",
   },
 ).trim();
 if (!DRY && behind !== "0")
-  fail("local main is behind origin/main — pull first");
+  fail(`local ${releaseBranch} is behind origin/${releaseBranch} — pull first`);
 try {
   execFileSync("gh", ["auth", "status"], { cwd: ROOT, stdio: "ignore" });
 } catch {
@@ -156,7 +160,7 @@ sh([
 ]);
 sh(["git", "commit", "-m", msg]);
 sh(["git", "tag", tag]);
-sh(["git", "push", "--atomic", "origin", "main", tag]);
+sh(["git", "push", "--atomic", "origin", releaseBranch, tag]);
 console.log(
   `  queued ${tag}; GitHub Actions publishes both packages, then creates one release`,
 );
