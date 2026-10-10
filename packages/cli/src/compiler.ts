@@ -16,6 +16,39 @@ import {
   type CompiledHandler,
   type HandlerFactory,
 } from "./compiler/runtime";
+import { requireBrickApp } from "./app-entry";
+
+type ApplicationBinder = (services: Service<any, any>[]) => CompiledApplication;
+const buildBindings = new Map<string, ApplicationBinder>();
+
+function applicationKey(
+  services: readonly Service<any, any>[],
+  prefix = "/api",
+) {
+  return JSON.stringify([prefix, services.map((service) => service.name)]);
+}
+
+/** Build artifact bootstrap: bind generated handlers while evaluating the original app. */
+export async function loadCompiledBrickApp(
+  load: () => Promise<{ default: unknown }>,
+  ir: BrickIR,
+  bind: ApplicationBinder,
+) {
+  const key = JSON.stringify([ir.prefix, ir.services]);
+  if (buildBindings.has(key))
+    throw new Error("Brick compiler: overlapping compiled app imports");
+  buildBindings.set(key, bind);
+  try {
+    const app = requireBrickApp((await load()).default);
+    if (applicationKey(app.definition.services, app.definition.prefix) !== key)
+      throw new Error(
+        "Brick compiler: app services/prefix changed; rebuild the application",
+      );
+    return app;
+  } finally {
+    buildBindings.delete(key);
+  }
+}
 
 export { emitCompiledApplication, emitHandlerFactory } from "./compiler/emit";
 export type { BrickIR, RouteIR, RouteMethod } from "./compiler/ir";
@@ -53,6 +86,10 @@ export function compileBrickApplication(options: {
   prefix?: string;
   mode?: "specialized" | "generic";
 }): CompiledApplication {
+  const bind = buildBindings.get(
+    applicationKey(options.services, options.prefix),
+  );
+  if (bind && options.mode !== "generic") return bind(options.services);
   const { ir, bindings } = analyzeApplication(options.services, options.prefix);
   const factories: HandlerFactory[] =
     options.mode === "generic"

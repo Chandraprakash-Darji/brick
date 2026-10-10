@@ -1,22 +1,19 @@
 import { mkdtemp, mkdir, rename, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
-import { getGlobalRegistry } from "@brickkit/core";
 import { compileBrickApplication, emitCompiledApplication } from "./compiler";
 import { aot } from "elysia/plugin/aot/bun";
+import { loadBrickApp } from "./app-entry";
 
 export interface BuildApplicationOptions {
-  /** A module that registers services, without starting a server. */
+  /** A module whose default export is a BrickApp, without starting a server. */
   entry: string;
   outdir?: string;
-  prefix?: string;
   port?: number;
-  requestLogging?: boolean;
   /** Precompile Elysia's HTTP handlers at build time (default true). */
   aot?: boolean;
 }
 
-/** Analyze definitions and bundle the emitted handlers with the user's callbacks. */
+/** Bundle an exported BrickApp with generated handlers and its original configuration. */
 export async function buildApplication(options: BuildApplicationOptions) {
   const entry = resolve(options.entry);
   if (!(await Bun.file(entry).exists()))
@@ -34,15 +31,11 @@ export async function buildApplication(options: BuildApplicationOptions) {
     throw new Error(
       "Brick compiler: port must be an integer between 0 and 65535",
     );
-  await import(pathToFileURL(entry).href);
-  const services = getGlobalRegistry().list();
-  if (!services.length)
-    throw new Error(
-      "Brick compiler: entry registered no services; use a definitions module",
-    );
+  const app = await loadBrickApp(entry);
+  const services = [...app.definition.services];
   const compilation = compileBrickApplication({
     services,
-    prefix: options.prefix,
+    prefix: app.definition.prefix,
   });
   await mkdir(dirname(outdir), { recursive: true });
   const staging = await mkdtemp(join(dirname(outdir), ".brick-build-"));
@@ -51,12 +44,9 @@ export async function buildApplication(options: BuildApplicationOptions) {
       join(staging, "routes.js"),
       emitCompiledApplication(compilation.ir),
     );
-    const source = `import ${JSON.stringify(entry)};
-import { brick } from "@brickkit/cli";
-import { getGlobalRegistry } from "@brickkit/core";
-import { bind } from "./routes.js";
-const services = getGlobalRegistry().list();
-export const app = brick({ services, compilation: bind(services), requestLogging: ${options.requestLogging ?? true} });
+    const source = `import { loadCompiledBrickApp } from "@brickkit/cli/compiler";
+import { ir, bind } from "./routes.js";
+export const app = await loadCompiledBrickApp(() => import(${JSON.stringify(entry)}), ir, bind);
 if (import.meta.main) {
   const port = Number(process.env.PORT ?? ${port});
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error("Invalid PORT");

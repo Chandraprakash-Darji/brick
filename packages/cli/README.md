@@ -57,19 +57,20 @@ The server compiles specialized JavaScript handlers for all resource CRUD and
 custom actions at startup, pre-renders documentation, and caches OpenAPI and
 architecture JSON with definition/endpoint invalidation. Health retains live
 uptime and timestamps. Build a
-definitions module into a runnable Bun server with:
+module whose default export is a `BrickApp` into a runnable Bun server with:
 
 ```sh
-brick build src/definitions.ts --outdir dist/brick
+brick build src/app.ts --outdir dist/brick
 bun dist/brick/server.js
 ```
 
-See [the compilation plan and artifact contract](COMPILER.md) for implemented
-stages, limitations and the next optimizations.
+Use the same app entry as `brick gen client`. The build preserves its selected
+services, prefix, docs settings, endpoints, and Elysia hooks. Keep `.listen()`
+in a separate server bootstrap.
 
 This beta branch pins Elysia `2.0.0-beta.29`. `brick build` also precompiles
 Elysia's HTTP handlers with its Bun AOT plugin and removes the runtime HTTP
-compiler. Use `brick build src/definitions.ts --no-aot` for a regular bundle.
+compiler. Use `brick build src/app.ts --no-aot` for a regular bundle.
 Development and direct `brick()` calls still use runtime HTTP compilation;
 both modes share the same services and Brick handlers.
 
