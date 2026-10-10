@@ -3,6 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { getGlobalRegistry } from "@brickkit/core";
 import { compileBrickApplication, emitCompiledApplication } from "./compiler";
+import { aot } from "elysia/plugin/aot/bun";
 
 export interface BuildApplicationOptions {
   /** A module that registers services, without starting a server. */
@@ -11,6 +12,8 @@ export interface BuildApplicationOptions {
   prefix?: string;
   port?: number;
   requestLogging?: boolean;
+  /** Precompile Elysia's HTTP handlers at build time (default true). */
+  aot?: boolean;
 }
 
 /** Analyze definitions and bundle the emitted handlers with the user's callbacks. */
@@ -72,6 +75,10 @@ if (import.meta.main) {
       outdir: staging,
       naming: "server.js",
       sourcemap: "external",
+      plugins:
+        options.aot === false
+          ? []
+          : [aot(join(staging, "entry.ts"), { target: "bun", strip: true })],
     });
     if (!result.success)
       throw new AggregateError(result.logs, "Brick compiler: bundling failed");

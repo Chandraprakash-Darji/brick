@@ -188,8 +188,6 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
     if (registeredRoutes.has(routeKey)) {
       return;
     }
-    registeredRoutes.add(routeKey);
-
     switch (method) {
       case "GET":
         app.get(path, handler);
@@ -207,13 +205,14 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
         app.delete(path, handler);
         break;
     }
+    registeredRoutes.add(routeKey);
   };
 
   // Raw endpoints (outside the JSON action mesh).
   const mountEndpoint = (def: EndpointDefinition) => {
+    mountRoute(def.method, def.path, createEndpointHandler(def, services));
     endpointDefs.push(def);
     endpointRevision++;
-    mountRoute(def.method, def.path, createEndpointHandler(def, services));
   };
 
   for (const def of options.endpoints ?? []) {

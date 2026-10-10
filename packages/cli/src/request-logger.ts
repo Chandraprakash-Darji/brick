@@ -32,10 +32,10 @@ function thrownStatus(error: unknown): number | undefined {
  * returns undefined so existing error mapping is preserved. Logging only —
  * no CORS headers are set here.
  *
- * Hooks are registered with `{ as: "global" }` so they propagate to the
+ * Hooks are registered with the "global" scope so they propagate to the
  * parent app when mounted via `app.use(...)` — Elysia scopes plain instance
- * hooks to the plugin's own routes. Timing is captured in onBeforeHandle
- * because onRequest offers no `as` option and is never propagated from a
+ * hooks to the plugin's own routes. Timing is captured in beforeHandle
+ * because request hooks are not propagated from a
  * used instance. Unmatched routes (no beforeHandle) fall back to Date.now().
  */
 export function requestLoggingPlugin(opts: RequestLoggingOptions = {}): Elysia {
@@ -74,9 +74,9 @@ export function requestLoggingPlugin(opts: RequestLoggingOptions = {}): Elysia {
     return undefined;
   };
 
-  plugin.onBeforeHandle({ as: "global" }, markStarted);
-  plugin.onAfterHandle({ as: "global" }, logSuccess);
-  plugin.onError({ as: "global" }, logError);
+  plugin.beforeHandle("global", markStarted);
+  plugin.afterHandle("global", logSuccess);
+  plugin.error("global", logError);
 
   return plugin;
 }

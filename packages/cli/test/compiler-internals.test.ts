@@ -79,17 +79,17 @@ it("invalidates architecture for definition changes, registry replacement and cl
   ).toBe("replacement");
 });
 
-it("invalidates OpenAPI when endpoints or service action definitions are added", async () => {
+it("includes startup endpoints and invalidates OpenAPI when service definitions change", async () => {
   const service = defineService("spec");
   const app = brick({
     services: [service],
     requestLogging: false,
     endpoints: [{ method: "GET", path: "/first", handler: () => "first" }],
   });
-  expect(
-    (await (await app.handle(request("/openapi.json"))).json()).paths["/first"],
-  ).toBeDefined();
   app.endpoint({ method: "GET", path: "/later", handler: () => "later" });
+  const initial = await (await app.handle(request("/openapi.json"))).json();
+  expect(initial.paths["/first"]).toBeDefined();
+  expect(initial.paths["/later"]).toBeDefined();
   service.action({ name: "laterAction", execute: () => "later" });
   const spec = await (await app.handle(request("/openapi.json"))).json();
   expect(spec.paths["/later"]).toBeDefined();
@@ -97,4 +97,23 @@ it("invalidates OpenAPI when endpoints or service action definitions are added",
   expect(await (await app.handle(request("/openapi.json"))).json()).toEqual(
     spec,
   );
+});
+
+it("keeps endpoint metadata unchanged when Elysia rejects registration after sealing", async () => {
+  const app = brick({ requestLogging: false });
+  const initial = await (await app.handle(request("/openapi.json"))).json();
+  const endpoint = {
+    method: "GET" as const,
+    path: "/late",
+    handler: () => "late",
+  };
+  // A failed attempt must not mark the route registered or add it to the spec.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    expect(() => app.endpoint(endpoint)).toThrow("sealed");
+    expect(app.listEndpoints()).toEqual([]);
+    expect(await (await app.handle(request("/openapi.json"))).json()).toEqual(
+      initial,
+    );
+  }
+  expect((await app.handle(request("/late"))).status).toBe(404);
 });
