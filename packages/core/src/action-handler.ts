@@ -9,7 +9,6 @@ import {
 import { getCompiledCheck } from "./typebox";
 import { buildErrorHelpers } from "./action";
 
-
 let _srvSeq = 0;
 const EMPTY_SERVICES = Object.freeze({});
 const DEFAULT_REQUEST = new Request("http://localhost");
