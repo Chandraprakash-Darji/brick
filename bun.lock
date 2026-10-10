@@ -95,7 +95,7 @@
     },
     "packages/cli": {
       "name": "@brickkit/cli",
-      "version": "0.3.0-beta.3",
+      "version": "0.3.0-beta.4",
       "bin": {
         "brick": "dist/bin.js",
       },
@@ -121,7 +121,7 @@
     },
     "packages/core": {
       "name": "@brickkit/core",
-      "version": "0.3.0-beta.3",
+      "version": "0.3.0-beta.4",
       "dependencies": {
         "@sinclair/typebox": "^0.34.0",
         "drizzle-orm": "^0.45.2",
@@ -138,7 +138,7 @@
     },
     "packages/crud": {
       "name": "@brickkit/crud",
-      "version": "0.3.0-beta.3",
+      "version": "0.3.0-beta.4",
       "dependencies": {
         "@brickkit/core": "^0.3.0-beta.1",
         "@sinclair/typebox": "^0.34.0",

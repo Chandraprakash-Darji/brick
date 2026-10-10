@@ -1,6 +1,6 @@
 {
   "name": "@brickkit/cli",
-  "version": "0.3.0-beta.3",
+  "version": "0.3.0-beta.4",
   "description": "CLI and server engine for Brick-TS",
   "license": "MIT",
   "type": "module",
@@ -49,7 +49,7 @@
     "format:check": "oxfmt --check ."
   },
   "dependencies": {
-    "@brickkit/core": "^0.3.0-beta.3",
+    "@brickkit/core": "^0.3.0-beta.4",
     "@sinclair/typebox": "^0.34.0",
     "elysia": "2.0.0-beta.29"
   },
