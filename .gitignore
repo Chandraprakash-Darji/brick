@@ -60,3 +60,5 @@ docs/
 !/www/src/routes/docs/
 !/examples/pages/src/routes/docs/
 !/examples/pages/src/content/docs/
+
+.openqodex/
