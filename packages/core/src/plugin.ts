@@ -111,7 +111,8 @@ export type ResourcePluginAPI<P, T, C, R = unknown> = P extends {
     ? A
     : never;
 
-const pluginKind = Symbol("Brick plugin");
+// Process-global like actionBindingKey, so descriptors survive a second core copy.
+const pluginKind: unique symbol = Symbol.for("brickkit.plugin.kind");
 export interface ServicePlugin<S extends Service<any, any>, A> {
   readonly [pluginKind]: "service";
   readonly name: string;

@@ -36,7 +36,7 @@ export function emitHandlerFactory(route: RouteIR): string {
     ? "const extra = await contextHook(ctx); if (extra) Object.assign(ctx, extra);"
     : "";
   const validation = route.input
-    ? `validate(inputChecker, input, ${name}, "input");`
+    ? `checkDepth(input, ${name}); validate(inputChecker, input, ${name}, "input");`
     : "";
   const authorization = route.authorize
     ? `if (!await authorize({ ctx, input, user: ctx.user })) deny(${name});`
@@ -55,7 +55,7 @@ ${output}
 return result;`;
   return `function bindAction(binding, runtime) {
 const { execute, contextHook, authorize, inputChecker, outputChecker, errorBuilder, logger, cachedDb, service } = binding;
-const { nextSequence, defaultRequest, emptyServices, mergeInput, validate, deny, mapError, isThenable } = runtime;
+const { nextSequence, defaultRequest, emptyServices, mergeInput, checkDepth, validate, deny, mapError, isThenable } = runtime;
 return ${asyncStages ? "async " : ""}function brickAction({ ${fields} }) {
 const seq = nextSequence();
 const traceId = (headers && headers["x-trace-id"]) || "tr_" + seq;

@@ -23,8 +23,7 @@ import {
   type Service,
 } from "../packages/core/src/index";
 import { brick } from "../packages/cli/src/server";
-import { benchTable, benchCrudOptions } from "./lib/fixtures";
-import { seedRows } from "./lib/fixtures";
+import { benchTable, benchCrudOptions, seedRows } from "./lib/fixtures";
 import { parseArgs, argInt, argStr } from "./lib/stats";
 
 export const BENCH_PORTS = {

@@ -3,6 +3,7 @@
 // npm publish and GitHub release via the publish-npm.yml workflow.
 //
 //   bun run release [patch|minor|major|beta] [--dry-run]
+// A stable bump from X.Y.Z-beta.N promotes it to X.Y.Z.
 // All packages use the same version and ship under one v<version> tag.
 //
 // Prerequisites (checked up front):
@@ -13,13 +14,39 @@
 //     npmjs.com package Settings -> Trusted Publisher -> Chandraprakash-Darji/brick
 
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
 const DRY = process.argv.includes("--dry-run");
 const args = process.argv.slice(2).filter((a) => a !== "--dry-run");
 const [bump = "patch"] = args;
+
+// Resolve binaries from fixed, unwriteable system directories instead of
+// trusting the caller's PATH (Sonar typescript:S4036). A release runs
+// `git push` and publishes to npm, so a hijacked PATH entry could swap
+// the binary that actually runs.
+const SAFE_BIN_DIRS = [
+  "/opt/homebrew/bin",
+  "/usr/local/bin",
+  "/usr/bin",
+  "/bin",
+];
+function resolveBin(name: string): string {
+  for (const dir of SAFE_BIN_DIRS) {
+    const candidate = join(dir, name);
+    try {
+      if (existsSync(candidate)) return candidate;
+    } catch {
+      // ignore and try the next directory
+    }
+  }
+  throw new Error(
+    `release: error: binary "${name}" not found in ${SAFE_BIN_DIRS.join(":")} — install it there first`,
+  );
+}
+const GIT = resolveBin("git");
+const GH = resolveBin("gh");
 
 const CORE_PKG = join(ROOT, "packages/core/package.json");
 const CLI_PKG = join(ROOT, "packages/cli/package.json");
@@ -30,7 +57,14 @@ function sh(cmd: string[], cwd = ROOT): string {
     console.log(`  [dry-run] $ ${cmd.join(" ")}`);
     return "";
   }
-  return execFileSync(cmd[0], cmd.slice(1), { cwd, encoding: "utf-8" }).trim();
+  const [bin, ...rest] = cmd;
+  // git/gh run push/fetch, so resolve them to absolute paths above.
+  // Other tools (e.g. bun, often under ~/.bun/bin) keep PATH lookup.
+  const resolved = bin === "git" ? GIT : bin === "gh" ? GH : bin;
+  return execFileSync(resolved, rest, {
+    cwd,
+    encoding: "utf-8",
+  }).trim();
 }
 
 function fail(msg: string): never {
@@ -56,6 +90,8 @@ function bumpVersion(v: string, kind: string): string {
     if (prerelease) return `${prerelease[1]}-beta.${Number(prerelease[2]) + 1}`;
     return `${bumpVersion(v, "minor")}-beta.0`;
   }
+  const promoted = /^(\d+\.\d+\.\d+)-beta\.\d+$/.exec(v);
+  if (promoted) return promoted[1];
   const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(v);
   if (!m) fail(`non-semver version "${v}" — bump it by hand`);
   let [major, minor, patch] = [Number(m[1]), Number(m[2]), Number(m[3])];
@@ -76,7 +112,7 @@ if (args.length > 1 || !["patch", "minor", "major", "beta"].includes(bump))
   fail("usage: bun run release [patch|minor|major|beta] [--dry-run]");
 
 // --- preconditions ---
-const dirty = execFileSync("git", ["status", "--porcelain"], {
+const dirty = execFileSync(GIT, ["status", "--porcelain"], {
   cwd: ROOT,
   encoding: "utf-8",
 })
@@ -84,18 +120,18 @@ const dirty = execFileSync("git", ["status", "--porcelain"], {
   .filter((l) => l && !l.startsWith("??"));
 if (dirty.length)
   fail(`tracked tree not clean:\n${dirty.join("\n")}\ncommit or stash first`);
-const branch = execFileSync("git", ["branch", "--show-current"], {
+const branch = execFileSync(GIT, ["branch", "--show-current"], {
   cwd: ROOT,
   encoding: "utf-8",
 }).trim();
 const releaseBranch = bump === "beta" ? "beta" : "main";
 if (branch !== releaseBranch) fail(`must run on ${releaseBranch}`);
-execFileSync("git", ["fetch", "origin"], {
+execFileSync(GIT, ["fetch", "origin"], {
   cwd: ROOT,
   stdio: DRY ? "ignore" : "inherit",
 });
 const behind = execFileSync(
-  "git",
+  GIT,
   ["rev-list", "--count", `HEAD..origin/${releaseBranch}`],
   {
     cwd: ROOT,
@@ -105,7 +141,7 @@ const behind = execFileSync(
 if (!DRY && behind !== "0")
   fail(`local ${releaseBranch} is behind origin/${releaseBranch} — pull first`);
 try {
-  execFileSync("gh", ["auth", "status"], { cwd: ROOT, stdio: "ignore" });
+  execFileSync(GH, ["auth", "status"], { cwd: ROOT, stdio: "ignore" });
 } catch {
   fail("gh is not authenticated — run `gh auth login` first");
 }
@@ -127,15 +163,11 @@ const releases = [
   { file: CRUD_PKG, data: crudJson },
 ];
 cliJson.dependencies["@brickkit/core"] = `^${version}`;
-crudJson.dependencies["@brickkit/core"] = `^${version}`;
-const exists = execFileSync(
-  "git",
-  ["ls-remote", "origin", `refs/tags/${tag}`],
-  {
-    cwd: ROOT,
-    encoding: "utf-8",
-  },
-).trim();
+crudJson.peerDependencies["@brickkit/core"] = `^${version}`;
+const exists = execFileSync(GIT, ["ls-remote", "origin", `refs/tags/${tag}`], {
+  cwd: ROOT,
+  encoding: "utf-8",
+}).trim();
 if (exists) fail(`tag ${tag} already exists on origin`);
 
 console.log("releasing:");

@@ -37,15 +37,15 @@ const app = brick({
 
 ## Health
 
-```ts
-// Always mounted:
-GET / _health; // { status: "ok", uptime, timestamp }
+```text
+# Always mounted:
+GET /_health  # { status: "ok", uptime, timestamp }
 ```
 
 ## Architecture export
 
-```ts
-GET / _brick / services; // introspected services, actions, resources
+```text
+GET /_brick/services  # introspected services, actions, resources
 ```
 
 Use it to verify what the mesh actually mounted, or to feed client codegen.

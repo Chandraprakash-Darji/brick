@@ -16,7 +16,8 @@ let sequence = 0;
 
 function isNonEmpty(value: any): boolean {
   if (value == null) return false;
-  for (const _ in value) return true;
+  // Early return on the first key: an allocation-free emptiness check.
+  for (const _ in value) return true; // NOSONAR
   return false;
 }
 
@@ -30,6 +31,35 @@ function mergeInput(first: any, second: any, third: any) {
   if (c && !a && !b) return third;
   if (a || b || c) return Object.assign({}, first, second, third);
   return undefined;
+}
+
+// Generic pre-validation nesting cap for parsed HTTP input. Compiled input
+// validators recurse, so unbounded nesting (e.g. a 20k-deep filter object)
+// would throw RangeError (HTTP 500) instead of failing validation with a
+// 400. The walk is iterative and far above legitimate depths (a max-depth
+// CRUD filter is ~45 levels of JSON).
+const MAX_INPUT_DEPTH = 128;
+export function inputTooDeep(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const stack: { node: unknown; depth: number }[] = [{ node: value, depth: 0 }];
+  while (stack.length > 0) {
+    const { node, depth } = stack.pop()!;
+    if (depth > MAX_INPUT_DEPTH) return true;
+    if (node && typeof node === "object") {
+      const children = Array.isArray(node) ? node : Object.values(node);
+      for (const child of children)
+        if (child && typeof child === "object")
+          stack.push({ node: child, depth: depth + 1 });
+    }
+  }
+  return false;
+}
+
+function checkDepth(value: unknown, action: string) {
+  if (!inputTooDeep(value)) return;
+  throw new ValidationError(`Validation failed for action '${action}' input`, [
+    { path: "", message: "Input exceeds maximum nesting depth" },
+  ]);
 }
 
 function validate(
@@ -69,6 +99,7 @@ export const compilerRuntime = Object.freeze({
   defaultRequest: DEFAULT_REQUEST,
   nextSequence: () => (++sequence).toString(36),
   mergeInput,
+  checkDepth,
   validate,
   mapError,
   isThenable: (value: any): boolean =>

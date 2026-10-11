@@ -1,5 +1,6 @@
 import { crud } from "@brickkit/crud";
 import {
+  brick,
   defineService,
   t,
   defineDatabase,
@@ -7,7 +8,6 @@ import {
   sqliteTable,
   text,
 } from "@brickkit/core";
-import { brick } from "@brickkit/core";
 const service = defineService("built", {
   context: (ctx) => ({
     user: ctx.request.headers.get("x-user") ? { id: "alice" } : null,

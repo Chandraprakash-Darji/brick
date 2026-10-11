@@ -309,3 +309,27 @@ it("runs generic preparation contributions only for specialized compilation and 
   metadata.revision = 2;
   expect(compiled.ir.preparations[0]!.metadata).toEqual({ revision: 1 });
 });
+
+it("rejects over-nested input with the generic handler's 400 in both modes", async () => {
+  const service = defineService("nested");
+  service.action({
+    name: "tree",
+    method: "POST",
+    input: t.Recursive((Node) => t.Object({ child: t.Optional(Node) })),
+    execute: () => ({ ok: true }),
+  });
+  let input: Record<string, unknown> = {};
+  for (let i = 0; i < 20_000; i++) input = { child: input };
+  for (const compiler of [true, false]) {
+    resetGlobalRegistry();
+    const app = brick({ services: [service], compiler, requestLogging: false });
+    const response = await app.handle(
+      request("/api/nested/tree", "POST", input),
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.errors).toEqual([
+      { path: "", message: "Input exceeds maximum nesting depth" },
+    ]);
+  }
+});

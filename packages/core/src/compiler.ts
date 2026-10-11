@@ -93,7 +93,9 @@ export function compileBrickApplication(options: {
         )
       : ir.routes.map(
           (route) =>
-            new Function(
+            // Emitted source holds only JSON-escaped literals and fixed
+            // identifiers; user callbacks are bound as closures, never inlined.
+            new Function( // NOSONAR
               `return (${emitHandlerFactory(route)});`,
             )() as HandlerFactory,
         );

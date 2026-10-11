@@ -6,8 +6,8 @@ description: Separate write normalization from response scrubbing
 Configure `hooks` inside `crud()` options. Before hooks can normalize data or
 assign trusted internal columns; after hooks observe completed writes. Available
 hooks are before/after create, update, and delete. Hook parameters include context
-and error helpers; update/delete hooks also receive the target identifier and
-existing row. After-create/update receive the persisted result.
+and error helpers; update/delete hooks also receive the target identifier.
+After-create/update receive the persisted result.
 
 ```ts
 crud({

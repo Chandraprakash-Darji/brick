@@ -1,5 +1,4 @@
-import { brick } from "@brickkit/core";
-import { and, eq } from "@brickkit/core";
+import { and, brick, eq } from "@brickkit/core";
 
 import { getAuth } from "./auth";
 import { registerMcpRoutes } from "./mcp";
