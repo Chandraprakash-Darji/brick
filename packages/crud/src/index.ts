@@ -763,7 +763,9 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
                 "Row-scoped creation requires an explicit create policy",
                 403,
               );
-            const writeFields = Object.keys(data).sort();
+            const writeFields = Object.keys(data).sort((a, b) =>
+              a < b ? -1 : 1,
+            );
             const boundData = Object.fromEntries(
               writeFields.map((field) => [
                 field,

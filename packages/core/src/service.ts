@@ -20,13 +20,13 @@ import type {
   Logger,
   Resource,
   ResourceConfig,
+  PreparationContribution,
 } from "./types";
 import { defineTool, isTool } from "./tool";
 import { defineAction } from "./action";
 import { getGlobalRegistry } from "./registry";
 import { getTableName, isDatabaseHandle, type DatabaseHandle } from "./db";
 import { defineResource } from "./resource";
-import type { PreparationContribution } from "./types";
 
 const defaultLogger: Logger = {
   info: (...args) => console.log("[INFO]", ...args),

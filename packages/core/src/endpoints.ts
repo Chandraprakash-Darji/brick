@@ -68,12 +68,8 @@ export function createEndpointHandler(
   services: Service<any, any>[],
 ): (elysiaCtx: any) => Promise<unknown> {
   return async ({ params, body, query, headers, request, set }: any) => {
-    const traceId =
-      headers?.["x-trace-id"] ||
-      `tr_${Math.random().toString(36).substring(2, 10)}`;
-    const requestId =
-      headers?.["x-request-id"] ||
-      `req_${Math.random().toString(36).substring(2, 10)}`;
+    const traceId = headers?.["x-trace-id"] || `tr_${crypto.randomUUID()}`;
+    const requestId = headers?.["x-request-id"] || `req_${crypto.randomUUID()}`;
 
     if (set?.headers) {
       set.headers["x-trace-id"] = traceId;

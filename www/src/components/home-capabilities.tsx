@@ -31,11 +31,10 @@ const actionCode = extensionSource
   )
   .trim();
 const routes = [
-  ["GET", "/api/comment", "List"],
+  ["POST", "/api/comment/query", "List"],
   ["GET", "/api/comment/:id", "Read"],
   ["POST", "/api/comment", "Create"],
   ["PATCH", "/api/comment/:id", "Update"],
-  ["PUT", "/api/comment/:id", "Update"],
   ["DELETE", "/api/comment/:id", "Delete"],
 ];
 

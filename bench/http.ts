@@ -218,18 +218,30 @@ async function main() {
       },
       {
         benchmark: "search.indexed",
-        method: "GET",
-        url: `${B}/api/item?limit=20&search=Benchmark`,
+        method: "POST",
+        url: `${B}/api/item/query`,
+        headers: JSON_H,
+        body: JSON.stringify({
+          limit: 20,
+          where: { field: "title", op: "contains", value: "Benchmark" },
+        }),
       },
       {
         benchmark: "search.filter-unindexed",
-        method: "GET",
-        url: `${B}/api/item?limit=20&status=published`,
+        method: "POST",
+        url: `${B}/api/item/query`,
+        headers: JSON_H,
+        body: JSON.stringify({
+          limit: 20,
+          where: { field: "status", op: "eq", value: "published" },
+        }),
       },
       {
         benchmark: "cursor.shallow",
-        method: "GET",
-        url: `${B}/api/item?limit=20`,
+        method: "POST",
+        url: `${B}/api/item/query`,
+        headers: JSON_H,
+        body: JSON.stringify({ limit: 20 }),
       },
     ];
     if (large)
@@ -350,21 +362,23 @@ async function main() {
       }
     }
     if (keep("cursor.deep")) {
-      let cursor = "";
-      for (let i = 0; i < 40; i++) {
-        const res = await fetch(
-          `${B}/api/item?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
-        );
-        const json: any = await res.json();
-        if (!json.nextCursor) break;
-        cursor = json.nextCursor;
-      }
-      if (cursor) {
+      // Page 41 of 20 (offset 800); skip if the dataset is too small to reach it.
+      const offset = 800;
+      const probeRes = await fetch(`${B}/api/item/query`, {
+        method: "POST",
+        headers: JSON_H,
+        body: JSON.stringify({ limit: 20, offset }),
+      });
+      const probe: any = probeRes.ok ? await probeRes.json() : null;
+      if (probe?.items?.length) {
         for (const c of concurrencies) {
           if (!keep(`cursor.deep/c${c}`)) continue;
           const r = await load({
             name: `cursor.deep c=${c}`,
-            url: `${B}/api/item?limit=20&cursor=${encodeURIComponent(cursor)}`,
+            url: `${B}/api/item/query`,
+            method: "POST",
+            headers: JSON_H,
+            body: JSON.stringify({ limit: 20, offset }),
             concurrency: c,
             requests: Math.min(requests, 500),
           });
@@ -377,7 +391,9 @@ async function main() {
       } else {
         skipped.push({
           benchmark: "cursor.deep",
-          reason: "no nextCursor (dataset smaller than 800 rows?)",
+          reason: probeRes.ok
+            ? "no rows at offset 800 (dataset smaller than 820 rows?)"
+            : `probe failed: HTTP ${probeRes.status}`,
         });
       }
     }
@@ -413,7 +429,10 @@ async function main() {
         for (const c of [1, 16]) {
           const r = await load({
             name: `scale.list-20-from-${target} c=${c}`,
-            url: `${B}/api/item?limit=20`,
+            url: `${B}/api/item/query`,
+            method: "POST",
+            headers: JSON_H,
+            body: JSON.stringify({ limit: 20 }),
             concurrency: c,
             requests: Math.min(requests, 500),
           });

@@ -1,11 +1,11 @@
 import {
+  brick,
   defineDatabase,
   defineService,
   syncSchema,
   sqliteTable,
   text,
 } from "@brickkit/core";
-import { brick } from "@brickkit/core";
 import { commentsTable, comments } from "./extensions/comments";
 const pages = sqliteTable("pages", { id: text("id").primaryKey() });
 const database = defineDatabase({ tables: { pages, comments: commentsTable } });

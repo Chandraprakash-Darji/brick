@@ -8,6 +8,7 @@ import {
 } from "./types";
 import { getCompiledCheck } from "./typebox";
 import { buildErrorHelpers } from "./action";
+import { inputTooDeep } from "./compiler/runtime";
 
 let _srvSeq = 0;
 const EMPTY_SERVICES = Object.freeze({});
@@ -15,29 +16,8 @@ const DEFAULT_REQUEST = new Request("http://localhost");
 
 function isNonEmpty(obj: any): boolean {
   if (obj == null) return false;
-  for (const _ in obj) return true;
-  return false;
-}
-
-// Generic pre-validation nesting cap for parsed HTTP input. Compiled input
-// validators recurse, so unbounded nesting (e.g. a 20k-deep filter object)
-// would throw RangeError (HTTP 500) instead of failing validation with a
-// 400. The walk is iterative and far above legitimate depths (a max-depth
-// CRUD filter is ~45 levels of JSON).
-const MAX_INPUT_DEPTH = 128;
-function inputTooDeep(value: unknown): boolean {
-  if (!value || typeof value !== "object") return false;
-  const stack: { node: unknown; depth: number }[] = [{ node: value, depth: 0 }];
-  while (stack.length > 0) {
-    const { node, depth } = stack.pop()!;
-    if (depth > MAX_INPUT_DEPTH) return true;
-    if (node && typeof node === "object") {
-      const children = Array.isArray(node) ? node : Object.values(node);
-      for (const child of children)
-        if (child && typeof child === "object")
-          stack.push({ node: child, depth: depth + 1 });
-    }
-  }
+  // Early return on the first key: an allocation-free emptiness check.
+  for (const _ in obj) return true; // NOSONAR
   return false;
 }
 
