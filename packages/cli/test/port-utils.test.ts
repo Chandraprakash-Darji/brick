@@ -14,8 +14,12 @@ describe("parsePort", () => {
     expect(parsePort(undefined, "3000")).toBe(3000);
   });
 
+  it("should reject PORT=0 from environment", () => {
+    expect(() => parsePort(undefined, "0")).toThrow(/invalid|port/i);
+  });
+
   it("should use default 4000 when invalid env port provided", () => {
-    expect(parsePort(undefined, "invalid")).toBe(4000);
+    expect(() => parsePort(undefined, "invalid")).toThrow(/invalid|port/i);
   });
 
   it("should accept valid port 1", () => {
