@@ -147,6 +147,8 @@ describe("plugin installation", () => {
       method: "GET",
       path: "/v2/page/label",
       clientPath: ["page", "labels", "label"],
+      plugin: "labels",
+      resource: "page",
     });
     expect(page.table).toBe(pages);
   });
@@ -168,6 +170,8 @@ describe("plugin installation", () => {
       method: "GET",
       path: "/v3/welcome",
       clientPath: ["other", "hello"],
+      plugin: "greeting",
+      resource: undefined,
     });
   });
   it("stores bindings on the action for bundler-duplicated core copies", async () => {
@@ -306,6 +310,87 @@ describe("plugin installation", () => {
         handler: () => "late",
       }),
     ).toThrow("during setup");
+  });
+  it("exports scoped resource-plugin actions under public names with plugin/resource metadata (issue #27)", async () => {
+    const { getGlobalRegistry } = await import("../src");
+    const service = makeHost();
+    const resource = service.resource({ name: "page", table: pages });
+    const api = resource.use(
+      defineResourcePlugin({
+        name: "@brickkit/crud",
+        setup({ routes }) {
+          const list = routes.action({
+            name: "list",
+            method: "POST",
+            path: "/query",
+            output: t.Object({ items: t.Array(t.String()) }),
+            execute: () => ({ items: [] }),
+          });
+          const get = routes.action({
+            name: "get",
+            method: "GET",
+            path: "/:id",
+            input: t.Object({ id: t.String() }),
+            output: t.String(),
+            execute: ({ input }) => input.id,
+          });
+          return { list, get };
+        },
+      }),
+    );
+    // Public names, no plugin package leak.
+    expect(api.list.name).toBe("page.list");
+    expect(api.get.name).toBe("page.get");
+    expect([...service.actions.keys()].sort()).toEqual([
+      "page.get",
+      "page.list",
+    ]);
+    expect((api.list as { plugin?: string }).plugin).toBe("@brickkit/crud");
+    expect((api.list as { resource?: string }).resource).toBe("page");
+    const architecture = getGlobalRegistry().exportArchitecture();
+    const names = architecture.services.flatMap((s) =>
+      s.actions.map((a) => a.name),
+    );
+    expect(names).toContain("page.list");
+    expect(names).toContain("page.get");
+    expect(names.some((n) => n.includes("@brickkit/crud"))).toBe(false);
+    const listed = architecture.services
+      .flatMap((s) => s.actions)
+      .filter((a) => a.name === "page.list");
+    expect(listed[0]?.plugin).toBe("@brickkit/crud");
+    expect(listed[0]?.resource).toBe("page");
+    // Service-plugin scoped names are public too (no descriptor prefix).
+    const svc = makeHost();
+    const helloApi = svc.use(
+      defineServicePlugin({
+        name: "@brickkit/greeting",
+        setup({ routes }) {
+          const hello = routes.action({
+            name: "hello",
+            method: "GET",
+            path: "/hello",
+            output: t.String(),
+            execute: () => "hi",
+          });
+          return { hello };
+        },
+      }),
+    );
+    expect(helloApi.hello.name).toBe("hello");
+    expect(
+      [...svc.actions.keys()].some((n) => n.includes("@brickkit/greeting")),
+    ).toBe(false);
+    // OpenAPI operationIds/summaries use public names.
+    const spec = generateOpenApiSpec({ services: [service] });
+    const ops = Object.values(spec.paths).flatMap((p) =>
+      Object.values(p as Record<string, any>),
+    ) as any[];
+    expect(ops.length).toBeGreaterThan(0);
+    for (const op of ops) {
+      expect(op.operationId).not.toContain("@brickkit/crud");
+      expect(op.summary).not.toContain("@brickkit/crud");
+    }
+    expect(JSON.stringify(ops).includes("page.list")).toBe(true);
   });
 });
 

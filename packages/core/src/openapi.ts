@@ -152,6 +152,12 @@ export function generateOpenApiSpec(
           action.config.tags && action.config.tags.length > 0
             ? action.config.tags
             : [service.name],
+        ...((action as { plugin?: string }).plugin
+          ? { "x-brick-plugin": (action as { plugin?: string }).plugin }
+          : {}),
+        ...((action as { resource?: string }).resource
+          ? { "x-brick-resource": (action as { resource?: string }).resource }
+          : {}),
         responses,
       };
 

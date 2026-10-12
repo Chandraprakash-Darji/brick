@@ -97,6 +97,10 @@ export interface BrickClientAction<
   kind: "action";
   name: string;
   serviceName: string;
+  /** Owning plugin descriptor name for plugin actions (e.g. `@brickkit/crud`). */
+  plugin?: string;
+  /** Owning resource name for resource-plugin actions (e.g. `page`). */
+  resource?: string;
   config: { path: string; method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" };
   /** Type information only; never emitted at runtime. */
   readonly __types?: { input: TInput; output: TOutput; errors: TErrors };

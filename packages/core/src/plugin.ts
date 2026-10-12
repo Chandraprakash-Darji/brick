@@ -209,6 +209,8 @@ function copyControls<S extends PluginRouteScope>(
 interface Binding {
   service: Service<any, any>;
   resource?: Resource<any, any, any>;
+  /** Owning plugin descriptor name (e.g. `@brickkit/crud`). Kept separate from the public action name. */
+  plugin: string;
   path: string;
   method: PluginRouteMethod;
   scope: PluginRouteScope;
@@ -280,6 +282,8 @@ export function getPluginActionRoute(
     path: pathOf(binding, prefix),
     method: binding.method,
     clientPath: binding.clientPath,
+    plugin: binding.plugin,
+    resource: binding.resource?.name,
   };
 }
 export function getPluginEndpoints(
@@ -383,6 +387,7 @@ export function installPlugin(
     return {
       service,
       resource,
+      plugin: descriptor.name,
       path,
       method: config.method,
       scope,
@@ -401,11 +406,20 @@ export function installPlugin(
             `Plugin action path parameter '${match[1]}' must be declared in its input schema`,
           );
       }
-      const name = `${resource ? `${resource.name}.` : ""}${descriptor.name}.${config.name}`;
+      // Public contract name: resource/operation only (e.g. `page.list`).
+      // The owning plugin stays in binding metadata (`plugin`) and on the
+      // action (`plugin`/`resource`) so it never leaks into exported names,
+      // OpenAPI, or client contracts.
+      const name = `${resource ? `${resource.name}.` : ""}${config.name}`;
       if (service.actions.has(name))
-        throw new Error(`Duplicate plugin action '${name}'`);
+        throw new Error(
+          `Duplicate plugin action '${name}' (from plugin '${descriptor.name}')`,
+        );
       const { scope: _scope, ...actionConfig } = config;
       const action = defineAction({ ...actionConfig, name });
+      (action as unknown as Record<string, unknown>).plugin = descriptor.name;
+      if (resource)
+        (action as unknown as Record<string, unknown>).resource = resource.name;
       service.action(action);
       ownedActions.add(action);
       state.actions.set(action, binding);

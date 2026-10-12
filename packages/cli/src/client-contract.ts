@@ -52,6 +52,16 @@ function addServiceActions(
       kind: "action",
       name: action.name,
       serviceName: service.name,
+      ...((action as { plugin?: string }).plugin
+        ? { plugin: (action as { plugin?: string }).plugin }
+        : pluginRoute?.plugin
+          ? { plugin: pluginRoute.plugin }
+          : {}),
+      ...((action as { resource?: string }).resource
+        ? { resource: (action as { resource?: string }).resource }
+        : pluginRoute?.resource
+          ? { resource: pluginRoute.resource }
+          : {}),
       config: {
         path:
           pluginRoute?.path ??

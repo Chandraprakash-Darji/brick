@@ -225,6 +225,10 @@ export interface Action<
 
   name: string;
   serviceName?: string;
+  /** Owning plugin descriptor name for plugin actions (e.g. `@brickkit/crud`). */
+  plugin?: string;
+  /** Owning resource name for resource-plugin actions (e.g. `page`). */
+  resource?: string;
   config: ActionConfig<TInputSchema, TOutputSchema, TErrors, TContext>;
   /**
    * Optional runtime-only output schema. When present, `validateOutput` and
@@ -425,6 +429,10 @@ export interface ServiceOptions<
 export interface ActionSchema {
   name: string;
   serviceName?: string;
+  /** Owning plugin descriptor name for plugin actions (e.g. `@brickkit/crud`). */
+  plugin?: string;
+  /** Owning resource name for resource-plugin actions (e.g. `page`). */
+  resource?: string;
   description?: string;
   inputSchema?: unknown;
   outputSchema?: unknown;

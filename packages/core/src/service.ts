@@ -400,6 +400,12 @@ export class ServiceImpl<
       actions: this.listActions().map((act) => ({
         name: act.name,
         serviceName: this.name,
+        ...((act as { plugin?: string }).plugin
+          ? { plugin: (act as { plugin?: string }).plugin }
+          : {}),
+        ...((act as { resource?: string }).resource
+          ? { resource: (act as { resource?: string }).resource }
+          : {}),
         description: act.config.description,
         inputSchema: act.config.input,
         outputSchema: act.config.output,
