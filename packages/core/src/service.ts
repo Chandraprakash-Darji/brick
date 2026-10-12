@@ -40,6 +40,9 @@ const EMPTY_SERVICES = Object.freeze({});
 const EMPTY_METADATA = Object.freeze({});
 let _ctxSeq = 0;
 
+// Symbol to tie context resolution to a specific service instance and invocation
+const RESOLVED_SYMBOL = Symbol("resolved");
+
 export class ServiceImpl<
   TDb = BunSQLiteDatabase<Record<string, unknown>>,
   TServiceContext extends Record<string, any> = Record<string, any>,
@@ -295,11 +298,13 @@ export class ServiceImpl<
   /**
    * Resolves the complete service execution context once per incoming request.
    * Merges framework BaseContext with the service's custom context hook.
+   * Always rebuilds context for this service to prevent caller context from overriding.
    */
   resolveContext(
     callCtx?: Partial<BaseContext<TDb> & TServiceContext>,
   ): Promise<BaseContext<TDb> & TServiceContext> {
-    if ((callCtx as any)?._resolved) {
+    // Only accept pre-resolved context if it was resolved by THIS service instance
+    if ((callCtx as any)?.[RESOLVED_SYMBOL] === this) {
       return Promise.resolve(callCtx as BaseContext<TDb> & TServiceContext);
     }
     return this._resolveContextSlow(callCtx);
@@ -310,7 +315,8 @@ export class ServiceImpl<
   ): Promise<BaseContext<TDb> & TServiceContext> {
     const seq = ++_ctxSeq;
     const req = callCtx?.request ?? DEFAULT_REQUEST;
-    const db = callCtx?.db ?? (this.getDb() as TDb);
+    // Always use this service's own database, never the caller's
+    const db = this.getDb() as TDb;
     const logger = callCtx?.logger ?? defaultLogger;
     const traceId = callCtx?.traceId ?? `tr_${seq.toString(36)}`;
     const requestId = callCtx?.requestId ?? `req_${seq.toString(36)}`;
@@ -326,11 +332,12 @@ export class ServiceImpl<
         requestId,
         services,
         metadata,
-        _resolved: true,
+        [RESOLVED_SYMBOL]: this,
       };
-      if (callCtx) {
-        Object.assign(finalCtx, callCtx, { _resolved: true });
-      }
+      // Preserve safe envelope fields only from callCtx
+      if (callCtx?.user !== undefined) finalCtx.user = callCtx.user;
+      if ((callCtx as any)?.caller !== undefined)
+        finalCtx.caller = (callCtx as any).caller;
       return finalCtx;
     }
 
@@ -348,9 +355,30 @@ export class ServiceImpl<
     const finalCtx: any = {
       ...fullBaseCtx,
       ...resolvedExtra,
-      ...callCtx,
-      _resolved: true,
+      [RESOLVED_SYMBOL]: this,
     };
+
+    // Merge safe envelope fields and custom context from callCtx
+    // But preserve the service's resolver values for all base framework fields
+    if (callCtx) {
+      for (const [key, value] of Object.entries(callCtx)) {
+        // Skip dangerous framework fields that should come from this service's db/resolver
+        const isDangerousFrameworkField = [
+          "db",
+          "request",
+          "logger",
+          "services",
+          "metadata",
+          "_resolved",
+          RESOLVED_SYMBOL,
+        ].includes(key);
+
+        if (!isDangerousFrameworkField) {
+          // Allow traceId, requestId, user, caller, and custom context fields
+          finalCtx[key] = value;
+        }
+      }
+    }
 
     return finalCtx;
   }

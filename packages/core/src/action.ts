@@ -24,6 +24,9 @@ const defaultLogger: Logger = {
 const DEFAULT_REQUEST = new Request("http://localhost");
 let _defaultCtxSeq = 0;
 
+// Symbol to tie context resolution to a specific service instance and invocation
+const RESOLVED_SYMBOL = Symbol("resolved");
+
 const standardErrorDefaults: Record<
   string,
   { status: number; message: string }
@@ -37,7 +40,8 @@ const standardErrorDefaults: Record<
 };
 
 function createDefaultContext(partial?: any): BaseContext & any {
-  if (partial?._resolved) return partial;
+  // Only accept pre-resolved context with a service-specific marker or when service will handle resolution
+  if (partial?.[RESOLVED_SYMBOL]) return partial;
   const seq = (++_defaultCtxSeq).toString(36);
   const req = partial?.request ?? DEFAULT_REQUEST;
   return {
@@ -50,7 +54,7 @@ function createDefaultContext(partial?: any): BaseContext & any {
     services: partial?.services || {},
     metadata: partial?.metadata || {},
     ...partial,
-    _resolved: true,
+    [RESOLVED_SYMBOL]: true,
   };
 }
 
@@ -148,15 +152,17 @@ export function defineAction(config: any): any {
 
   actionFn.execute = async (params: { input?: any; ctx?: any }) => {
     let fullCtx: any;
-    if (params?.ctx?._resolved) {
+    const boundService = (actionFn as any).service;
+    // Check if context is already resolved by the bound service
+    if (params?.ctx?.[RESOLVED_SYMBOL] === boundService) {
       fullCtx = params.ctx;
+    } else if (
+      boundService &&
+      typeof boundService.resolveContext === "function"
+    ) {
+      fullCtx = await boundService.resolveContext(params?.ctx);
     } else {
-      const boundService = (actionFn as any).service;
-      if (boundService && typeof boundService.resolveContext === "function") {
-        fullCtx = await boundService.resolveContext(params?.ctx);
-      } else {
-        fullCtx = createDefaultContext(params?.ctx);
-      }
+      fullCtx = createDefaultContext(params?.ctx);
     }
 
     // Auto-populate ctx.db from the bound service or global registry if not provided in call ctx
