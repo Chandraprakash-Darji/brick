@@ -87,6 +87,6 @@ export async function prepareTestDatabase() {
     client: postgres(TEST_DATABASE_URL, { max: 1 }),
   });
   pagesService.setDb(database);
-  initAuth(database);
+  await initAuth(database).$context;
   return database;
 }

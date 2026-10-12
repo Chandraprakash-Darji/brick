@@ -202,9 +202,7 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
     access:
       typeof options.access === "string"
         ? options.access
-        : options.access
-          ? { ...options.access }
-          : undefined,
+        : { ...options.access },
     hooks: options.hooks ? { ...options.hooks } : undefined,
     operations:
       typeof options.operations === "object"
@@ -917,7 +915,7 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
           const db: any = service.getDb();
           if (
             !db?.$client?.prepare ||
-            options.access?.scope ||
+            (options.access !== "public" && options.access.scope) ||
             Object.values(columns).some(
               (column) => column.defaultFn || column.onUpdateFn,
             )
