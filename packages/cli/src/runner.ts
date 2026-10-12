@@ -10,6 +10,11 @@ export interface DevServerOptions {
 
 export async function startDevServer(options: DevServerOptions = {}) {
   const port = options.port ?? (Number(process.env.PORT) || 4000);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(
+      `Invalid port: ${port}. Port must be an integer between 1 and 65535`,
+    );
+  }
   const entry = options.entry;
 
   if (entry) {
