@@ -2,8 +2,9 @@
 import { startDevServer } from "./runner";
 import { buildApplication } from "./build";
 import { writeClientContract } from "./client-contract-file";
-import { getGlobalRegistry, generateOpenApiSpec } from "@brickkit/core";
+import { generateOpenApiSpec } from "@brickkit/core";
 import { parsePort } from "./port-utils";
+import { loadBrickApp } from "./app-entry";
 
 const args = process.argv.slice(2);
 const command = args[0] || "dev";
@@ -78,10 +79,17 @@ async function main() {
         break;
       }
       if (subCommand === "openapi") {
+        const entry = args[2];
+        if (!entry || entry.startsWith("-"))
+          throw new Error("Usage: brick gen openapi <entry> [--output <file>]");
         const outIdx = args.indexOf("--output");
         const outputFile = outIdx !== -1 ? args[outIdx + 1] : undefined;
 
-        const spec = generateOpenApiSpec();
+        const app = await loadBrickApp(entry);
+        const spec = generateOpenApiSpec({
+          services: [...app.definition.services],
+          prefix: app.definition.prefix,
+        });
         const jsonOutput = JSON.stringify(spec, null, 2);
 
         if (outputFile) {
@@ -101,8 +109,15 @@ async function main() {
 
     case "info":
     case "services": {
-      const registry = getGlobalRegistry();
-      console.log(JSON.stringify(registry.exportArchitecture(), null, 2));
+      const entry = args[1];
+      if (!entry || entry.startsWith("-"))
+        throw new Error("Usage: brick info <entry>");
+      const app = await loadBrickApp(entry);
+      const architecture = {
+        version: "1.0.0",
+        services: app.definition.services.map((s) => s.introspect()),
+      };
+      console.log(JSON.stringify(architecture, null, 2));
       break;
     }
 
@@ -114,9 +129,9 @@ Usage:
   brick dev [entry] [--port <number>]                    Start development server with live reload
   brick start [entry] [--port <number>]                  Start production server
   brick build <app.ts> [--outdir <dir>] [--port <number>] [--no-aot]  Compile a default-exported BrickApp into a Bun server
-  brick gen openapi [--output <file>]                    Generate OpenAPI 3.1 JSON specification
+  brick gen openapi <entry> [--output <file>]            Generate OpenAPI 3.1 JSON specification
   brick gen client <entry> [--output <file>]             Generate a typed browser client contract
-  brick info                                             Export architecture JSON schema
+  brick info <entry>                                     Export architecture JSON schema
 
 Port Resolution (dev/start commands):
   - CLI --port flag takes precedence
