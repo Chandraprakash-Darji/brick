@@ -426,6 +426,8 @@ export interface ServiceOptions<
   lifecycle?: LifecycleOptions;
 }
 
+export type ActionAccessPolicy = "public" | "authorized" | "scoped";
+
 export interface ActionSchema {
   name: string;
   /** Present only when this action has a registered HTTP route. */
@@ -440,6 +442,8 @@ export interface ActionSchema {
   inputSchema?: unknown;
   outputSchema?: unknown;
   hasAuthorize: boolean;
+  hasScope?: boolean;
+  accessPolicy?: ActionAccessPolicy;
   errors?: Record<string, ActionErrorDefinition>;
   emits?: string[];
   tags?: string[];

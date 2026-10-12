@@ -1,4 +1,9 @@
-import { defineResourcePlugin, t, ActionExecutionError } from "@brickkit/core";
+import {
+  defineResourcePlugin,
+  t,
+  ActionExecutionError,
+  setActionAccess,
+} from "@brickkit/core";
 import { Type, FormatRegistry, Kind, type TSchema } from "@sinclair/typebox";
 import {
   getTableColumns,
@@ -500,9 +505,32 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
         return await build();
       };
       const api: Record<string, unknown> = {};
+      // Expose the access policy for introspection: enforcement stays inside
+      // execute(), so stamp metadata that getActionAccess() reads. Deny by
+      // default — anything that is not explicit "public" is protected, even
+      // when authorize is missing (runtime rejects with FORBIDDEN).
+      const crudIsPublic = options.access === "public";
+      const crudHasScopeFn =
+        !crudIsPublic &&
+        typeof (options.access as { scope?: unknown } | undefined)?.scope ===
+          "function";
+      const crudHasAuthorize = !crudIsPublic;
       for (const operation of Object.keys(methods) as Operation[]) {
         if (options.operations && options.operations[operation] === false)
           continue;
+        // Per-operation metadata: `create` never runs row-scoped (its scope
+        // is always undefined, and a nonempty create scope is rejected with
+        // FORBIDDEN), so it reports authorized rather than scoped.
+        const opHasScope = crudHasScopeFn && operation !== "create";
+        const crudAccess = {
+          hasAuthorize: crudHasAuthorize,
+          hasScope: opHasScope,
+          policy: (crudIsPublic
+            ? "public"
+            : opHasScope
+              ? "scoped"
+              : "authorized") as "public" | "authorized" | "scoped",
+        };
         const action = routes.action({
           name: operation,
           ...methods[operation],
@@ -847,6 +875,7 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
         // Runtime output validation accepts subset projections while the
         // published `config.output` stays strict for contracts/OpenAPI.
         action.outputValidationSchema = looseOutputs[operation];
+        setActionAccess(action, crudAccess);
         const innerValidateInput = action.validateInput.bind(action);
         action.validateInput = (rawInput: unknown) =>
           whereDepthExceeded(rawInput)

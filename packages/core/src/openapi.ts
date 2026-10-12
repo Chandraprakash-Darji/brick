@@ -1,4 +1,5 @@
 import { getPluginActionRoute } from "./plugin";
+import { getActionAccess } from "./access";
 import type { ServiceRegistry } from "./registry";
 import { getGlobalRegistry } from "./registry";
 import type { Service, ActionErrorDefinition } from "./types";
@@ -53,7 +54,7 @@ export function generateOpenApiSpec(
       // Match the compiler's first-registration-wins policy for route collisions.
       if (paths[actionPath][method]) continue;
 
-      const hasAuth = Boolean(action.config.authorize);
+      const hasAuth = getActionAccess(action).hasAuthorize;
       if (hasAuth) {
         hasAnyAuthorizedAction = true;
       }
