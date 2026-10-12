@@ -55,17 +55,19 @@ export interface CrudOptions<
   routes?: PluginRoutes;
   defaultLimit?: number;
   maxLimit?: number;
-  access?: {
-    authorize?: (args: {
-      operation: Operation;
-      input: unknown;
-      ctx: ActionContext;
-    }) => boolean | Promise<boolean>;
-    scope?: (args: {
-      operation: Operation;
-      ctx: ActionContext;
-    }) => SQL | undefined | Promise<SQL | undefined>;
-  };
+  access:
+    | "public"
+    | {
+        authorize?: (args: {
+          operation: Operation;
+          input: unknown;
+          ctx: ActionContext;
+        }) => boolean | Promise<boolean>;
+        scope?: (args: {
+          operation: Operation;
+          ctx: ActionContext;
+        }) => SQL | undefined | Promise<SQL | undefined>;
+      };
   hooks?: {
     beforeCreate?: (args: {
       data: Record<string, unknown>;

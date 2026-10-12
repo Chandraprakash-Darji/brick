@@ -505,14 +505,20 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
           output: outputs[operation],
           execute: async ({ input: validatedInput, ctx, error }) => {
             const input: any = validatedInput;
-            if (
-              options.access?.authorize &&
-              !(await options.access.authorize({ operation, input, ctx }))
-            )
-              throw new ActionExecutionError("FORBIDDEN", "Access denied", 403);
+            if (options.access !== "public") {
+              const accessConfig = options.access;
+              if (
+                !accessConfig?.authorize ||
+                !(await accessConfig.authorize({ operation, input, ctx }))
+              )
+                throw new ActionExecutionError("FORBIDDEN", "Access denied", 403);
+            }
             const db: any = ctx.db ?? service.getDb();
             if (!db) throw new Error("CRUD requires a configured database");
-            const scope = await options.access?.scope?.({ operation, ctx });
+            const scope =
+              options.access === "public"
+                ? undefined
+                : await options.access?.scope?.({ operation, ctx });
             const cacheable =
               !scope &&
               !!db.$client?.prepare &&
