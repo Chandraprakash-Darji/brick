@@ -27,6 +27,7 @@ import { defineAction } from "./action";
 import { getGlobalRegistry } from "./registry";
 import { getTableName, isDatabaseHandle, type DatabaseHandle } from "./db";
 import { defineResource } from "./resource";
+import { getActionAccess } from "./access";
 
 const defaultLogger: Logger = {
   info: (...args) => console.log("[INFO]", ...args),
@@ -397,23 +398,28 @@ export class ServiceImpl<
       options,
       hasDatabase: Boolean(this.database),
       databaseConfig,
-      actions: this.listActions().map((act) => ({
-        name: act.name,
-        serviceName: this.name,
-        ...((act as { plugin?: string }).plugin
-          ? { plugin: (act as { plugin?: string }).plugin }
-          : {}),
-        ...((act as { resource?: string }).resource
-          ? { resource: (act as { resource?: string }).resource }
-          : {}),
-        description: act.config.description,
-        inputSchema: act.config.input,
-        outputSchema: act.config.output,
-        hasAuthorize: Boolean(act.config.authorize),
-        errors: act.config.errors,
-        emits: act.config.emits,
-        tags: act.config.tags,
-      })),
+      actions: this.listActions().map((act) => {
+        const access = getActionAccess(act);
+        return {
+          name: act.name,
+          serviceName: this.name,
+          ...((act as { plugin?: string }).plugin
+            ? { plugin: (act as { plugin?: string }).plugin }
+            : {}),
+          ...((act as { resource?: string }).resource
+            ? { resource: (act as { resource?: string }).resource }
+            : {}),
+          description: act.config.description,
+          inputSchema: act.config.input,
+          outputSchema: act.config.output,
+          hasAuthorize: access.hasAuthorize,
+          hasScope: access.hasScope,
+          accessPolicy: access.policy,
+          errors: act.config.errors,
+          emits: act.config.emits,
+          tags: act.config.tags,
+        };
+      }),
       resources: this.listResources().map((res) => ({
         name: res.name,
       })),

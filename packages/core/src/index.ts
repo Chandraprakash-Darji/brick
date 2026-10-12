@@ -65,6 +65,8 @@ export { compilerRuntime } from "./compiler/runtime";
 
 // Core Primitives
 export { defineService, ServiceImpl } from "./service";
+export { getActionAccess, setActionAccess, ACTION_ACCESS_KEY } from "./access";
+export type { ActionAccessInfo } from "./access";
 export { defineAction, buildErrorHelpers } from "./action";
 export { defineResource } from "./resource";
 export { createServiceProxy } from "./rpc";
