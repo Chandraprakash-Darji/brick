@@ -394,7 +394,7 @@ export class ServiceImpl<
     const { database: _database, ...options } = this.options;
     return {
       name: this.name,
-      options: { ...options, database: databaseConfig },
+      options,
       hasDatabase: Boolean(this.database),
       databaseConfig,
       actions: this.listActions().map((act) => ({

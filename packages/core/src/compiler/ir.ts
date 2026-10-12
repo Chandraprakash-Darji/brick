@@ -55,6 +55,15 @@ export function analyzeApplication(
   services: Service<any, any>[],
   prefix = "/api",
 ) {
+  for (const service of services) service.build();
+  return analyzeDeclaredApplication(services, prefix);
+}
+
+/** Inspect current declarations without closing service/plugin setup. */
+export function analyzeDeclaredApplication(
+  services: Service<any, any>[],
+  prefix = "/api",
+) {
   if (!prefix.startsWith("/"))
     throw new Error("Brick compiler: prefix must start with '/'");
   const names = new Set<string>();
@@ -62,7 +71,6 @@ export function analyzeApplication(
     if (names.has(service.name))
       throw new Error(`Brick compiler: duplicate service '${service.name}'`);
     names.add(service.name);
-    service.build();
   }
   const routes: RouteIR[] = [];
   const bindings: RouteBinding[] = [];

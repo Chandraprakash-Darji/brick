@@ -428,6 +428,9 @@ export interface ServiceOptions<
 
 export interface ActionSchema {
   name: string;
+  /** Present only when this action has a registered HTTP route. */
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  path?: string;
   serviceName?: string;
   /** Owning plugin descriptor name for plugin actions (e.g. `@brickkit/crud`). */
   plugin?: string;
@@ -444,13 +447,7 @@ export interface ActionSchema {
 
 export interface ServiceSchema {
   name: string;
-  options: Omit<ServiceOptions, "database"> & {
-    database?: {
-      name?: string;
-      engine: "sqlite" | "postgres";
-      tables: string[];
-    };
-  };
+  options: Omit<ServiceOptions, "database">;
   hasDatabase: boolean;
   databaseConfig?: {
     name?: string;

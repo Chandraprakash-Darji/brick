@@ -46,14 +46,14 @@ it("pre-renders built-in pages and reuses identical JSON across repeated request
   expect(second.uptime).toBeGreaterThan(first.uptime);
 });
 
-it("invalidates architecture for definition changes, registry replacement and clear", async () => {
+it("invalidates architecture metadata while keeping the mounted app services", async () => {
   const service = defineService("initial");
   const registry = getGlobalRegistry();
   const original = registry.exportArchitecture.bind(registry);
   let exports = 0;
-  registry.exportArchitecture = () => {
+  registry.exportArchitecture = (application) => {
     exports++;
-    return original();
+    return original(application);
   };
   const app = brick({ requestLogging: false });
   for (let i = 0; i < 3; i++)
@@ -62,21 +62,23 @@ it("invalidates architecture for definition changes, registry replacement and cl
   service.action({ name: "newAction", execute: () => null });
   const changed = await (await app.handle(request("/_brick/services"))).json();
   expect(changed.services[0].actions[0].name).toBe("newAction");
+  expect(changed.services[0].actions[0]).not.toHaveProperty("method");
+  expect(changed.services[0].actions[0]).not.toHaveProperty("path");
   expect(exports).toBe(2);
   defineService("newService");
   expect(
     (await (await app.handle(request("/_brick/services"))).json()).services,
-  ).toHaveLength(2);
+  ).toHaveLength(1);
   registry.clear();
   expect(
     (await (await app.handle(request("/_brick/services"))).json()).services,
-  ).toHaveLength(0);
+  ).toHaveLength(1);
   resetGlobalRegistry();
   defineService("replacement");
   expect(
     (await (await app.handle(request("/_brick/services"))).json()).services[0]
       .name,
-  ).toBe("replacement");
+  ).toBe("initial");
 });
 
 it("includes startup endpoints and invalidates OpenAPI when service definitions change", async () => {

@@ -1,4 +1,10 @@
 import type { Service, ArchitectureSchema } from "./types";
+import { analyzeDeclaredApplication, type RouteIR } from "./compiler/ir";
+
+export interface ArchitectureApplication {
+  services: readonly Service[];
+  routes: readonly RouteIR[];
+}
 
 export class ServiceRegistry {
   private _revision = 0;
@@ -11,6 +17,18 @@ export class ServiceRegistry {
   }
 
   private services = new Map<string, Service>();
+  private routes = new Map<Service, readonly RouteIR[]>();
+
+  /** Remember the actual registered routes for subsequent registry exports. */
+  setApplicationRoutes(application: ArchitectureApplication): void {
+    for (const service of application.services) {
+      this.routes.set(
+        service,
+        application.routes.filter((route) => route.service === service.name),
+      );
+    }
+    this.touch();
+  }
 
   register(service: Service): void {
     if (this.services.has(service.name)) {
@@ -18,6 +36,8 @@ export class ServiceRegistry {
         `[Brick-TS] Service '${service.name}' is already registered. Overwriting.`,
       );
     }
+    const previous = this.services.get(service.name);
+    if (previous) this.routes.delete(previous);
     this.services.set(service.name, service);
     this.touch();
   }
@@ -36,13 +56,32 @@ export class ServiceRegistry {
 
   clear(): void {
     this.services.clear();
+    this.routes.clear();
     this.touch();
   }
 
-  exportArchitecture(): ArchitectureSchema {
+  exportArchitecture(
+    application?: ArchitectureApplication,
+  ): ArchitectureSchema {
     return {
       version: "1.0.0",
-      services: this.list().map((s) => s.introspect()),
+      services: (application?.services ?? this.list()).map((service) => {
+        const routes = application
+          ? application.routes.filter((route) => route.service === service.name)
+          : (this.routes.get(service) ??
+            analyzeDeclaredApplication([service]).ir.routes);
+        const byAction = new Map(routes.map((route) => [route.action, route]));
+        const schema = service.introspect();
+        return {
+          ...schema,
+          actions: schema.actions.map((action) => {
+            const route = byAction.get(action.name);
+            return route
+              ? { ...action, method: route.method, path: route.path }
+              : action;
+          }),
+        };
+      }),
     };
   }
 }

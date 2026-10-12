@@ -1,5 +1,9 @@
 import { Elysia } from "elysia";
-import { compileBrickApplication, type CompiledApplication } from "./compiler";
+import {
+  compileBrickApplication,
+  type CompiledApplication,
+  type RouteIR,
+} from "./compiler";
 import type { Service } from "./types";
 import { getGlobalRegistry } from "./registry";
 import { getPluginActionRoute, getPluginEndpoints } from "./plugin";
@@ -74,20 +78,6 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
     uptime: process.uptime(),
     timestamp: Date.now(),
   }));
-
-  // Serialize stable metadata once; registry changes invalidate the snapshot.
-  app.get(
-    "/_brick/services",
-    compiled
-      ? cachedJsonRoute(
-          () => getGlobalRegistry().exportArchitecture(),
-          () => {
-            const registry = getGlobalRegistry();
-            return [registry, registry.revision] as const;
-          },
-        )
-      : () => getGlobalRegistry().exportArchitecture(),
-  );
 
   // Request logging first so every route below is timed.
   const requestLogging = options.requestLogging ?? true;
@@ -204,7 +194,7 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
     if (registeredRoutes.has(key)) {
       if (plugin || registeredRoutes.get(key))
         throw new Error(`Brick: duplicate plugin route '${method} ${path}'`);
-      return;
+      return false;
     }
     switch (method) {
       case "GET":
@@ -224,6 +214,7 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
         break;
     }
     registeredRoutes.set(key, plugin);
+    return true;
   };
 
   // Raw endpoints (outside the JSON action mesh).
@@ -248,9 +239,6 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
   }
 
   const brickApp = app as unknown as BrickApp;
-  Object.defineProperty(brickApp, "definition", {
-    value: Object.freeze({ services: Object.freeze([...services]), prefix }),
-  });
   brickApp.endpoint = (def: EndpointDefinition) => {
     mountEndpoint(def);
   };
@@ -272,6 +260,7 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
       "Brick compiler: server services/prefix differ from the bound compilation",
     );
   }
+  const mountedRoutes: RouteIR[] = [];
   for (const route of compilation.routes) {
     const service = services.find(
       (candidate) => candidate.name === route.ir.service,
@@ -279,7 +268,7 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
     const action = service
       .listActions()
       .find((candidate) => candidate.name === route.ir.action)!;
-    mountRoute(
+    const mounted = mountRoute(
       route.ir.method,
       route.ir.path,
       (context: any) => {
@@ -291,7 +280,30 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
       },
       getPluginActionRoute(action, prefix) !== undefined,
     );
+    if (mounted) mountedRoutes.push(route.ir);
   }
+
+  const definition = Object.freeze({
+    services: Object.freeze([...services]),
+    prefix,
+    routes: Object.freeze(mountedRoutes),
+  });
+  Object.defineProperty(brickApp, "definition", { value: definition });
+  getGlobalRegistry().setApplicationRoutes(definition);
+
+  // Serialize stable metadata once; registry changes invalidate the snapshot.
+  app.get(
+    "/_brick/services",
+    compiled
+      ? cachedJsonRoute(
+          () => getGlobalRegistry().exportArchitecture(definition),
+          () => {
+            const registry = getGlobalRegistry();
+            return [registry, registry.revision] as const;
+          },
+        )
+      : () => getGlobalRegistry().exportArchitecture(definition),
+  );
 
   return brickApp;
 }
