@@ -5,6 +5,7 @@
     "rootDir": "src",
     "noEmit": false,
     "declarationMap": false,
+    "resolveJsonModule": true,
     "sourceMap": false,
     "paths": {
       "@brickkit/core": ["../core/dist/index.d.ts"],

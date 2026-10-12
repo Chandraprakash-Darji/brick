@@ -6,9 +6,10 @@ import { writeClientContract } from "./client-contract-file";
 import { generateOpenApiSpec } from "@brickkit/core";
 import { parsePort } from "./port-utils";
 import { loadBrickApp } from "./app-entry";
+import cliPkg from "../package.json";
 
-// Keep in sync with packages/cli/package.json version.
-const CLI_VERSION = "0.3.0-beta.5";
+// Single source of truth for the CLI version (inlined at build time).
+const CLI_VERSION: string = cliPkg.version;
 
 const PORT_HELP =
   "Port to listen on (CLI --port overrides PORT env, default 4000)";
