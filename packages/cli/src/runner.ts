@@ -14,12 +14,12 @@ export async function startDevServer(options: DevServerOptions = {}) {
 
   if (entry) {
     const resolvedEntry = resolve(process.cwd(), entry);
-    if (existsSync(resolvedEntry)) {
-      console.log(`[Brick-TS] Loading application entry: ${resolvedEntry}`);
-      await import(resolvedEntry);
-    } else {
-      console.warn(`[Brick-TS] Specified entry not found: ${resolvedEntry}`);
+    if (!existsSync(resolvedEntry)) {
+      console.error(`[Brick-TS] Error: Entry file not found: ${resolvedEntry}`);
+      process.exit(1);
     }
+    console.log(`[Brick-TS] Loading application entry: ${resolvedEntry}`);
+    await import(resolvedEntry);
   }
 
   const registry = getGlobalRegistry();
