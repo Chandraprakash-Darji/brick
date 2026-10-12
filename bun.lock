@@ -100,8 +100,9 @@
         "brick": "dist/bin.js",
       },
       "dependencies": {
-        "@brickkit/core": "^0.3.0-beta.1",
+        "@brickkit/core": "^0.3.0-beta.5",
         "@sinclair/typebox": "^0.34.0",
+        "commander": "^15.0.0",
         "elysia": "2.0.0-beta.29",
       },
       "devDependencies": {
