@@ -27,9 +27,9 @@ export async function buildApplication(options: BuildApplicationOptions) {
       "Brick compiler: output would overwrite the application entry",
     );
   const port = options.port ?? 4000;
-  if (!Number.isInteger(port) || port < 0 || port > 65535)
+  if (!Number.isInteger(port) || port < 1 || port > 65535)
     throw new Error(
-      "Brick compiler: port must be an integer between 0 and 65535",
+      "Brick compiler: port must be an integer between 1 and 65535",
     );
   const app = await loadBrickApp(entry);
   const services = [...app.definition.services];
@@ -49,7 +49,7 @@ import { ir, bind } from "./routes.js";
 export const app = await loadCompiledBrickApp(() => import(${JSON.stringify(entry)}), ir, bind);
 if (import.meta.main) {
   const port = Number(process.env.PORT ?? ${port});
-  if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error("Invalid PORT");
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Invalid PORT: must be between 1 and 65535");
   app.listen(port);
   console.log("Brick compiled server listening on http://localhost:" + app.server.port);
   const stop = async () => { await app.stop(); process.exit(0); };
