@@ -194,7 +194,12 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
         { ...value, filter: value.filter ? [...value.filter] : undefined },
       ]),
     ) as F,
-    access: options.access ? { ...options.access } : undefined,
+    access:
+      typeof options.access === "string"
+        ? options.access
+        : options.access
+          ? { ...options.access }
+          : undefined,
     hooks: options.hooks ? { ...options.hooks } : undefined,
     operations:
       typeof options.operations === "object"

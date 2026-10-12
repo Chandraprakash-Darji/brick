@@ -39,6 +39,7 @@ database.getDb().insert(pages).values({ id: "one", title: "Built page" }).run();
 const store = defineService("store", { database });
 store.resource({ name: "page", table: pages }).use(
   crud({
+    access: "public",
     fields: {
       id: { read: true, create: true },
       title: { read: true, create: true, update: true },

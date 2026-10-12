@@ -21,6 +21,7 @@ it("mounts plugin CRUD routes and read helpers without GET collection or PUT ali
   const service = defineService("notes", { database });
   service.resource({ name: "note", table }).use(
     crud({
+      access: "public",
       fields: {
         id: { read: true, create: true, filter: ["eq"] },
         title: {
@@ -86,6 +87,7 @@ it("rejects over-nested filters over HTTP with 400 instead of hanging", async ()
   const service = defineService("notes-deep", { database });
   service.resource({ name: "note", table }).use(
     crud({
+      access: "public",
       fields: {
         id: { read: true, create: true, filter: ["eq"] },
         title: { read: true, create: true, filter: ["eq"] },

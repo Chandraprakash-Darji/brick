@@ -23,6 +23,7 @@ it("uses generated metadata for CRUD routes, namespaced calls and disabled expos
   const service = defineService("notes", { database });
   const note = service.resource({ name: "note", table }).use(
     crud({
+      access: "public",
       fields: {
         id: { read: true, create: true },
         title: { read: true, create: true, update: true },

@@ -25,6 +25,7 @@ function fixture(name: string, compiler: boolean) {
   const service = defineService(name, { database });
   service.resource({ name: "item", table }).use(
     crud({
+      access: "public",
       fields: {
         id: { read: true, create: true },
         title: { read: true, create: true, update: true },

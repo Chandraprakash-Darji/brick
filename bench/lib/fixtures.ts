@@ -32,6 +32,7 @@ export const benchTable = sqliteTable("bench_items", {
 });
 
 export const benchCrudOptions = {
+  access: "public",
   fields: {
     id: { read: true, filter: ["eq", "in"] },
     slug: {

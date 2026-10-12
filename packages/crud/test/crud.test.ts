@@ -15,6 +15,7 @@ const records = sqliteTable("records", {
 let sequence = 0;
 function fixture(
   options: Parameters<typeof crud>[0] = {
+    access: "public",
     fields: {
       id: { read: true, filter: ["eq", "in"] },
       name: {
@@ -146,6 +147,7 @@ test("scope protects all reads and mutations even local actions", async () => {
   } = fixture({
     fields: { id: { read: true }, name: { read: true, update: true } },
     access: {
+      authorize: () => true,
       scope: ({ operation }) =>
         operation === "create" ? undefined : eq(records.id, 1),
     },
@@ -171,6 +173,7 @@ test("scope protects all reads and mutations even local actions", async () => {
 });
 test("operation disabling removes local capabilities", () => {
   const { resource: r, sqlite } = fixture({
+    access: "public",
     fields: { id: { read: true } },
     operations: { delete: false, create: false },
   });
@@ -189,6 +192,7 @@ test("trusted hooks can supply internal fields without exposing them", async () 
     db,
     sqlite,
   } = fixture({
+    access: "public",
     fields: {
       id: { read: true },
       name: { read: true, create: true, update: true },
@@ -290,6 +294,7 @@ test("unique database constraints return conflict without modifying the existing
 
 test("deeply nested where rejects with 400 before validation recurses", async () => {
   const { resource: r, sqlite } = fixture({
+    access: "public",
     fields: {
       id: { read: true },
       name: { read: true, filter: ["eq"] },
@@ -320,6 +325,7 @@ test("deeply nested where rejects with 400 before validation recurses", async ()
 
 test("boolean columns are sortable", async () => {
   const { resource: r, sqlite } = fixture({
+    access: "public",
     fields: {
       id: { read: true },
       name: { read: true, create: true },

@@ -59,6 +59,7 @@ async function main() {
     });
     service.resource({ name: "item", table, id: table.id }).use(
       crud({
+        access: "public",
         fields: {
           id: { read: true, filter: ["eq"] },
           title: { read: true, create: true, update: true },

@@ -27,6 +27,7 @@ function app() {
   const service = defineService("content", { database });
   service.resource({ name: "page", table, id: table.id }).use(
     crud({
+      access: "public",
       fields: {
         id: { read: true, filter: ["eq", "in", "isNull"] },
         title: {

@@ -28,7 +28,14 @@ async function closeServer() {
 }
 
 async function createServer(options: DevServerOptions, label: string) {
-  const port = options.port ?? (Number(process.env.PORT) || 4000);
+  let port: number;
+  if (options.port !== undefined) {
+    port = options.port;
+  } else if (process.env.PORT !== undefined && process.env.PORT !== "") {
+    port = Number(process.env.PORT);
+  } else {
+    port = 4000;
+  }
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error(
       `Invalid port: ${port}. Port must be an integer between 1 and 65535`,
@@ -85,7 +92,12 @@ export async function startProdServer(options: DevServerOptions = {}) {
     await import(resolvedEntry);
   }
 
-  const port = options.port ?? (Number(process.env.PORT) || 4000);
+  const port =
+    options.port !== undefined
+      ? options.port
+      : process.env.PORT !== undefined && process.env.PORT !== ""
+        ? Number(process.env.PORT)
+        : 4000;
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error(
       `Invalid port: ${port}. Port must be an integer between 1 and 65535`,
@@ -142,7 +154,7 @@ export async function startDevServer(options: DevServerOptions = {}) {
     await import(resolvedEntry);
   }
 
-  await createServer(options, "Development");
+  const app = await createServer(options, "Development");
 
   const cwd = process.cwd();
   const watchDirs = [
@@ -189,4 +201,6 @@ export async function startDevServer(options: DevServerOptions = {}) {
   }
 
   console.log(`\n👀 Watching for changes in: ${watchDirs.join(", ")}`);
+
+  return app;
 }

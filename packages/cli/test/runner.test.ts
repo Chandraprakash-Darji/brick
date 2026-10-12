@@ -37,14 +37,14 @@ describe("startDevServer", () => {
   });
 
   it("should start server without entry when no entry is provided", async () => {
-    const app = await startDevServer({ port: 0 });
+    const app = await startDevServer({ port: 45111 });
     expect(app).toBeDefined();
     expect(exitCode).toBeNull();
   });
 
   it("should fail with non-zero exit code when entry is provided but not found", async () => {
     try {
-      await startDevServer({ entry: "does-not-exist.ts", port: 0 });
+      await startDevServer({ entry: "does-not-exist.ts", port: 45112 });
     } catch {
       // Expected to throw due to mocked process.exit
     }
@@ -64,7 +64,7 @@ describe("startDevServer", () => {
     await Bun.write(entryPath, content);
 
     try {
-      const app = await startDevServer({ entry: filename, port: 0 });
+      const app = await startDevServer({ entry: filename, port: 45113 });
       expect(app).toBeDefined();
       expect(exitCode).toBeNull();
     } finally {

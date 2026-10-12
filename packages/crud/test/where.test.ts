@@ -25,6 +25,7 @@ function fixture() {
     .resource({ name: "record", table: records, id: records.id })
     .use(
       crud({
+        access: "public",
         fields: {
           id: {
             read: true,
@@ -265,6 +266,7 @@ test("filter fields colliding with branch names fail fast", () => {
   expect(() =>
     service.resource({ name: "record", table: odd, id: odd.id }).use(
       crud({
+        access: "public",
         fields: { id: { read: true }, and: { read: true, filter: ["eq"] } },
       }),
     ),
@@ -280,6 +282,7 @@ test("filter fields colliding with branch names fail fast", () => {
   expect(() =>
     serviceOr.resource({ name: "record", table: oddOr, id: oddOr.id }).use(
       crud({
+        access: "public",
         fields: { id: { read: true }, or: { read: true, filter: ["eq"] } },
       }),
     ),

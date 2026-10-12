@@ -41,6 +41,7 @@ for (const aot of [true, false]) {
     await mkdir(join(root, ".brick"), { recursive: true });
     const dir = await mkdtemp(join(root, ".brick/compiler-test-"));
     const deploy = await mkdtemp(join(tmpdir(), "brick-deploy-"));
+    const testPort = aot ? "45731" : "45732";
     let server: ReturnType<typeof Bun.spawn> | undefined;
     try {
       const build = Bun.spawn(
@@ -52,7 +53,7 @@ for (const aot of [true, false]) {
           "--outdir",
           dir,
           "--port",
-          "0",
+          testPort,
           ...(aot ? [] : ["--no-aot"]),
         ],
         { cwd: root, stdout: "pipe", stderr: "pipe" },
@@ -100,7 +101,7 @@ globalThis.Function = new Proxy(Function, {
         ],
         {
           cwd: deploy,
-          env: { ...process.env, PORT: "0" },
+          env: { ...process.env, PORT: testPort },
           stdout: "pipe",
           stderr: "pipe",
         },

@@ -10,6 +10,7 @@ const table = sqliteTable("typed", {
 const service = defineService("typed_crud");
 const resource = service.resource({ name: "typed", table, id: table.id }).use(
   crud({
+    access: "public",
     fields: {
       id: { read: true, filter: ["eq", "in"] },
       name: {
@@ -59,7 +60,7 @@ resource.list.run({ where: { field: "id", op: "eq", value: "1" } });
 resource.list.run({ orderBy: [{ field: "email", direction: "asc" }] });
 const empty = service
   .resource({ name: "empty", table })
-  .use(crud({ fields: {}, operations: false }));
+  .use(crud({ access: "public", fields: {}, operations: false }));
 // @ts-expect-error disabled plugin contributes no operations
 void empty.list;
 

@@ -44,12 +44,15 @@ function fixture(name: string, compiler: boolean) {
   });
   service.resource({ name: "item", table }).use(
     crud({
+      access: {
+        authorize: () => true,
+        scope: ({ ctx }) => eq(table.userId, ctx.user!.id),
+      },
       fields: {
         id: { read: true, filter: ["eq", "in"] },
         title: { read: true, filter: ["eq", "contains"], sort: true },
         published: { read: true, filter: ["eq"] },
       },
-      access: { scope: ({ ctx }) => eq(table.userId, ctx.user!.id) },
     }),
   );
   const compilation = compileBrickApplication({
@@ -144,6 +147,7 @@ it("reuses a prepared query shape with new filter values and observes fresh data
   const service = defineService("cached_reads", { database });
   service.resource({ name: "item", table }).use(
     crud({
+      access: "public",
       fields: { id: { read: true, filter: ["eq"] }, title: { read: true } },
     }),
   );
