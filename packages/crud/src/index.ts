@@ -511,7 +511,11 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
                 !accessConfig?.authorize ||
                 !(await accessConfig.authorize({ operation, input, ctx }))
               )
-                throw new ActionExecutionError("FORBIDDEN", "Access denied", 403);
+                throw new ActionExecutionError(
+                  "FORBIDDEN",
+                  "Access denied",
+                  403,
+                );
             }
             const db: any = ctx.db ?? service.getDb();
             if (!db) throw new Error("CRUD requires a configured database");

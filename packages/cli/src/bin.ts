@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { startDevServer } from "./runner";
+import { startDevServer, startProdServer } from "./runner";
 import { buildApplication } from "./build";
 import { writeClientContract } from "./client-contract-file";
 import { generateOpenApiSpec } from "@brickkit/core";
@@ -11,14 +11,23 @@ const command = args[0] || "dev";
 
 async function main() {
   switch (command) {
-    case "dev":
-    case "start": {
+    case "dev": {
       const entry = args[1] && !args[1].startsWith("-") ? args[1] : undefined;
       const portArgIdx = args.indexOf("--port");
       const portStr = portArgIdx !== -1 ? args[portArgIdx + 1] : undefined;
       const port = parsePort(portStr, process.env.PORT);
 
       await startDevServer({ entry, port });
+      break;
+    }
+
+    case "start": {
+      const entry = args[1] && !args[1].startsWith("-") ? args[1] : undefined;
+      const portArgIdx = args.indexOf("--port");
+      const portStr = portArgIdx !== -1 ? args[portArgIdx + 1] : undefined;
+      const port = parsePort(portStr, process.env.PORT);
+
+      await startProdServer({ entry, port });
       break;
     }
 
