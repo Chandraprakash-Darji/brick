@@ -16,6 +16,7 @@ export function comments(options: { table: typeof commentsTable }) {
         })
         .use(
           crud({
+            access: "public",
             fields: {
               id: { read: true, filter: ["eq"] },
               targetId: { read: true, create: true, filter: ["eq"] },
