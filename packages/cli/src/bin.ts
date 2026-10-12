@@ -3,7 +3,7 @@ import { Command, InvalidArgumentError } from "commander";
 import { startDevServer, startProdServer } from "./runner";
 import { buildApplication } from "./build";
 import { writeClientContract } from "./client-contract-file";
-import { generateOpenApiSpec } from "@brickkit/core";
+import { generateOpenApiSpec, getGlobalRegistry } from "@brickkit/core";
 import { parsePort } from "./port-utils";
 import { loadBrickApp } from "./app-entry";
 
@@ -202,10 +202,9 @@ ${PORT_RESOLUTION_HELP}`,
     .argument("<entry>", "Application entry file")
     .action(async (entry: string) => {
       const app = await loadBrickApp(entry);
-      const architecture = {
-        version: "1.0.0",
-        services: app.definition.services.map((s) => s.introspect()),
-      };
+      const architecture = getGlobalRegistry().exportArchitecture(
+        app.definition,
+      );
       console.log(JSON.stringify(architecture, null, 2));
     });
 

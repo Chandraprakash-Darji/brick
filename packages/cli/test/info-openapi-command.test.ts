@@ -122,3 +122,87 @@ it("rejects invalid arguments and missing entry", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it("pages info exports effective routes matching the live server", async () => {
+  const cwd = resolve(import.meta.dir, "../../../examples/pages");
+  const result = await run(cwd, "info", "src/api/app.ts");
+  expect(result.code).toBe(0);
+  expect(result.stderr).toBe("");
+  const architecture = JSON.parse(result.stdout);
+  const pages = architecture.services.find(
+    (service: any) => service.name === "pages",
+  );
+  expect(pages.options.database).toBeUndefined();
+  expect(pages.databaseConfig).toMatchObject({
+    name: "pages",
+    engine: "postgres",
+  });
+  expect(
+    pages.actions.find((action: any) => action.name === "get_public_page"),
+  ).toMatchObject({ method: "GET", path: "/api/public/pages/:slug" });
+  expect(
+    pages.actions.find((action: any) => action.name === "page.update"),
+  ).toMatchObject({ method: "PATCH", path: "/api/page/:id" });
+
+  // Use a separate process so the pages app's registry/secrets do not leak into other tests.
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "-e",
+      `
+    import app from "./src/api/app.ts";
+    import { brick, getGlobalRegistry } from "@brickkit/core";
+    const registry = getGlobalRegistry();
+    const original = registry.exportArchitecture();
+    const prefixed = brick({ services: [...app.definition.services], prefix: "/v9", requestLogging: false });
+    app.listen({ port: 0 });
+    prefixed.listen({ port: 0 });
+    try {
+      const live = await fetch(app.server.url + "_brick/services").then(r => r.json());
+      const prefixedLive = await fetch(prefixed.server.url + "_brick/services").then(r => r.json());
+      console.log(JSON.stringify({ original, live, prefixedLive, current: registry.exportArchitecture(),
+        routes: app.routes.map(({ method, path }) => ({ method, path })),
+        prefixedRoutes: prefixed.routes.map(({ method, path }) => ({ method, path })) }));
+    } finally {
+      await app.stop();
+      await prefixed.stop();
+    }
+  `,
+    ],
+    { cwd, stdout: "pipe", stderr: "pipe" },
+  );
+  const [code, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  expect(code).toBe(0);
+  expect(stderr).toBe("");
+  const live = JSON.parse(stdout.trim().split("\n").at(-1)!);
+  expect(live.original).toEqual(architecture);
+  expect(live.live).toEqual(architecture);
+  expect(live.current).toEqual(live.prefixedLive);
+  for (const action of pages.actions) {
+    expect(live.routes).toContainEqual({
+      method: action.method,
+      path: action.path,
+    });
+  }
+  const prefixedPages = live.prefixedLive.services.find(
+    (service: any) => service.name === "pages",
+  );
+  expect(
+    prefixedPages.actions.find((action: any) => action.name === "page.update"),
+  ).toMatchObject({ method: "PATCH", path: "/v9/page/:id" });
+  expect(
+    prefixedPages.actions.find(
+      (action: any) => action.name === "get_public_page",
+    ),
+  ).toMatchObject({ method: "GET", path: "/api/public/pages/:slug" });
+  for (const action of prefixedPages.actions) {
+    expect(live.prefixedRoutes).toContainEqual({
+      method: action.method,
+      path: action.path,
+    });
+  }
+});

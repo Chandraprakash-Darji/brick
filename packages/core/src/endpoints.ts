@@ -1,3 +1,4 @@
+import type { RouteIR } from "./compiler/ir";
 import type { Elysia } from "elysia";
 import type { Service } from "./types";
 import type { DatabaseHandle } from "./db/define";
@@ -164,6 +165,7 @@ export function endpointPaths(defs: EndpointDefinition[]): Record<string, any> {
 export type BrickApp = Elysia<any, any, any, any, any, any, any> & {
   /** Service definitions and prefix selected when this app was constructed. */
   readonly definition: {
+    readonly routes: readonly RouteIR[];
     readonly services: readonly Service<any, any>[];
     readonly prefix: string;
   };
