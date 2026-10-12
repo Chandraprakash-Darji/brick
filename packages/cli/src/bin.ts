@@ -3,6 +3,7 @@ import { startDevServer } from "./runner";
 import { buildApplication } from "./build";
 import { writeClientContract } from "./client-contract-file";
 import { getGlobalRegistry, generateOpenApiSpec } from "@brickkit/core";
+import { parsePort } from "./port-utils";
 
 const args = process.argv.slice(2);
 const command = args[0] || "dev";
@@ -13,7 +14,8 @@ async function main() {
     case "start": {
       const entry = args[1] && !args[1].startsWith("-") ? args[1] : undefined;
       const portArgIdx = args.indexOf("--port");
-      const port = portArgIdx !== -1 ? Number(args[portArgIdx + 1]) : 4000;
+      const portStr = portArgIdx !== -1 ? args[portArgIdx + 1] : undefined;
+      const port = parsePort(portStr, process.env.PORT);
 
       await startDevServer({ entry, port });
       break;
@@ -36,11 +38,15 @@ async function main() {
           throw new Error(`Missing value for ${flag}`);
         return args[index + 1];
       };
-      const port = value("--port");
+      const portStr = value("--port");
+      let port: number | undefined;
+      if (portStr !== undefined) {
+        port = parsePort(portStr, undefined);
+      }
       const result = await buildApplication({
         entry,
         outdir: value("--outdir"),
-        port: port === undefined ? undefined : Number(port),
+        port,
         aot: !args.includes("--no-aot"),
       });
       for (const warning of result.ir.diagnostics)
@@ -105,12 +111,23 @@ async function main() {
 🧱 Brick-TS CLI
 
 Usage:
-  brick dev [entry] [--port <number>]    Start development server with live reload
-  brick start [entry]                   Start production server
-  brick build <app.ts> [--outdir <dir>] [--no-aot]  Compile a default-exported BrickApp into a Bun server
-  brick gen openapi [--output <file>]    Generate OpenAPI 3.1 JSON specification
-  brick gen client <entry> [--output <file>] Generate a typed browser client contract
-  brick info                            Export architecture JSON schema
+  brick dev [entry] [--port <number>]                    Start development server with live reload
+  brick start [entry] [--port <number>]                  Start production server
+  brick build <app.ts> [--outdir <dir>] [--port <number>] [--no-aot]  Compile a default-exported BrickApp into a Bun server
+  brick gen openapi [--output <file>]                    Generate OpenAPI 3.1 JSON specification
+  brick gen client <entry> [--output <file>]             Generate a typed browser client contract
+  brick info                                             Export architecture JSON schema
+
+Port Resolution:
+  - Use --port <number> flag (1-65535) to specify port explicitly
+  - Or set PORT environment variable as fallback
+  - Defaults to 4000 if neither is set
+
+Examples:
+  brick dev app.ts                       Start on default port 4000
+  brick dev app.ts --port 5000           Start on port 5000
+  PORT=3000 brick dev app.ts             Start on port 3000 (from PORT env)
+  brick dev app.ts --port 6000 PORT=3000 Start on port 6000 (--port overrides PORT env)
 `);
       process.exit(0);
   }
