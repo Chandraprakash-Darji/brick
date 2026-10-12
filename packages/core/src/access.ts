@@ -44,8 +44,15 @@ export function getActionAccess(action: Action | object): ActionAccessInfo {
   }
   const hasAuthorize = configAuthorize || Boolean(meta.hasAuthorize);
   const hasScope = Boolean(meta.hasScope);
-  const policy: ActionAccessPolicy =
+  let policy: ActionAccessPolicy =
     meta.policy ??
     (hasAuthorize ? (hasScope ? "scoped" : "authorized") : "public");
+  // Normalize conflicting metadata so the policy always agrees with the
+  // effective flags (e.g. metadata stamped "public" on an action that also
+  // declares config.authorize must not report policy "public").
+  if (policy === "public" && hasAuthorize)
+    policy = hasScope ? "scoped" : "authorized";
+  else if (policy !== "public" && !hasAuthorize) policy = "public";
+  else if (policy === "scoped" && !hasScope) policy = "authorized";
   return { hasAuthorize, hasScope, policy };
 }

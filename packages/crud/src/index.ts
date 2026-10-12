@@ -510,22 +510,27 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
       // default — anything that is not explicit "public" is protected, even
       // when authorize is missing (runtime rejects with FORBIDDEN).
       const crudIsPublic = options.access === "public";
-      const crudHasScope =
+      const crudHasScopeFn =
         !crudIsPublic &&
         typeof (options.access as { scope?: unknown } | undefined)?.scope ===
           "function";
-      const crudAccess = {
-        hasAuthorize: !crudIsPublic,
-        hasScope: crudHasScope,
-        policy: (crudIsPublic
-          ? "public"
-          : crudHasScope
-            ? "scoped"
-            : "authorized") as "public" | "authorized" | "scoped",
-      };
+      const crudHasAuthorize = !crudIsPublic;
       for (const operation of Object.keys(methods) as Operation[]) {
         if (options.operations && options.operations[operation] === false)
           continue;
+        // Per-operation metadata: `create` never runs row-scoped (its scope
+        // is always undefined, and a nonempty create scope is rejected with
+        // FORBIDDEN), so it reports authorized rather than scoped.
+        const opHasScope = crudHasScopeFn && operation !== "create";
+        const crudAccess = {
+          hasAuthorize: crudHasAuthorize,
+          hasScope: opHasScope,
+          policy: (crudIsPublic
+            ? "public"
+            : opHasScope
+              ? "scoped"
+              : "authorized") as "public" | "authorized" | "scoped",
+        };
         const action = routes.action({
           name: operation,
           ...methods[operation],

@@ -8,6 +8,7 @@ import {
   getGlobalRegistry,
   resetGlobalRegistry,
   generateOpenApiSpec,
+  setActionAccess,
   t,
 } from "@brickkit/core";
 import { crud } from "../src";
@@ -73,19 +74,30 @@ test("CRUD with authorize+scope reports hasAuthorize/hasScope/scoped", () => {
     const { actions } = crudActions(service);
     expect(actions).toHaveLength(8);
     for (const action of actions) {
+      const op = action.name.split(".").pop()!;
       expect(action.hasAuthorize).toBe(true);
-      expect(action.hasScope).toBe(true);
-      expect(action.accessPolicy).toBe("scoped");
+      if (op === "create") {
+        // create never runs row-scoped: its scope is always undefined and a
+        // nonempty create scope is rejected with FORBIDDEN.
+        expect(action.hasScope).toBe(false);
+        expect(action.accessPolicy).toBe("authorized");
+      } else {
+        expect(action.hasScope).toBe(true);
+        expect(action.accessPolicy).toBe("scoped");
+      }
     }
     // exportArchitecture() surfaces the same policy (issue #28 repro).
     const exported = getGlobalRegistry().exportArchitecture();
     const svc = exported.services.find((s) => s.name === service.name)!;
     expect(svc).toBeDefined();
-    for (const action of svc.actions.filter((a) =>
+    for (const action of svc.actions.filter((a: any) =>
       CRUD_OPS.some((op) => a.name.endsWith(`.${op}`)),
     )) {
+      const op = action.name.split(".").pop()!;
       expect(action.hasAuthorize).toBe(true);
-      expect(action.accessPolicy).toBe("scoped");
+      expect(action.accessPolicy).toBe(
+        op === "create" ? "authorized" : "scoped",
+      );
     }
   } finally {
     sqlite.close();
@@ -182,6 +194,28 @@ test("hand-written actions keep config.authorize reporting alongside CRUD", () =
   const open = arch.actions.find((a) => a.name === "open")!;
   expect(open.hasAuthorize).toBe(false);
   expect(open.accessPolicy).toBe("public");
+});
+
+test("conflicting metadata never reports a public policy for a guarded action", () => {
+  resetGlobalRegistry();
+  const database = defineDatabase({ tables: [records] });
+  const service = defineService(`conflict_${sequence++}`, { database });
+  const guarded = service.action({
+    name: "guarded",
+    output: t.String(),
+    authorize: () => true,
+    execute: async () => "guarded",
+  });
+  // Stale metadata stamped "public" must not override the declared guard.
+  setActionAccess(guarded, {
+    hasAuthorize: false,
+    hasScope: false,
+    policy: "public",
+  });
+  const arch = service.introspect();
+  const action = arch.actions.find((a) => a.name === "guarded")!;
+  expect(action.hasAuthorize).toBe(true);
+  expect(action.accessPolicy).toBe("authorized");
 });
 
 test("OpenAPI advertises security for protected CRUD and omits it for public", () => {
