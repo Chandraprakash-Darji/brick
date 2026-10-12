@@ -1,6 +1,6 @@
 import { existsSync } from "fs";
 import { resolve } from "path";
-import { getGlobalRegistry, brick } from "@brickkit/core";
+import { brick, getPluginActionRoute } from "@brickkit/core";
 
 export interface DevServerOptions {
   port?: number;
@@ -22,30 +22,31 @@ export async function startDevServer(options: DevServerOptions = {}) {
     }
   }
 
-  const registry = getGlobalRegistry();
-  const services = registry.list();
+  const app = brick({
+    port,
+    prefix: options.prefix,
+  });
+
+  const prefix = app.definition.prefix;
+  const services = app.definition.services;
 
   console.log(`\n🧱 Brick-TS Development Server`);
   console.log(`   Registered Services: ${services.length}`);
 
   for (const svc of services) {
-    console.log(`   • ${svc.name} (${svc.listActions().length} actions)`);
-    if (typeof (svc as any).listResources === "function") {
-      for (const res of (svc as any).listResources()) {
-        console.log(
-          `     -> Resource: /api/${res.name} (REST: GET, POST, /:id: GET, PATCH, DELETE)`,
-        );
-      }
-    }
-    for (const act of svc.listActions()) {
-      console.log(`     -> Action:   /api/${svc.name}/${act.name}`);
+    const actions = svc.listActions();
+    console.log(`   • ${svc.name} (${actions.length} actions)`);
+    for (const act of actions) {
+      const pluginRoute = getPluginActionRoute(act, prefix);
+      if (pluginRoute === false) continue;
+      const method = pluginRoute?.method ?? act.config.method ?? "POST";
+      const path =
+        pluginRoute?.path ??
+        act.config.path ??
+        `${prefix}/${svc.name}/${act.name}`;
+      console.log(`     -> ${method.padEnd(6)} ${path}`);
     }
   }
-
-  const app = brick({
-    port,
-    prefix: options.prefix,
-  });
 
   app.listen(port);
 
