@@ -2,9 +2,14 @@ export function parsePort(
   portStr: string | undefined,
   envPort?: string | undefined,
 ): number {
-  const cliPort = portStr;
-  const fallbackPort = envPort ? Number(envPort) : undefined;
-  const port = cliPort !== undefined ? Number(cliPort) : fallbackPort || 4000;
+  let port: number | undefined;
+  if (portStr !== undefined) {
+    port = Number(portStr);
+  } else if (envPort !== undefined) {
+    port = Number(envPort);
+  } else {
+    port = 4000;
+  }
 
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error(

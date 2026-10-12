@@ -118,16 +118,17 @@ Usage:
   brick gen client <entry> [--output <file>]             Generate a typed browser client contract
   brick info                                             Export architecture JSON schema
 
-Port Resolution:
-  - Use --port <number> flag (1-65535) to specify port explicitly
-  - Or set PORT environment variable as fallback
+Port Resolution (dev/start commands):
+  - CLI --port flag takes precedence
+  - Falls back to PORT environment variable
   - Defaults to 4000 if neither is set
+  - Valid range: 1-65535
 
 Examples:
-  brick dev app.ts                       Start on default port 4000
-  brick dev app.ts --port 5000           Start on port 5000
-  PORT=3000 brick dev app.ts             Start on port 3000 (from PORT env)
-  brick dev app.ts --port 6000 PORT=3000 Start on port 6000 (--port overrides PORT env)
+  brick dev app.ts                        # port 4000 (default)
+  brick dev app.ts --port 5000            # port 5000 (explicit)
+  PORT=3000 brick dev app.ts              # port 3000 (from env)
+  brick dev app.ts --port 6000 PORT=3000  # port 6000 (CLI overrides)
 `);
       process.exit(0);
   }
