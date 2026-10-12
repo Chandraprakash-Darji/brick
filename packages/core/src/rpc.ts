@@ -26,18 +26,45 @@ export function createServiceProxy<T extends Record<string, any>>(
             );
           }
 
-          const mergedCtx = {
-            ...options.context,
-            ...callCtx,
-          };
+          // Build envelope context: exclude dangerous framework fields
+          // This prevents the caller's database, providers, and resolver from overriding the receiving service's
+          const dangerousFields = new Set([
+            "db",
+            "request",
+            "logger",
+            "services",
+            "metadata",
+            "_resolved",
+          ]);
 
-          if (!mergedCtx.db && service.getDb()) {
-            mergedCtx.db = service.getDb();
+          const envelopeCtx: any = {};
+
+          // Merge safe fields from options.context (if present)
+          if (options.context) {
+            for (const [key, value] of Object.entries(options.context)) {
+              if (!dangerousFields.has(key)) {
+                envelopeCtx[key] = value;
+              }
+            }
+          }
+
+          // Merge safe fields from callCtx (callCtx overrides options.context)
+          if (callCtx) {
+            for (const [key, value] of Object.entries(callCtx)) {
+              if (!dangerousFields.has(key)) {
+                envelopeCtx[key] = value;
+              }
+            }
+          }
+
+          // Set caller to the originating service if not already set
+          if (!envelopeCtx.caller) {
+            envelopeCtx.caller = serviceName;
           }
 
           return action.execute({
             input: payload,
-            ctx: mergedCtx,
+            ctx: envelopeCtx,
           });
         } else {
           throw new Error(
