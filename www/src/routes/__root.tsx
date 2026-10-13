@@ -16,18 +16,19 @@ export const Route = createRootRoute({
   head: () => {
     // Umami analytics (self-hosted on Vercel), mirroring
     // Chandraprakash-Darji/portfolio (`@yeskunall/astro-umami` with
-    // endpointUrl/hostUrl). Only include the tracker when both env vars are
-    // set, so local dev, previews and forks send nothing. Set these in the
-    // www Vercel project (Production only). See www/README.md.
+    // endpointUrl/hostUrl). Env vars override the production defaults below;
+    // `data-domains` restricts tracking to production so local dev, previews
+    // and forks send nothing. See www/README.md.
     // Umami's tracker watches the History API, so TanStack Router
     // client-side navigation is recorded automatically — no manual
     // `umami.track()` on route change (that would double-count pageviews).
     const umamiUrl = (
-      import.meta.env.VITE_UMAMI_URL as string | undefined
+      (import.meta.env.VITE_UMAMI_URL as string | undefined) ??
+      "https://unami.rega.run"
     )?.replace(/\/$/, "");
-    const umamiWebsiteId = import.meta.env.VITE_UMAMI_WEBSITE_ID as
-      | string
-      | undefined;
+    const umamiWebsiteId =
+      (import.meta.env.VITE_UMAMI_WEBSITE_ID as string | undefined) ??
+      "40d976e9-29ab-42b6-a777-b3a126a87e19";
     // Optional proxy: set VITE_UMAMI_HOST_URL to the Umami instance and serve
     // the script through our own domain (`/stats/script.js`) so ad blockers
     // don't drop events. When unset, events go directly to VITE_UMAMI_URL.
