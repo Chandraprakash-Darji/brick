@@ -59,6 +59,32 @@ export const article = articlesService
   );
 ```
 
+### Schema
+
+These columns match the Drizzle tables in the example. Defaults marked as application defaults run in Drizzle, rather than in SQL.
+
+export const articlesSchemaFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+    defaultValue: "crypto.randomUUID() (application)",
+  },
+  {
+    name: "title",
+    type: "text",
+    description: "Display title.",
+  },
+  {
+    name: "slug",
+    type: "text",
+    description: "URL slug.",
+  },
+];
+
+<DatabaseTable name="articles" fields={articlesSchemaFields} />
+
 ## Available CRUD Hooks
 
 All hooks are declared inside the `hooks` configuration of `crud()`:

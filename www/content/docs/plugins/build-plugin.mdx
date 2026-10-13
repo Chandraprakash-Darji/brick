@@ -122,3 +122,24 @@ const found = await article.findBySlug("my-post-slug", ctx);
 2. **Connection Flow**: Use `ctx.db` provided during request handling. Never create persistent connection pools inside plugin constructors.
 3. **Collision Avoidance**: Resource plugin contributions must not overwrite existing resource properties or prototype methods.
 4. **Isolated Descriptors**: Reinstalling a plugin with a different descriptor of the same name fails. Reuse descriptors when sharing instances.
+
+### Schema
+
+The resource-plugin example expects an application-owned `articles` table with an identity column and a slug column. Declare the table before registering the resource. A unique slug makes `findBySlug` unambiguous.
+
+export const articleFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Article identifier.",
+    isPrimaryKey: true,
+  },
+  {
+    name: "slug",
+    type: "text",
+    description: "Slug used by findBySlug.",
+    isUnique: true,
+  },
+];
+
+<DatabaseTable name="articles" fields={articleFields} />

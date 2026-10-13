@@ -18,6 +18,33 @@ bun init -y
 bun add @brickkit/core @brickkit/crud @brickkit/cli
 ```
 
+### Schema
+
+These columns match the Drizzle tables in the example. Defaults marked as application defaults run in Drizzle, rather than in SQL.
+
+export const pagesSchemaFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+    defaultValue: "crypto.randomUUID() (application)",
+  },
+  {
+    name: "title",
+    type: "text",
+    description: "Display title.",
+  },
+  {
+    name: "content",
+    type: "text",
+    description: "Page content.",
+    isOptional: true,
+  },
+];
+
+<DatabaseTable name="pages" fields={pagesSchemaFields} />
+
   </Tab>
   <Tab value="pnpm">
 

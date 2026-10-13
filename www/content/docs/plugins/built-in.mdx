@@ -50,6 +50,32 @@ export const product = service
   );
 ```
 
+### Schema
+
+These columns match the Drizzle tables in the example. Defaults marked as application defaults run in Drizzle, rather than in SQL.
+
+export const productsSchemaFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+    defaultValue: "crypto.randomUUID() (application)",
+  },
+  {
+    name: "name",
+    type: "text",
+    description: "Display name.",
+  },
+  {
+    name: "price",
+    type: "text",
+    description: "Product price stored as text.",
+  },
+];
+
+<DatabaseTable name="products" fields={productsSchemaFields} />
+
 For full field policy options, query filter syntax, and operations control, see **[Resources and CRUD](/docs/resources)**.
 
 ## Request Logging Plugin

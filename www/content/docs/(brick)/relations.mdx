@@ -66,6 +66,115 @@ export const commentResource = blogService
   );
 ```
 
+### Schema
+
+These columns match the Drizzle tables in the example. Defaults marked as application defaults run in Drizzle, rather than in SQL.
+
+export const articlesSchemaFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+    defaultValue: "crypto.randomUUID() (application)",
+  },
+  {
+    name: "title",
+    type: "text",
+    description: "Display title.",
+  },
+];
+
+<DatabaseTable name="articles" fields={articlesSchemaFields} />
+
+export const commentsSchemaFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+    defaultValue: "crypto.randomUUID() (application)",
+  },
+  {
+    name: "target_id",
+    type: "text",
+    description:
+      "Logical parent article identifier; no SQL foreign-key constraint.",
+  },
+  {
+    name: "body",
+    type: "text",
+    description: "Text content.",
+  },
+];
+
+<DatabaseTable name="comments" fields={commentsSchemaFields} />
+
+export const tagsSchemaFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+  },
+  {
+    name: "name",
+    type: "text",
+    description: "Display name.",
+  },
+];
+
+<DatabaseTable name="tags" fields={tagsSchemaFields} />
+
+export const article_tagsSchemaFields = [
+  {
+    name: "article_id",
+    type: "text",
+    description: "Article identifier. Part of the composite primary key.",
+    isPrimaryKey: true,
+  },
+  {
+    name: "tag_id",
+    type: "text",
+    description: "Tag identifier. Part of the composite primary key.",
+    isPrimaryKey: true,
+  },
+];
+
+<DatabaseTable name="article_tags" fields={article_tagsSchemaFields} />
+
+export const app_settingsSchemaFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+    defaultValue: "global_settings (application)",
+  },
+  {
+    name: "singleton_key",
+    type: "integer",
+    description: "Singleton discriminator.",
+    isUnique: true,
+    isOptional: true,
+    defaultValue: 1,
+  },
+  {
+    name: "site_name",
+    type: "text",
+    description: "Site display name.",
+  },
+  {
+    name: "maintenanceMode",
+    type: "boolean",
+    description: "Whether maintenance mode is enabled.",
+    isOptional: true,
+    defaultValue: false,
+  },
+];
+
+<DatabaseTable name="app_settings" fields={app_settingsSchemaFields} />
+
 To fetch all comments for an article over HTTP, call the `comment.list` action. CRUD routes are scoped to the resource name, and `list` is mounted at `POST {prefix}/{resource}/query`:
 
 ```bash

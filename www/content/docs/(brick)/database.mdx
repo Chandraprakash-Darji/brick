@@ -28,6 +28,28 @@ export const database = defineDatabase({
 syncSchema({ users }, database.getDb());
 ```
 
+### Schema
+
+These columns match the Drizzle tables in the example. Defaults marked as application defaults run in Drizzle, rather than in SQL.
+
+export const usersSchemaFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+    defaultValue: "crypto.randomUUID() (application)",
+  },
+  {
+    name: "email",
+    type: "text",
+    description: "Unique email address.",
+    isUnique: true,
+  },
+];
+
+<DatabaseTable name="users" fields={usersSchemaFields} />
+
 ## Configuring Databases (`defineDatabase`)
 
 `defineDatabase` creates a lazy, typed database handle. Connections are opened only when requested by services or runtime actions.

@@ -146,3 +146,24 @@ Understanding current runtime behavior:
   will align unauthenticated requests to HTTP 401 and forbidden role/scope
   rejections to HTTP 403.
 </Callout>
+
+### Schema
+
+The owner-scoping example expects these columns on the application-owned `documentsTable`. Brick does not generate `owner_id`; populate it in a `beforeCreate` hook from the authenticated context.
+
+export const documentFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Document identifier.",
+    isPrimaryKey: true,
+  },
+  { name: "title", type: "text", description: "Document title." },
+  {
+    name: "owner_id",
+    type: "text",
+    description: "Owner identifier used by the scope policy.",
+  },
+];
+
+<DatabaseTable name="documents" fields={documentFields} />

@@ -69,3 +69,18 @@ All plugins follow strict design rules:
 - **Synchronous Registration**: The `setup()` function must be synchronous. Plugins register actions, routes, and hooks before the server compiles.
 - **Connection Isolation**: Plugins do not open database pools or mutate schemas during setup. Database connections flow through `ctx.db` at runtime.
 - **Namespaced Actions**: Actions registered by plugins stay scoped to their host resource or service, preventing naming collisions.
+
+### Schema
+
+The ping service plugin requires no database table. The resource-plugin example requires a host table; its CRUD field policy exposes only `id`.
+
+export const pageFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Page identifier.",
+    isPrimaryKey: true,
+  },
+];
+
+<DatabaseTable name="pages" fields={pageFields} />

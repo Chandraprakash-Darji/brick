@@ -47,6 +47,78 @@ export const itemResource = itemsService
   );
 ```
 
+### Schema
+
+These columns match the Drizzle tables in the example. Defaults marked as application defaults run in Drizzle, rather than in SQL.
+
+export const itemsSchemaFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+    defaultValue: "crypto.randomUUID() (application)",
+  },
+  {
+    name: "name",
+    type: "text",
+    description: "Display name.",
+  },
+];
+
+<DatabaseTable name="items" fields={itemsSchemaFields} />
+
+export const documentsSchemaFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+    defaultValue: "crypto.randomUUID() (application)",
+  },
+  {
+    name: "title",
+    type: "text",
+    description: "Display title.",
+  },
+];
+
+<DatabaseTable name="documents" fields={documentsSchemaFields} />
+
+export const usersSchemaFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+    defaultValue: 'mintId("usr") (application)',
+  },
+  {
+    name: "name",
+    type: "text",
+    description: "Display name.",
+  },
+];
+
+<DatabaseTable name="users" fields={usersSchemaFields} />
+
+export const logsSchemaFields = [
+  {
+    name: "id",
+    type: "integer",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+    defaultValue: "autoincrement",
+  },
+  {
+    name: "message",
+    type: "text",
+    description: "Log message.",
+  },
+];
+
+<DatabaseTable name="logs" fields={logsSchemaFields} />
+
 ## Supported Primary Key Strategies
 
 Drizzle column builders define primary key generation strategies:

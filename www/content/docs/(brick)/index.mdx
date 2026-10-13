@@ -56,6 +56,33 @@ app.listen(4000);
 console.log("Server listening on http://localhost:4000");
 ```
 
+### Schema
+
+These columns match the Drizzle tables in the example. Defaults marked as application defaults run in Drizzle, rather than in SQL.
+
+export const pagesSchemaFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+    defaultValue: "crypto.randomUUID() (application)",
+  },
+  {
+    name: "title",
+    type: "text",
+    description: "Display title.",
+  },
+  {
+    name: "content",
+    type: "text",
+    description: "Page content.",
+    isOptional: true,
+  },
+];
+
+<DatabaseTable name="pages" fields={pagesSchemaFields} />
+
 ## Architectural Mental Model
 
 Brick-TS unifies monolithic developer ergonomics with distributed system boundaries:
