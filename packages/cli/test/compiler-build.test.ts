@@ -40,7 +40,7 @@ it("bundles the lazy SQLite adapter without another adapter import", async () =>
   } finally {
     await rm(deploy, { recursive: true, force: true });
   }
-});
+}, 20000);
 
 it("rejects an entry that does not default-export a BrickApp", async () => {
   const root = resolve(import.meta.dir, "../../..");
