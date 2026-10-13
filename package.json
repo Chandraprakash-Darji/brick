@@ -39,6 +39,7 @@
   "overrides": {
     "drizzle-orm": "0.45.2",
     "esbuild": "0.28.2",
+    "mdast-util-to-markdown": "2.1.2",
     "postcss-selector-parser": "7.1.6"
   },
   "devDependencies": {

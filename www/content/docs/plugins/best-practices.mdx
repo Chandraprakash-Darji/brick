@@ -1,19 +1,73 @@
 ---
-title: Plugin best practices
-description: Explicit tables, policies, names, and lifecycle
+title: Plugin Best Practices
+description: Architectural guidelines for building maintainable, safe, and isolated plugins.
 ---
 
-Keep schemas and migrations under application control. Plugins register
-capabilities synchronously before build and do not open connections or mutate
-schema during setup. Use resource plugins for behavior attached to a table.
+Adhering to plugin best practices ensures your extensions maintain high performance, avoid naming collisions, and preserve security boundaries.
 
-Configure CRUD fields explicitly. Hidden fields are not selectable by callers;
-masking is a separate output transformation. Use operation authorization and
-trusted row scope for local and HTTP access. Custom routes need their own policies.
+## 1. Keep Setup Synchronous
 
-Use stable plugin and route names. Reuse the exact descriptor to reinstall on
-one host. A different descriptor with the same name on that host fails; the same
-descriptor on separate resources creates independent instances.
+The `setup()` function must be completely synchronous:
 
-Test real local and HTTP calls, disabled routes, app prefix overrides,
-collisions, multiple hosts, failed-installation rollback, and inferred APIs.
+```ts title="src/plugins/bad-practice.ts"
+// ❌ Anti-pattern: Async setup functions throw an error at runtime
+setup: async ({ service }) => {
+  await fetchRemoteConfig();
+}
+
+// ✅ Correct: Synchronous registration of declarations
+setup: ({ service, routes }) => {
+  routes.action({ ... });
+}
+```
+
+Never initiate database migrations, connect to external network endpoints, or execute queries during `setup()`. Plugin installation occurs when defining services before the server boots.
+
+## 2. Depend on Runtime Context (`ctx.db`)
+
+Plugins should not instantiate their own database connections or cache clients:
+
+```ts title="src/plugins/good-practice.ts"
+// ✅ Correct: Use ctx.db injected from the host service
+execute: async ({ input, ctx }) => {
+  const db = ctx.db;
+  return db.select().from(table);
+};
+```
+
+Using `ctx.db` guarantees that plugins respect transaction boundaries, tenant routing, and context isolation.
+
+## 3. Explicit Access and Validation
+
+When registering actions inside a plugin via `routes.action()`, always specify:
+
+- TypeBox `input` and `output` schemas.
+- Explicit `method` and `path`.
+- An authorization check or clear documentation indicating the action is public.
+
+## 4. Avoid Property Collisions on Host Resources
+
+Resource plugins return objects that are assigned directly to the host resource. Never return keys that conflict with core resource properties:
+
+- Reserved resource keys: `name`, `serviceName`, `table`, `id`, `idField`, `config`, `use`.
+- Avoid prototype keys: `__proto__`, `prototype`, `constructor`.
+
+Brick checks for collisions during plugin installation and throws an immediate error if a collision is detected.
+
+## 5. Structured Error Handling
+
+When rejecting operations in plugins or hooks, throw `ActionExecutionError` with standard HTTP error codes:
+
+```ts title="src/plugins/error-handling.ts"
+import { ActionExecutionError } from "@brickkit/core";
+
+if (!isValid) {
+  throw new ActionExecutionError(
+    "BAD_REQUEST",
+    "Invalid plugin parameter",
+    400,
+  );
+}
+```
+
+This ensures errors format into the standard Brick-TS JSON envelope expected by typed clients.

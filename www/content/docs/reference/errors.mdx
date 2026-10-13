@@ -1,0 +1,130 @@
+---
+title: Error Catalog & Troubleshooting
+description: Catalog of error codes, HTTP statuses, response envelopes, and troubleshooting advice.
+---
+
+This catalog documents the runtime errors, HTTP status codes, error envelopes, and common troubleshooting solutions in Brick-TS.
+
+## Error Envelopes
+
+Errors thrown from an action (including CRUD actions) are serialized by the HTTP runtime into one of three JSON shapes. `ActionExecutionError` and `ValidationError` are serialized with their `toJSON()` methods; the HTTP status is the error's `status` (falling back to `400`).
+
+### ActionExecutionError Envelope
+
+```json
+{
+  "name": "ActionExecutionError",
+  "code": "NOT_FOUND",
+  "message": "User with ID 'usr_10' not found",
+  "status": 404,
+  "details": {
+    "entity": "user",
+    "id": "usr_10"
+  }
+}
+```
+
+`details` is omitted from the JSON body when it is `undefined`.
+
+### ValidationError Envelope
+
+```json
+{
+  "name": "ValidationError",
+  "message": "Validation failed for action 'createArticle' input",
+  "status": 400,
+  "errors": [
+    {
+      "path": "/title",
+      "message": "Expected string length greater or equal to 3",
+      "value": "Hi"
+    }
+  ]
+}
+```
+
+Input validation failures use status `400`; output validation failures use status `500` with the message `Validation failed for action '<name>' output`.
+
+### Unexpected Errors (500)
+
+Any other thrown value from an action becomes a `500` response with this body:
+
+```json
+{
+  "name": "InternalServerError",
+  "message": "<the thrown error's message>",
+  "status": 500
+}
+```
+
+<Callout type="warn">
+  The original error's `message` is returned to the client verbatim (falling
+  back to `"An unexpected error occurred"` only when it is empty). Do not put
+  secrets or internal details in messages of errors that may escape `execute`.
+</Callout>
+
+### Raw Endpoint Errors
+
+Raw endpoints (`brick({ endpoints })`, `app.endpoint()`, plugin `routes.endpoint()`) serialize `ActionExecutionError` and `ValidationError` the same way. Any other error with a numeric `status` returns `{ "message", "status" }` with that status; everything else returns `{ "message", "status": 500 }` (no `name` field).
+
+## Standard Error Codes Catalog
+
+The standard error helpers injected into `execute({ error })` and CRUD hooks throw an `ActionExecutionError` with the following codes and HTTP status codes. Each helper accepts an optional message override (defaulting to the standard message, e.g. `"Not Found"`) and optional `details`. Custom codes declared in an action's `errors` map get helpers too; their status defaults to `400` when `status` is omitted.
+
+| Code                    | HTTP Status          | Standard Meaning                                     | Helper Method                                 |
+| :---------------------- | :------------------- | :--------------------------------------------------- | :-------------------------------------------- |
+| `BAD_REQUEST`           | `400 Bad Request`    | Client sent malformed payload or unprocessable query | `error.BAD_REQUEST(msg?, details?)`           |
+| `UNAUTHORIZED`          | `401 Unauthorized`   | Missing authentication or invalid credentials        | `error.UNAUTHORIZED(msg?, details?)`          |
+| `FORBIDDEN`             | `403 Forbidden`      | Authenticated caller lacks permissions or role       | `error.FORBIDDEN(msg?, details?)`             |
+| `NOT_FOUND`             | `404 Not Found`      | Target record or entity does not exist               | `error.NOT_FOUND(msg?, details?)`             |
+| `CONFLICT`              | `409 Conflict`       | Unique constraint violation or state collision       | `error.CONFLICT(msg?, details?)`              |
+| `INTERNAL_SERVER_ERROR` | `500 Internal Error` | Unexpected backend or database failure               | `error.INTERNAL_SERVER_ERROR(msg?, details?)` |
+
+## Current Authorization Status Codes & Issue #53
+
+Authorization failures are reported as follows in the current release:
+
+| Layer  | Trigger                              | Thrown Code    | HTTP Status     | Source Reference              |
+| :----- | :----------------------------------- | :------------- | :-------------- | :---------------------------- |
+| Action | `authorize()` returns `false`        | `UNAUTHORIZED` | `403 Forbidden` | `packages/core/src/action.ts` |
+| CRUD   | `access.authorize()` returns `false` | `FORBIDDEN`    | `403 Forbidden` | `packages/crud/src/index.ts`  |
+| CRUD   | `access` object has no `authorize`   | `FORBIDDEN`    | `403 Forbidden` | `packages/crud/src/index.ts`  |
+| CRUD   | `create` with a non-empty `scope`    | `FORBIDDEN`    | `403 Forbidden` | `packages/crud/src/index.ts`  |
+
+The action message is `Access denied for action '<name>'`; the CRUD message is `Access denied` (or `Row-scoped creation requires an explicit create policy` for scoped creates).
+
+<Callout type="warn">
+  **Known inconsistency (Issue #53)**: In the current release, an action
+  `authorize` rejection throws code `UNAUTHORIZED` with HTTP status `403`, while
+  CRUD access denial uses `FORBIDDEN`/`403`. Issue #53 tracks aligning these
+  codes; until it lands, clients should treat both codes as access denial. Track
+  progress in [GitHub Issue
+  #53](https://github.com/Chandraprakash-Darji/brick/issues/53).
+</Callout>
+
+## Common Troubleshooting Scenarios
+
+### 1. `Validation failed for action '<name>' output` (Status 500)
+
+- **Cause**: An action returned data that violated its declared `output` schema. Brick responds with a `ValidationError` (status 500) instead of the invalid payload.
+- **Fix**: Check that your `execute` function returns all properties marked as required in `output: t.Object(...)`.
+
+### 2. `ActionExecutionError: FORBIDDEN: Access denied` (Status 403)
+
+- **Cause**: A CRUD resource's `access` object has no `authorize` function, or `access.authorize()` returned `false`. CRUD is deny-by-default (`access` is a required option).
+- **Fix**: Configure `access: "public"` for open resources, or implement `access: { authorize: ({ ctx }) => ... }`.
+
+### 3. `Error: CRUD requires a configured database`
+
+- **Cause**: A resource with `crud()` was invoked on a service that did not have a database handle attached. This is a plain `Error`, so the client receives a `500` `InternalServerError` body with this message.
+- **Fix**: Supply a database handle when declaring the service: `defineService("name", { database: defineDatabase(...) })`.
+
+### 4. `Error: Invalid port: <number>. Port must be an integer between 1 and 65535`
+
+- **Cause**: `--port` or `PORT` environment variable contained an out-of-range integer or non-numeric string.
+- **Fix**: Ensure `PORT` is set to a valid integer between 1 and 65535.
+
+### 5. `[Brick-TS] Error: Entry file not found: <path>`
+
+- **Cause**: `brick dev` or `brick start` was invoked with an explicit entry file argument that does not exist on disk. The CLI prints this message and exits with code 1. (`brick build` reports `Brick compiler: entry not found: <path>` instead.)
+- **Fix**: Verify file path spelling.

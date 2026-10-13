@@ -1,0 +1,99 @@
+---
+title: API Cheatsheet
+description: Quick reference of all public functions, classes, and types in Brick-TS.
+---
+
+A quick reference of commonly used public exports from `@brickkit/core`, `@brickkit/crud`, and `@brickkit/cli`. For the full surface, see `packages/core/src/index.ts`.
+
+## Core Primitives (`@brickkit/core`)
+
+| Export                             | Kind     | Description                                                                                 |
+| :--------------------------------- | :------- | :------------------------------------------------------------------------------------------ |
+| `defineService(name, options)`     | Function | Creates an isolated service domain with optional database, context resolver, and lifecycle. |
+| `defineAction(config)`             | Function | Constructs a typed action with input/output validation, error helpers, and authorization.   |
+| `defineResource(service, config)`  | Function | Binds a Drizzle table to a service with explicit primary key identity.                      |
+| `createServiceProxy(serviceName)`  | Function | Creates a type-safe proxy for calling another service in-process with context isolation.    |
+| `brick(options)`                   | Function | Instantiates an Elysia HTTP server gateway precompiled with services and routes.            |
+| `t` / `Type`                       | Object   | TypeBox schema builder for declaring runtime input and output data shapes.                  |
+| `Static<typeof Schema>`            | Type     | Incurs static TypeScript compile-time types from TypeBox runtime schemas.                   |
+| `validateWithSchema(schema, data)` | Function | Directly validates arbitrary data against a TypeBox schema.                                 |
+
+## Database Integration (`@brickkit/core`)
+
+| Export                                   | Kind     | Description                                                                        |
+| :--------------------------------------- | :------- | :--------------------------------------------------------------------------------- |
+| `defineDatabase(options)`                | Function | Configures a lazy database handle for SQLite or PostgreSQL.                        |
+| `syncSchema(serviceOrTables, db?)`       | Function | Explicit development/test helper to create SQLite tables from Drizzle definitions. |
+| `ensureResourceIndexes(db, table, opts)` | Function | Generates secondary B-Tree indexes and PostgreSQL trigram search indexes.          |
+| `ensureSQLiteFts(db, table, searchCols)` | Function | Creates an FTS5 full-text search sidecar table with sync triggers on SQLite.       |
+| `buildFtsMatchQuery(query)`              | Function | Formats user search queries into sanitized SQLite FTS5 MATCH expressions.          |
+| `isDatabaseHandle(value)`                | Function | Type guard checking if an object is a Brick database handle.                       |
+
+## Errors & Builders (`@brickkit/core`)
+
+| Export                          | Kind     | Description                                                                              |
+| :------------------------------ | :------- | :--------------------------------------------------------------------------------------- |
+| `ActionExecutionError`          | Class    | Standard domain error with HTTP status, machine error code, and optional details.        |
+| `ValidationError`               | Class    | Thrown when TypeBox input (400) or output (500) validation fails.                        |
+| `buildErrorHelpers(errorsDef?)` | Function | Generates standard HTTP error helpers (`error.NOT_FOUND`, etc.) and custom action codes. |
+
+## Typed Client SDK (`@brickkit/core/client`)
+
+| Export                       | Kind     | Description                                                                                                                                                                      |
+| :--------------------------- | :------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createBrickClient(options)` | Function | Instantiates an end-to-end typed HTTP client proxy from backend server types.                                                                                                    |
+| `BrickTransportError`        | Class    | Client error thrown when network connectivity fails, bodies are unparsable, or responses fall outside the declared contract. Aborts propagate the native `AbortError` unwrapped. |
+| `BrickServerError`           | Class    | Client error thrown when the server responds with an unhandled 5xx status code.                                                                                                  |
+| `isBrickTransportError(err)` | Function | Type guard for checking if an error originated from client transport failure.                                                                                                    |
+| `isBrickServerError(err)`    | Function | Type guard for checking if an error is an unexpected 5xx server failure.                                                                                                         |
+| `InferActionInput<T>`        | Type     | Extracts the static TypeScript input payload type for an action.                                                                                                                 |
+| `InferActionOutput<T>`       | Type     | Extracts the static TypeScript return type for an action.                                                                                                                        |
+| `InferActionErrorCodes<T>`   | Type     | Union of all error code strings declared by an action.                                                                                                                           |
+
+## AI & Model Context Protocol (`@brickkit/core`)
+
+| Export                       | Kind     | Description                                                                                                                |
+| :--------------------------- | :------- | :------------------------------------------------------------------------------------------------------------------------- |
+| `defineTool(config)`         | Function | Constructs an LLM-invocable tool. When `input` is present it must be an object schema.                                     |
+| `isTool(value)`              | Function | Type guard checking if an action is designated as an AI tool.                                                              |
+| `createMcpRegistry(options)` | Function | Collects explicitly declared tools into a Model Context Protocol registry.                                                 |
+| `createMcpHandler(options)`  | Function | Generates an MCP-compliant JSON-RPC 2.0 HTTP POST handler from `{ registry, serverInfo }`. Non-POST requests return `405`. |
+| `UnknownToolError`           | Class    | Error thrown when an MCP client requests an unregistered tool name.                                                        |
+
+## Plugins (`@brickkit/core`)
+
+| Export                                 | Kind     | Description                                                                            |
+| :------------------------------------- | :------- | :------------------------------------------------------------------------------------- |
+| `defineServicePlugin(descriptor)`      | Function | Packages reusable capabilities installed at service scope via `service.use()`.         |
+| `defineResourcePlugin(descriptor)`     | Function | Packages table-attached capabilities installed at resource scope via `resource.use()`. |
+| `getPluginActionRoute(action, prefix)` | Function | Retrieves the effective HTTP route configuration bound to a plugin action.             |
+| `getPluginEndpoints(service, prefix)`  | Function | Retrieves raw HTTP endpoints registered by service and resource plugins.               |
+
+## CRUD Plugin (`@brickkit/crud`)
+
+| Export           | Kind      | Description                                                                                                    |
+| :--------------- | :-------- | :------------------------------------------------------------------------------------------------------------- |
+| `crud(options)`  | Function  | Deny-by-default resource plugin providing field-level operations, filtering, and hooks.                        |
+| `FieldPolicy`    | Interface | Configuration options for column visibility (`read`, `create`, `update`, `filter`, `sort`, `schema`, `scrub`). |
+| `CrudOptions`    | Interface | Full options object accepted by `crud()` (`fields`, `access`, `hooks`, `operations`, `routes`, limits).        |
+| `FilterOperator` | Type      | Union of allowed query operators (`eq`, `ne`, `in`, `contains`, `between`, `isNull`, etc.).                    |
+
+## Secrets Management (`@brickkit/core`)
+
+| Export                        | Kind     | Description                                                                                                                                   |
+| :---------------------------- | :------- | :-------------------------------------------------------------------------------------------------------------------------------------------- |
+| `secret(name, options?)`      | Function | Declares a secret reference resolved lazily from environment variables or custom sources.                                                     |
+| `SecretRef`                   | Class    | Container wrapping secret names with `.default()`, `.transform()`, `.validate()`, `.url()`, `.value()`, `.require()`, and `.isSet()` methods. |
+| `resolveSecrets(options?)`    | Function | Eagerly validates and resolves all declared secret references.                                                                                |
+| `overrideSecret(name, value)` | Function | Overrides a secret value in test environments.                                                                                                |
+
+## CLI Commands (`@brickkit/cli`)
+
+| Command             | Usage                                         | Description                                                            |
+| :------------------ | :-------------------------------------------- | :--------------------------------------------------------------------- |
+| `brick dev`         | `brick dev [entry] [--port <number>]`         | Starts development server with live reload and route banners.          |
+| `brick start`       | `brick start [entry] [--port <number>]`       | Starts production server without file system watching.                 |
+| `brick build`       | `brick build <entry> [--outdir <dir>]`        | Compiles a default-exported `BrickApp` into an AOT Bun server bundle.  |
+| `brick gen openapi` | `brick gen openapi <entry> [--output <file>]` | Extracts OpenAPI 3.1 JSON specification from services.                 |
+| `brick gen client`  | `brick gen client <entry> [--output <file>]`  | Generates a typed browser client contract file (`_brick/contract.ts`). |
+| `brick info`        | `brick info <entry>`                          | Exports the runtime service graph and access policies as JSON.         |

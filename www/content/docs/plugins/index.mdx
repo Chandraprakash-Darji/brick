@@ -1,55 +1,71 @@
 ---
-title: Plugins
-description: Install service and resource plugins with typed APIs and scoped routes
+title: Plugins Overview
+description: Extend services and resources with modular plugins, typed APIs, and scoped routes.
 ---
 
-Use `defineServicePlugin()` to package service capabilities and install them with
-`service.use(plugin)`. Use `defineResourcePlugin()` to attach a named API to an
-existing resource with `resource.use(plugin)`.
+Brick-TS provides modular plugin primitives—`defineServicePlugin` and `defineResourcePlugin`—to package reusable capabilities, custom endpoints, and typed resource extensions.
 
-```ts
-import { defineService, defineServicePlugin, t } from "@brickkit/core";
+## Minimal Example
 
-const greeting = defineServicePlugin({
-  name: "example/greeting",
-  setup({ routes }) {
-    const hello = routes.action({
-      name: "hello",
-      method: "GET",
-      path: "/hello",
-      input: t.Object({ name: t.String() }),
-      output: t.String(),
-      execute: ({ input }) => `Hello ${input.name}`,
-    });
-    return { hello };
-  },
-});
+Define a reusable service plugin that registers a health check action and install it with `service.use()`:
 
-const service = defineService("greetings");
-const api = service.use(greeting);
-await api.hello({ input: { name: "Ada" } });
+```ts title="src/plugins/ping.ts"
+import { defineServicePlugin, defineService, t } from "@brickkit/core";
+
+// 1. Declare the plugin descriptor
+export function pingPlugin(options: { endpointPath?: string } = {}) {
+  return defineServicePlugin({
+    name: "ping",
+    setup({ routes }) {
+      const ping = routes.action({
+        name: "ping",
+        method: "GET",
+        path: options.endpointPath ?? "/ping",
+        output: t.Object({ status: t.String(), timestamp: t.Number() }),
+        execute: () => ({ status: "ok", timestamp: Date.now() }),
+      });
+
+      return { ping };
+    },
+  });
+}
+
+// 2. Install the plugin onto a service
+const service = defineService("system");
+const api = service.use(pingPlugin());
+
+// The returned API is fully typed in TypeScript:
+const result = await api.ping({});
+console.log(result.status); // "ok"
 ```
 
-With the default app prefix, the HTTP route is `GET /api/greetings/hello`.
-The generated browser API is `api.greetings.hello`. Local actions use the
-same schemas, authorization and execution context as HTTP requests.
+## Two Plugin Kinds
 
-A plugin may register raw endpoints for HTML, streams or webhooks. Consumers
-can override route paths and scopes or disable HTTP exposure while keeping
-local actions callable. Plugins do not create or migrate database tables.
+Brick-TS divides plugins into two distinct scopes:
 
-## Other extension points
+### 1. Service Plugins (`defineServicePlugin`)
 
-Resource hooks, `service.action()`, `app.endpoint()`, and `createServiceProxy()`
-remain available for application code. Resources are generic table hosts.
-Install `@brickkit/crud` with `resource.use(crud({fields: ...}))` for CRUD.
+- Installed with `service.use(plugin)`.
+- Scope: Service-level capabilities (e.g. rate limiters, health endpoints, event emitters).
+- Returns a typed API object that becomes accessible to callers.
 
-## Where to go next
+### 2. Resource Plugins (`defineResourcePlugin`)
 
-- [Build a plugin](/docs/plugins/build-plugin) explains descriptors, typed APIs,
-  raw endpoints and route controls.
-- [Built-in capabilities](/docs/plugins/built-in) describes `brick()` options.
-- [Audit-trail pattern](/docs/plugins/audit) shows resource hooks writing audit rows.
-- [Comments pattern](/docs/plugins/comments) shows an application composition
-  pattern using a comments table and resource plugin composition.
-- [Best practices](/docs/plugins/best-practices) covers scoping and testing.
+- Installed with `resource.use(plugin)`.
+- Scope: Table-level capabilities (e.g. `@brickkit/crud`, comments, audit logs, file attachments).
+- Receives `{ resource, service, routes }` and attaches properties directly onto the host resource.
+
+```ts title="src/example-resource-plugin.ts"
+// Attaching CRUD plugin to a resource:
+const page = service
+  .resource({ name: "page", table: pages, id: pages.id })
+  .use(crud({ access: "public", fields: { id: { read: true } } }));
+```
+
+## Plugin Lifecycle & Guarantees
+
+All plugins follow strict design rules:
+
+- **Synchronous Registration**: The `setup()` function must be synchronous. Plugins register actions, routes, and hooks before the server compiles.
+- **Connection Isolation**: Plugins do not open database pools or mutate schemas during setup. Database connections flow through `ctx.db` at runtime.
+- **Namespaced Actions**: Actions registered by plugins stay scoped to their host resource or service, preventing naming collisions.

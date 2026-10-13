@@ -27,7 +27,12 @@ export const links: LinkItemType[] = [
   },
   {
     active: "url",
-    text: "Extensions",
+    text: "Plugins",
     url: "/docs/plugins",
+  },
+  {
+    active: "url",
+    text: "Reference",
+    url: "/docs/reference/cheatsheet",
   },
 ];

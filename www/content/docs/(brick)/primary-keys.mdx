@@ -1,34 +1,117 @@
 ---
-title: Primary keys
-description: Use actual columns and database defaults
+title: Primary Keys and Identifiers
+description: Configure custom primary keys, UUIDs, and auto-minted column IDs.
 ---
 
-Pass `id: table.name` for a Frappe-style string key or `id: table.id` for a numeric
-key. The column must belong to the resource table. When omitted, core infers a
-single primary key; missing or ambiguous identifiers fail declaration.
+Brick-TS uses whatever primary key your Drizzle table defines: autoincrement integers, UUIDs, or custom prefixed string identifiers minted with `$defaultFn()`.
 
-CRUD input selectors consistently use `{id}` even when the stored column has a
-different name. Updates separate `{id,data}`. The identifier cannot be updated.
-Database-generated identifiers and `$defaultFn` values remain database concerns;
-CRUD does not generate a prefixed string ID automatically.
+## Minimal Example
 
-```ts
-const tickets = sqliteTable("tickets", {
-  number: integer("number").primaryKey({ autoIncrement: true }),
-  title: text("title").notNull(),
+Define an auto-minted UUID primary key and register it with the resource:
+
+```ts title="src/services/items.ts"
+import {
+  defineDatabase,
+  defineService,
+  sqliteTable,
+  text,
+} from "@brickkit/core";
+import { crud } from "@brickkit/crud";
+
+export const items = sqliteTable("items", {
+  // Auto-minted UUID primary key
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull(),
 });
-const ticket = service
-  .resource({ name: "ticket", table: tickets, id: tickets.number })
+
+const database = defineDatabase({ tables: { items } });
+export const itemsService = defineService("items", { database });
+
+// Register resource identity using items.id
+export const itemResource = itemsService
+  .resource({
+    name: "item",
+    table: items,
+    id: items.id, // Optional here: items has a single primary key
+  })
   .use(
     crud({
+      access: "public",
       fields: {
-        number: { read: true },
-        title: { read: true, create: true, update: true },
+        id: { read: true, filter: ["eq", "in"] },
+        name: { read: true, create: true, update: true },
       },
     }),
   );
-await ticket.get({ input: { id: 42 } });
 ```
 
-This fragment uses `sqliteTable`, `integer`, and `text` from core, `crud` from
-`@brickkit/crud`, and an application's configured `service`.
+## Supported Primary Key Strategies
+
+Drizzle column builders define primary key generation strategies:
+
+### 1. Auto-Minted UUIDs
+
+Generates random RFC 4122 UUID strings on row creation:
+
+```ts title="src/schema.ts"
+export const documents = sqliteTable("documents", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  title: text("title").notNull(),
+});
+```
+
+### 2. Prefixed Identifiers (Stripe-Style)
+
+Prefix IDs with entity tags (e.g. `usr_...`, `inv_...`) to improve readability and debugging:
+
+```ts title="src/schema.ts"
+function mintId(prefix: string): string {
+  return `${prefix}_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+}
+
+export const users = sqliteTable("users", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => mintId("usr")),
+  name: text("name").notNull(),
+});
+```
+
+### 3. Autoincrement Integers
+
+Standard sequential integer identifiers:
+
+```ts title="src/schema.ts"
+import { integer, sqliteTable, text } from "@brickkit/core";
+
+export const logs = sqliteTable("logs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  message: text("message").notNull(),
+});
+```
+
+When using integer keys, Brick automatically types action parameters such as `id` in `item.get` and `item.update` as `number`.
+
+## Resource Identity Registration
+
+`service.resource()` takes an optional `id` column. If you omit it, Brick uses the table's primary key when the table has exactly one primary-key column. Pass `id` explicitly when the table has no single primary key (for example a composite key) or when you want lookups to use a different unique column; the column must belong to the resource's table, otherwise `resource()` throws `Resource '<name>' requires an id column belonging to its table`.
+
+```ts title="src/services/catalog.ts"
+const product = service
+  .resource({
+    name: "product",
+    table: productsTable,
+    id: productsTable.id, // Column CRUD uses for get/update/delete lookups
+  })
+  .use(crud({ access: "public", fields: {/* ... */} }));
+```
+
+The CRUD plugin uses this column for single-record operations, and types `id` from the column's data type:
+
+- `product.get({ input: { id: "prod_1" } })`
+- `product.update({ input: { id: "prod_1", data: { name: "New Name" } } })`
+- `product.delete({ input: { id: "prod_1" } })`

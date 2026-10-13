@@ -1,0 +1,199 @@
+---
+title: Relational Data Modeling & Joins
+description: Model one-to-many, many-to-many, and singleton relationships with explicit Drizzle queries.
+---
+
+Brick-TS leverages standard relational database patterns and Drizzle ORM to model relations without proprietary abstractions or hidden query overhead.
+
+## Minimal Example: One-to-Many Relationships
+
+Model parent entities and related records using standard foreign keys:
+
+```ts title="src/services/blog.ts"
+import {
+  defineDatabase,
+  defineService,
+  eq,
+  sqliteTable,
+  text,
+} from "@brickkit/core";
+import { crud } from "@brickkit/crud";
+
+// 1. Parent table: Articles
+export const articles = sqliteTable("articles", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  title: text("title").notNull(),
+});
+
+// 2. Child table: Comments (pointing to article via targetId)
+export const comments = sqliteTable("comments", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  targetId: text("target_id").notNull(),
+  body: text("body").notNull(),
+});
+
+const database = defineDatabase({ tables: { articles, comments } });
+export const blogService = defineService("blog", { database });
+
+// 3. Expose articles and comments as explicit CRUD resources
+export const articleResource = blogService
+  .resource({ name: "article", table: articles, id: articles.id })
+  .use(
+    crud({
+      access: "public",
+      fields: {
+        id: { read: true },
+        title: { read: true, create: true },
+      },
+    }),
+  );
+
+export const commentResource = blogService
+  .resource({ name: "comment", table: comments, id: comments.id })
+  .use(
+    crud({
+      access: "public",
+      fields: {
+        id: { read: true, filter: ["eq"] },
+        targetId: { read: true, create: true, filter: ["eq"] },
+        body: { read: true, create: true, filter: ["contains"] },
+      },
+    }),
+  );
+```
+
+To fetch all comments for an article over HTTP, call the `comment.list` action. CRUD routes are scoped to the resource name, and `list` is mounted at `POST {prefix}/{resource}/query`:
+
+```bash
+curl -X POST http://localhost:4000/api/comment/query \
+  -H "Content-Type: application/json" \
+  -d '{"where": {"field": "targetId", "op": "eq", "value": "ARTICLE_UUID"}}'
+```
+
+## Relational Joins in Custom Actions
+
+When an endpoint needs composite parent-and-child data in a single round-trip, write an action using Drizzle joins:
+
+```ts title="src/services/articles-with-comments.ts"
+import { eq, t } from "@brickkit/core";
+import { articles, comments } from "./blog";
+import { blogService } from "./blog";
+
+export const getArticleDetails = blogService.action({
+  name: "getArticleDetails",
+  method: "GET",
+  path: "/api/blog/articles/:id/details",
+  input: t.Object({ id: t.String() }),
+  output: t.Object({
+    id: t.String(),
+    title: t.String(),
+    comments: t.Array(
+      t.Object({
+        id: t.String(),
+        body: t.String(),
+      }),
+    ),
+  }),
+  execute: async ({ input, ctx, error }) => {
+    // 1. Fetch parent article
+    const articleRows = await ctx.db
+      .select()
+      .from(articles)
+      .where(eq(articles.id, input.id))
+      .limit(1);
+
+    if (!articleRows.length) {
+      error.NOT_FOUND("Article not found");
+    }
+
+    // 2. Fetch associated comments
+    const commentRows = await ctx.db
+      .select({ id: comments.id, body: comments.body })
+      .from(comments)
+      .where(eq(comments.targetId, input.id));
+
+    return {
+      id: articleRows[0].id,
+      title: articleRows[0].title,
+      comments: commentRows,
+    };
+  },
+});
+```
+
+## Many-to-Many Relationships (Join Tables)
+
+Model many-to-many connections using a dedicated join table with a composite primary key:
+
+```ts title="src/schema/tags.ts"
+import { primaryKey, sqliteTable, text } from "@brickkit/core";
+import { articles } from "./blog";
+
+export const tags = sqliteTable("tags", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+});
+
+// Join table linking articles and tags
+export const articleTags = sqliteTable(
+  "article_tags",
+  {
+    articleId: text("article_id").notNull(),
+    tagId: text("tag_id").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.articleId, t.tagId] })],
+);
+```
+
+## Modeling Singleton Records
+
+When an application requires exactly one configuration row per tenant or global system, enforce the constraint in the database with a `unique()` column:
+
+```ts title="src/services/settings.ts"
+import { integer, sqliteTable, text } from "@brickkit/core";
+import { crud } from "@brickkit/crud";
+import { defineDatabase, defineService } from "@brickkit/core";
+
+export const appSettings = sqliteTable("app_settings", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => "global_settings"),
+  // Single-row constraint: always 1 with unique index
+  singletonKey: integer("singleton_key").unique().default(1),
+  siteName: text("site_name").notNull(),
+  maintenanceMode: integer({ mode: "boolean" }).default(false),
+});
+
+const database = defineDatabase({ tables: { appSettings } });
+export const settingsService = defineService("settings", { database });
+
+export const settings = settingsService
+  .resource({ name: "settings", table: appSettings, id: appSettings.id })
+  .use(
+    crud({
+      access: "public",
+      operations: {
+        delete: false, // Prevent deleting singleton
+      },
+      fields: {
+        id: { read: true, filter: ["eq"] }, // findOne can only filter on declared operators
+        siteName: { read: true, create: true, update: true },
+        maintenanceMode: { read: true, update: true },
+      },
+    }),
+  );
+```
+
+Retrieve the single record via `findOne`:
+
+```ts
+const config = await settings.findOne({
+  input: {
+    where: { field: "id", op: "eq", value: "global_settings" },
+  },
+});
+```

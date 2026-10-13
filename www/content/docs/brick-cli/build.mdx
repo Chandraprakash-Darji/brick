@@ -1,50 +1,84 @@
 ---
-title: Compile an Application
-description: Emit route handlers, inspectable Brick IR and a bundled Bun server
+title: Build & Compilation
+description: Compile default-exported Brick applications into standalone Bun server bundles.
 ---
 
-`brick build` takes a TypeScript module that registers services without starting
-a listening server. It analyzes the definitions, emits route handlers, and bundles
-them together with your callbacks into a Bun server.
+The `brick build` command compiles a default-exported `BrickApp` into a standalone Bun server bundle with ahead-of-time route handlers.
 
-## Try the runnable example
+## Minimal Example
 
-From the repository root:
+Create an application entry that default-exports a `brick()` server instance without calling `.listen()`:
 
-```sh
-bun packages/cli/src/bin.ts build examples/showcase/src/services/users.ts --outdir .build/showcase-compiled --port 3017
-bun .build/showcase-compiled/server.js
+```ts title="src/server.ts"
+import { brick, defineService, t } from "@brickkit/core";
+
+export const healthService = defineService("health");
+
+healthService.action({
+  name: "ping",
+  method: "GET",
+  output: t.Object({ ok: t.Boolean() }),
+  execute: () => ({ ok: true }),
+});
+
+export const app = brick({
+  services: [healthService],
+  title: "Health API",
+});
+
+// Default export is required for brick build:
+export default app;
 ```
 
-In another terminal:
+Compile the application bundle:
 
-```sh
-curl 'http://localhost:3017/api/users/getUser?id=usr_42'
+```bash
+brick build src/server.ts --outdir dist/brick
 ```
 
-The bundled example returns the seeded user from its actual action definition.
-In an installed application, invoke the same command through `bunx brick build`.
+Output (paths printed are absolute, resolved from `--outdir`):
 
-## Inspect the output
+```text
+Compiled 1 services / 1 routes
+IR: /Users/project/dist/brick/brick-ir.json
+Run: bun /Users/project/dist/brick/server.js
+```
 
-| File            | Purpose                                                      |
-| --------------- | ------------------------------------------------------------ |
-| `brick-ir.json` | Analyzed services, route plans and compiler diagnostics      |
-| `routes.js`     | Generated handler factories bound to the registered services |
-| `server.js`     | Runnable bundled Bun server                                  |
-| `server.js.map` | Source map for the bundled server                            |
+Run the compiled server with Bun:
 
-The compiler prepares routing and execution plans. Custom action callbacks remain
-JavaScript in the Bun runtime; compiling an application does not translate its
-business logic into native machine code.
+```bash
+PORT=8080 bun dist/brick/server.js
+```
 
-## Options
+## Options Table
 
-- `--outdir <directory>`: output directory; defaults to `dist/brick`.
-- `--prefix <path>`: route prefix override.
-- `--port <number>`: default listening port; defaults to 4000.
-- `--no-request-logging`: disable request logging in the generated server.
+| Flag       | Argument       | Default        | Description                                                                     |
+| :--------- | :------------- | :------------- | :------------------------------------------------------------------------------ |
+| `<entry>`  | File path      | _(Required)_   | Application entry file. Must default-export a `BrickApp` instance.              |
+| `--outdir` | Directory path | `"dist/brick"` | Target output directory for compiled bundles and IR artifacts.                  |
+| `--port`   | Number         | `4000`         | Default listening port baked into the server launcher (overridable via `PORT`). |
+| `--no-aot` | Flag           | `false`        | Disables ahead-of-time compilation of Elysia route handlers.                    |
 
-The generated server accepts a `PORT` environment override. Rebuild when
-application definitions change. Database setup and migrations remain the
-application's responsibility.
+<Callout type="warn">
+  **Application Configuration vs Build Flags**: The flags `--prefix` and `--no-request-logging` are rejected. Passing either makes `brick build` throw; configure `prefix` and `requestLogging` directly in your `brick({ prefix, requestLogging })` definition instead of CLI flags.
+</Callout>
+
+## Output Bundle Structure
+
+The compilation produces four artifacts in the output directory:
+
+```text
+dist/brick/
+├── server.js          # Standalone Bun server entry with graceful shutdown
+├── routes.js          # Precompiled route dispatcher and IR bindings
+├── server.js.map      # Source map for debugging
+└── brick-ir.json      # Serialized intermediate representation of all routes
+```
+
+### Production Readiness
+
+The generated `server.js` includes:
+
+- Production `PORT` environment variable resolution with numeric validation (1-65535).
+- Graceful shutdown listeners for `SIGINT` and `SIGTERM` signals.
+- Ahead-of-time compiled Elysia route plans (when `--no-aot` is not passed), reducing startup compilation work on cold boots.

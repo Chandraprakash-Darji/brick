@@ -1,0 +1,108 @@
+---
+title: Zero-Codegen Type Inference
+description: Infer static TypeScript types directly from TypeBox schemas and Drizzle models without build steps.
+---
+
+Brick-TS delivers instant, bidirectional type safety by deriving static TypeScript types directly from runtime TypeBox schemas and Drizzle database models without intermediate compilation steps.
+
+## Minimal Example
+
+Derive static TypeScript types directly from schemas and tables without running codegen commands:
+
+```ts title="src/types/models.ts"
+import { type Static, sqliteTable, t, text } from "@brickkit/core";
+
+// 1. Runtime validation schema -> TypeScript static type
+export const UserSchema = t.Object({
+  id: t.String(),
+  name: t.String(),
+  role: t.Union([t.Literal("admin"), t.Literal("member")]),
+});
+
+export type User = Static<typeof UserSchema>;
+// Equivalent to: { id: string; name: string; role: "admin" | "member" }
+
+// 2. Drizzle table -> Select and Insert types
+export const users = sqliteTable("users", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull(),
+  bio: text("bio"),
+});
+
+export type UserRow = typeof users.$inferSelect;
+export type NewUserRow = typeof users.$inferInsert;
+```
+
+## Why Zero-Codegen Matters
+
+Many backend frameworks rely on external DSLs, generated code directories (`gen/`, `prisma/client`), or file watchers. Brick-TS avoids code generation:
+
+- **Instant Feedback**: Modifying a database column or an action schema reflects immediately in TypeScript errors across your editor and test runners.
+- **Single Source of Truth**: The runtime validator and the static compiler type are defined in the exact same TypeScript statement.
+- **No Stale Build Artifacts**: You never encounter compiler errors caused by forgotten `generate` commands.
+
+## Action Type Inference
+
+Actions infer types automatically from their schema declarations:
+
+```ts title="src/services/projects.ts"
+import { defineService, t } from "@brickkit/core";
+
+export const projectsService = defineService("projects");
+
+export const createProject = projectsService.action({
+  name: "createProject",
+  input: t.Object({
+    title: t.String(),
+    tags: t.Array(t.String()),
+  }),
+  output: t.Object({
+    id: t.String(),
+    title: t.String(),
+  }),
+  execute: ({ input }) => {
+    // TypeScript automatically types `input` as:
+    // { title: string; tags: string[] }
+    return { id: "proj_1", title: input.title };
+  },
+});
+```
+
+### Context User Narrowing (`NarrowAuthorizedContext`)
+
+When an action declares an `authorize` guard, Brick narrows `ctx.user` from `User | null` to non-nullable `User` inside `execute`:
+
+```ts title="src/services/profile.ts"
+export const updateProfile = projectsService.action({
+  name: "updateProfile",
+  authorize: ({ user }) => !!user,
+  execute: ({ ctx }) => {
+    // ctx.user is typed as NonNullable<User>
+    return { owner: ctx.user.id };
+  },
+});
+```
+
+## Client Type Inference
+
+Frontend clients get typed callers from the generated contract (see Typed
+Client SDK). The contract file exports both the runtime metadata and its
+type, so the frontend bundle never includes backend server code:
+
+```ts title="src/frontend/api.ts"
+import { createBrickClient } from "@brickkit/core/client";
+import { contract, type AppContract } from "../../_brick/contract";
+
+export const api = createBrickClient<AppContract>({
+  baseUrl: "http://localhost:4000",
+  contract,
+});
+
+// Autocomplete and type checking on every action:
+const project = await api.projects.createProject({
+  title: "New Website",
+  tags: ["design", "typescript"],
+});
+```

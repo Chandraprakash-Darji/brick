@@ -1,29 +1,117 @@
 ---
-title: CRUD hooks
-description: Separate write normalization from response scrubbing
+title: Lifecycle Hooks
+description: Intercept CRUD operations before and after writes to validate, transform, and log data.
 ---
 
-Configure `hooks` inside `crud()` options. Before hooks can normalize data or
-assign trusted internal columns; after hooks observe completed writes. Available
-hooks are before/after create, update, and delete. Hook parameters include context
-and error helpers; update/delete hooks also receive the target identifier.
-After-create/update receive the persisted result.
+Lifecycle hooks allow you to intercept CRUD operations before and after database mutations to normalize payloads, validate business logic, or trigger side effects.
 
-```ts
-crud({
-  fields: { title: { read: true, create: true, update: true } },
-  hooks: {
-    beforeCreate: ({ data, error }) => {
-      data.title = String(data.title).trim();
-      if (!data.title) error.BAD_REQUEST("Title cannot be blank");
-    },
-  },
+## Minimal Example
+
+Configure hooks on a CRUD resource to normalize input before saving and log after saving. `slug` has no `create` permission, so clients can't send it; the hook always derives it:
+
+```ts title="src/services/articles.ts"
+import {
+  defineDatabase,
+  defineService,
+  sqliteTable,
+  text,
+} from "@brickkit/core";
+import { crud } from "@brickkit/crud";
+
+export const articles = sqliteTable("articles", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  title: text("title").notNull(),
+  slug: text("slug").notNull(),
 });
+
+const database = defineDatabase({ tables: { articles } });
+export const articlesService = defineService("articles", { database });
+
+export const article = articlesService
+  .resource({ name: "article", table: articles, id: articles.id })
+  .use(
+    crud({
+      access: "public",
+      fields: {
+        id: { read: true },
+        title: { read: true, create: true, update: true },
+        slug: { read: true },
+      },
+      hooks: {
+        beforeCreate: async ({ data, error }) => {
+          // Normalize input data in place
+          const title = String(data.title ?? "").trim();
+          if (!title) {
+            return error.BAD_REQUEST("Article title cannot be blank");
+          }
+          data.title = title;
+
+          // Hooks may set columns clients can't write
+          data.slug = title.toLowerCase().replace(/\s+/g, "-");
+        },
+        afterCreate: async ({ row, ctx }) => {
+          ctx.logger.info(`Article created: ${row.id} (${row.title})`);
+        },
+      },
+    }),
+  );
 ```
 
-`crud` is imported from `@brickkit/crud`. Hook data is a record of trusted table
-values; hooks must use real column keys. Assign explicit timestamps or owners
-here, or use database defaults. There is no implicit timestamp detection.
-Hooks cannot return hidden fields to consumers. Response `scrub` policies run
-separately after querying and do not change persisted data. After hooks run after
-the write and cannot undo it; use application transactions for atomic side effects.
+## Available CRUD Hooks
+
+All hooks are declared inside the `hooks` configuration of `crud()`:
+
+Hooks run after input validation, `authorize`, and `scope`.
+
+| Hook           | Arguments                  | Timing                   | Common Use Cases                                               |
+| :------------- | :------------------------- | :----------------------- | :------------------------------------------------------------- |
+| `beforeCreate` | `{ data, ctx, error }`     | Before `INSERT` query    | Data trimming, hashing, slug generation, permission validation |
+| `afterCreate`  | `{ row, ctx, error }`      | After `INSERT` completes | Audit logging, notification dispatch, webhooks                 |
+| `beforeUpdate` | `{ id, data, ctx, error }` | Before `UPDATE` query    | Field mutation validation, updated timestamp stamping          |
+| `afterUpdate`  | `{ id, row, ctx, error }`  | After `UPDATE` completes | Cache invalidation, audit logging                              |
+| `beforeDelete` | `{ id, ctx, error }`       | Before `DELETE` query    | Cascade checks, preventing deletion of active resources        |
+| `afterDelete`  | `{ id, ctx, error }`       | After `DELETE` completes | Cleanup associated files/assets, search index purging          |
+
+`row` in `afterCreate` and `afterUpdate` is the full database row, including columns without `read` permission. The response is still limited to readable fields.
+
+## Mutating Input in `before*` Hooks
+
+Before hooks receive `data`, a copy of the validated write payload (the `create` input, or `update`'s `data` object). You can mutate fields or add values for columns clients can't write. Every key must be a column of the table, or the call fails with a 500. An update whose `data` is empty after `beforeUpdate` is rejected with `BAD_REQUEST`.
+
+```ts title="src/services/profiles.ts"
+hooks: {
+  beforeCreate: async ({ data, ctx }) => {
+    // Inject tenant and author from authenticated context
+    data.tenantId = ctx.tenantId;
+    data.createdBy = ctx.user?.id;
+  },
+  beforeUpdate: async ({ data }) => {
+    if (typeof data.displayName === "string") {
+      data.displayName = data.displayName.trim();
+    }
+  },
+}
+```
+
+## Aborting Writes with Error Helpers
+
+Hooks receive the standard `error` builder (`BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `INTERNAL_SERVER_ERROR`). Calling a helper throws an `ActionExecutionError` with that code and status.
+
+CRUD doesn't wrap hooks in a transaction. Throwing in a `before*` hook stops the write before it runs. Throwing in an `after*` hook returns an error to the client, but the row has already been written and isn't rolled back.
+
+```ts title="src/services/comments.ts"
+hooks: {
+  beforeCreate: async ({ data, ctx, error }) => {
+    if (!ctx.user) {
+      return error.UNAUTHORIZED("Sign in to comment");
+    }
+
+    const trimmed = String(data.body ?? "").trim();
+    if (trimmed.length < 3) {
+      error.BAD_REQUEST("Comment must be at least 3 characters long");
+    }
+  },
+}
+```

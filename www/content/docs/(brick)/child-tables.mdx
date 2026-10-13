@@ -1,29 +1,13 @@
 ---
-title: Related tables
-description: Use explicit tables and target mappings
+title: Related Tables
+description: Modeling parent-child relationships and joins with Drizzle ORM.
 ---
 
-Relations are application or resource-plugin concerns. Declare comment storage
-explicitly and keep its field policies in `comments({table,columns,fields})`.
-The parent table and identifier come from the resource plugin's setup context.
+<Callout type="info">
+  This guide has been moved to **[Relational Data Modeling &
+  Joins](/docs/relations)**.
+</Callout>
 
-```ts
-const page = service
-  .resource({ name: "page", table: pagesTable, id: pagesTable.id })
-  .use(
-    comments({
-      table: pageCommentsTable,
-      columns: {
-        targetId: pageCommentsTable.pageId,
-        body: pageCommentsTable.body,
-      },
-      fields: { body: { read: true, create: true, update: true } },
-    }),
-  );
-```
+Brick-TS models child tables and relational joins using pure Drizzle ORM and standard relational database constraints.
 
-This illustrates an application-defined comments factory, not a published Brick
-comments package. Install independently on posts with a post comment table.
-Validate target existence and authorization in that plugin. Database foreign
-keys enforce relationships when configured by the application. Core never adds
-columns, foreign keys, or tables during installation.
+Please see the canonical guide: **[Relational Data Modeling & Joins](/docs/relations)**.

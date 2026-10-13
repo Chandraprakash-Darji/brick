@@ -1,213 +1,124 @@
 ---
-title: Build a plugin
-description: Define typed service and resource APIs with controlled HTTP exposure
+title: Authoring Plugins
+description: Create custom service and resource plugins with scoped routes and typed APIs.
 ---
 
-A plugin is a descriptor with a name and a synchronous `setup()` function.
-Service plugins return their API. Resource plugins return named contributions
-that extend the installed resource. Installation registers declarations before
-app build; it does not run migrations or start background tasks.
+Plugins package modular capabilities into reusable TypeScript descriptors that install onto services or resources.
 
-## A service plugin
+## Authoring a Service Plugin (`defineServicePlugin`)
 
-This module creates an action and a raw HTML endpoint. The factory owns its
-options and forwards route controls to the framework.
+A service plugin registers actions and raw HTTP endpoints onto a host service using `setup({ service, routes })`:
 
-```ts
-// greeting.ts
+```ts title="src/plugins/greeting.ts"
 import { defineServicePlugin, t, type PluginRoutes } from "@brickkit/core";
 
-export function greeting(
-  options: {
-    salutation?: string;
-    routes?: PluginRoutes<"app" | "service">;
-  } = {},
-) {
+export interface GreetingOptions {
+  salutation?: string;
+  routes?: PluginRoutes<"app" | "service">;
+}
+
+export function greeting(options: GreetingOptions = {}) {
   const salutation = options.salutation ?? "Hello";
+
   return defineServicePlugin({
     name: "example/greeting",
     routes: options.routes,
-    setup({ routes }) {
+    setup({ service, routes }) {
+      // 1. Register an action onto the service mesh
       const hello = routes.action({
         name: "hello",
         method: "GET",
-        path: "/hello",
-        input: t.Object({ name: t.String() }),
-        output: t.Object({ message: t.String() }),
-        execute: ({ input }) => ({ message: `${salutation} ${input.name}` }),
+        path: `/${service.name}/hello`,
+        input: t.Object({
+          name: t.String({ minLength: 1 }),
+        }),
+        output: t.String(),
+        execute: ({ input }) => `${salutation}, ${input.name}!`,
       });
+
+      // 2. Register a raw HTML endpoint (outside the JSON action mesh)
       routes.endpoint({
-        name: "help",
+        name: "welcome",
         method: "GET",
-        path: "/help",
-        handler: () =>
-          new Response("<p>Send a name to the greeting endpoint.</p>", {
-            headers: { "content-type": "text/html" },
-          }),
+        path: `/${service.name}/welcome.html`,
+        handler: async ({ set }) => {
+          set.headers["content-type"] = "text/html; charset=utf-8";
+          return `<!DOCTYPE html><html><body><h1>${salutation}!</h1></body></html>`;
+        },
       });
-      return { hello };
+
+      // Return a typed API namespace for callers
+      return {
+        hello,
+        salutation,
+      };
     },
   });
 }
 ```
 
-```ts
-// app.ts
-import { brick, defineService } from "@brickkit/core";
-import { greeting } from "./greeting";
+### Installing the Service Plugin
 
-const service = defineService("greetings");
-const api = service.use(
-  greeting({
-    routes: {
-      hello: { scope: "app", path: "/welcome" },
-      help: false,
+Install onto a service using `service.use()`:
+
+```ts title="src/services/greeter.ts"
+import { defineService } from "@brickkit/core";
+import { greeting } from "../plugins/greeting";
+
+export const greeterService = defineService("greeter");
+
+// Install the plugin
+export const api = greeterService.use(greeting({ salutation: "Welcome" }));
+
+// In-process TypeScript calls are fully typed:
+const message = await api.hello({ input: { name: "Ada" } });
+console.log(message); // "Welcome, Ada!"
+```
+
+## Authoring a Resource Plugin (`defineResourcePlugin`)
+
+A resource plugin attaches behavior to a specific database table and entity:
+
+```ts title="src/plugins/slugify.ts"
+import { defineResourcePlugin, eq } from "@brickkit/core";
+
+export function slugLookup(options: { slugColumn: any }) {
+  return defineResourcePlugin({
+    name: "example/slugLookup",
+    setup({ resource, service, routes }) {
+      // Return helper methods attached directly onto the resource object
+      return {
+        findBySlug: async (slug: string, ctx: any) => {
+          if (!ctx.db) throw new Error("Database required");
+          const rows = await ctx.db
+            .select()
+            .from(resource.table)
+            .where(eq(options.slugColumn, slug))
+            .limit(1);
+          return rows[0] ?? null;
+        },
+      };
     },
-  }),
-);
-
-export default brick({ services: [service], prefix: "/v1" });
-await api.hello({ input: { name: "Ada" } });
+  });
+}
 ```
 
-This exposes `GET /v1/welcome?name=Ada`. The `help` endpoint is disabled.
-Action schemas infer the local input/output types and generated browser types.
-Raw endpoints have no generated JSON client method.
+### Installing the Resource Plugin
 
-## Resource contributions
+Install onto a resource using `resource.use()`:
 
-A resource plugin receives the parent resource. The same descriptor can be
-installed on multiple resources, with independent registrations and paths.
+```ts title="src/services/articles.ts"
+const article = service
+  .resource({ name: "article", table: articlesTable, id: articlesTable.id })
+  .use(slugLookup({ slugColumn: articlesTable.slug }));
 
-```ts
-import {
-  defineDatabase,
-  defineService,
-  defineResourcePlugin,
-  sqliteTable,
-  text,
-  t,
-} from "@brickkit/core";
-
-const pages = sqliteTable("pages", {
-  id: text("id").primaryKey(),
-  title: text("title").notNull(),
-});
-const service = defineService("pages", {
-  database: defineDatabase({ tables: { pages } }),
-});
-
-const identity = defineResourcePlugin({
-  name: "example/identity",
-  setup({ resource, routes }) {
-    const name = routes.action({
-      name: "name",
-      method: "GET",
-      path: "/identity",
-      output: t.String(),
-      execute: () => resource.name,
-    });
-    return { identity: { name } };
-  },
-});
-
-const page = service.resource({ name: "page", table: pages }).use(identity);
-await page.identity.name({});
-// GET /api/page/identity
-// Browser client: api.page.identity.name()
+// The returned resource is augmented with findBySlug:
+const found = await article.findBySlug("my-post-slug", ctx);
 ```
 
-Retain the `.use()` return value to use the inferred contributions. Plugins
-cannot replace resource properties or existing contributions. The supplied
-schema remains application-owned; this declaration does not create tables.
+## Plugin Design Principles
 
-## Route placement and exposure
-
-Route names are stable keys for consumer overrides. Both actions and raw
-endpoints accept a scope:
-
-- `service` mounts under the service name and is the service plugin default.
-- `resource` mounts under the resource name and is the resource plugin default.
-- `app` mounts directly under the configured app prefix.
-
-Service plugins cannot select resource scope. Override a route with
-`routes: { hello: { path: "/welcome", scope: "app" } }`, disable one with
-`routes: { hello: false }`, or disable all plugin bindings with `routes: false`.
-Unknown route keys fail installation. These controls apply to the descriptor's
-own routes. Dependencies have their own route controls.
-
-Disabling HTTP exposure leaves actions callable locally. Disabled bindings have
-no HTTP fallback route and disappear from OpenAPI and generated browser clients.
-Returned actions appear at their API paths in the browser contract. Exposed
-actions not returned by setup use their internal scoped action names instead.
-Raw endpoints appear in OpenAPI and use the framework's endpoint error handling.
-Method/path collisions involving plugin routes fail app construction.
-
-## Typed host requirements
-
-A callback declared before installation cannot infer its context from a later
-`.use()` call. Annotate setup with `ServicePluginContext<MyService>` when a
-plugin requires a particular service database or custom context. For resource
-requirements, use `ResourcePluginContext<MyService, MyResource>`.
-
-```ts
-import {
-  defineService,
-  defineServicePlugin,
-  t,
-  type ServicePluginContext,
-} from "@brickkit/core";
-
-const service = defineService("identity", {
-  context: () => ({ user: { id: "demo" } }),
-});
-type IdentityService = typeof service;
-
-const identity = defineServicePlugin({
-  name: "example/current-user",
-  setup({ routes }: ServicePluginContext<IdentityService>) {
-    const who = routes.action({
-      name: "who",
-      method: "GET",
-      path: "/who",
-      output: t.String(),
-      execute: ({ ctx }) => ctx.user.id,
-    });
-    return { who };
-  },
-});
-service.use(identity);
-```
-
-Raw handlers receive `{ request, params, query, body, headers, set, ctx }`.
-`ctx` is the resolved service context, including database, logger and custom
-context fields.
-
-## Installation identity and lifecycle
-
-Reuse a descriptor to reuse its installation on one host. Calling a factory
-again creates a different descriptor. Installing a different descriptor with
-an already installed name on that host fails, even if the options are equal.
-Installing the same resource descriptor on another resource is independent.
-
-Setup may install dependencies with `service.use()`. Cycles fail. Registration
-and resource contributions are restored when setup throws. External side
-effects and arbitrary user-object mutations are outside that transaction.
-Setup must be synchronous, and installation must finish before service build.
-Route registrars close after setup.
-
-## CRUD and table behavior
-
-`@brickkit/crud` is a resource plugin. Pass field permissions, hooks, access
-policies and route controls to `crud()`; the core resource declaration accepts
-only name, table and identifier. Plugins own the policies for their own table.
-
-The runnable `examples/extensions` comments factory is installed with
-`resource.use(comments({table}))` and returns a `comments` namespace. It uses
-the parent identifier to validate targets and installs CRUD on its explicit
-comment table. There is no published comments package.
-
-Plugins can specialize returned types for a host with the exported
-`ResourcePluginTypes` and `ResourcePluginAPI` protocol. Ordinary descriptors
-infer concrete setup return values without that protocol. The CRUD package uses
-the protocol to preserve table-specific field and operation types.
+1. **Synchronous Setup**: `setup()` must execute synchronously. Asynchronous connection initialization or network lookups are prohibited during registration.
+2. **Connection Flow**: Use `ctx.db` provided during request handling. Never create persistent connection pools inside plugin constructors.
+3. **Collision Avoidance**: Resource plugin contributions must not overwrite existing resource properties or prototype methods.
+4. **Isolated Descriptors**: Reinstalling a plugin with a different descriptor of the same name fails. Reuse descriptors when sharing instances.

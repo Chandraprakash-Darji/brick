@@ -1,0 +1,139 @@
+---
+title: Database Management & Migrations
+description: Configure SQLite and PostgreSQL databases, development sync, and production migrations.
+---
+
+Brick-TS provides database configuration handles for SQLite and PostgreSQL, with development table synchronization and caller-owned production migrations via Drizzle ORM.
+
+## Minimal Example
+
+Configure an in-memory SQLite database for local development and test:
+
+```ts title="src/database.ts"
+import { defineDatabase, sqliteTable, syncSchema, text } from "@brickkit/core";
+
+export const users = sqliteTable("users", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  email: text("email").notNull().unique(),
+});
+
+// Configure SQLite database handle
+export const database = defineDatabase({
+  tables: { users },
+});
+
+// Dev/test only: explicitly sync SQLite schema
+syncSchema({ users }, database.getDb());
+```
+
+## Configuring Databases (`defineDatabase`)
+
+`defineDatabase` creates a lazy, typed database handle. Connections are opened only when requested by services or runtime actions.
+
+### 1. SQLite Configuration
+
+The default database engine in Brick-TS is `sqlite`, running on Bun's high-performance native SQLite client (`bun:sqlite`):
+
+```ts title="src/db/sqlite.ts"
+import { defineDatabase } from "@brickkit/core";
+import { users, posts } from "./schema";
+
+export const sqliteDb = defineDatabase({
+  engine: "sqlite", // default
+  filename: "./data/app.db", // Omit for in-memory :memory:
+  wal: true, // Enable Write-Ahead Logging (default true)
+  foreignKeys: true, // Enforce foreign key constraints (default true)
+  tables: { users, posts },
+});
+```
+
+### 2. PostgreSQL Configuration
+
+Connect to PostgreSQL using the PostgresJS driver:
+
+```ts title="src/db/postgres.ts"
+import { defineDatabase, secret } from "@brickkit/core";
+import { users, posts } from "./schema";
+
+export const postgresDb = defineDatabase({
+  engine: "postgres",
+  url: secret("DATABASE_URL"), // Resolves from environment variable
+  ssl: process.env.NODE_ENV === "production",
+  tables: { users, posts },
+});
+```
+
+### Database Configuration Options Table
+
+| Option        | Engine   | Default      | Description                                                                                                    |
+| :------------ | :------- | :----------- | :------------------------------------------------------------------------------------------------------------- |
+| `engine`      | All      | `"sqlite"`   | `"sqlite"` or `"postgres"`.                                                                                    |
+| `tables`      | All      | `undefined`  | Record or array of Drizzle tables registered with the handle.                                                  |
+| `filename`    | SQLite   | `":memory:"` | Path to SQLite file on disk. Parent directories are created automatically.                                     |
+| `wal`         | SQLite   | `true`       | Enables Write-Ahead Logging for high-concurrency performance.                                                  |
+| `foreignKeys` | SQLite   | `true`       | Enforces SQLite foreign key constraints.                                                                       |
+| `url`         | Postgres | `undefined`  | PostgreSQL connection string URL (`postgres://...`) or `SecretRef`. Falls back to `DATABASE_URL` when omitted. |
+| `ssl`         | Postgres | `undefined`  | SSL mode or certificate configuration.                                                                         |
+
+## SQLite Schema Synchronization (`syncSchema`)
+
+For local development and unit tests, Brick provides an explicit schema preparation utility:
+
+```ts title="src/setup.ts"
+import { syncSchema } from "@brickkit/core";
+import { usersService } from "./services/users";
+
+// Automatically generates SQLite DDL and creates tables if they don't exist:
+syncSchema(usersService);
+```
+
+<Callout type="warn">
+  **Explicit Development Helper**: `syncSchema` is an explicit development and
+  test utility. Brick-TS **never** alters database schema automatically at
+  server boot. Do not call `syncSchema` in production environments.
+</Callout>
+
+## Production Schema Migrations (PostgreSQL)
+
+In production, database migrations are **caller-owned**. Manage migrations with Drizzle Kit:
+
+### 1. Configure Drizzle Kit
+
+Create `drizzle.config.ts` in your project root:
+
+```ts title="drizzle.config.ts"
+import { defineConfig } from "drizzle-kit";
+
+export default defineConfig({
+  schema: "./src/schema/**/*.ts",
+  out: "./drizzle",
+  dialect: "postgresql",
+  dbCredentials: {
+    url: process.env.DATABASE_URL!,
+  },
+});
+```
+
+### 2. Generate and Apply Migrations
+
+Use standard Drizzle Kit commands in your deployment pipeline:
+
+```bash
+# 1. Generate migration SQL files from schema diffs
+bunx drizzle-kit generate
+
+# 2. Apply pending migrations to the target database
+bunx drizzle-kit migrate
+```
+
+This workflow gives you full version control, rollback inspection, and zero runtime lock-in.
+
+## Secondary Indexes and Search Optimizations
+
+Brick-TS provides explicit opt-in helpers for secondary indexes and search
+(no indexes are created automatically — call these yourself):
+
+- **Secondary B-Tree Indexes**: `ensureResourceIndexes(db, table, { sortFields, ownerField })` creates indexes on hot lookup and sorting paths. Pass `searchFields` on PostgreSQL to also add `pg_trgm` GIN indexes for fast substring matching.
+- **SQLite FTS5 Full-Text Search**: `ensureSQLiteFts(db, table, searchCols)` builds an FTS5 sidecar virtual table with sync triggers for rapid text search queries.

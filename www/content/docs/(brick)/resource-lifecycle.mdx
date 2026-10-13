@@ -1,19 +1,14 @@
 ---
-title: Resource lifecycle
-description: Registration, preparation, and action execution
+title: Resource Lifecycle
+description: Lifecycle phases, preparation, and hooks for resources and services.
 ---
 
-A resource declaration records its table and identifier. `.use(crud(options))`
-registers enabled actions and route metadata during synchronous setup. Service
-build closes registration. Core does not generate CRUD plans.
+<Callout type="info">
+  This guide has been consolidated into **[Resources and
+  CRUD](/docs/resources)** and **[Lifecycle Hooks](/docs/hooks)**.
+</Callout>
 
-The compiler reads generic action bindings and preparation contributions. CRUD
-contributes schema descriptions and prepares stable query shapes. SQLite query
-caches are bounded and tied to the database instance. Parameter values remain
-bound rather than embedded in SQL. Scoped queries and dynamic defaults take the
-safe dynamic path. Both compiler modes run the same policies and scrubbers.
+Learn about resource identity, field policies, prepared statement optimizations, and CRUD mutation hooks.
 
-Execution validates input, resolves context, authorizes the operation, combines
-trusted row scope with caller filters, executes SQL, scrubs readable fields, and
-validates output. Write hooks can supply internal values without enabling caller
-writes. Query totals are optional. Nothing applies a migration or schema change.
+- See **[Resources and CRUD](/docs/resources)** for resource configuration and operations.
+- See **[Lifecycle Hooks](/docs/hooks)** for before and after write hooks.

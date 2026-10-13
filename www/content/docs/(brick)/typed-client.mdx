@@ -1,173 +1,157 @@
 ---
-title: Typed Client
-description: Automatically generated browser-safe types and routes from your Brick app
+title: Typed Client SDK
+description: Call backend actions with full end-to-end type safety in frontend applications without build-time codegen.
 ---
 
-The typed client provides autocomplete and compile-time input/output checking.
-The Vite plugin derives its contract from your app's registered services, so
-you define actions once and never maintain a second action list.
+The Brick-TS client SDK provides end-to-end typed HTTP communication between frontend applications and backend services without code generation.
 
-## Export your app
+## Minimal Example
 
-Any entry filename works; its default export must be a `BrickApp`. Use
-`brick({ services })` directly. The entry constructs the app without calling
-`.listen()`:
+The client is typed by a generated contract: browser-safe route metadata and transport types derived from your app. Your app entry must default-export a `BrickApp` created by `brick()` (without calling `.listen()`).
 
-```ts
-// src/api/app.ts
-import { brick } from "@brickkit/core";
-import { records, users } from "./services";
+Generate the contract with the Vite plugin, which writes `_brick/contract.ts` on dev startup and build and regenerates it when the app changes:
 
-export default brick({ prefix: "/v2", services: [records, users] });
-```
-
-## Add the Vite plugin
-
-```ts
+```ts title="vite.config.ts"
 import { defineConfig } from "vite";
 import { brickClient } from "@brickkit/cli/vite";
 
 export default defineConfig({
-  plugins: [
-    brickClient({ entry: "./src/api/app.ts" }),
-    // Your framework plugins follow.
-  ],
+  plugins: [brickClient({ entry: "./src/api/app.ts" })],
 });
 ```
 
-The plugin generates `_brick/contract.ts` at development startup, before the
-frontend loads, and during production builds. It reads the app's selected
-services and prefix. Changes to the app or its dependencies regenerate the
-contract, and Vite reloads its frontend consumers. Unchanged metadata leaves
-the generated file untouched, avoiding update loops.
+Or generate it without Vite:
 
-Add `_brick/` to `.gitignore`. Set `output` in the plugin options if you need
-another location. Generation evaluates the app entry, so configuration needed
-to construct the app must be available at startup and build time. This plugin
-uses Vite 8; no separate code-generation command is needed.
-Keep startup jobs and connection-opening initialization outside the app
-definition module, for example in request handlers or the server bootstrap.
-
-## Generate without Vite
-
-For another frontend framework or build tool, use the standalone Bun CLI with
-the same default-exported app:
-
-```sh
+```bash
 brick gen client src/api/app.ts
-# Or choose an output location:
+# default output: _brick/contract.ts
 brick gen client src/api/app.ts --output frontend/src/contract.ts
 ```
 
-The default output is `_brick/contract.ts` relative to the working directory.
-Vite is not required. Run generation before your frontend development server,
-production build, or type check, and rerun after backend definition edits.
-For example, add `"gen:client": "brick gen client src/api/app.ts"` to your
-package scripts and run `bun run gen:client` before your frontend command.
-The CLI uses the app's selected services and prefix, creates missing output
-directories, and skips rewriting unchanged contents. The same entry-evaluation
-and schema requirements described above apply.
+Then import `createBrickClient` from `@brickkit/core/client` (a browser-safe subpath) and pass the contract:
 
-## Call your API
-
-```ts
-// src/lib/api.ts
+```ts title="src/lib/api.ts"
 import { createBrickClient } from "@brickkit/core/client";
 import { contract } from "../../_brick/contract";
 
 export const api = createBrickClient({
-  baseUrl: "http://localhost:8085",
+  baseUrl: "http://localhost:4000",
   contract,
 });
 
-await api.records.get_value({ doctype: "CRMDeal", fields: ["name"] });
-// For the action path /v2/records/:doctype/value and method POST:
-// POST /v2/records/CRMDeal/value with { fields: ["name"] }
+// CRUD resources live at the root: api.<resource>.<operation>
+const response = await api.page.list({
+  where: { field: "title", op: "contains", value: "Launch" },
+  limit: 5,
+});
+
+console.log(response.items); // Typed from the resource's read fields
 ```
 
-The client infers its types directly from the generated contract. The file
-contains transport types and route metadata, with no runtime imports, backend
-handlers, service instances, or database code. It also exports `AppContract`
-when you need to refer to the complete contract type explicitly.
+Custom actions are grouped by service name (`api.<service>.<action>`), and dotted action names become nested namespaces. The contract carries each action's HTTP method and path, including CRUD routes and custom `path`/`method` overrides. GET and DELETE input is sent as a query string; other methods send JSON.
 
-Custom HTTP actions are grouped by service name; dotted names become nested
-namespaces. Resources use their names at the root (`api.page.create`,
-`api.page.list`, etc.) with their normal REST methods. MCP-only tools are absent;
-opt in with `http: true` or `service.action(tool)` to expose them over HTTP.
-Raw endpoints are outside the generated action client.
+## Client Configuration (`createBrickClient`)
 
-Schemas determine JSON transport types. Absent input/output schemas yield
-`unknown`; unresolved schema references and non-JSON transport types fail
-explicitly. Missing path parameters reject before sending a request. Parameter
-names follow the server's full-segment syntax, and values are URL-encoded.
+The client constructor accepts the following options:
 
-## Embedded servers such as TanStack Start
+| Option      | Type                                                                                          | Default            | Description                                                                                                                     |
+| :---------- | :-------------------------------------------------------------------------------------------- | :----------------- | :------------------------------------------------------------------------------------------------------------------------------ |
+| `baseUrl`   | `string`                                                                                      | _(Required)_       | Server origin (e.g. `"http://localhost:4000"`). Trailing slashes are trimmed.                                                   |
+| `contract`  | `Record<string, any>`                                                                         | `undefined`        | Generated contract. Without it, every call is `POST {prefix}/<service>/<action>`, so CRUD and custom-path routes won't resolve. |
+| `prefix`    | `string`                                                                                      | `"/api"`           | Route prefix used only for calls without contract metadata. Must match `brick({ prefix })`.                                     |
+| `headers`   | `Record<string, string> \| (() => Record<string, string> \| Promise<Record<string, string>>)` | `undefined`        | Static headers, or a function re-evaluated on every call.                                                                       |
+| `fetch`     | `(input, init) => Promise<Response>`                                                          | `globalThis.fetch` | Custom fetch implementation for tests, proxies, or `credentials: "include"`.                                                    |
+| `timeoutMs` | `number`                                                                                      | `undefined`        | Default per-call timeout in milliseconds (uses `AbortSignal.timeout`).                                                          |
+| `signal`    | `AbortSignal`                                                                                 | `undefined`        | Default abort signal for every call.                                                                                            |
 
-The same app runs inside your framework server. Import it through Vite's
-server-only module and forward the API requests your app owns:
+### Dynamic Authentication Headers
 
-```ts
-import app from "virtual:brick-app";
+Pass an async function to `headers` to attach dynamic authentication tokens to every outgoing request:
 
-export function handleBrickRequest(request: Request) {
-  return app.fetch(request);
-}
+```ts title="src/lib/api.ts"
+export const api = createBrickClient({
+  baseUrl: "https://api.example.com",
+  contract,
+  headers: async (): Promise<Record<string, string>> => {
+    const token = await getSessionToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  },
+});
 ```
 
-Add `/// <reference types="@brickkit/cli/vite/client" />` to `vite-env.d.ts` for
-its type declaration. The module tracks the app and its dependencies for hot
-reload and rejects browser imports. The Pages example keeps one TanStack Start
-app, with no separate API listener; its existing server entry forwards Brick
-paths and lets Start handle SSR and assets.
+## Per-Call Options
 
-### Errors
+Every client invocation accepts an optional second argument for request-specific headers, an abort signal, or a timeout. Per-call headers merge over the client defaults:
 
-One throw-based convention, mirroring local `action.execute` semantics (promises can't encode thrown types, so declared codes surface on the error object, not in the return type):
+```ts title="src/components/PageList.tsx"
+const controller = new AbortController();
 
-```ts
+const pages = await api.page.list(
+  { limit: 10 },
+  {
+    signal: controller.signal,
+    headers: { "X-Custom-Trace": "req_123" },
+  },
+);
+```
+
+Only one signal is applied per call, in this order: per-call `signal`, then the timeout signal (per-call `timeoutMs`, else the client `timeoutMs`), then the client `signal`. Passing both `signal` and `timeoutMs` on the same call ignores the timeout. Aborts are not wrapped: they reject with the native `AbortError`.
+
+## Error Handling
+
+When a request fails, the client rejects according to the response:
+
+- A body with a string `code` (declared errors, standard helpers, authorization failures) → `ActionExecutionError` with `code`, `status`, `message`, and `details`.
+- A body with `name: "ValidationError"` → `ValidationError` with `errors`.
+- Any other 5xx → `BrickServerError`; any other non-OK response, a network failure, or an unparsable body → `BrickTransportError`.
+
+`@brickkit/core/client` exports the client builder, the transport classes and
+guards, and the type utilities — but not `ActionExecutionError` or
+`ValidationError`, which live in the server entry `@brickkit/core`. In browser
+code, narrow them by `err.name` instead:
+
+```ts title="src/lib/fetch-user.ts"
 import {
-  ActionExecutionError,
-  ValidationError,
-  BrickTransportError,
-  BrickServerError,
+  type InferActionFailure,
+  isBrickServerError,
+  isBrickTransportError,
 } from "@brickkit/core/client";
+import { api } from "./api";
 
 try {
-  await api.page.create(input);
+  const user = await api.users.getUser({ id: "usr_99" });
 } catch (err) {
-  if (err instanceof ActionExecutionError) {
-    err.code; // The declared server error code.
-  } else if (err instanceof ValidationError) {
-    err.errors; // [{ path, message }] — same shape as local execution
-  } else if (err instanceof BrickServerError) {
-    err.status; // unexpected 5xx outside the declared contract
-  } else if (err instanceof BrickTransportError) {
-    err.status; // network failure or contract-external 4xx
-  } else if (err instanceof DOMException && err.name === "AbortError") {
-    // cancellation propagates unwrapped
+  if (err instanceof Error && err.name === "ActionExecutionError") {
+    // Domain error from the action (declared code or e.g. NOT_FOUND, FORBIDDEN)
+    const failure = err as InferActionFailure<unknown>;
+    console.error(`[${failure.code}] (${failure.status}): ${failure.message}`);
+    console.error("Details:", failure.details);
+  } else if (err instanceof Error && err.name === "ValidationError") {
+    // TypeBox schema validation failure
+    console.error("Validation error:", (err as any).errors);
+  } else if (isBrickServerError(err)) {
+    // 5xx without a Brick error shape
+    console.error("Server failure:", err.status, err.message);
+  } else if (isBrickTransportError(err)) {
+    // Network failure, unparsable body, or unrecognized 4xx
+    console.error("Transport failure:", err.status, err.message);
   }
 }
 ```
 
-`InferActionErrorCodes<AppContract["page"]["create"]>` gives the declared code union for a generated action when you need it in a type position.
+## Type Utilities
 
-### Options
+Extract static types directly from actions or client functions:
 
-```ts
-const api = createBrickClient({
-  baseUrl: "http://localhost:4000",
-  contract,
-  headers: () => ({ authorization: `Bearer ${getToken()}` }),
-  timeoutMs: 5000,
-  fetch: customFetch,
-});
+```ts title="src/types/client.ts"
+import type {
+  InferActionErrorCodes,
+  InferActionInput,
+  InferActionOutput,
+} from "@brickkit/core/client";
+import type { getUser } from "../server/users";
 
-await api.page.list(
-  { limit: 10 },
-  { signal, headers: { "x-trace-id": "tr_1" } },
-);
+export type GetUserInput = InferActionInput<typeof getUser>;
+export type GetUserOutput = InferActionOutput<typeof getUser>;
+export type GetUserErrorCodes = InferActionErrorCodes<typeof getUser>;
 ```
-
-The generated contract already includes the app's prefix. Without a runtime
-contract, the low-level client's conventional resource/action routes remain
-available, but custom paths cannot be inferred from types alone.

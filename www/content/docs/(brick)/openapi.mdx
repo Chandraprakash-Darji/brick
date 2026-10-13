@@ -1,47 +1,104 @@
 ---
-title: OpenAPI
-description: Live OpenAPI 3.1 spec served by the running server
+title: OpenAPI 3.1 & Interactive Documentation
+description: Generate OpenAPI 3.1 specifications and serve interactive Scalar and Swagger docs automatically.
 ---
 
-Brick-TS serves its OpenAPI 3.1 spec **live** from the running server — there is no offline emission step and no static spec file to check in.
+Brick-TS automatically generates compliant OpenAPI 3.1 JSON specifications from TypeBox schemas and serves interactive documentation via Scalar and Swagger UI.
 
-## Generating the spec in code
+## Minimal Example
 
-```ts
+Enable automatic documentation generation by passing services into `brick()`:
+
+```ts title="src/server.ts"
+import { brick, defineService, t } from "@brickkit/core";
+
+const usersService = defineService("users");
+
+usersService.action({
+  name: "getUser",
+  description: "Fetch user profile by ID",
+  method: "GET",
+  path: "/api/users/:id",
+  input: t.Object({ id: t.String() }),
+  output: t.Object({ id: t.String(), name: t.String() }),
+  execute: ({ input }) => ({ id: input.id, name: "Ada Lovelace" }),
+});
+
+export const app = brick({
+  services: [usersService],
+  title: "Users API",
+  version: "1.0.0",
+  description: "User management and profile service mesh",
+  prefix: "/api",
+});
+
+app.listen(4000);
+```
+
+Once started, the following endpoints are available (mounted at the app root, not under `prefix`):
+
+- **OpenAPI 3.1 Spec**: `http://localhost:4000/openapi.json`
+- **Scalar Modern UI**: `http://localhost:4000/docs`
+- **Swagger UI**: `http://localhost:4000/swagger`
+
+## Server Documentation Options
+
+Configure OpenAPI and documentation routes in `CreateServerOptions`:
+
+| Option        | Type                          | Default               | Description                                                                    |
+| :------------ | :---------------------------- | :-------------------- | :----------------------------------------------------------------------------- |
+| `docs`        | `boolean`                     | `true`                | Enables or disables OpenAPI spec and HTML documentation endpoints.             |
+| `title`       | `string`                      | `"Brick-TS API Mesh"` | API title in OpenAPI `info.title`.                                             |
+| `version`     | `string`                      | `"1.0.0"`             | API version in OpenAPI `info.version`.                                         |
+| `description` | `string`                      | `undefined`           | Overview description rendered in OpenAPI `info.description`.                   |
+| `openApiPath` | `string`                      | `"/openapi.json"`     | Path where raw OpenAPI 3.1 JSON is served.                                     |
+| `docsPath`    | `string`                      | `"/docs"`             | Path where Scalar interactive documentation is mounted.                        |
+| `swaggerPath` | `string`                      | `"/swagger"`          | Path where Swagger UI is mounted.                                              |
+| `reference`   | `boolean \| ReferenceOptions` | `false`               | Mounts an optional dedicated Scalar reference page (defaults to `/reference`). |
+
+### Mounting a Dedicated `/reference` Route
+
+For web apps that use `/docs` for product documentation (such as a documentation website), mount the API reference on `/reference`:
+
+```ts title="src/server.ts"
+const app = brick({
+  services: [usersService],
+  docs: true,
+  reference: {
+    path: "/reference",
+    title: "Platform API Reference",
+  },
+});
+```
+
+## Programmatic Spec Generation (`generateOpenApiSpec`)
+
+Generate specifications programmatically (e.g. for CI pipelines or static documentation sites) without starting an HTTP server:
+
+```ts title="scripts/generate-spec.ts"
 import { generateOpenApiSpec } from "@brickkit/core";
+import { usersService } from "../src/services/users";
 
 const spec = generateOpenApiSpec({
-  title: "Pages API",
-  version: "1.0.0",
-  description: "Public pages service",
+  title: "Production Platform API",
+  version: "2.0.0",
   prefix: "/api",
-  services: [pagesService], // defaults to every registered service
+  services: [usersService],
 });
+
+await Bun.write("dist/openapi.json", JSON.stringify(spec, null, 2));
+console.log("OpenAPI 3.1 spec written to dist/openapi.json");
 ```
 
-Options: `title` (default `"Brick-TS API Mesh"`), `version` (`"1.0.0"`), `description`, `prefix` (`"/api"`), `services`, `registry`. Each action exposes one operation at its configured `path` (default `/api/{service}/{action}`) and `method` (default `POST`). Custom paths replace the default action path; action names do not infer extra methods. Path parameters are documented as required parameters; `GET` and `DELETE` use query parameters for the remaining input. Actions with `authorize` advertise `bearerAuth`; per-action `errors:` entries become named response schemas.
+You can also use the CLI generator:
 
-## Served paths
-
-`brick` wires these automatically (all paths configurable via options):
-
-| Path                   | Content                                      |
-| ---------------------- | -------------------------------------------- |
-| `GET /openapi.json`    | The generated spec (raw endpoints merged in) |
-| `GET /docs`            | Scalar API reference (HTML)                  |
-| `GET /swagger`         | Swagger UI (HTML)                            |
-| `GET /_brick/services` | Architecture JSON (`exportArchitecture()`)   |
-
-```ts
-const app = brick({
-  services: [pagesService],
-  title: "Pages API",
-  version: "1.0.0",
-  // openApiPath: "/openapi.json", docsPath: "/docs", swaggerPath: "/swagger",
-  // docs: true, reference: false, // optional /reference page
-});
+```bash
+bunx brick gen openapi src/server.ts --output openapi.json
 ```
 
-Need a static snapshot for SDK generation? Fetch `/openapi.json` from a running instance in CI and save the result — the generator itself always runs against live service registrations.
+## Security Requirements in OpenAPI
 
-First-party frontends usually don't need the spec at all: the [Typed Client](/docs/typed-client) infers inputs, outputs, and error codes straight from your TypeScript contract with no codegen step.
+Brick automatically flags protected operations in the OpenAPI specification:
+
+- Actions with `authorize` guards advertise authentication requirements in their operation definition.
+- CRUD resources with `access !== "public"` automatically advertise security requirements while public CRUD resources omit them.

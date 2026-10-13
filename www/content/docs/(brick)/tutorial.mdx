@@ -1,0 +1,266 @@
+---
+title: "Tutorial: Building a REST API"
+description: Build a complete, production-ready REST API end to end with database models, CRUD, access control, and custom actions.
+---
+
+This tutorial walks through building a complete blog API featuring database models, CRUD resources, context resolvers, authorization policies, and custom business actions.
+
+<Steps>
+
+### Step 1: Project Setup and Dependencies
+
+Initialize a Bun project and install the Brick-TS packages:
+
+```bash
+mkdir blog-api && cd blog-api
+bun init -y
+bun add @brickkit/core @brickkit/crud @brickkit/cli
+```
+
+### Step 2: Define Database Models
+
+Declare tables for articles and comments using Drizzle schema builders in `src/schema.ts`:
+
+```ts title="src/schema.ts"
+import { integer, sqliteTable, text } from "@brickkit/core";
+
+export const articles = sqliteTable("articles", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  title: text("title").notNull(),
+  slug: text("slug").notNull().unique(),
+  body: text("body").notNull(),
+  authorId: text("author_id").notNull(),
+  views: integer("views").default(0).notNull(),
+});
+
+export const comments = sqliteTable("comments", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  targetId: text("target_id").notNull(),
+  authorId: text("author_id").notNull(),
+  body: text("body").notNull(),
+});
+```
+
+### Step 3: Configure Database and Service Context
+
+Create `src/service.ts` to configure the database handle and a context resolver that extracts the authenticated user from the HTTP `Authorization` header:
+
+```ts title="src/service.ts"
+import { defineDatabase, defineService } from "@brickkit/core";
+import { articles, comments } from "./schema";
+
+export interface User {
+  id: string;
+  role: "admin" | "author" | "reader";
+}
+
+// 1. Create a database handle
+export const database = defineDatabase({
+  tables: { articles, comments },
+});
+
+// 2. Define the service with a typed context resolver
+export const blogService = defineService("blog", {
+  database,
+  context: async (baseCtx) => {
+    const authHeader = baseCtx.request.headers.get("authorization");
+    if (!authHeader) return { user: null };
+
+    // In a real application, verify JWT or session token here
+    const token = authHeader.replace("Bearer ", "").trim();
+    if (token === "admin-token") {
+      return { user: { id: "usr_admin", role: "admin" as const } };
+    }
+    if (token === "author-token") {
+      return { user: { id: "usr_author", role: "author" as const } };
+    }
+    return { user: null };
+  },
+});
+```
+
+### Step 4: Add CRUD Resources with Access Policies
+
+Attach CRUD operations to `articles` with field policies, a before-create hook, and operation authorization in `src/resources.ts`. `authorId` has no `create` permission, so clients can't send it; the hook fills it in from the session:
+
+```ts title="src/resources.ts"
+import { ActionExecutionError } from "@brickkit/core";
+import { crud } from "@brickkit/crud";
+import { articles } from "./schema";
+import { blogService } from "./service";
+
+export const articleResource = blogService
+  .resource({
+    name: "article",
+    table: articles,
+    id: articles.id,
+  })
+  .use(
+    crud({
+      // CRUD is deny-by-default; an explicit access policy is required
+      access: {
+        authorize: ({ operation, ctx }) => {
+          // Public reads
+          if (
+            operation === "list" ||
+            operation === "get" ||
+            operation === "findOne"
+          ) {
+            return true;
+          }
+          // Only authenticated authors or admins can write
+          return !!ctx.user;
+        },
+      },
+      fields: {
+        id: { read: true, filter: ["eq", "in"] },
+        title: {
+          read: true,
+          create: true,
+          update: true,
+          filter: ["contains"],
+          sort: true,
+        },
+        slug: { read: true, create: true, filter: ["eq"] },
+        body: { read: true, create: true, update: true },
+        authorId: { read: true, filter: ["eq"] },
+        views: { read: true, sort: true },
+      },
+      hooks: {
+        beforeCreate: async ({ data, ctx, error }) => {
+          if (!ctx.user)
+            return error.UNAUTHORIZED(
+              "Authentication required to create articles",
+            );
+          // authorId isn't writable by clients; set it from the session
+          data.authorId = ctx.user.id;
+        },
+      },
+    }),
+  );
+```
+
+### Step 5: Add a Custom Business Action
+
+Add a custom action for incrementing article views. Actions provide full TypeBox schema validation and custom error helpers:
+
+```ts title="src/actions.ts"
+import { eq, sql, t } from "@brickkit/core";
+import { articles } from "./schema";
+import { blogService } from "./service";
+
+export const incrementView = blogService.action({
+  name: "incrementView",
+  description: "Atomically increment the view counter for an article",
+  method: "POST",
+  path: "/api/blog/articles/:id/view",
+  input: t.Object({
+    id: t.String(),
+  }),
+  output: t.Object({
+    id: t.String(),
+    views: t.Number(),
+  }),
+  execute: async ({ input, ctx, error }) => {
+    const updated = await ctx.db
+      .update(articles)
+      .set({ views: sql`${articles.views} + 1` })
+      .where(eq(articles.id, input.id))
+      .returning({ id: articles.id, views: articles.views });
+
+    if (!updated.length) {
+      error.NOT_FOUND(`Article with ID '${input.id}' not found`);
+    }
+
+    return updated[0];
+  },
+});
+```
+
+### Step 6: Start the Server
+
+Create the server entry in `src/server.ts`, sync the SQLite schema, and start the application:
+
+```ts title="src/server.ts"
+import { brick, syncSchema } from "@brickkit/core";
+import { blogService } from "./service";
+import "./resources";
+import "./actions";
+
+// Prepare SQLite database tables in development
+syncSchema(blogService);
+
+export const app = brick({
+  services: [blogService],
+  title: "Blog API Mesh",
+  version: "1.0.0",
+});
+
+export default app;
+```
+
+Run the server with the `brick` CLI:
+
+```bash
+bunx brick dev src/server.ts --port 4000
+```
+
+`syncSchema()` creates the tables of resources registered on the service (here, `articles`) with `CREATE TABLE IF NOT EXISTS`. It's a development helper, not a migration runner.
+
+### Step 7: Verify with Requests
+
+CRUD routes are mounted under the resource name (`/api/article`), while the custom action uses the `path` you declared.
+
+#### 1. Create an Article (Authorized)
+
+```bash
+curl -X POST http://localhost:4000/api/article \
+  -H "Authorization: Bearer author-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Getting Started with Brick-TS",
+    "slug": "getting-started-with-brick-ts",
+    "body": "Brick-TS makes building backend services fast and safe."
+  }'
+```
+
+Without the `Authorization` header, `authorize` returns `false` and the request fails with `403` and code `FORBIDDEN`.
+
+#### 2. Increment Article View (Custom Action)
+
+```bash
+curl -X POST http://localhost:4000/api/blog/articles/YOUR_ARTICLE_ID/view
+```
+
+The `:id` path parameter becomes `input.id`, so no body is needed.
+
+#### 3. List Articles (Public Read)
+
+```bash
+curl -X POST http://localhost:4000/api/article/query \
+  -H "Content-Type: application/json" \
+  -d '{"limit": 5, "orderBy": [{"field": "views", "direction": "desc"}]}'
+```
+
+</Steps>
+
+## Related Topics
+
+<Cards>
+  <Card title="Services & Actions" href="/docs/services-and-actions">
+    Explore the full action definition API and error helpers.
+  </Card>
+  <Card title="Access Control" href="/docs/access-control">
+    Configure role-based access and row scoping for multi-tenant applications.
+  </Card>
+  <Card title="Relational Data Modeling" href="/docs/relations">
+    Learn patterns for child tables, joins, and parent-child cascades.
+  </Card>
+  <Card title="Typed Client" href="/docs/typed-client">
+    Consume this API with end-to-end type safety from React or Next.js.
+  </Card>
+</Cards>

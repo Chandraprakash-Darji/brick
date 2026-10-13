@@ -1,13 +1,13 @@
 ---
-title: Singleton records
-description: Model singleton constraints in the database
+title: Singleton Records
+description: Model singleton constraints and single-row tables in the database.
 ---
 
-Use database uniqueness constraints to express one record per application or
-owner. CRUD does not infer singleton behavior from names. Install CRUD with
-explicit field policies and use `findOne` for lookup, which returns null when no
-record matches. Configure trusted access scopes for per-user records.
+<Callout type="info">
+  This guide has been moved to **[Relational Data Modeling &
+  Joins](/docs/relations)**.
+</Callout>
 
-A unique constraint remains necessary when concurrent requests create rows.
-A before-create lookup alone cannot enforce uniqueness. More specialized
-singleton behavior can be packaged as a resource plugin.
+In Brick-TS, singleton configuration rows are enforced using standard database uniqueness constraints and retrieved via `findOne`.
+
+Please see the canonical guide: **[Relational Data Modeling & Joins](/docs/relations)**.

@@ -1,16 +1,15 @@
 {
-  "title": "Extensions",
-  "description": "Extend brick-ts with hooks, actions, and raw endpoints",
+  "title": "Plugins",
+  "description": "Extend services and resources with modular plugins",
   "icon": "Plug",
   "root": true,
-  "defaultOpen": true,
   "pages": [
     "index",
-    "---Built-in---",
+    "---Built-in & Recipes---",
     "built-in",
     "audit",
     "comments",
-    "---Build Your Own---",
+    "---Authoring---",
     "build-plugin",
     "best-practices"
   ]

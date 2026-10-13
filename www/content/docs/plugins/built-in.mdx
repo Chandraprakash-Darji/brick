@@ -1,83 +1,108 @@
 ---
 title: Built-in Capabilities
-description: Request logging, docs, health, and architecture export from brick
+description: Explore built-in framework plugins for CRUD, request logging, and interactive documentation.
 ---
 
-These ship with `@brickkit/core` — no install step, just `brick()`
-options. They are framework behavior, not add-on packages.
+Brick-TS ships with built-in capabilities and plugins for declarative database operations, request timing, health checks, and API documentation.
 
-## Request logging
+## The CRUD Plugin (`@brickkit/crud`)
 
-On by default. Every route is timed and logged via the `requestLoggingPlugin`:
+The primary resource plugin in Brick-TS is `crud()`, published in `@brickkit/crud`. It installs declarative, field-guarded operations onto any table resource:
 
-```ts
+```ts title="src/services/catalog.ts"
+import {
+  defineDatabase,
+  defineService,
+  sqliteTable,
+  text,
+} from "@brickkit/core";
+import { crud } from "@brickkit/crud";
+
+export const products = sqliteTable("products", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull(),
+  price: text("price").notNull(),
+});
+
+const database = defineDatabase({ tables: { products } });
+const service = defineService("catalog", { database });
+
+// Install the CRUD plugin onto the product resource:
+export const product = service
+  .resource({ name: "product", table: products, id: products.id })
+  .use(
+    crud({
+      access: "public",
+      fields: {
+        id: { read: true, filter: ["eq", "in"] },
+        name: {
+          read: true,
+          create: true,
+          update: true,
+          filter: ["contains"],
+          sort: true,
+        },
+        price: { read: true, create: true, update: true },
+      },
+    }),
+  );
+```
+
+For full field policy options, query filter syntax, and operations control, see **[Resources and CRUD](/docs/resources)**.
+
+## Request Logging Plugin
+
+Request timing and logging are enabled by default in `brick()`. Every incoming route is measured and logged with status code and duration:
+
+```ts title="src/server.ts"
 import { brick } from "@brickkit/core";
 
-const app = brick({ requestLogging: true });
-```
-
-Pass an options object to tune it, or `false` to disable.
-
-## Scalar reference + Swagger UI
-
-Interactive docs are served from the live OpenAPI spec:
-
-```ts
+// Enabled by default:
 const app = brick({
-  docs: true, // GET /openapi.json, /docs (Scalar), /swagger
-  reference: { path: "/reference", title: "Pages API" },
+  requestLogging: true,
+});
+
+// Or customize options:
+const customApp = brick({
+  requestLogging: {
+    enabled: true,
+    logger: (msg) => console.log(msg),
+  },
 });
 ```
 
-- `GET /openapi.json` — generated OpenAPI 3.1 spec covering the action mesh
-  plus every `app.endpoint()` raw route.
-- `GET /docs` — Scalar API reference.
-- `GET /swagger` — Swagger UI.
-- `GET /reference` — opt-in second Scalar mount (used by the pages example).
+To disable logging entirely, pass `requestLogging: false`.
 
-## Health
+## Interactive API Documentation
 
-```text
-# Always mounted:
-GET /_health  # { status: "ok", uptime, timestamp }
+Interactive documentation is built into `brick()` and requires no separate middleware:
+
+- **Scalar API Docs**: Modern documentation available at `/docs` (e.g. `http://localhost:4000/docs`).
+- **Swagger UI**: Traditional Swagger documentation available at `/swagger` (e.g. `http://localhost:4000/swagger`).
+- **Raw OpenAPI 3.1 Spec**: Machine-readable specification at `/openapi.json`.
+
+These documentation routes mount at the root and are not affected by `prefix`.
+
+For configuration options and mounting custom reference routes, see **[OpenAPI 3.1 & Interactive Documentation](/docs/openapi)**.
+
+## Diagnostics & Health Check (`/_health`)
+
+Every Brick server automatically mounts a diagnostics route at `/_health`:
+
+```bash
+curl http://localhost:4000/_health
 ```
 
-## Architecture export
+Response:
 
-```text
-GET /_brick/services  # introspected services, actions, resources
+```json
+{
+  "status": "ok",
+  "uptime": 12.45,
+  "timestamp": 1728821400000
+}
 ```
 
-Use it to verify what the mesh actually mounted, or to feed client codegen.
-
-## Secrets
-
-Declare env vars with `secret()` from `@brickkit/core`; boot validates them
-before serving anything:
-
-```ts
-import { secret } from "@brickkit/core";
-
-export const portSecret = secret("PORT").default("3333").transform(Number);
-export const databaseUrlSecret = secret("DATABASE_URL");
-
-const app = brick({
-  port: portSecret.require(),
-  secrets: { validate: true }, // fail fast on missing required secrets
-});
-```
-
-## MCP routes in the pages example
-
-The pages example (`examples/pages`) mounts an MCP bearer transport on the
-same app as the action mesh — plain Elysia routes plus a raw endpoint, not a
-plugin package:
-
-- `POST /mcp` — MCP JSON-RPC transport for the 11 page tools
-  (`tools/list`, `tools/call`), bearer-protected via JWT.
-- `GET /.well-known/oauth-protected-resource/mcp` — OAuth discovery metadata.
-- `GET /p/:slug` — raw HTML page viewer via `app.endpoint({ method: "GET",
-path: "/p/:slug", service: pagesService, handler })`, with cache headers
-  set through `ctx.set.headers`.
-
-See `examples/pages/src/api/mcp.ts` and `examples/pages/src/api/app.ts` for the wiring.
+This endpoint is ideal for Kubernetes liveness/readiness probes, Docker health checks, and load balancer pinging.
