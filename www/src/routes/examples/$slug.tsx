@@ -36,9 +36,9 @@ function Section({
   title,
   children,
 }: {
-  id: string;
-  title: string;
-  children: React.ReactNode;
+  readonly id: string;
+  readonly title: string;
+  readonly children: React.ReactNode;
 }) {
   return (
     <section id={id} className="scroll-mt-28 border-t pt-10">

@@ -44,10 +44,10 @@ function Tree({
   selected,
   onSelect,
 }: {
-  node: TreeNode;
-  depth: number;
-  selected: string;
-  onSelect: (path: string) => void;
+  readonly node: TreeNode;
+  readonly depth: number;
+  readonly selected: string;
+  readonly onSelect: (path: string) => void;
 }) {
   return (
     <ul>
@@ -100,8 +100,8 @@ export function SourceBrowser({
   slug,
   entry,
 }: {
-  slug: string;
-  entry: string;
+  readonly slug: string;
+  readonly entry: string;
 }) {
   const [files, setFiles] = React.useState<ExampleSource[]>();
   const [selected, setSelected] = React.useState(entry);

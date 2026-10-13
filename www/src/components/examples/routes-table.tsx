@@ -1,7 +1,11 @@
 import type { ExampleService } from "@/lib/examples";
 
 /** Actions with their HTTP route and access policy, one table per service. */
-export function RoutesTable({ services }: { services: ExampleService[] }) {
+export function RoutesTable({
+  services,
+}: {
+  readonly services: ExampleService[];
+}) {
   return (
     <div className="space-y-8">
       {services.map((service) => (

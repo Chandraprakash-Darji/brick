@@ -23,7 +23,7 @@ export function DatabaseTable({ name, columns }: ExampleTable) {
                   {column.type}
                 </td>
                 <td className="px-4 py-1.5 text-right text-gopher-ink">
-                  {column.primary ? "PK" : column.notNull ? "NOT NULL" : ""}
+                  {keyBadge(column)}
                 </td>
               </tr>
             ))}
@@ -32,4 +32,10 @@ export function DatabaseTable({ name, columns }: ExampleTable) {
       )}
     </figure>
   );
+}
+
+function keyBadge(column: { primary: boolean; notNull: boolean }) {
+  if (column.primary) return "PK";
+  if (column.notNull) return "NOT NULL";
+  return "";
 }

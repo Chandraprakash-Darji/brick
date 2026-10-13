@@ -68,26 +68,34 @@ interface ExampleMeta {
 }
 
 async function walk(dir: string, root: string, out: string[] = []) {
-  for (const entry of await readdir(dir, { withFileTypes: true })) {
-    if (entry.isDirectory()) {
-      if (!SKIP_DIRS.has(entry.name))
-        await walk(join(dir, entry.name), root, out);
-    } else if (!SKIP_FILES.has(entry.name) && !entry.name.endsWith(".gen.ts")) {
-      out.push(relative(root, join(dir, entry.name)));
-    }
-  }
+  const entries = await readdir(dir, { withFileTypes: true });
+  await Promise.all(
+    entries.map(async (entry) => {
+      if (entry.isDirectory()) {
+        if (!SKIP_DIRS.has(entry.name))
+          await walk(join(dir, entry.name), root, out);
+      } else if (
+        !SKIP_FILES.has(entry.name) &&
+        !entry.name.endsWith(".gen.ts")
+      ) {
+        out.push(relative(root, join(dir, entry.name)));
+      }
+    }),
+  );
   return out;
 }
 
 async function collectSources(dir: string) {
-  const files: { path: string; lang: string; code: string }[] = [];
-  for (const path of (await walk(dir, dir)).sort()) {
-    const lang = LANGS[extname(path)];
-    if (!lang || path.startsWith(".env")) continue;
-    if ((await stat(join(dir, path))).size > MAX_FILE_BYTES) continue;
-    files.push({ path, lang, code: await readFile(join(dir, path), "utf8") });
-  }
-  return files;
+  const paths = (await walk(dir, dir)).sort((a, b) => a.localeCompare(b));
+  const files = await Promise.all(
+    paths.map(async (path) => {
+      const lang = LANGS[extname(path)];
+      if (!lang || path.startsWith(".env")) return undefined;
+      if ((await stat(join(dir, path))).size > MAX_FILE_BYTES) return undefined;
+      return { path, lang, code: await readFile(join(dir, path), "utf8") };
+    }),
+  );
+  return files.filter((file) => file !== undefined);
 }
 
 function loadArchitecture(dir: string, entry: string) {
@@ -125,11 +133,10 @@ await rm(outDir, { recursive: true, force: true });
 await mkdir(join(outDir, "examples"), { recursive: true });
 await mkdir(join(outDir, "sources"), { recursive: true });
 
-let count = 0;
-for (const slug of (await readdir(examplesDir)).sort()) {
+async function processExample(slug: string) {
   const dir = join(examplesDir, slug);
   const metaPath = join(dir, "brick.example.json");
-  if (!existsSync(metaPath)) continue;
+  if (!existsSync(metaPath)) return false;
   const meta: ExampleMeta = JSON.parse(await readFile(metaPath, "utf8"));
   for (const key of ["title", "description", "entry"] as const) {
     if (!meta[key]) throw new Error(`${metaPath}: "${key}" is required`);
@@ -155,6 +162,10 @@ for (const slug of (await readdir(examplesDir)).sort()) {
     JSON.stringify(sources),
   );
   console.log(`[examples] ${slug}: ${sources.length} files`);
-  count++;
+  return true;
 }
-if (count === 0) throw new Error("no examples/*/brick.example.json found");
+
+const slugs = (await readdir(examplesDir)).sort((a, b) => a.localeCompare(b));
+const processed = await Promise.all(slugs.map((slug) => processExample(slug)));
+if (!processed.some(Boolean))
+  throw new Error("no examples/*/brick.example.json found");

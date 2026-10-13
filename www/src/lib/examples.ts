@@ -83,8 +83,11 @@ export function loadExampleSources(slug: string) {
   return load ? load() : Promise.resolve([]);
 }
 
-export const exampleGitHubUrl = (slug: string, path?: string) =>
-  `${site.repo}/${path ? "blob" : "tree"}/main/examples/${slug}${path ? `/${path}` : ""}`;
+export const exampleGitHubUrl = (slug: string, path?: string) => {
+  const kind = path ? "blob" : "tree";
+  const suffix = path ? `/${path}` : "";
+  return `${site.repo}/${kind}/main/examples/${slug}${suffix}`;
+};
 
 export const exampleCloneCommand = (slug: string) =>
   `git clone ${site.repo}.git && cd brick/examples/${slug}`;

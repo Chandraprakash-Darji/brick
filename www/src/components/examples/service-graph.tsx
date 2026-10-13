@@ -44,12 +44,12 @@ function Node({
   detail,
   strong,
 }: {
-  x: number;
-  y: number;
-  width: number;
-  label: string;
-  detail?: string;
-  strong?: boolean;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly label: string;
+  readonly detail?: string;
+  readonly strong?: boolean;
 }) {
   // Monospace 11px is about 6.6px per character; leave room for the detail.
   const maxChars = Math.floor(
@@ -92,7 +92,11 @@ function Node({
  * Static SVG of an architecture export: each service sits between its
  * database tables and its resources and standalone actions.
  */
-export function ServiceGraph({ services }: { services: ExampleService[] }) {
+export function ServiceGraph({
+  services,
+}: {
+  readonly services: ExampleService[];
+}) {
   const layout = services.map((service) => {
     const items = itemsOf(service);
     const rows = Math.max(service.tables.length, items.length, 1);
@@ -102,7 +106,7 @@ export function ServiceGraph({ services }: { services: ExampleService[] }) {
     ...block,
     y: 24 + layout.slice(0, i).reduce((sum, b) => sum + b.height + GAP, 0),
   }));
-  const last = blocks[blocks.length - 1];
+  const last = blocks.at(-1);
   const height = last ? last.y + last.height + 8 : 32;
 
   return (
