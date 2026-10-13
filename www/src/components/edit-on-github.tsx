@@ -15,7 +15,6 @@ export function EditOnGitHub({
       href={`${repoUrl}/edit/${gitConfig.branch}/${path}`}
       target="_blank"
       rel="noreferrer noopener"
-      data-umami-event="docs-edit-github"
       onClick={(e) => {
         onClick?.(e);
         trackEvent("docs-edit-github", { path });

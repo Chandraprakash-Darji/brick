@@ -47,8 +47,6 @@ function Examples() {
               key={example.slug}
               to="/examples/$slug"
               params={{ slug: example.slug }}
-              data-umami-event="example-open"
-              data-umami-event-slug={example.slug}
               onClick={() => trackEvent("example-open", { slug: example.slug })}
               className="group flex flex-col rounded-lg border bg-card p-6 transition-colors hover:border-foreground/25"
             >

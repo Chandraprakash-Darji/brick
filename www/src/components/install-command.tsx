@@ -64,7 +64,6 @@ export function InstallCommand({
     <button
       type="button"
       aria-label={`Copy "${command}"`}
-      data-umami-event="copy-install-command"
       onClick={() =>
         void navigator.clipboard.writeText(command).then(() => {
           trackEvent("copy-install-command", { command });
