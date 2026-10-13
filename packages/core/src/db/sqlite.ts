@@ -1,7 +1,9 @@
 import type { Database } from "bun:sqlite";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 
-import { loadDriver } from "./load";
+import { createRequire } from "node:module";
+
+const requireSQLite = createRequire(import.meta.url);
 
 export type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 
@@ -57,7 +59,7 @@ export function createSQLiteDatabase<
     config?: { schema?: TSchema },
   ) => BunSQLiteDatabase<TSchema>;
   try {
-    ({ Database } = loadDriver("bun:sqlite"));
+    ({ Database } = requireSQLite("bun:sqlite"));
     // Keep the adapter lazy for Node imports, but visible to Bun's bundler.
     ({ drizzle } = require("drizzle-orm/bun-sqlite"));
   } catch (err: any) {
