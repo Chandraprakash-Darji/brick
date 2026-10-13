@@ -2,6 +2,21 @@ import type { RouteIR } from "./ir";
 import type { HandlerFactory } from "./runtime";
 import type { ActionContext } from "../types";
 
+function coerceQueryValue(
+  value: unknown,
+  type: RouteIR["coercions"][number]["type"],
+) {
+  if (type === "number" && value !== undefined) {
+    const number = Number(value);
+    return Number.isNaN(number) ? value : number;
+  }
+  if (type === "boolean") {
+    if (value === "true" || value === "1") return true;
+    if (value === "false" || value === "0") return false;
+  }
+  return value;
+}
+
 /** Bind route metadata with ordinary closures; emitted factories remain build-only. */
 export function createHandlerFactory(route: RouteIR): HandlerFactory {
   return (binding, runtime) => {
@@ -24,15 +39,8 @@ export function createHandlerFactory(route: RouteIR): HandlerFactory {
           if (query && route.coercions.length) {
             coercedQuery = { ...query };
             for (const { key, type } of route.coercions) {
-              const value = query[key];
-              if (type === "number" && value !== undefined) {
-                const number = Number(value);
-                if (!Number.isNaN(number)) coercedQuery[key] = number;
-              } else if (type === "boolean") {
-                if (value === "true" || value === "1") coercedQuery[key] = true;
-                else if (value === "false" || value === "0")
-                  coercedQuery[key] = false;
-              }
+              if (query[key] !== undefined)
+                coercedQuery[key] = coerceQueryValue(query[key], type);
             }
           }
           let input = readLike
