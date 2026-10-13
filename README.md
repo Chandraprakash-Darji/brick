@@ -1,67 +1,115 @@
+<div align="center">
+  <picture>
+    <source srcset="./banner-dark.svg" media="(prefers-color-scheme: dark)"/>
+    <source srcset="./banner-light.svg" media="(prefers-color-scheme: light)"/>
+    <img src="./banner-light.svg" alt="Brick logo" width="160"/>
+  </picture>
+
+[![npm](https://img.shields.io/npm/dm/@brickkit/core?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/@brickkit/core)
+[![npm version](https://img.shields.io/npm/v/@brickkit/core.svg?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/@brickkit/core)
+[![GitHub stars](https://img.shields.io/github/stars/Chandraprakash-Darji/brick?style=flat&colorA=000000&colorB=000000)](https://github.com/Chandraprakash-Darji/brick/stargazers)
+
+  <p>
+    <a href="https://github.com/Chandraprakash-Darji/brick/issues">Issues</a>
+    ·
+    <a href="./CONTRIBUTING.md">Contributing</a>
+    ·
+    <a href="https://github.com/Chandraprakash-Darji/brick/releases">Releases</a>
+  </p>
+</div>
+
 # Brick-TS
 
-_High-Throughput, Logical-Monolith / Physical-Microservices TypeScript Platform_
+Brick-TS is a TypeScript backend framework on Bun. You define services with validated actions, mount them with `brick()`, and get an Elysia HTTP server with OpenAPI output and a typed client.
 
-Powered by **Bun (Rust core)** + **Elysia (AOT routing)** + **Better Auth** + **Drizzle ORM**.
+The framework runs on Bun, Elysia, TypeBox, and Drizzle ORM. The pages example adds Better Auth and Postgres.
 
-Install the public packages:
+## Install
+
+You need Bun 1.2 or later.
 
 ```sh
 bun add @brickkit/core @brickkit/cli @brickkit/crud
 ```
 
-The full pages app lives in `examples/pages` and uses local workspace packages,
-including the typed SDK. Try framework changes without publishing to npm:
+## Build a minimal API
+
+Define a service, mount it, and start the server.
+
+```ts
+import { brick, defineAction, defineService } from "@brickkit/core";
+
+const healthService = defineService("system");
+const ping = defineAction({
+  name: "ping",
+  execute: async () => ({ status: "ok" }),
+});
+healthService.action(ping);
+
+const app = brick({ services: [healthService] });
+app.listen(4000);
+```
+
+This serves `POST /api/system/ping`.
+
+Inspect the same app without starting it:
+
+```sh
+brick gen openapi src/app.ts --output openapi.json
+brick info src/app.ts
+```
+
+The entry module must default-export the `BrickApp` and must not call `.listen()` inside it. Keep the listener in a separate bootstrap file. The CLI reference is in `packages/cli/README.md`.
+
+## Packages
+
+| Package          | Directory        | What it holds                                                                                |
+| ---------------- | ---------------- | -------------------------------------------------------------------------------------------- |
+| `@brickkit/core` | `packages/core/` | Services, actions, the `brick()` server, and the typed client at `@brickkit/core/client`.    |
+| `@brickkit/crud` | `packages/crud/` | Opt-in CRUD plugin with field policies, filtering, and hooks.                                |
+| `@brickkit/cli`  | `packages/cli/`  | The `brick` binary: `dev`, `start`, `build`, `gen`, and `info`, plus the Vite client plugin. |
+
+The full app is in `examples/pages/`. It mounts the API in process with TanStack Start and uses workspace packages directly. The docs site is in `www/`, with content in `www/content/docs`.
+
+## Develop and test
 
 ```sh
 bun install
+bun test packages bench
 bun run pages:dev
+```
+
+`bun test packages bench` runs the framework and benchmark tests without Postgres. `bun run pages:dev` builds the framework and starts the combined web and API server on port 5174. Rerun it after you change framework code.
+
+The pages suite needs Postgres. It is documented in `examples/pages/README.md`.
+
+```sh
 bun run pages:typecheck
 TEST_DATABASE_URL=postgresql://localhost:5432/drafton_test bun run pages:test
 ```
 
-Pages requires Postgres; see [its setup and test instructions](examples/pages/README.md).
-`pages:dev` builds the framework and starts the combined web/API server on :5174.
-Rerun it after changing framework code. `bun run test` runs the framework and
-benchmark tests; the Postgres-backed app suite runs separately via `pages:test`.
+Run the full gate before you push:
 
-To release new versions from a clean, up-to-date `main` checkout:
+```sh
+bun run check
+```
+
+`bun run check` runs lint, format check, build, typecheck, and tests. Each package also has `lint`, `lint:fix`, `format`, and `format:check`. Shared config lives in `.oxlintrc.json` and `.oxfmtrc.json`.
+
+## Release
+
+Releases run from a clean, up-to-date `main` checkout:
 
 ```sh
 bun run release patch
 ```
 
-The release script bumps versions, builds and tests the packages, then pushes
-`v<version>`, with core and CLI sharing the same version. GitHub Actions publishes
-both packages to npm, then creates one GitHub release with notes grouped by package. The
-**Publish to npm** workflow can also be run manually from `main`. It defaults to
-`patch` (with `minor` and `major` available), runs the same release script, and
-pushes a version commit updating both package manifests, the CLI's core dependency,
-and `bun.lock`. It then publishes that exact commit and creates its GitHub release
-in the same workflow run. `dry_run` previews the bump and validates the tarballs
-without committing, tagging, pushing, or publishing. To retry a failed publish,
-rerun the failed jobs so they reuse the prepared release version.
+The script in `scripts/release.ts` bumps all three packages to one version and pushes one `v<version>` tag. The `publish-npm.yml` workflow publishes the packages and creates the GitHub release. `dry_run` previews the bump and validates tarballs without publishing. Beta releases run from the `beta` branch.
 
-For token-free publishing, configure a trusted publisher in each npm package's
-settings: owner `Chandraprakash-Darji`, repository `brick`, workflow `publish-npm.yml`, with
-`npm publish` allowed. The initial publish can use the repository's `NPM_TOKEN`
-secret with write access to the `@brickkit` scope.
+## Star history
 
-For local development, run `bun install`; it installs Lefthook's Git hooks.
-Before committing, the hooks check staged whitespace, formatting with Oxfmt,
-and lint with Oxlint. Package, example, or benchmark changes also run tests.
-Before pushing, the hooks check repository formatting and lint, build both
-packages, check package and benchmark types, and run all tests.
-Website changes also run its lint and type checks. The website is part of the
-Bun workspace, so the root `bun install` manages all dependencies with one
-`bun.lock`.
+[![Star History Chart](https://api.star-history.com/svg?repos=Chandraprakash-Darji/brick&type=date&legend=top-left)](https://www.star-history.com/?repos=Chandraprakash-Darji%2Fbrick&type=date&legend=top-left)
 
-Run `bun run check` for the package checks, or
-`bunx --no-install lefthook run pre-push --all-files` to include website checks.
+## Contribute
 
-Every package, example, and the website provides `bun run lint`,
-`bun run lint:fix`, `bun run format`, and `bun run format:check`. Run these from the
-package directory, or from the repository root to check or format everything.
-Shared configuration lives in `.oxlintrc.json` and `.oxfmtrc.json`; the website
-also enables its React and import lint rules. Generated files and build output
-are excluded. Commit hooks report formatting issues; run `bun run format` to fix them.
+Read `CONTRIBUTING.md` for setup, checks, and hook behavior. Small starter tasks carry the `good first issue` label. The project is MIT licensed.

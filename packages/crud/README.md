@@ -4,16 +4,20 @@ Opt-in auto-CRUD resource plugin for Brick-TS. Core resources declare identity
 and a table but register no actions; `crud()` adds typed list/get/create/
 update/delete/findOne/count/exists operations with HTTP routes.
 
+You need Bun 1.2 or later and `@brickkit/core` as a peer dependency.
+
 ```sh
-bun add @brickkit/crud
+bun add @brickkit/crud @brickkit/core
 ```
 
 ```ts
 import { defineService } from "@brickkit/core";
 import { crud } from "@brickkit/crud";
 
+const service = defineService("pages");
 const page = service.resource({ name: "page", table: pages, id: pages.id }).use(
   crud({
+    access: "public",
     fields: {
       id: { read: true, filter: ["eq", "in"] },
       title: {
@@ -29,6 +33,9 @@ const page = service.resource({ name: "page", table: pages, id: pages.id }).use(
 
 await page.list.run({ where: { field: "title", op: "contains", value: "Hi" } });
 ```
+
+`access` is required: use `"public"` or an `authorize`/`scope` policy.
+Unlisted fields and omitted permissions stay disabled.
 
 ## Field policies
 

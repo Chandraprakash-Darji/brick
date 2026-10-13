@@ -4,6 +4,8 @@ CLI and server engine for the Brick-TS framework. Mounts services,
 actions, and resources as a typed HTTP API (Elysia) with OpenAPI 3.1,
 Scalar/Swagger docs, request logging, and MCP routes.
 
+You need Bun 1.2 or later.
+
 ```sh
 bun add @brickkit/cli @brickkit/core
 ```
@@ -13,6 +15,20 @@ import { brick } from "@brickkit/core";
 
 const app = brick({ title: "Pages API", version: "1.0.0" });
 app.listen(3333);
+```
+
+## Commands
+
+Every command except `dev` and `start` takes a required `<entry>`: a module
+whose default export is a `BrickApp` that does not call `.listen()`.
+
+```sh
+brick dev [entry] [--port 4000]
+brick start [entry] [--port 4000]
+brick build <entry> [--outdir dist/brick] [--port <number>] [--no-aot]
+brick gen openapi <entry> [--output openapi.json]
+brick gen client <entry> [--output _brick/contract.ts]
+brick info <entry>
 ```
 
 Build the backend directly from registered services:
@@ -27,13 +43,16 @@ const app = brick({ services: [pagesService, billingService] });
 The typed HTTP client is available from `@brickkit/core/client`. See
 `www/content/docs/(brick)/typed-client.mdx` for routing and error handling.
 
-The `brick` binary ships in this package for local dev and inspection:
+The `brick` binary ships in this package for local dev and inspection.
+`dev` and `start` accept an optional entry and resolve the port from
+`--port`, then `PORT`, then 4000:
 
 ```sh
 brick dev --port 4000
-brick gen openapi --output openapi.json
+brick dev src/app.ts --port 4000
+brick gen openapi src/app.ts --output openapi.json
 brick gen client src/app.ts
-brick info
+brick info src/app.ts
 ```
 
 Source: <https://github.com/Chandraprakash-Darji/brick>.

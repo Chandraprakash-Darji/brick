@@ -2,6 +2,17 @@
   "name": "@brickkit/crud",
   "version": "0.3.0",
   "description": "Opt-in resource CRUD plugin for Brick",
+  "keywords": [
+    "typescript",
+    "bun",
+    "crud",
+    "drizzle-orm",
+    "postgres",
+    "sqlite",
+    "rest-api",
+    "typebox",
+    "backend-framework"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Chandraprakash-Darji/brick.git",

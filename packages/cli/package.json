@@ -2,6 +2,18 @@
   "name": "@brickkit/cli",
   "version": "0.3.0",
   "description": "CLI and server engine for Brick-TS",
+  "keywords": [
+    "typescript",
+    "bun",
+    "cli",
+    "dev-server",
+    "elysia",
+    "openapi-generator",
+    "typed-client",
+    "vite-plugin",
+    "build-tool",
+    "mcp"
+  ],
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
