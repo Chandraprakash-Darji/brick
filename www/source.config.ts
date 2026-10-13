@@ -1,18 +1,24 @@
 import { defineConfig, defineDocs } from "fumadocs-mdx/config";
 import { pageSchema } from "fumadocs-core/source/schema";
 import { z } from "zod";
+import {
+  docsMarkdownOptions,
+  remarkDocsMarkdown,
+} from "./src/lib/docs-markdown";
 
 export const docs = defineDocs({
   dir: "content/docs",
   docs: {
     lastModified: true,
     postprocess: {
-      includeProcessedMarkdown: true,
+      includeProcessedMarkdown: docsMarkdownOptions,
     },
   },
 });
 
-export default defineConfig();
+export default defineConfig({
+  mdxOptions: { remarkPlugins: [remarkDocsMarkdown] },
+});
 
 export const blog = defineDocs({
   dir: "content/blog",
