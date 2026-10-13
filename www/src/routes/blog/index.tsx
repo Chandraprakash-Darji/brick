@@ -47,29 +47,28 @@ function Blog() {
       </header>
       <section aria-label="Blog posts" className="border-t border-border">
         {posts.map((post) => (
-          <article
-            key={post.slug}
-            className="grid gap-5 border-b border-border py-9 sm:grid-cols-[240px_1fr] sm:gap-10"
-          >
-            <BlogMeta {...post} />
-            <div>
-              <Link
-                to="/blog/$slug"
-                params={{ slug: post.slug }}
-                className="group flex items-start justify-between gap-6"
-              >
-                <h2 className="text-2xl font-medium tracking-tight transition-colors group-hover:text-gopher sm:text-3xl">
-                  {post.title}
-                </h2>
-                <ArrowUpRightIcon className="mt-1 size-5 shrink-0 transition-colors group-hover:text-gopher" />
-              </Link>
-              <p className="mt-3 max-w-2xl leading-relaxed text-muted-foreground">
-                {post.description}
-              </p>
-              <p className="mt-4 text-xs text-muted-foreground">
-                By {post.author}
-              </p>
-            </div>
+          <article key={post.slug} className="border-b border-border">
+            <Link
+              to="/blog/$slug"
+              params={{ slug: post.slug }}
+              className="group grid gap-5 py-9 sm:grid-cols-[240px_1fr] sm:gap-10 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <BlogMeta {...post} />
+              <div>
+                <div className="flex items-start justify-between gap-6">
+                  <h2 className="text-2xl font-medium tracking-tight transition-colors group-hover:text-gopher sm:text-3xl">
+                    {post.title}
+                  </h2>
+                  <ArrowUpRightIcon className="mt-1 size-5 shrink-0 transition-colors group-hover:text-gopher" />
+                </div>
+                <p className="mt-3 max-w-2xl leading-relaxed text-muted-foreground">
+                  {post.description}
+                </p>
+                <p className="mt-4 text-xs text-muted-foreground">
+                  By {post.author}
+                </p>
+              </div>
+            </Link>
           </article>
         ))}
       </section>

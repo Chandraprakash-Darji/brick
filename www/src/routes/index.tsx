@@ -336,10 +336,13 @@ function Home() {
       </div>
       <ul className="home-feature-grid">
         {features.map((feature, i) => (
-          <li key={feature.title} className="brick-feature">
-            <Link to={feature.link} className="group flex h-full flex-col">
+          <li key={feature.title}>
+            <Link
+              to={feature.link}
+              className="brick-feature group flex h-full flex-col rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
               <div
-                className="feature-visual"
+                className="feature-visual transition-colors group-hover:border-foreground/30"
                 aria-hidden="true"
                 data-variant={i}
               >

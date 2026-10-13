@@ -176,25 +176,49 @@ export function HomeCapabilities() {
               "Inputs",
               "Request validation",
               "t.Object({ id: t.String() })",
+              "validation-and-errors",
             ],
             [
               "02",
               "Handlers",
               "Inferred action types",
               "execute: ({ input, ctx })",
+              "services-and-actions",
             ],
-            ["03", "Resources", "Table-derived shapes", "table.$inferSelect"],
-            ["04", "API contracts", "Registered API schemas", "OpenAPI 3.1"],
-          ].map(([number, title, text, code]) => (
-            <article key={title}>
+            [
+              "03",
+              "Resources",
+              "Table-derived shapes",
+              "table.$inferSelect",
+              "resources",
+            ],
+            [
+              "04",
+              "API contracts",
+              "Registered API schemas",
+              "OpenAPI 3.1",
+              "openapi",
+            ],
+          ].map(([number, title, text, code, slug]) => (
+            <Link
+              key={title}
+              to="/docs/$"
+              params={{ _splat: slug }}
+              className="group block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
               <div className="pipeline-top">
                 <span>{number}</span>
-                <ArrowRightIcon className="size-3" aria-hidden="true" />
+                <ArrowRightIcon
+                  className="size-3 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+                  aria-hidden="true"
+                />
               </div>
-              <h3>{title}</h3>
+              <h3 className="transition-colors group-hover:text-foreground">
+                {title}
+              </h3>
               <p>{text}</p>
               <code>{code}</code>
-            </article>
+            </Link>
           ))}
         </div>
       </section>
@@ -441,16 +465,29 @@ export function HomeCapabilities() {
               link: "Run the example",
             },
           ].map(({ title, text, icon: Icon, visual, detail, slug, link }) => (
-            <article key={title}>
-              <div className="product-visual" aria-hidden="true">
+            <Link
+              key={title}
+              to="/docs/$"
+              params={{ _splat: slug }}
+              className="group flex flex-col rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <div
+                className="product-visual transition-colors group-hover:border-foreground/30"
+                aria-hidden="true"
+              >
                 <Icon className="product-icon" />
                 <code>{visual}</code>
                 <span>{detail}</span>
               </div>
-              <h3>{title}</h3>
+              <h3 className="flex items-center justify-between font-semibold tracking-tight">
+                {title}
+              </h3>
               <p>{text}</p>
-              <DocsLink slug={slug}>{link}</DocsLink>
-            </article>
+              <span className="capability-link mt-auto pt-1">
+                {link}
+                <ArrowRightIcon className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+              </span>
+            </Link>
           ))}
         </div>
       </section>
