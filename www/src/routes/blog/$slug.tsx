@@ -4,6 +4,7 @@ import browserCollections from "collections/browser";
 import { ArrowLeftIcon } from "lucide-react";
 import { Suspense } from "react";
 import { BlogMeta } from "@/components/blog-meta";
+import { EditOnGitHub } from "@/components/edit-on-github";
 import { getMDXComponents } from "@/components/mdx";
 import { blogSource } from "@/lib/blog";
 
@@ -20,7 +21,7 @@ const loadPost = createServerFn({ method: "GET" })
   });
 
 const clientLoader = browserCollections.blog.createClientLoader({
-  component({ default: MDX, frontmatter }) {
+  component({ default: MDX, frontmatter }, { path }: { path: string }) {
     return (
       <article className="mx-auto max-w-3xl">
         <header className="mb-10 border-b border-border pb-10">
@@ -38,6 +39,9 @@ const clientLoader = browserCollections.blog.createClientLoader({
         <div className="prose min-w-0">
           <MDX components={getMDXComponents()} />
         </div>
+        <footer className="mt-12 border-t border-border pt-6 text-xs">
+          <EditOnGitHub path={`www/content/blog/${path}`} />
+        </footer>
       </article>
     );
   },
@@ -75,7 +79,7 @@ function Post() {
         All posts
       </Link>
       <Suspense fallback={<p>Loading article…</p>}>
-        {clientLoader.useContent(path)}
+        {clientLoader.useContent(path, { path })}
       </Suspense>
     </main>
   );
