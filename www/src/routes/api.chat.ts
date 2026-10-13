@@ -80,25 +80,23 @@ export const Route = createFileRoute("/api/chat")({
 
         const result = streamText({
           model: openai.chat(process.env.OPENAI_MODEL!),
+          instructions: systemPrompt,
           stopWhen: stepCountIs(5),
           tools: {
             search: searchTool,
           },
-          messages: [
-            { role: "system", content: systemPrompt },
-            ...(await convertToModelMessages<ChatUIMessage>(
-              reqJson.messages ?? [],
-              {
-                convertDataPart(part) {
-                  if (part.type === "data-client")
-                    return {
-                      type: "text",
-                      text: `[Client Context: ${JSON.stringify(part.data)}]`,
-                    };
-                },
+          messages: await convertToModelMessages<ChatUIMessage>(
+            reqJson.messages ?? [],
+            {
+              convertDataPart(part) {
+                if (part.type === "data-client")
+                  return {
+                    type: "text",
+                    text: `[Client Context: ${JSON.stringify(part.data)}]`,
+                  };
               },
-            )),
-          ],
+            },
+          ),
           toolChoice: "auto",
         });
 
