@@ -145,7 +145,7 @@ function Home() {
         <div className="hero-actions">
           <Link
             to="/docs/$"
-            params={{ _splat: "getting-started" }}
+            params={{ _splat: "quickstart" }}
             className="home-button home-button-primary"
           >
             Start building <ArrowRightIcon className="size-3.5" />

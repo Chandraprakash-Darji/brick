@@ -520,7 +520,7 @@ export function HomeCapabilities() {
         <div className="hero-actions">
           <Link
             to="/docs/$"
-            params={{ _splat: "getting-started" }}
+            params={{ _splat: "quickstart" }}
             className="home-button home-button-primary"
           >
             Start with the guide

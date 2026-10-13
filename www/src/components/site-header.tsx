@@ -59,7 +59,7 @@ export function SiteHeader() {
       <div className="header-actions ml-auto flex items-center gap-2">
         <Link
           to="/docs/$"
-          params={{ _splat: "getting-started" }}
+          params={{ _splat: "quickstart" }}
           className="home-button home-button-primary header-cta"
         >
           Get started <ArrowRightIcon className="size-3" />

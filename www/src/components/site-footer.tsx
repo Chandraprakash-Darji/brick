@@ -43,7 +43,7 @@ export function SiteFooter() {
         </nav>
         <nav aria-label="Developer links">
           <p className="label">Developers</p>
-          <Link to="/docs/$" params={{ _splat: "getting-started" }}>
+          <Link to="/docs/$" params={{ _splat: "quickstart" }}>
             Getting started
           </Link>
           <Link to="/docs/$" params={{ _splat: "" }}>

@@ -1,4 +1,4 @@
-import { createFileRoute, notFound } from "@tanstack/react-router";
+import { createFileRoute, notFound, redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import browserCollections from "collections/browser";
 import { useFumadocsLoader } from "fumadocs-core/source/client";
@@ -22,6 +22,14 @@ import { gitConfig, repoUrl } from "@/lib/shared";
 import { slugsToMarkdownPath, source } from "@/lib/source";
 
 export const Route = createFileRoute("/docs/$")({
+  beforeLoad: ({ params }) => {
+    if (params._splat === "getting-started") {
+      throw redirect({
+        to: "/docs/$",
+        params: { _splat: "quickstart" },
+      });
+    }
+  },
   component: Page,
   loader: async ({ params }) => {
     const slugs = params._splat?.split("/") ?? [];
