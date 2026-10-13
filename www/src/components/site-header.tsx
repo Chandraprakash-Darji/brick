@@ -69,6 +69,8 @@ export function SiteHeader() {
           aria-label="GitHub"
           target="_blank"
           rel="noreferrer"
+          data-umami-event="github-click"
+          data-umami-event-location="header"
           className={buttonVariants({ variant: "ghost", size: "icon" })}
         >
           <GitHubIcon className="size-4" />

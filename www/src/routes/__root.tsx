@@ -42,6 +42,14 @@ export const Route = createRootRoute({
       { rel: "stylesheet", href: appCss },
       { rel: "icon", type: "image/svg+xml", href: "/brand/logo.svg" },
     ],
+    scripts: [
+      {
+        defer: true,
+        src: "https://unami.rega.run/script.js",
+        "data-website-id": "40d976e9-29ab-42b6-a777-b3a126a87e19",
+        "data-domains": new URL(site.url).hostname,
+      },
+    ],
   }),
   component: RootComponent,
 });

@@ -115,3 +115,33 @@ through the docs Markdown renderer. Field arrays must use static values so
 the renderer can read them at build time without running JavaScript.
 
 Run the component checks with `bun test test` from `www`.
+
+## Analytics (Umami)
+
+Page views and custom events go to our self-hosted Umami instance
+(`https://unami.rega.run`). The tracker script is added in
+`src/routes/__root.tsx` via TanStack Start's `head()` `scripts` field.
+`data-domains` is the production hostname (`brick.rega.run`), so local dev,
+previews and forks never send events.
+
+TanStack Router client-side navigation is tracked automatically — Umami
+watches the History API, so don't call `umami.track()` for page views (that
+would double-count).
+
+Custom events (`src/lib/analytics.ts` `trackEvent` + `data-umami-event`):
+
+- `copy-install-command` (install command copy button)
+- `ask-ai-open`, `ask-ai-message` (AI chat)
+- `docs-copy-markdown`, `docs-edit-github` (docs page actions)
+- `example-open` (examples catalog cards)
+- `search-open` (docs search trigger)
+- `github-click` (outbound GitHub links)
+
+Umami is cookieless. The footer notes this.
+
+Optional ad-blocker proxy: serve `src` from the first-party `/stats` base
+(e.g. `https://brick.rega.run/stats`) so it stays first-party
+(`/stats/script.js`) with `data-host-url` sending to `/stats/api/send` on our
+domain. Proxy `/stats/script.js` → the Umami instance's `/script.js` and
+forward `/stats/api/send` → the Umami instance's `/api/send` (`/api/collect`
+is the legacy endpoint).

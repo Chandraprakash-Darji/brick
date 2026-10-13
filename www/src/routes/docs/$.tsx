@@ -105,7 +105,10 @@ const clientLoader = browserCollections.docs.createClientLoader({
           {frontmatter.description}
         </DocsDescription>
         <div className="-mt-4 flex flex-row items-center gap-2 border-b pb-6">
-          <MarkdownCopyButton markdownUrl={markdownUrl} />
+          <MarkdownCopyButton
+            markdownUrl={markdownUrl}
+            data-umami-event="docs-copy-markdown"
+          />
           <ViewOptionsPopover
             markdownUrl={markdownUrl}
             githubUrl={`${repoUrl}/blob/${gitConfig.branch}/www/content/docs/${path}`}
@@ -137,6 +140,10 @@ function Page() {
         {...baseOptions()}
         nav={{ title: <Wordmark />, url: "/" }}
         themeSwitch={{ enabled: false }}
+        searchToggle={{
+          sm: { "data-umami-event": "search-open" } as never,
+          full: { "data-umami-event": "search-open" } as never,
+        }}
         tree={pageTree}
         aiChat={{
           open: chatOpen,

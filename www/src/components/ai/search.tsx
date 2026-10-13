@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "../../lib/cn";
+import { trackEvent } from "@/lib/analytics";
 import { buttonVariants } from "../ui/button";
 import { useChat, type UseChatHelpers } from "@ai-sdk/react";
 import {
@@ -139,6 +140,7 @@ export function AISearchInput(props: ComponentProps<"form">) {
     const message = input.trim();
     if (message.length === 0) return;
 
+    trackEvent("ask-ai-message");
     void sendMessage({
       role: "user",
       parts: [
@@ -363,6 +365,12 @@ export function AISearch({
       api: "/api/chat",
     }),
   });
+
+  // Mirror portfolio's CommandBar `search-open` tracking: fire once per open.
+  // Umami pageviews are automatic (History API), so only custom events here.
+  useEffect(() => {
+    if (open) trackEvent("ask-ai-open");
+  }, [open]);
 
   return (
     <Context
