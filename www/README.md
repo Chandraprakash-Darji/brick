@@ -129,8 +129,6 @@ preview builds send nothing):
 ```bash
 VITE_UMAMI_URL=https://umami.example.com
 VITE_UMAMI_WEBSITE_ID=your-website-id
-# Optional proxy to dodge ad blockers:
-# VITE_UMAMI_HOST_URL=https://umami.example.com
 ```
 
 The script is only included when both `VITE_UMAMI_URL` and
