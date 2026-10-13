@@ -24,16 +24,16 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@sinclair/typebox": "^0.34.0",
+    "@sinclair/typebox": "^0.34.52",
     "drizzle-orm": "^0.45.2"
   },
   "peerDependencies": {
     "@brickkit/core": "^0.3.0"
   },
   "devDependencies": {
-    "tsdown": "^0.23.0",
+    "tsdown": "^0.23.1",
     "typescript": "^5.7.0",
-    "@types/bun": "latest"
+    "@types/bun": "^1.4.3"
   },
   "publishConfig": {
     "access": "public"

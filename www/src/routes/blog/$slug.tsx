@@ -8,7 +8,7 @@ import { getMDXComponents } from "@/components/mdx";
 import { blogSource } from "@/lib/blog";
 
 const loadPost = createServerFn({ method: "GET" })
-  .inputValidator((slug: string) => slug)
+  .validator((slug: string) => slug)
   .handler(({ data: slug }) => {
     const page = blogSource.getPage([slug]);
     if (!page) throw notFound();
