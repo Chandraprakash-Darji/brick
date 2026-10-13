@@ -21,22 +21,22 @@ const features = [
   {
     title: "Monomorphic Dispatch",
     text: "Call typed actions directly in process with the same validation and error handling used by HTTP routes.",
-    link: "/docs/getting-started",
+    link: "/docs/services-and-actions",
   },
   {
     title: "AOT Routing & Streaming",
     text: "Compile action handlers and resource plans ahead of request handling, and serve them through Elysia.",
-    link: "/docs/resource-lifecycle",
+    link: "/docs/brick-cli/build",
   },
   {
     title: "Logical Monolith",
     text: "Single repository with shared schemas, full TypeScript type safety, and instant jump-to-definition across services.",
-    link: "/docs/codegen",
+    link: "/docs/type-inference",
   },
   {
     title: "Physical Microservices",
     text: "Expose services over HTTP using the same action definitions you invoke in process.",
-    link: "/docs/brick-cli",
+    link: "/docs",
   },
   {
     title: "Better Auth & Drizzle",
@@ -46,7 +46,7 @@ const features = [
   {
     title: "Continuous Benchmarking",
     text: "Every push to main measures throughput, latency, net heap changes and process RSS on macOS, Linux and Windows.",
-    link: "/docs/benchmarking",
+    link: "/docs/contributing/benchmarking",
   },
 ];
 
@@ -336,10 +336,13 @@ function Home() {
       </div>
       <ul className="home-feature-grid">
         {features.map((feature, i) => (
-          <li key={feature.title} className="brick-feature">
-            <Link to={feature.link} className="group flex h-full flex-col">
+          <li key={feature.title}>
+            <Link
+              to={feature.link}
+              className="brick-feature group flex h-full flex-col rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
               <div
-                className="feature-visual"
+                className="feature-visual transition-colors group-hover:border-foreground/30"
                 aria-hidden="true"
                 data-variant={i}
               >

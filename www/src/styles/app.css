@@ -911,15 +911,20 @@ html > body[data-scroll-locked] {
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
 }
-.contract-pipeline article {
+.contract-pipeline > article,
+.contract-pipeline > a {
   min-width: 0;
   padding: 26px 22px;
   border-right: 1px solid var(--border);
+  transition: background-color 150ms ease;
 }
-.contract-pipeline article:first-child {
+.contract-pipeline > a:hover {
+  background: var(--code);
+}
+.contract-pipeline > :first-child {
   padding-left: 0;
 }
-.contract-pipeline article:last-child {
+.contract-pipeline > :last-child {
   border-right: 0;
   padding-right: 0;
 }
@@ -1090,7 +1095,8 @@ html > body[data-scroll-locked] {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 24px;
 }
-.capability-product-grid article {
+.capability-product-grid article,
+.capability-product-grid > a {
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -1125,7 +1131,8 @@ html > body[data-scroll-locked] {
 .capability-product-grid h3 {
   margin-top: 22px;
 }
-.capability-product-grid article > p {
+.capability-product-grid article > p,
+.capability-product-grid > a > p {
   margin-top: 12px;
   margin-bottom: 24px;
   color: var(--muted-foreground);
@@ -1254,13 +1261,13 @@ html > body[data-scroll-locked] {
   .contract-pipeline {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .contract-pipeline article:nth-child(n) {
+  .contract-pipeline > :nth-child(n) {
     padding: 24px;
   }
-  .contract-pipeline article:nth-child(2) {
+  .contract-pipeline > :nth-child(2) {
     border-right: 0;
   }
-  .contract-pipeline article:nth-child(-n + 2) {
+  .contract-pipeline > :nth-child(-n + 2) {
     border-bottom: 1px solid var(--border);
   }
   .capability-product-grid {
@@ -1319,7 +1326,7 @@ html > body[data-scroll-locked] {
   .capability-code-body {
     padding: 16px;
   }
-  .contract-pipeline article:nth-child(n) {
+  .contract-pipeline > :nth-child(n) {
     padding: 18px 12px;
   }
   .contract-pipeline h3 {
@@ -1355,7 +1362,8 @@ html > body[data-scroll-locked] {
   .product-visual code {
     font-size: 14px;
   }
-  .capability-product-grid article > p {
+  .capability-product-grid article > p,
+  .capability-product-grid > a > p {
     margin-bottom: 18px;
   }
   .ecosystem-tools {

@@ -3,6 +3,7 @@ import type { MDXComponents } from "mdx/types";
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 import { Step, Steps } from "fumadocs-ui/components/steps";
 import { DatabaseTable } from "./database-table";
+import { Card, Cards } from "./card";
 
 export function getMDXComponents(components?: MDXComponents) {
   return {
@@ -12,6 +13,8 @@ export function getMDXComponents(components?: MDXComponents) {
     Step,
     Steps,
     DatabaseTable,
+    Card,
+    Cards,
     ...components,
   } satisfies MDXComponents;
 }

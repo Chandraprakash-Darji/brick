@@ -48,7 +48,7 @@ function Examples() {
               to="/examples/$slug"
               params={{ slug: example.slug }}
               onClick={() => trackEvent("example-open", { slug: example.slug })}
-              className="group flex flex-col rounded-lg border bg-card p-6 transition-colors hover:border-foreground/25"
+              className="group flex flex-col rounded-lg border bg-card p-6 transition-colors hover:border-foreground/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               <div className="flex items-start justify-between gap-4">
                 <h2 className="text-2xl font-medium tracking-tight transition-colors group-hover:text-gopher">
