@@ -13,6 +13,27 @@ export interface CardProps extends Omit<
   arrow?: boolean;
 }
 
+function hasInteractiveDescendant(node: React.ReactNode): boolean {
+  if (!node || typeof node !== "object") return false;
+  if (Array.isArray(node)) {
+    return node.some(hasInteractiveDescendant);
+  }
+  if (React.isValidElement(node)) {
+    const type = node.type;
+    if (type === "a" || type === "button") return true;
+    if (typeof type === "function" || typeof type === "object") {
+      const name =
+        (type as { displayName?: string; name?: string }).displayName ||
+        (type as { displayName?: string; name?: string }).name ||
+        "";
+      if (/Link|Button|Anchor/i.test(name)) return true;
+    }
+    const children = (node.props as { children?: React.ReactNode })?.children;
+    return hasInteractiveDescendant(children);
+  }
+  return false;
+}
+
 export function Card({
   title,
   description,
@@ -23,13 +44,24 @@ export function Card({
   children,
   ...props
 }: CardProps) {
-  if (!href) {
+  const hasInteractiveContent =
+    hasInteractiveDescendant(children) ||
+    hasInteractiveDescendant(title) ||
+    hasInteractiveDescendant(description) ||
+    hasInteractiveDescendant(icon);
+
+  // If href is missing OR if card has interactive descendants, render static container
+  // to avoid invalid nested interactive elements like <a> inside <a>
+  const isLink = Boolean(href) && !hasInteractiveContent;
+
+  if (!isLink) {
     if (arrow) {
       throw new Error("Card has arrow styling but no href.");
     }
     if (
       className &&
-      (/\bhover:/.test(className) || /\bcursor-pointer\b/.test(className))
+      (/(\bhover:|\[&:(?:[^\]]*?)hover(?:[^\]]*?)\])/.test(className) ||
+        /\bcursor-pointer\b/.test(className))
     ) {
       throw new Error("Card has hover or pointer styling but no href.");
     }

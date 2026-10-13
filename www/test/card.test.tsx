@@ -68,6 +68,12 @@ describe("Card component", () => {
     ).toThrow("Card has hover or pointer styling but no href.");
 
     expect(() =>
+      renderToStaticMarkup(
+        <Card title="Invalid" className="[&:hover]:bg-accent" />,
+      ),
+    ).toThrow("Card has hover or pointer styling but no href.");
+
+    expect(() =>
       renderToStaticMarkup(<Card title="Invalid" className="cursor-pointer" />),
     ).toThrow("Card has hover or pointer styling but no href.");
   });
@@ -78,7 +84,22 @@ describe("Card component", () => {
     ).toThrow("Card has arrow styling but no href.");
   });
 
-  test("audits that every Card in documentation has an href", async () => {
+  test("renders static card without enclosing anchor when interactive children are present", () => {
+    const html = renderToStaticMarkup(
+      <Card title="Card with Link" href="/docs/guide">
+        Read the <a href="/docs/subpage">subpage</a> for details.
+      </Card>,
+    );
+
+    // Should not render nested <a> inside outer <a>
+    expect(html).toStartWith("<div");
+    expect(html).not.toContain("hover:border-foreground");
+    expect(html).toContain('<a href="/docs/subpage">');
+    const anchorMatches = html.match(/<a[\s>]/g) || [];
+    expect(anchorMatches.length).toBe(1);
+  });
+
+  test("audits that documentation cards with interactive affordances have an href", async () => {
     const root = new URL("../content/docs/", import.meta.url);
     const glob = new Bun.Glob("**/*.mdx");
     let cardCount = 0;
@@ -90,6 +111,15 @@ describe("Card component", () => {
       while ((match = cardRegex.exec(content)) !== null) {
         const props = match[1];
         cardCount++;
+        // If a card has arrow or hover/pointer affordance, it must have href
+        const hasInteractiveAffordance =
+          /arrow\b/.test(props) ||
+          /hover:/.test(props) ||
+          /cursor-pointer/.test(props);
+        if (hasInteractiveAffordance) {
+          expect(props).toContain("href=");
+        }
+        // In current docs all cards link to valid destinations
         expect(props).toContain("href=");
         expect(props).not.toContain("hover:");
         expect(props).not.toContain("cursor-pointer");
