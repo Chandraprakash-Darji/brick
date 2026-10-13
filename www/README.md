@@ -118,19 +118,9 @@ Run the component checks with `bun test test` from `www`.
 
 ## Analytics (Umami)
 
-Page views and custom events go to our self-hosted Umami instance on Vercel.
-The tracker script is added in `src/routes/__root.tsx` via TanStack Start's
-`head()` `scripts` field, mirroring `Chandraprakash-Darji/portfolio`
-(`src/lib/analytics.ts` + `data-umami-event` attributes).
-
-Set these in the www Vercel project to override the production defaults
-(`https://unami.rega.run` + `40d976e9-29ab-42b6-a777-b3a126a87e19`):
-
-```bash
-VITE_UMAMI_URL=https://unami.rega.run
-VITE_UMAMI_WEBSITE_ID=40d976e9-29ab-42b6-a777-b3a126a87e19
-```
-
+Page views and custom events go to our self-hosted Umami instance
+(`https://unami.rega.run`). The tracker script is added in
+`src/routes/__root.tsx` via TanStack Start's `head()` `scripts` field.
 `data-domains` is the production hostname (`brick.rega.run`), so local dev,
 previews and forks never send events.
 
@@ -149,9 +139,9 @@ Custom events (`src/lib/analytics.ts` `trackEvent` + `data-umami-event`):
 
 Umami is cookieless. The footer notes this.
 
-Optional ad-blocker proxy: set `VITE_UMAMI_URL` and `VITE_UMAMI_HOST_URL` to the
-first-party `/stats` base (e.g. `https://brick.rega.run/stats`) so `src` stays
-first-party (`/stats/script.js`) and `data-host-url` sends to `/stats/api/send`
-on our domain. Proxy `/stats/script.js` → the Umami instance's `/script.js`
-and forward `/stats/api/send` → the Umami instance's `/api/send` (`/api/collect`
+Optional ad-blocker proxy: serve `src` from the first-party `/stats` base
+(e.g. `https://brick.rega.run/stats`) so it stays first-party
+(`/stats/script.js`) with `data-host-url` sending to `/stats/api/send` on our
+domain. Proxy `/stats/script.js` → the Umami instance's `/script.js` and
+forward `/stats/api/send` → the Umami instance's `/api/send` (`/api/collect`
 is the legacy endpoint).

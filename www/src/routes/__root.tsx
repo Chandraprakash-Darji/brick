@@ -13,72 +13,44 @@ import { SiteFooter } from "@/components/site-footer";
 import { site } from "@/lib/site";
 
 export const Route = createRootRoute({
-  head: () => {
-    // Umami analytics (self-hosted on Vercel), mirroring
-    // Chandraprakash-Darji/portfolio (`@yeskunall/astro-umami` with
-    // endpointUrl/hostUrl). Env vars override the production defaults below;
-    // `data-domains` restricts tracking to production so local dev, previews
-    // and forks send nothing. See www/README.md.
-    // Umami's tracker watches the History API, so TanStack Router
-    // client-side navigation is recorded automatically — no manual
-    // `umami.track()` on route change (that would double-count pageviews).
-    const umamiUrl = (
-      (import.meta.env.VITE_UMAMI_URL as string | undefined) ??
-      "https://unami.rega.run"
-    )?.replace(/\/$/, "");
-    const umamiWebsiteId =
-      (import.meta.env.VITE_UMAMI_WEBSITE_ID as string | undefined) ??
-      "40d976e9-29ab-42b6-a777-b3a126a87e19";
-    // Optional proxy: set VITE_UMAMI_HOST_URL to the Umami instance and serve
-    // the script through our own domain (`/stats/script.js`) so ad blockers
-    // don't drop events. When unset, events go directly to VITE_UMAMI_URL.
-    const umamiHostUrl = (
-      import.meta.env.VITE_UMAMI_HOST_URL as string | undefined
-    )?.replace(/\/$/, "");
-
-    return {
-      meta: [
-        {
-          charSet: "utf-8",
-        },
-        {
-          name: "viewport",
-          content: "width=device-width, initial-scale=1",
-        },
-        {
-          title: site.title,
-        },
-        {
-          name: "description",
-          content: site.description,
-        },
-        {
-          property: "og:title",
-          content: site.title,
-        },
-        {
-          property: "og:description",
-          content: site.description,
-        },
-      ],
-      links: [
-        { rel: "stylesheet", href: appCss },
-        { rel: "icon", type: "image/svg+xml", href: "/brand/logo.svg" },
-      ],
-      scripts:
-        umamiUrl && umamiWebsiteId
-          ? [
-              {
-                defer: true,
-                src: `${umamiUrl}/script.js`,
-                "data-website-id": umamiWebsiteId,
-                "data-domains": new URL(site.url).hostname,
-                ...(umamiHostUrl ? { "data-host-url": umamiHostUrl } : {}),
-              },
-            ]
-          : [],
-    };
-  },
+  head: () => ({
+    meta: [
+      {
+        charSet: "utf-8",
+      },
+      {
+        name: "viewport",
+        content: "width=device-width, initial-scale=1",
+      },
+      {
+        title: site.title,
+      },
+      {
+        name: "description",
+        content: site.description,
+      },
+      {
+        property: "og:title",
+        content: site.title,
+      },
+      {
+        property: "og:description",
+        content: site.description,
+      },
+    ],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "icon", type: "image/svg+xml", href: "/brand/logo.svg" },
+    ],
+    scripts: [
+      {
+        defer: true,
+        src: "https://unami.rega.run/script.js",
+        "data-website-id": "40d976e9-29ab-42b6-a777-b3a126a87e19",
+        "data-domains": new URL(site.url).hostname,
+      },
+    ],
+  }),
   component: RootComponent,
 });
 
