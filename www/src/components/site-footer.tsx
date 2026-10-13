@@ -49,13 +49,7 @@ export function SiteFooter() {
             For AI agents
           </Link>
           <a href="/llms.txt">llms.txt</a>
-          <a
-            href={`${site.repo}/tree/main/examples`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Examples
-          </a>
+          <Link to="/examples">Examples</Link>
         </nav>
         <nav aria-label="Project links">
           <p className="label">Project</p>

@@ -41,14 +41,13 @@ export function SiteHeader() {
         >
           Docs
         </Link>
-        <a
-          href={`${site.repo}/tree/main/examples`}
-          target="_blank"
-          rel="noreferrer"
+        <Link
+          to="/examples"
           className={navLink}
+          data-current={pathname.startsWith("/examples") || undefined}
         >
           Examples
-        </a>
+        </Link>
         <Link
           to="/blog"
           className={navLink}

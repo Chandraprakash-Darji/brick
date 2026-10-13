@@ -1,0 +1,16 @@
+{
+  "title": "Resource plugin",
+  "description": "A comments plugin built with defineResourcePlugin that attaches a typed comments namespace and CRUD routes to a parent resource.",
+  "tags": ["Plugins", "CRUD", "SQLite"],
+  "features": [
+    "defineResourcePlugin and resource extensions",
+    "Write hooks that trim and validate input",
+    "Compiled HTTP routes for list, count, update and delete"
+  ],
+  "entry": "src/app.ts",
+  "run": [
+    "bun run --cwd examples/extensions demo",
+    "bun run --cwd examples/extensions serve"
+  ],
+  "runNote": "The server listens on port 3001."
+}
