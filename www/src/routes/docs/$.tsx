@@ -14,10 +14,11 @@ import {
 import { Suspense, useState } from "react";
 
 import { AISearch, AISearchPanel } from "@/components/ai/search";
+import { EditOnGitHub } from "@/components/edit-on-github";
 import { Wordmark } from "@/components/logo";
 import { useMDXComponents } from "@/components/mdx";
 import { baseOptions } from "@/lib/layout.shared";
-import { gitConfig } from "@/lib/shared";
+import { gitConfig, repoUrl } from "@/lib/shared";
 import { slugsToMarkdownPath, source } from "@/lib/source";
 
 export const Route = createFileRoute("/docs/$")({
@@ -42,8 +43,38 @@ const serverLoader = createServerFn({
       markdownUrl: slugsToMarkdownPath(page.slugs).url,
       pageTree: await source.serializePageTree(source.getPageTree()),
       path: page.path,
+      lastModified: page.data.lastModified?.toISOString(),
     };
   });
+
+const lastUpdatedFormat = new Intl.DateTimeFormat("en", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+function TocFooter({
+  path,
+  lastModified,
+}: {
+  path: string;
+  lastModified?: string;
+}) {
+  return (
+    <div className="mt-4 shrink-0 border-t border-border pt-4 text-xs text-muted-foreground">
+      <EditOnGitHub path={`www/content/docs/${path}`} />
+      {lastModified ? (
+        <p className="mt-2">
+          Last updated{" "}
+          <time dateTime={lastModified}>
+            {lastUpdatedFormat.format(new Date(lastModified))}
+          </time>
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 const clientLoader = browserCollections.docs.createClientLoader({
   component(
@@ -52,17 +83,22 @@ const clientLoader = browserCollections.docs.createClientLoader({
     {
       markdownUrl,
       path,
+      lastModified,
     }: {
       markdownUrl: string;
       path: string;
+      lastModified?: string;
     },
   ) {
+    const tocFooter = <TocFooter path={path} lastModified={lastModified} />;
     return (
       <DocsPage
         toc={toc}
         tableOfContent={{
           //   style: "clerk",
+          footer: tocFooter,
         }}
+        tableOfContentPopover={{ footer: tocFooter }}
       >
         <DocsTitle className="docs-title">{frontmatter.title}</DocsTitle>
         <DocsDescription className="docs-description">
@@ -72,7 +108,7 @@ const clientLoader = browserCollections.docs.createClientLoader({
           <MarkdownCopyButton markdownUrl={markdownUrl} />
           <ViewOptionsPopover
             markdownUrl={markdownUrl}
-            githubUrl={`https://github.com/${gitConfig.user}/${gitConfig.repo}/blob/${gitConfig.branch}/www/content/docs/${path}`}
+            githubUrl={`${repoUrl}/blob/${gitConfig.branch}/www/content/docs/${path}`}
           />
         </div>
         <DocsBody>
@@ -84,7 +120,7 @@ const clientLoader = browserCollections.docs.createClientLoader({
 });
 
 function Page() {
-  const { path, pageTree, markdownUrl } = useFumadocsLoader(
+  const { path, pageTree, markdownUrl, lastModified } = useFumadocsLoader(
     Route.useLoaderData(),
   );
   const [chatOpen, setChatOpen] = useState(false);
@@ -103,7 +139,7 @@ function Page() {
         }}
       >
         <Suspense>
-          {clientLoader.useContent(path, { markdownUrl, path })}
+          {clientLoader.useContent(path, { markdownUrl, path, lastModified })}
         </Suspense>
       </DocsLayout>
     </AISearch>

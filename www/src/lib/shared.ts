@@ -3,7 +3,9 @@ export const docsRoute = "/docs";
 export const docsImageRoute = "/og/docs";
 
 export const gitConfig = {
-  user: "brick-org",
+  user: "Chandraprakash-Darji",
   repo: "brick",
   branch: "main",
 };
+
+export const repoUrl = `https://github.com/${gitConfig.user}/${gitConfig.repo}`;

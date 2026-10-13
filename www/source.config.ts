@@ -5,6 +5,7 @@ import { z } from "zod";
 export const docs = defineDocs({
   dir: "content/docs",
   docs: {
+    lastModified: true,
     postprocess: {
       includeProcessedMarkdown: true,
     },

@@ -3,11 +3,11 @@ import type {
   LinkItemType,
 } from "@fumadocs/base-ui/layouts/shared";
 
-import { appName, gitConfig } from "./shared";
+import { appName, repoUrl } from "./shared";
 
 export function baseOptions(): BaseLayoutProps {
   return {
-    githubUrl: `https://github.com/${gitConfig.user}/${gitConfig.repo}`,
+    githubUrl: repoUrl,
     nav: {
       title: appName,
     },
