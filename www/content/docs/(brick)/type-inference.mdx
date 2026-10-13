@@ -35,6 +35,33 @@ export type UserRow = typeof users.$inferSelect;
 export type NewUserRow = typeof users.$inferInsert;
 ```
 
+### Schema
+
+These columns match the Drizzle tables in the example. Defaults marked as application defaults run in Drizzle, rather than in SQL.
+
+export const usersSchemaFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+    defaultValue: "crypto.randomUUID() (application)",
+  },
+  {
+    name: "name",
+    type: "text",
+    description: "Display name.",
+  },
+  {
+    name: "bio",
+    type: "text",
+    description: "Profile biography.",
+    isOptional: true,
+  },
+];
+
+<DatabaseTable name="users" fields={usersSchemaFields} />
+
 ## Why Zero-Codegen Matters
 
 Many backend frameworks rely on external DSLs, generated code directories (`gen/`, `prisma/client`), or file watchers. Brick-TS avoids code generation:

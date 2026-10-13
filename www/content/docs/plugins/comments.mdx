@@ -23,11 +23,46 @@ export const commentsTable = sqliteTable("comments", {
 
 ### Schema
 
-| Field      | Type   | Description                                            | Constraints       |
-| :--------- | :----- | :----------------------------------------------------- | :---------------- |
-| `id`       | `text` | Unique comment identifier                              | Primary key, UUID |
-| `targetId` | `text` | Foreign key referencing the parent resource identifier | Not null          |
-| `body`     | `text` | The text content of the comment                        | Not null          |
+These columns match the Drizzle tables in the example. Defaults marked as application defaults run in Drizzle, rather than in SQL.
+
+export const commentsSchemaFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+    defaultValue: "crypto.randomUUID() (application)",
+  },
+  {
+    name: "target_id",
+    type: "text",
+    description: "Parent record identifier, validated by the application.",
+  },
+  {
+    name: "body",
+    type: "text",
+    description: "Text content.",
+  },
+];
+
+<DatabaseTable name="comments" fields={commentsSchemaFields} />
+
+export const pagesSchemaFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+    defaultValue: "crypto.randomUUID() (application)",
+  },
+  {
+    name: "title",
+    type: "text",
+    description: "Display title.",
+  },
+];
+
+<DatabaseTable name="pages" fields={pagesSchemaFields} />
 
 ## Plugin Implementation
 

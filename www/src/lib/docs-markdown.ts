@@ -1,9 +1,14 @@
 import type { LLMsOptions } from "fumadocs-core/mdx-plugins/remark-llms";
-import type { MdxJsxFlowElement, MdxJsxTextElement } from "mdast-util-mdx";
+import type {
+  MdxJsxFlowElement,
+  MdxJsxTextElement,
+  MdxjsEsm,
+} from "mdast-util-mdx";
 import { z } from "zod";
 import type { Root } from "mdast";
 import { replaceSource } from "fumadocs-core/mdx-plugins/stringifier";
 import { visit } from "unist-util-visit";
+import { databaseFieldsSchema, databaseTableMarkdown } from "./database-schema";
 
 function attribute(
   node: MdxJsxFlowElement | MdxJsxTextElement,
@@ -18,7 +23,82 @@ function attribute(
   return undefined;
 }
 
-const cell = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+type Program = NonNullable<NonNullable<MdxjsEsm["data"]>["estree"]>;
+type Expression = Extract<
+  Program["body"][number],
+  { type: "ExpressionStatement" }
+>["expression"];
+
+function staticValue(expression: Expression | null | undefined): unknown {
+  if (!expression)
+    throw new Error("DatabaseTable requires static field values.");
+  switch (expression.type) {
+    case "Literal":
+      return expression.value;
+    case "ArrayExpression":
+      return expression.elements.map((element) => {
+        if (element?.type === "SpreadElement")
+          throw new Error("DatabaseTable does not support spreads.");
+        return staticValue(element);
+      });
+    case "ObjectExpression":
+      return Object.fromEntries(
+        expression.properties.map((property) => {
+          if (
+            property.type !== "Property" ||
+            property.computed ||
+            property.kind !== "init" ||
+            property.method ||
+            property.value.type === "AssignmentPattern" ||
+            property.value.type === "ArrayPattern" ||
+            property.value.type === "ObjectPattern" ||
+            property.value.type === "RestElement"
+          ) {
+            throw new Error("DatabaseTable requires static object fields.");
+          }
+          const key =
+            property.key.type === "Identifier"
+              ? property.key.name
+              : staticValue(property.key);
+          return [z.string().parse(key), staticValue(property.value)];
+        }),
+      );
+    case "UnaryExpression":
+      if (
+        expression.operator === "-" &&
+        expression.argument.type === "Literal" &&
+        typeof expression.argument.value === "number"
+      )
+        return -expression.argument.value;
+      break;
+  }
+  throw new Error("DatabaseTable requires static field values.");
+}
+
+function tableFields(
+  node: MdxJsxFlowElement | MdxJsxTextElement,
+  exports: Map<string, Expression>,
+) {
+  const attr = node.attributes.find(
+    (attr) => attr.type === "mdxJsxAttribute" && attr.name === "fields",
+  );
+  if (
+    !attr ||
+    attr.type !== "mdxJsxAttribute" ||
+    !attr.value ||
+    typeof attr.value === "string"
+  ) {
+    throw new Error("DatabaseTable requires a fields array.");
+  }
+  const statement = attr.value.data?.estree?.body[0];
+  let expression =
+    statement?.type === "ExpressionStatement"
+      ? statement.expression
+      : undefined;
+  if (expression?.type === "Identifier")
+    expression = exports.get(expression.name);
+  return databaseFieldsSchema.parse(staticValue(expression));
+}
 
 export const docsMarkdownOptions = { headingIds: false } satisfies LLMsOptions;
 
@@ -26,6 +106,20 @@ export function remarkDocsMarkdown() {
   return (tree: Root, file: Parameters<typeof replaceSource>[0]) => {
     if (file.path && !file.path.replaceAll("\\", "/").includes("content/docs/"))
       return;
+    const exports = new Map<string, Expression>();
+    visit(tree, "mdxjsEsm", (node) => {
+      for (const statement of node.data?.estree?.body ?? []) {
+        if (
+          statement.type !== "ExportNamedDeclaration" ||
+          statement.declaration?.type !== "VariableDeclaration"
+        )
+          continue;
+        for (const declaration of statement.declaration.declarations) {
+          if (declaration.id.type === "Identifier" && declaration.init)
+            exports.set(declaration.id.name, declaration.init);
+        }
+      }
+    });
     visit(tree, (node) => {
       if (
         node.type === "mdxFlowExpression" ||
@@ -41,30 +135,13 @@ export function remarkDocsMarkdown() {
       )
         return;
       if (node.name === "DatabaseTable") {
-        const columns = z
-          .array(z.string())
-          .nonempty()
-          .parse(attribute(node, "columns"));
-        const rows = z.array(z.array(cell)).parse(attribute(node, "rows"));
-        if (rows.some((row) => row.length !== columns.length)) {
-          throw new Error("DatabaseTable rows must match the columns.");
-        }
-        const line = (values: unknown[]) =>
-          `| ${values
-            .map((value) =>
-              String(value ?? "")
-                .replaceAll("|", "\\|")
-                .replace(/\r?\n/g, " "),
-            )
-            .join(" | ")} |`;
         replaceSource(
           file,
           node,
-          [
-            line(columns),
-            line(columns.map(() => "---")),
-            ...rows.map(line),
-          ].join("\n"),
+          databaseTableMarkdown({
+            name: z.string().parse(attribute(node, "name")),
+            fields: tableFields(node, exports),
+          }),
         );
         return;
       }

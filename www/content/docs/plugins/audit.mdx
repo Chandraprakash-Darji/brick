@@ -59,14 +59,46 @@ export function auditTrail() {
 
 ### Schema
 
-| Field          | Type      | Description                                          | Constraints       |
-| :------------- | :-------- | :--------------------------------------------------- | :---------------- |
-| `id`           | `text`    | Unique audit record identifier                       | Primary key, UUID |
-| `resourceName` | `text`    | Name of the mutated resource (e.g. `"account"`)      | Not null          |
-| `recordId`     | `text`    | Target row identifier                                | Not null          |
-| `operation`    | `text`    | Mutation action (`"create"`, `"update"`, `"delete"`) | Not null          |
-| `userId`       | `text`    | Authenticated user ID from request context           | Nullable          |
-| `timestamp`    | `integer` | Unix epoch millisecond timestamp                     | Not null          |
+These columns match the Drizzle tables in the example. Defaults marked as application defaults run in Drizzle, rather than in SQL.
+
+export const audit_logsSchemaFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+    defaultValue: "crypto.randomUUID() (application)",
+  },
+  {
+    name: "resource_name",
+    type: "text",
+    description: "Name of the mutated resource.",
+  },
+  {
+    name: "record_id",
+    type: "text",
+    description: "Identifier of the mutated row.",
+  },
+  {
+    name: "operation",
+    type: "text",
+    description: "Mutation action: create, update, or delete.",
+  },
+  {
+    name: "user_id",
+    type: "text",
+    description: "Authenticated user identifier, or null for anonymous writes.",
+    isOptional: true,
+  },
+  {
+    name: "timestamp",
+    type: "integer",
+    description:
+      "Unix epoch timestamp in milliseconds, set by the audit logger.",
+  },
+];
+
+<DatabaseTable name="audit_logs" fields={audit_logsSchemaFields} />
 
 ## Wiring into CRUD Lifecycle Hooks
 

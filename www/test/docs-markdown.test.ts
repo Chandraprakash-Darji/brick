@@ -53,14 +53,44 @@ npm install @brickkit/core
     expect(markdown).toContain("[Relational Data Modeling](/docs/relations)");
   });
 
-  test("renders a database table with escaped cells", () => {
-    expect(
-      renderDocsMarkdown(
-        `<DatabaseTable columns={["Column", "Type"]} rows={[["id", "text"], ["choice", "a|b"]]} />`,
-      ),
-    ).toBe(
-      "| Column | Type |\n| --- | --- |\n| id | text |\n| choice | a\\|b |\n",
+  test("renders exported schema fields with constraints and escaped cells", () => {
+    const markdown = renderDocsMarkdown(`export const fields = [
+      { name: "id", type: "text", description: "a|b", isPrimaryKey: true, isUnique: true },
+      { name: "parent_id", type: "text", description: "Parent", references: { table: "parents", field: "id" }, isOptional: true },
+      { name: "count", type: "integer", description: "Count", defaultValue: 0 },
+      { name: "enabled", type: "boolean", description: "Enabled", defaultValue: false },
+    ];
+
+<DatabaseTable name="children" fields={fields} />`);
+    expect(markdown).toContain("#### Table Name: `children`");
+    expect(markdown.replace(/ +/g, " ")).toContain(
+      "| Field | Type | Description |",
     );
+    expect(markdown).toContain("a\\|b PK Unique");
+    expect(markdown).toContain(
+      "[FK: parents.id](#table-name-parents) Optional",
+    );
+    expect(markdown).toContain("Default: 0");
+    expect(markdown).toContain("Default: false");
+    expect(markdown).not.toContain("export const");
+  });
+
+  test("renders inline schema fields without evaluating JavaScript", () => {
+    const markdown = renderDocsMarkdown(
+      '<DatabaseTable name="counts" fields={[{ name: "count", type: "integer", description: "Count", defaultValue: -1 }]} />',
+    );
+    expect(markdown).toContain("Default: -1");
+    expect(() =>
+      renderDocsMarkdown('<DatabaseTable name="bad" fields={getFields()} />'),
+    ).toThrow("static field values");
+    expect(() =>
+      renderDocsMarkdown('<DatabaseTable name="bad" fields={missingFields} />'),
+    ).toThrow("static field values");
+    expect(() =>
+      renderDocsMarkdown(
+        '<DatabaseTable name="bad" fields={[{ name: "id" }]} />',
+      ),
+    ).toThrow();
   });
 
   test("renders callouts and linked cards without JSX", () => {
@@ -84,11 +114,9 @@ Define a tool.
     expect(() => renderDocsMarkdown("{someRuntimeValue}")).toThrow(
       "dynamic expressions",
     );
-    expect(() =>
-      renderDocsMarkdown(
-        '<DatabaseTable columns={["id"]} rows={[["a", "b"]]} />',
-      ),
-    ).toThrow("match the columns");
+    expect(() => renderDocsMarkdown('<DatabaseTable name="bad" />')).toThrow(
+      "fields array",
+    );
   });
 
   test("preserves code containing JSX and removes MDX imports", () => {

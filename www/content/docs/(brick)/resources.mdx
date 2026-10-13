@@ -52,6 +52,41 @@ export const page = pagesService
   );
 ```
 
+### Schema
+
+Brick does not generate owner or timestamp columns. Declare them in your table and populate them with Drizzle defaults or CRUD hooks when needed.
+
+These columns match the Drizzle tables in the example. Defaults marked as application defaults run in Drizzle, rather than in SQL.
+
+export const pagesSchemaFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+    defaultValue: "crypto.randomUUID() (application)",
+  },
+  {
+    name: "title",
+    type: "text",
+    description: "Display title.",
+  },
+  {
+    name: "content",
+    type: "text",
+    description: "Page content.",
+    isOptional: true,
+  },
+  {
+    name: "internal_notes",
+    type: "text",
+    description: "Internal notes, hidden by the CRUD field policy.",
+    isOptional: true,
+  },
+];
+
+<DatabaseTable name="pages" fields={pagesSchemaFields} />
+
 <Callout type="warn">
   **CRUD is Deny-by-Default**: `access` is a required option. `access: "public"` allows every call. `access: { authorize, scope }` calls your `authorize` on every operation and adds your `scope` condition to queries. An access object without `authorize` rejects every call with `FORBIDDEN` (HTTP 403).
 </Callout>

@@ -29,9 +29,7 @@ not bypass content negotiation. Both negotiated representations vary on `Accept`
 The production build runs this check too. Dynamic MDX expressions and components
 without renderable content fail the check instead of disappearing from exports.
 Code tabs flatten to labeled code blocks, callouts become blockquotes, and cards
-become links. `DatabaseTable` exports accept static JSON `columns` and `rows`, for
-example `columns={["Column", "Type"]} rows={[["id", "text"]]}`. Prefer native
-markdown tables for new documentation.
+become links. `DatabaseTable` exports render the same schema fields as the HTML component.
 
 With the site running, verify every exported URL and content negotiation:
 
@@ -69,3 +67,51 @@ the card is marked as live.
 
 `entry` is a module that exports a BrickApp (`default` or `app`), a
 `buildApp()` factory, or `defineService` services. It must not call `listen()`.
+
+## Document database schemas
+
+Add a `### Schema` section to every guide that creates or requires a table.
+`DatabaseTable` is registered globally for MDX. Use SQL column names and match
+constraints to the Drizzle declaration. Set `isOptional` for nullable columns;
+label `$defaultFn` values as application defaults.
+
+```mdx
+### Schema
+
+export const exampleFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+  },
+  {
+    name: "parent_id",
+    type: "text",
+    description: "Parent row.",
+    isForeignKey: true,
+    references: { table: "parents", field: "id" },
+  },
+  {
+    name: "enabled",
+    type: "boolean",
+    description: "Whether enabled.",
+    isOptional: true,
+    defaultValue: false,
+  },
+];
+
+<DatabaseTable name="examples" fields={exampleFields} />
+```
+
+Fields support `isPrimaryKey`, `isUnique`, `isForeignKey`, `references`,
+`isOptional`, and `defaultValue`. Foreign-key badges link to the referenced
+`DatabaseTable` on the same page. Include that table on the page when you use
+`references`. Describe logical relationships in prose when the schema does
+not declare a SQL foreign key.
+
+The component renders a Markdown table in `/docs/*.md` and `/llms-full.txt`
+through the docs Markdown renderer. Field arrays must use static values so
+the renderer can read them at build time without running JavaScript.
+
+Run the component checks with `bun test test` from `www`.

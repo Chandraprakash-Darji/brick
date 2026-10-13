@@ -11,3 +11,25 @@ description: Database configuration in development and caller-owned PostgreSQL m
 Brick-TS uses explicit `syncSchema` helpers for SQLite in development and caller-owned migrations via Drizzle Kit for PostgreSQL.
 
 Please see the canonical guide: **[Database Management & Migrations](/docs/database)**.
+
+### Schema
+
+The database guide uses this application-owned table. Apply migrations to the tables declared in your Drizzle schema.
+
+export const usersSchemaFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+    defaultValue: "crypto.randomUUID() (application)",
+  },
+  {
+    name: "email",
+    type: "text",
+    description: "Unique email address.",
+    isUnique: true,
+  },
+];
+
+<DatabaseTable name="users" fields={usersSchemaFields} />
