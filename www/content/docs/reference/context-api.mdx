@@ -1,0 +1,84 @@
+---
+title: Context API Reference
+description: Detailed specification of BaseContext, ActionContext, and context lifecycle guarantees.
+---
+
+This reference documents the TypeScript interfaces, fields, and lifecycle guarantees of the Brick-TS context system.
+
+## `BaseContext` Interface
+
+`BaseContext` is the foundational object passed to all service context resolvers and action executions:
+
+```ts
+export interface BaseContext<TDb = any> {
+  request: Request;
+  db: TDb;
+  logger: Logger;
+  traceId: string;
+  requestId?: string;
+  services?: Record<string, any>;
+  metadata?: Record<string, unknown>;
+}
+```
+
+### Properties Breakdown
+
+| Property    | Type                      | Description                                                                                                                                                                       |
+| :---------- | :------------------------ | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `request`   | `Request`                 | Standard web `Request` for the active HTTP call. In-process calls without a request receive a placeholder `Request("http://localhost")`.                                          |
+| `db`        | `TDb`                     | The database client from the service's database handle (`service.getDb()`). Undefined when the service has no database.                                                           |
+| `logger`    | `Logger`                  | Logger with `.info()`, `.warn()`, `.error()`, and `.debug()` methods. The default logger prefixes output with the level (e.g. `[INFO]`).                                          |
+| `traceId`   | `string`                  | Correlation id. Over HTTP it is taken from the `x-trace-id` request header or minted (e.g. `tr_1`), and echoed back as an `x-trace-id` response header.                           |
+| `requestId` | `string \| undefined`     | Request id. Over HTTP it is taken from the `x-request-id` header or minted (e.g. `req_1`), and echoed back as an `x-request-id` response header. The HTTP runtime always sets it. |
+| `services`  | `Record<string, any>`     | Reserved. The HTTP runtime and default context set it to an empty object.                                                                                                         |
+| `metadata`  | `Record<string, unknown>` | Free-form metadata. The HTTP action runtime sets it to `{ headers }` (the request headers).                                                                                       |
+
+## Logger Interface
+
+The `logger` property on `BaseContext` adheres to:
+
+```ts
+export interface Logger {
+  info: (...args: any[]) => void;
+  warn: (...args: any[]) => void;
+  error: (...args: any[]) => void;
+  debug: (...args: any[]) => void;
+}
+```
+
+## `ActionContext`
+
+`ActionContext` is the intersection of `BaseContext` and your service's custom context resolver return type:
+
+```ts
+export type ActionContext<
+  TDb = any,
+  TServiceContext = DefaultServiceContext,
+> = BaseContext<TDb> & TServiceContext;
+```
+
+Inside an action's `execute({ ctx })` or CRUD hook, `ctx` includes all fields from `BaseContext` plus whatever your service `context` resolver returned.
+
+## `NarrowAuthorizedContext<TCtx>`
+
+When an action declares an `authorize` guard, Brick wraps the context with `NarrowAuthorizedContext`:
+
+```ts
+export type NarrowAuthorizedContext<TCtx> = TCtx extends { user: infer U }
+  ? [U] extends [null | undefined]
+    ? TCtx
+    : Omit<TCtx, "user"> & { user: NonNullable<U> }
+  : TCtx;
+```
+
+This utility narrows `ctx.user` from `User | null` to `NonNullable<User>` at the type level. Inside `execute({ ctx })` of an action with `authorize`, you do not need optional chaining or null assertions on `ctx.user`. The narrowing is a type assertion only: it is your `authorize` function that must actually reject calls without a user.
+
+## Context Isolation Across Service Proxies
+
+When calling actions with `createServiceProxy("targetService")` (call signature: `proxy.actionName(input, ctx?)`), Brick isolates execution contexts:
+
+1. **Dangerous Field Stripping**: The caller's `db`, `request`, `logger`, `services`, `metadata`, and `_resolved` (from the proxy's `options.context` or the per-call `ctx`) are stripped from the invocation envelope. Other fields such as `user`, `traceId`, and `requestId` pass through.
+2. **Independent Context Resolution**: The target service resolves its own context using its own `context` resolver and uses its own configured database connection.
+3. **`caller` Field**: If the envelope has no `caller`, the proxy sets `ctx.caller` to the **target** service name passed to `createServiceProxy()` (not the calling service). Pass `{ caller: "..." }` in the call context if the receiver needs the originating service.
+
+Only in-process dispatch is implemented; creating a proxy with `{ isMonolith: false }` throws when an action is called.

@@ -1,28 +1,156 @@
 ---
-title: Comments plugin pattern
-description: Attach comments to an explicit parent resource
+title: Comments Plugin Pattern
+description: Attach discussion threads to any parent resource using a canonical comments schema.
 ---
 
-An application comments factory returns `defineResourcePlugin({name,setup})`.
-Setup receives `{resource,service,routes}`. The resource supplies the parent
-identity; options supply the comment table and typed column mappings. Field
-policies belong to comments options and apply to comments, never the parent.
+This guide demonstrates the canonical Brick-TS comments plugin pattern, attaching threaded discussions to any parent resource with target foreign-key validation.
 
-```ts
-const page = service
-  .resource({ name: "page", table: pagesTable, id: pagesTable.id })
-  .use(comments({ table: pageCommentsTable }));
-const post = service
-  .resource({ name: "post", table: postsTable, id: postsTable.id })
-  .use(comments({ table: postCommentsTable }));
+## Canonical Schema
+
+The comments pattern uses a single, unified database schema across all services:
+
+```ts title="src/extensions/comments/schema.ts"
+import { sqliteTable, text } from "@brickkit/core";
+
+export const commentsTable = sqliteTable("comments", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  targetId: text("target_id").notNull(),
+  body: text("body").notNull(),
+});
 ```
 
-These are application-defined factories and schema imports. Brick does not ship
-a comments package. See the runnable `examples/extensions` implementation for a
-concrete single-table factory, target validation, CRUD field policies, write
-normalization, and a returned comments namespace.
+### Schema
 
-A reusable factory should accept mapped target/body/author columns, validate
-compatible target IDs and authorization, and expose stable named routes. Separate
-comment tables per parent permit database foreign keys. Shared polymorphic storage
-requires an explicit discriminator and scoping on every operation.
+| Field      | Type   | Description                                            | Constraints       |
+| :--------- | :----- | :----------------------------------------------------- | :---------------- |
+| `id`       | `text` | Unique comment identifier                              | Primary key, UUID |
+| `targetId` | `text` | Foreign key referencing the parent resource identifier | Not null          |
+| `body`     | `text` | The text content of the comment                        | Not null          |
+
+## Plugin Implementation
+
+Implement the comments factory using `defineResourcePlugin` and `@brickkit/crud`:
+
+```ts title="src/extensions/comments/index.ts"
+import { ActionExecutionError, defineResourcePlugin, eq } from "@brickkit/core";
+import { crud } from "@brickkit/crud";
+import { commentsTable } from "./schema";
+
+export { commentsTable } from "./schema";
+
+/** Resource plugin that attaches comments to any host resource. */
+export function comments(options: { table: typeof commentsTable }) {
+  return defineResourcePlugin({
+    name: "example/comments",
+    setup({ resource, service }) {
+      const comment = service
+        .resource({
+          name: `${resource.name}Comment`,
+          table: options.table,
+          id: options.table.id,
+        })
+        .use(
+          crud({
+            access: "public",
+            fields: {
+              id: { read: true, filter: ["eq"] },
+              targetId: { read: true, create: true, filter: ["eq"] },
+              body: {
+                read: true,
+                create: true,
+                update: true,
+                filter: ["contains"],
+              },
+            },
+            hooks: {
+              beforeCreate: async ({ data, ctx }) => {
+                data.body = String(data.body).trim();
+                if (!data.body) {
+                  throw new ActionExecutionError(
+                    "BAD_REQUEST",
+                    "Comment body cannot be blank",
+                    400,
+                  );
+                }
+
+                // Verify parent resource exists in the database
+                const parents = await ctx.db
+                  .select({ id: resource.id })
+                  .from(resource.table)
+                  .where(eq(resource.id, data.targetId))
+                  .limit(1);
+
+                if (!parents.length) {
+                  throw new ActionExecutionError(
+                    "NOT_FOUND",
+                    "Comment target not found",
+                    404,
+                  );
+                }
+              },
+              beforeUpdate: ({ data }) => {
+                if (data.body !== undefined) {
+                  data.body = String(data.body).trim();
+                  if (!data.body) {
+                    throw new ActionExecutionError(
+                      "BAD_REQUEST",
+                      "Comment body cannot be blank",
+                      400,
+                    );
+                  }
+                }
+              },
+            },
+          }),
+        );
+
+      return { comments: comment };
+    },
+  });
+}
+```
+
+## Attaching to Resources
+
+Attach the comments plugin to any host resource with `.use()`:
+
+```ts title="src/services/pages.ts"
+import {
+  defineDatabase,
+  defineService,
+  sqliteTable,
+  text,
+} from "@brickkit/core";
+import { crud } from "@brickkit/crud";
+import { comments, commentsTable } from "../extensions/comments";
+
+export const pagesTable = sqliteTable("pages", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  title: text("title").notNull(),
+});
+
+const database = defineDatabase({ tables: { pagesTable, commentsTable } });
+export const pagesService = defineService("pages", { database });
+
+// Attach comments plugin to the page resource:
+export const page = pagesService
+  .resource({ name: "page", table: pagesTable, id: pagesTable.id })
+  .use(
+    crud({
+      access: "public",
+      fields: { id: { read: true }, title: { read: true, create: true } },
+    }),
+  )
+  .use(comments({ table: commentsTable }));
+```
+
+This automatically mounts the standard CRUD REST endpoints for the comment resource (under the service prefix, e.g. `/api`):
+
+- `POST /api/pageComment` (create)
+- `POST /api/pageComment/query` (list)
+- `POST /api/pageComment/count` and `POST /api/pageComment/exists`
+- `GET /api/pageComment/:id`, `PATCH /api/pageComment/:id`, `DELETE /api/pageComment/:id`

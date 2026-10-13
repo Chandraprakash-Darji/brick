@@ -1,8 +1,7 @@
 {
   "title": "brick CLI",
-  "description": "Command-line tools",
+  "description": "Command-line developer and build tooling",
   "icon": "Terminal",
   "root": true,
-  "defaultOpen": true,
-  "pages": ["index", "build", "generate", "migrate", "schema-dump"]
+  "pages": ["index", "dev-and-start", "build", "gen", "info"]
 }

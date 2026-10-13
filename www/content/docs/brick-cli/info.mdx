@@ -1,0 +1,79 @@
+---
+title: Architecture Introspection
+description: Export and inspect the runtime architecture JSON schema of your application.
+---
+
+The `brick info` command exports the complete runtime service graph, mounted endpoints, access policies, and database configurations as JSON.
+
+## Minimal Example
+
+Run `brick info` against an application entry file:
+
+```bash
+brick info src/server.ts
+```
+
+Alias:
+
+```bash
+brick services src/server.ts
+```
+
+The CLI loads the application and prints the `ArchitectureSchema` JSON to stdout:
+
+```json
+{
+  "version": "1.0.0",
+  "services": [
+    {
+      "name": "pages",
+      "hasDatabase": true,
+      "databaseConfig": {
+        "engine": "sqlite",
+        "tables": ["pages"]
+      },
+      "resources": [{ "name": "page" }],
+      "actions": [
+        {
+          "name": "page.list",
+          "method": "POST",
+          "path": "/api/pages/page.list",
+          "serviceName": "pages",
+          "plugin": "@brickkit/crud",
+          "resource": "page",
+          "hasAuthorize": false,
+          "hasScope": false,
+          "accessPolicy": "public"
+        },
+        {
+          "name": "page.create",
+          "method": "POST",
+          "path": "/api/pages/page.create",
+          "serviceName": "pages",
+          "plugin": "@brickkit/crud",
+          "resource": "page",
+          "hasAuthorize": true,
+          "hasScope": false,
+          "accessPolicy": "authorized"
+        }
+      ]
+    }
+  ]
+}
+```
+
+## Runtime Architecture Endpoint
+
+In addition to the CLI command, every running Brick server exposes the exact same architecture snapshot over HTTP at:
+
+```bash
+curl http://localhost:4000/_brick/services
+```
+
+This endpoint is read-only and provides an up-to-date representation of all mounted services and security policies. The database handle itself is excluded from the export (`options.database` is omitted), but the remaining service `options` are included; do not treat the output as free of configuration values.
+
+## Use Cases for Introspection
+
+- **Security Auditing**: Verify in CI that no internal or administrative actions are accidentally exposed with `accessPolicy: "public"`.
+- **Microservice Graph Visualization**: Ingest the architecture JSON to render dynamic service dependency graphs and infrastructure maps.
+- **Contract Verification**: Ensure that paths and methods match expected API gateway routing rules.

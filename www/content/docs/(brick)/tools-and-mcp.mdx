@@ -1,0 +1,130 @@
+---
+title: AI Tools and Model Context Protocol (MCP)
+description: Expose backend actions to AI agents via Model Context Protocol (MCP) and JSON-RPC.
+---
+
+Brick-TS provides first-class support for AI agents through Model Context Protocol (MCP) tool declarations and JSON-RPC transports.
+
+## Minimal Example
+
+Define an AI tool on a service, assemble an MCP registry, and serve it over JSON-RPC 2.0:
+
+```ts title="src/services/documents.ts"
+import {
+  brick,
+  createMcpHandler,
+  createMcpRegistry,
+  defineService,
+  t,
+} from "@brickkit/core";
+
+export const docsService = defineService("docs");
+
+// 1. Declare an AI tool with an object input schema and description
+export const searchDocs = docsService.tool({
+  name: "search_docs",
+  description: "Search knowledge base documents by query string",
+  input: t.Object({
+    query: t.String({ description: "Search terms or keywords" }),
+    limit: t.Optional(t.Number({ default: 5 })),
+  }),
+  output: t.Array(
+    t.Object({
+      id: t.String(),
+      title: t.String(),
+      snippet: t.String(),
+    }),
+  ),
+  execute: async ({ input, ctx }) => {
+    return [
+      {
+        id: "doc_1",
+        title: "Architecture",
+        snippet: "Brick-TS is built on Bun...",
+      },
+    ];
+  },
+});
+
+// 2. Build MCP registry from registered tools
+const mcpRegistry = createMcpRegistry({
+  services: [docsService],
+});
+
+// 3. Create JSON-RPC 2.0 handler
+const mcpHandler = createMcpHandler({
+  registry: mcpRegistry,
+  serverInfo: { name: "docs-agent-server", version: "1.0.0" },
+});
+
+// 4. Mount on the Brick (Elysia) app; the handler only accepts POST
+const app = brick({ services: [docsService] });
+app.post("/mcp", ({ request }) => mcpHandler(request));
+app.listen(4000);
+```
+
+## Tools (`defineTool` / `service.tool`)
+
+Tools are specialized actions designed for invocation by Large Language Models:
+
+- **Object Schema Requirement**: The `input` schema, if present, must be a TypeBox object (`t.Object(...)`). Any other schema makes `defineTool()` / `service.tool()` throw `Tool '<name>' input must be an object schema` when the tool is defined.
+- **MCP-only by default**: Tools are not mounted as HTTP routes. Set `http: true` on the tool (or register it with `service.action(tool)`) to also expose it as an HTTP action and in OpenAPI.
+- **Agent Descriptions**: Provide clear `description` strings on the tool and each schema property; LLM agents use these descriptions to determine tool calling logic.
+- **Annotations**: Tools accept MCP annotations: `title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint`. You can also set a top-level `title`:
+
+```ts title="src/services/admin.ts"
+export const deleteUserTool = adminService.tool({
+  name: "delete_user",
+  description: "Permanently delete a user account and associated data",
+  annotations: {
+    destructiveHint: true,
+    readOnlyHint: false,
+  },
+  input: t.Object({
+    userId: t.String({
+      description: "The unique identifier of the user to remove",
+    }),
+  }),
+  output: t.Object({ success: t.Boolean() }),
+  execute: async ({ input, error }) => {
+    return { success: true };
+  },
+});
+```
+
+## MCP Registry (`createMcpRegistry`)
+
+`createMcpRegistry` gathers only explicitly defined tools:
+
+- Standard service actions and internal functions are **never exposed** to AI agents unless declared as tools via `service.tool` or `defineTool`.
+- You can pass `services` (their `service.tool()` tools are collected), standalone `tools` from `defineTool()`, or both.
+- Two different tools with the same name are rejected with `Duplicate MCP tool: <name>` when the registry is created.
+
+```ts title="src/mcp-setup.ts"
+import { createMcpRegistry } from "@brickkit/core";
+import { docsService } from "./services/documents";
+import { adminService } from "./services/admin";
+
+export const registry = createMcpRegistry({
+  services: [docsService, adminService],
+});
+
+// Inspect available tools:
+const toolList = registry.listTools();
+console.log(toolList.map((t) => t.name)); // ["search_docs", "delete_user"]
+```
+
+## JSON-RPC 2.0 Handler (`createMcpHandler`)
+
+`createMcpHandler({ registry, serverInfo, protocolVersions? })` returns a stateless `(request, ctx?) => Promise<Response>` handler for MCP JSON-RPC 2.0 over HTTP POST. Non-POST requests get `405`, and notifications (requests without an `id`) get `202` with no body. It handles:
+
+- `initialize`: Returns `{ capabilities: { tools: {} }, protocolVersion, serverInfo }`. The client's requested version is echoed if it is in `protocolVersions` (default `["2025-06-18"]`); otherwise the first listed version is returned.
+- `ping`: Returns `{}`.
+- `tools/list`: Returns each tool's `name`, `title` (if set), `description`, `inputSchema`, and `annotations`.
+- `tools/call`: Validates and executes the tool, returning `{ content: [{ type: "text", text }] }`. Strings are returned as-is; other values are JSON-stringified. A thrown error becomes a result with `isError: true` and the error message as text. An unknown tool name returns JSON-RPC error `-32602`.
+
+The handler performs no authentication. Wrap it with your own auth, and pass an optional `ctx` (for example `{ user }`) as the second argument; it is forwarded to the tool's execution context along with the `request`.
+
+### Connecting a Client
+
+Point an MCP client that supports HTTP transport at your endpoint, for example `http://localhost:4000/mcp`. The configuration format depends on the client.

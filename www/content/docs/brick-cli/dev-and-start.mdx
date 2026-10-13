@@ -1,0 +1,88 @@
+---
+title: Development & Production Server
+description: Run development servers with live reload and start production instances.
+---
+
+The `brick dev` and `brick start` commands run your service mesh with automatic route discovery, port validation, and live reload.
+
+## Development Server (`brick dev`)
+
+Start local development with recursive file watching and debounced server restarts:
+
+```bash
+brick dev src/server.ts --port 4000
+```
+
+### Live Reload Behavior
+
+When running `brick dev`:
+
+1. **Entry File Loading**: The CLI resolves the application entry file. If an entry file path is provided but does not exist, the CLI exits immediately with an error.
+2. **Watch Directories**: The CLI monitors `src/`, `app/`, and the parent folder of the entry file for changes (excluding `node_modules`).
+3. **Registry Reset**: On file modification (after a short debounce), `brick dev` closes the existing HTTP listener, resets the global service registry (`resetGlobalRegistry()`), re-imports the application entry via dynamic `import()`, and spins up a fresh server instance. Known issue: in v0.3.0 the re-import is served from Bun's module cache, so after a reload no services are registered again and actions return 404 until you restart `brick dev` ([#57](https://github.com/Chandraprakash-Darji/brick/issues/57)).
+
+### Startup Route Banner
+
+Upon startup, `brick dev` logs registered services and their public HTTP endpoints:
+
+```text
+🧱 Brick-TS Development Server
+   Registered Services: 2
+   • pages (8 actions)
+     -> POST   /api/pages/page.list
+     -> POST   /api/pages/page.get
+     -> POST   /api/pages/page.create
+   • users (2 actions)
+     -> GET    /api/users/:id
+     -> POST   /api/users/login
+
+⚡ API Gateway running on: http://localhost:4000
+🩺 Health check:        http://localhost:4000/_health
+🗺️ Architecture graph:  http://localhost:4000/_brick/services
+
+👀 Watching for changes in: /Users/project/src
+```
+
+## Production Server (`brick start`)
+
+Start the production server without file system watchers or development restarts:
+
+```bash
+brick start src/server.ts --port 8080
+```
+
+Or pass the port via environment variable:
+
+```bash
+PORT=8080 brick start src/server.ts
+```
+
+## Port Resolution and Validation
+
+Port resolution follows a strict three-tier precedence:
+
+```mermaid
+flowchart LR
+    Flag["--port flag"] -->|Overrides| Env["PORT environment variable"]
+    Env -->|Overrides| Default["Default: 4000"]
+```
+
+Examples:
+
+```bash
+# 1. Defaults to 4000:
+brick dev src/server.ts
+
+# 2. Uses PORT=3000 from environment:
+PORT=3000 brick dev src/server.ts
+
+# 3. CLI --port 5000 overrides PORT=3000:
+PORT=3000 brick dev src/server.ts --port 5000
+```
+
+Port numbers must be integers between `1` and `65535`. Invalid ports cause immediate process termination:
+
+```bash
+brick dev src/server.ts --port 99999
+# Error: Invalid port: 99999. Port must be an integer between 1 and 65535
+```

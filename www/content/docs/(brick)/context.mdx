@@ -1,0 +1,122 @@
+---
+title: Execution Context & Services
+description: Resolve request context, inject databases and users, and isolate in-process service calls.
+---
+
+Execution context provides request metadata, database handles, logging, and user authentication state to actions and lifecycle hooks.
+
+## Minimal Example
+
+Configure a service context resolver to parse authentication headers and inject user identity into actions:
+
+```ts title="src/services/billing.ts"
+import { defineService, t } from "@brickkit/core";
+
+// Define custom session shape
+interface BillingUser {
+  id: string;
+  plan: "free" | "pro";
+}
+
+export const billingService = defineService("billing", {
+  context: async (baseCtx): Promise<{ user: BillingUser | null }> => {
+    const auth = baseCtx.request.headers.get("authorization");
+    if (!auth) return { user: null };
+
+    // Example token validation
+    const user =
+      auth === "Bearer pro-token"
+        ? { id: "usr_42", plan: "pro" as const }
+        : { id: "usr_10", plan: "free" as const };
+
+    return { user };
+  },
+});
+
+export const getSubscription = billingService.action({
+  name: "getSubscription",
+  output: t.Object({ plan: t.String() }),
+  execute: ({ ctx, error }) => {
+    // Error helpers throw; `return` lets TypeScript narrow `ctx.user`
+    if (!ctx.user) return error.UNAUTHORIZED("Sign in required");
+    return { plan: ctx.user.plan };
+  },
+});
+```
+
+## `BaseContext` Properties
+
+Every action invocation and service resolver receives a `BaseContext` containing HTTP and runtime telemetry primitives:
+
+| Field       | Type                      | Description                                                                                              |
+| :---------- | :------------------------ | :------------------------------------------------------------------------------------------------------- |
+| `request`   | `Request`                 | Web-standard `Request` for the active HTTP call, or a placeholder `http://localhost` request in-process. |
+| `db`        | `TDb`                     | Database instance from the owning service's handle.                                                      |
+| `logger`    | `Logger`                  | Logger with `.info()`, `.warn()`, `.error()`, and `.debug()`.                                            |
+| `traceId`   | `string`                  | Trace ID. Over HTTP, taken from the `x-trace-id` header when present (e.g., `tr_k2l9p0`).                |
+| `requestId` | `string`                  | Request ID. Over HTTP, taken from the `x-request-id` header when present (e.g., `req_k2l9p0`).           |
+| `services`  | `Record<string, any>`     | Reserved. Brick passes an empty object; use `createServiceProxy` to call other services.                 |
+| `metadata`  | `Record<string, unknown>` | Over HTTP, `{ headers }` with the request headers; an empty object in-process.                           |
+
+Over HTTP, Brick echoes `traceId` and `requestId` back as `x-trace-id` and `x-request-id` response headers.
+
+## Service Context Resolvers
+
+Brick passes `BaseContext` to the service's `context` resolver on every HTTP request and every in-process call:
+
+```ts title="src/services/projects.ts"
+export const projectsService = defineService("projects", {
+  context: async (baseCtx) => {
+    const tenantId = baseCtx.request.headers.get("x-tenant-id") ?? "default";
+    baseCtx.logger.info(`Resolving context for tenant: ${tenantId}`);
+
+    return {
+      tenantId,
+      resolvedAt: Date.now(),
+    };
+  },
+});
+```
+
+The returned object is merged with `BaseContext` to form `ActionContext`. Inside `execute({ ctx })`, TypeScript infers both `BaseContext` properties (like `ctx.db` and `ctx.logger`) and the resolved properties (like `ctx.tenantId`).
+
+## Context Isolation Across In-Process Service Calls
+
+When calling another service in-process using `createServiceProxy`, Brick enforces strict context isolation:
+
+```ts title="src/services/notifications.ts"
+import { createServiceProxy, defineService } from "@brickkit/core";
+
+export const notificationsService = defineService("notifications");
+
+// The type parameter is the shape you call; Brick doesn't infer it
+type UsersApi = {
+  getUser: (input: {
+    id: string;
+  }) => Promise<{ id: string; name: string; email: string }>;
+};
+
+// Proxy to the "users" service, looked up by name in the global registry
+const users = createServiceProxy<UsersApi>("users");
+
+export const sendWelcome = notificationsService.action({
+  name: "sendWelcome",
+  execute: async ({ ctx }) => {
+    // Proxy methods take (input, callCtx?) and run the action in-process
+    const user = await users.getUser({ id: "usr_1" });
+    ctx.logger.info(`Sending welcome email to ${user.email}`);
+    return { sent: true };
+  },
+});
+```
+
+Each proxy method takes the action's input as its first argument and an optional call context as its second. Only in-process (monolith) dispatch is implemented; `createServiceProxy(name, { isMonolith: false })` throws when called.
+
+### Security Boundaries
+
+What the receiving service sees:
+
+1. **Own context and database**: The receiving service runs its own `context` resolver and uses its own database.
+2. **Framework fields are dropped**: `db`, `request`, `logger`, `services`, and `metadata` in the call context are discarded before reaching the receiving service.
+3. **Other fields pass through**: Any other field you pass in the call context (such as `user`, `traceId`, or a custom field) is forwarded and overrides the value the receiving service's resolver returned. Only pass identity you trust.
+4. **`ctx.caller`**: If you don't pass `caller`, Brick sets it to the **target** service's name, not the calling service's. To identify the caller, pass it explicitly: `users.getUser({ id }, { caller: "notifications" })`.

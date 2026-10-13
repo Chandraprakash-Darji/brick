@@ -1,0 +1,156 @@
+---
+title: Validation and Errors
+description: Validate inputs and outputs with TypeBox schemas and throw structured errors with HTTP statuses.
+---
+
+Brick-TS enforces strict runtime schema validation using TypeBox and provides structured error helpers for consistent error envelopes.
+
+## Minimal Example
+
+Define an action with TypeBox schemas and use the injected `error` builder to return typed HTTP errors:
+
+```ts title="src/services/checkout.ts"
+import { defineService, t } from "@brickkit/core";
+
+export const checkoutService = defineService("checkout");
+
+export const processPayment = checkoutService.action({
+  name: "processPayment",
+  input: t.Object({
+    orderId: t.String({ minLength: 1 }),
+    amount: t.Number({ minimum: 1 }),
+  }),
+  output: t.Object({
+    transactionId: t.String(),
+    status: t.String(),
+  }),
+  // Declare custom action-specific error codes
+  errors: {
+    INSUFFICIENT_FUNDS: { status: 400, message: "Account balance is too low" },
+    CARD_EXPIRED: { status: 400, message: "Payment method has expired" },
+  },
+  execute: async ({ input, error }) => {
+    if (input.amount > 10000) {
+      error.INSUFFICIENT_FUNDS("Amount exceeds single-transaction limit", {
+        limit: 10000,
+        requested: input.amount,
+      });
+    }
+
+    return {
+      transactionId: `tx_${crypto.randomUUID()}`,
+      status: "succeeded",
+    };
+  },
+});
+```
+
+## Schema Validation with TypeBox
+
+TypeBox provides zero-dependency JSON Schema builders that validate at runtime and infer static TypeScript types simultaneously:
+
+```ts title="src/schemas/user.ts"
+import { type Static, t } from "@brickkit/core";
+
+export const CreateUserSchema = t.Object({
+  name: t.String({ minLength: 2, maxLength: 100 }),
+  email: t.String({ pattern: "^[^@\\s]+@[^@\\s]+$" }),
+  role: t.Union([t.Literal("admin"), t.Literal("member")]),
+  tags: t.Optional(t.Array(t.String())),
+});
+
+// Infer static TypeScript type without codegen:
+export type CreateUserInput = Static<typeof CreateUserSchema>;
+```
+
+<Callout type="warn">
+  TypeBox only validates string `format`s that are registered in its `FormatRegistry`. Brick-TS core registers none, so `t.String({ format: "email" })` rejects every value with `Unknown format 'email'`. Use `pattern`, or register the format yourself with `FormatRegistry.Set()` from `@sinclair/typebox`. (`@brickkit/crud` registers `date-time` only.)
+</Callout>
+
+### Input Validation
+
+Input validation runs before `execute()`. If an incoming payload violates the schema, Brick aborts execution and responds with `ValidationError` (HTTP status 400):
+
+```json
+{
+  "name": "ValidationError",
+  "status": 400,
+  "message": "Validation failed for action 'processPayment' input",
+  "errors": [
+    {
+      "path": "/amount",
+      "message": "Expected number to be greater or equal to 1",
+      "value": 0
+    }
+  ]
+}
+```
+
+### Output Validation
+
+Output validation runs after `execute()` resolves. If an action returns data that does not conform to its declared `output` schema, Brick throws `ValidationError` with HTTP status 500 and the message `Validation failed for action '<name>' output`.
+
+### Unexpected Errors
+
+Any other error thrown from an action is returned as HTTP 500 with `{ "name": "InternalServerError", "message": <error message>, "status": 500 }`.
+
+## Standard Error Helpers
+
+The `error` helper is passed to `execute({ input, ctx, error })` and to every CRUD lifecycle hook (`beforeCreate`, `afterCreate`, `beforeUpdate`, `afterUpdate`, `beforeDelete`, `afterDelete`). Each helper takes an optional message override and optional `details`, and throws an `ActionExecutionError`:
+
+| Helper                                        | HTTP Status | Default Error Code      | Default Message           |
+| :-------------------------------------------- | :---------- | :---------------------- | :------------------------ |
+| `error.BAD_REQUEST(msg?, details?)`           | `400`       | `BAD_REQUEST`           | `"Bad Request"`           |
+| `error.UNAUTHORIZED(msg?, details?)`          | `401`       | `UNAUTHORIZED`          | `"Unauthorized"`          |
+| `error.FORBIDDEN(msg?, details?)`             | `403`       | `FORBIDDEN`             | `"Forbidden"`             |
+| `error.NOT_FOUND(msg?, details?)`             | `404`       | `NOT_FOUND`             | `"Not Found"`             |
+| `error.CONFLICT(msg?, details?)`              | `409`       | `CONFLICT`              | `"Conflict"`              |
+| `error.INTERNAL_SERVER_ERROR(msg?, details?)` | `500`       | `INTERNAL_SERVER_ERROR` | `"Internal Server Error"` |
+
+When an action's `authorize()` returns `false`, Brick throws `ActionExecutionError` with code `"UNAUTHORIZED"` and status `403` (not 401). CRUD access denial uses code `"FORBIDDEN"` with status `403`.
+
+### Error Envelope Format
+
+All `ActionExecutionError` instances format automatically into consistent JSON responses:
+
+```json
+{
+  "name": "ActionExecutionError",
+  "code": "NOT_FOUND",
+  "status": 404,
+  "message": "User with ID 'usr_99' not found",
+  "details": {
+    "entity": "user",
+    "id": "usr_99"
+  }
+}
+```
+
+## Custom Declared Action Errors
+
+Actions can declare custom domain errors in their `errors` configuration map:
+
+```ts title="src/services/auth.ts"
+export const resetPassword = authService.action({
+  name: "resetPassword",
+  input: t.Object({ token: t.String(), newPassword: t.String() }),
+  output: t.Object({ success: t.Boolean() }),
+  errors: {
+    TOKEN_EXPIRED: { status: 400, message: "Password reset token has expired" },
+    WEAK_PASSWORD: {
+      status: 422,
+      message: "Password does not meet complexity requirements",
+    },
+  },
+  execute: ({ input, error }) => {
+    if (input.newPassword.length < 8) {
+      error.WEAK_PASSWORD("Password must be at least 8 characters long");
+    }
+    return { success: true };
+  },
+});
+```
+
+If you omit `status` on a declared error, it defaults to `400`. A declared error with the same name as a standard helper (for example `NOT_FOUND`) overrides it.
+
+Custom error keys are typed onto the `error` argument, ensuring compile-time safety and autocompletion for error codes.
