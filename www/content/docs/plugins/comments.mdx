@@ -53,7 +53,17 @@ export function comments(options: { table: typeof commentsTable }) {
         })
         .use(
           crud({
-            access: "public",
+            // Anyone may read and post comments; editing and deleting
+            // existing comments requires an authenticated user.
+            access: {
+              authorize: ({ operation, ctx }) => {
+                if (operation === "update" || operation === "delete") {
+                  return !!ctx.user;
+                }
+
+                return true;
+              },
+            },
             fields: {
               id: { read: true, filter: ["eq"] },
               targetId: { read: true, create: true, filter: ["eq"] },
@@ -153,4 +163,6 @@ This automatically mounts the standard CRUD REST endpoints for the comment resou
 - `POST /api/pageComment` (create)
 - `POST /api/pageComment/query` (list)
 - `POST /api/pageComment/count` and `POST /api/pageComment/exists`
-- `GET /api/pageComment/:id`, `PATCH /api/pageComment/:id`, `DELETE /api/pageComment/:id`
+- `GET /api/pageComment/:id` (public), `PATCH /api/pageComment/:id` and `DELETE /api/pageComment/:id` (authenticated)
+
+The recipe has no per-comment ownership, so any authenticated user can edit or delete any comment. If comments should be editable only by their author, add an owner column to the table and return an ownership `scope` from the access policy, alongside `authorize`.

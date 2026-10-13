@@ -95,7 +95,7 @@ const pages = await api.page.list(
 );
 ```
 
-Only one signal is applied per call, in this order: per-call `signal`, then the timeout signal (per-call `timeoutMs`, else the client `timeoutMs`), then the client `signal`. Passing both `signal` and `timeoutMs` on the same call ignores the timeout. Aborts are not wrapped: they reject with the native `AbortError`.
+Only one signal is applied per call, in this order: per-call `signal`, then the timeout signal (per-call `timeoutMs`, else the client `timeoutMs`), then the client `signal`. Passing both `signal` and `timeoutMs` on the same call ignores the timeout. Cancelling through a `signal` is never wrapped: it rejects with the native `AbortError`. A `timeoutMs` expiry behaves differently — it aborts with a `TimeoutError`, which the client reports as a `BrickTransportError`.
 
 ## Error Handling
 

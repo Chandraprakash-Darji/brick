@@ -7,7 +7,7 @@ Brick-TS automatically generates compliant OpenAPI 3.1 JSON specifications from 
 
 ## Minimal Example
 
-Enable automatic documentation generation by passing services into `brick()`:
+Enable automatic documentation generation by passing services into `brick()`. Export the app as the **default export** so the CLI generators can import the definition without starting a server:
 
 ```ts title="src/server.ts"
 import { brick, defineService, t } from "@brickkit/core";
@@ -24,13 +24,19 @@ usersService.action({
   execute: ({ input }) => ({ id: input.id, name: "Ada Lovelace" }),
 });
 
-export const app = brick({
+export default brick({
   services: [usersService],
   title: "Users API",
   version: "1.0.0",
   description: "User management and profile service mesh",
   prefix: "/api",
 });
+```
+
+Start the server from a separate entry file, so importing the app has no side effects:
+
+```ts title="src/index.ts"
+import app from "./server";
 
 app.listen(4000);
 ```
@@ -61,7 +67,7 @@ Configure OpenAPI and documentation routes in `CreateServerOptions`:
 For web apps that use `/docs` for product documentation (such as a documentation website), mount the API reference on `/reference`:
 
 ```ts title="src/server.ts"
-const app = brick({
+export default brick({
   services: [usersService],
   docs: true,
   reference: {
@@ -90,7 +96,7 @@ await Bun.write("dist/openapi.json", JSON.stringify(spec, null, 2));
 console.log("OpenAPI 3.1 spec written to dist/openapi.json");
 ```
 
-You can also use the CLI generator:
+You can also use the CLI generator, which imports the entry's **default export** (so it reads the app definition without calling `listen()`):
 
 ```bash
 bunx brick gen openapi src/server.ts --output openapi.json

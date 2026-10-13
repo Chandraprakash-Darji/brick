@@ -88,7 +88,7 @@ export const blogService = defineService("blog", {
 Attach CRUD operations to `articles` with field policies, a before-create hook, and operation authorization in `src/resources.ts`. `authorId` has no `create` permission, so clients can't send it; the hook fills it in from the session:
 
 ```ts title="src/resources.ts"
-import { ActionExecutionError } from "@brickkit/core";
+import { ActionExecutionError, eq } from "@brickkit/core";
 import { crud } from "@brickkit/crud";
 import { articles } from "./schema";
 import { blogService } from "./service";
@@ -114,6 +114,15 @@ export const articleResource = blogService
           }
           // Only authenticated authors or admins can write
           return !!ctx.user;
+        },
+        // Row-level writes: CRUD ANDs this into the WHERE clause of update
+        // and delete, so authors can only touch their own articles.
+        // `authorize` above already rejected anonymous callers.
+        scope: ({ operation, ctx }) => {
+          if (operation !== "update" && operation !== "delete")
+            return undefined;
+          if (ctx.user?.role === "admin") return undefined;
+          return eq(articles.authorId, ctx.user!.id);
         },
       },
       fields: {
