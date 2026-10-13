@@ -19,12 +19,12 @@
     "docs:http-check": "bun scripts/check-docs-http.ts"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^4.0.93",
     "@ai-sdk/react": "^4.0.142",
     "@base-ui/react": "^1.9.0",
     "@fumadocs/base-ui": "16.17.2",
     "@fontsource-variable/geist": "^5.3.0",
     "@fontsource-variable/geist-mono": "^5.3.0",
-    "@openrouter/ai-sdk-provider": "^3.1.0",
     "@radix-ui/react-presence": "^1.1.11",
     "@shikijs/magic-move": "^4.5.0",
     "@tanstack/react-router": "1.170.44",

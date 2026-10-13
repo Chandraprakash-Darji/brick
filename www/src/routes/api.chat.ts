@@ -1,4 +1,4 @@
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { createOpenAI } from "@ai-sdk/openai";
 import {
   convertToModelMessages,
   stepCountIs,
@@ -58,8 +58,9 @@ async function chunkedAll<O>(promises: Promise<O>[]): Promise<O[]> {
   return out;
 }
 
-const openrouter = createOpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY,
+const openai = createOpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: process.env.OPENAI_BASE_URL,
 });
 
 /** System prompt, you can update it to provide more specific information */
@@ -78,9 +79,7 @@ export const Route = createFileRoute("/api/chat")({
         const reqJson = await req.json();
 
         const result = streamText({
-          model: openrouter.chat(
-            process.env.OPENROUTER_MODEL ?? "anthropic/claude-3.5-sonnet",
-          ),
+          model: openai.chat(process.env.OPENAI_MODEL!),
           stopWhen: stepCountIs(5),
           tools: {
             search: searchTool,
