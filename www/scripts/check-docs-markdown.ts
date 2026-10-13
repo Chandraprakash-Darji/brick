@@ -1,4 +1,5 @@
 import { remark } from "remark";
+import { fileURLToPath } from "node:url";
 import remarkMdx from "remark-mdx";
 import remarkGfm from "remark-gfm";
 import { remarkLLMs } from "fumadocs-core/mdx-plugins/remark-llms";
@@ -32,7 +33,7 @@ export function renderDocsMarkdown(content: string) {
 if (import.meta.main) {
   const root = new URL("../content/docs/", import.meta.url);
   let count = 0;
-  for await (const path of new Bun.Glob("**/*.mdx").scan(root.pathname)) {
+  for await (const path of new Bun.Glob("**/*.mdx").scan(fileURLToPath(root))) {
     try {
       renderDocsMarkdown(await Bun.file(new URL(path, root)).text());
       count++;
@@ -40,5 +41,7 @@ if (import.meta.main) {
       throw new Error(`Cannot render docs page ${path}`, { cause: error });
     }
   }
+  if (count === 0)
+    throw new Error("No docs pages found for markdown validation.");
   console.log(`Validated markdown for ${count} docs pages.`);
 }
