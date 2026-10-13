@@ -6,7 +6,7 @@ import {
   type BrickIR,
   type RouteIR,
 } from "./compiler/ir";
-import { emitHandlerFactory } from "./compiler/emit";
+import { createHandlerFactory } from "./compiler/handler";
 import {
   compilerRuntime,
   type CompiledHandler,
@@ -75,7 +75,7 @@ function bindAnalyzed(
   return Object.freeze({ ir: freezeIR(ir), routes: Object.freeze(routes) });
 }
 
-/** Startup compiler: analyzes once, generates JS once, then binds live callbacks. */
+/** Startup compiler: analyzes once, then binds live callbacks. */
 export function compileBrickApplication(options: {
   services: Service<any, any>[];
   prefix?: string;
@@ -91,14 +91,7 @@ export function compileBrickApplication(options: {
       ? ir.routes.map(
           () => (plan) => (context) => executeCompiledRoute(plan, context),
         )
-      : ir.routes.map(
-          (route) =>
-            // Emitted source holds only JSON-escaped literals and fixed
-            // identifiers; user callbacks are bound as closures, never inlined.
-            new Function( // NOSONAR
-              `return (${emitHandlerFactory(route)});`,
-            )() as HandlerFactory,
-        );
+      : ir.routes.map(createHandlerFactory);
   if (options.mode !== "generic")
     for (const service of options.services) {
       service.prepareContributions();

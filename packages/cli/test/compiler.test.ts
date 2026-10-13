@@ -10,6 +10,35 @@ import {
 import { brick } from "../src/server";
 
 beforeEach(resetGlobalRegistry);
+
+it("runs published core handlers when Node disables string code generation", async () => {
+  const core = new URL("../../core/dist/index.js", import.meta.url).href;
+  const child = Bun.spawn(
+    [
+      "node",
+      "--disallow-code-generation-from-strings",
+      "--input-type=module",
+      "-e",
+      `import { defineService, compileBrickApplication } from ${JSON.stringify(core)};
+     const service = defineService("safe");
+     service.action({ name: "ready", execute: () => ({ ok: true }) });
+     const app = compileBrickApplication({ services: [service] });
+     const result = app.routes[0].handler({ set: { headers: {} } });
+     if (result instanceof Promise) throw new Error("Expected a synchronous handler");
+     console.log(JSON.stringify(result));`,
+    ],
+    { stdout: "pipe", stderr: "pipe" },
+  );
+  const [code, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  expect(stderr).toBe("");
+  expect(code).toBe(0);
+  expect(JSON.parse(stdout)).toEqual({ ok: true });
+});
+
 const request = (
   path: string,
   method = "GET",
