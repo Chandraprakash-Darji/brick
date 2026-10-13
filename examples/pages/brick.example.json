@@ -1,0 +1,15 @@
+{
+  "title": "Pages",
+  "description": "A publishing app: TanStack Start frontend, an in-process Brick API, Better Auth, Postgres and MCP tools in one server.",
+  "tags": ["Full stack", "Postgres", "Auth", "MCP"],
+  "features": [
+    "CRUD resource with authorized and scoped access policies",
+    "Better Auth and OAuth provider tables",
+    "Typed client with a type-only API contract",
+    "MCP tools over the same services"
+  ],
+  "entry": "src/api/app.ts",
+  "demo": "https://pages.rega.run",
+  "run": ["bun run pages:dev"],
+  "runNote": "Needs a local Postgres database; set DATABASE_URL and apply migrations with bun run --cwd examples/pages db:migrate. The app listens on port 5174."
+}
