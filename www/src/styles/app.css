@@ -2,8 +2,9 @@
 @import "tw-animate-css";
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist-mono";
-@import "fumadocs-ui/css/lib/default-colors.css";
-@import "fumadocs-ui/css/preset.css";
+@import "@fumadocs/base-ui/css/lib/default-colors.css";
+@import "@fumadocs/base-ui/css/generated/spacious.css";
+@import "@fumadocs/base-ui/css/preset.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -1427,78 +1428,6 @@ html > body[data-scroll-locked] {
 }
 .benchmark-group tr[id] {
   scroll-margin-top: calc(var(--site-header-height) + 100px);
-}
-.brick-docs-site > .frame:has(#nd-docs-layout) {
-  border-top: 1px solid var(--border);
-}
-.brick-docs-site #nd-docs-layout {
-  --fd-banner-height: var(--site-header-height);
-  --fd-docs-height: calc(100dvh - var(--site-header-height));
-  --fd-layout-width: 1280px;
-}
-.brick-docs-site #nd-sidebar {
-  background: var(--background);
-  font-size: 13px;
-}
-.brick-docs-site #nd-sidebar a[href="/docs"] {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-.brick-docs-site #nd-sidebar a[data-active="true"] {
-  background: var(--code);
-  color: var(--foreground);
-}
-.brick-docs-site #nd-sidebar [data-search-full] {
-  border-radius: 0;
-  background: var(--code);
-}
-.brick-docs-site #nd-page {
-  padding-top: 48px;
-  padding-bottom: 64px;
-}
-.brick-docs-site .docs-title {
-  font-size: clamp(30px, 3vw, 44px);
-  font-weight: 500;
-  line-height: 1.12;
-  letter-spacing: -0.045em;
-}
-.brick-docs-site .docs-description {
-  font-size: 15px;
-  line-height: 1.7;
-}
-.brick-docs-site .prose {
-  font-size: 14px;
-  line-height: 1.8;
-}
-.brick-docs-site .prose h2 {
-  font-size: 25px;
-  font-weight: 500;
-  letter-spacing: -0.025em;
-}
-.brick-docs-site .prose h3 {
-  font-weight: 500;
-}
-.brick-docs-site .prose figure {
-  border-radius: 0;
-  box-shadow: none;
-}
-.brick-docs-site #nd-toc {
-  font-size: 12px;
-}
-.brick-docs-site #toc-title {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-.brick-docs-site #nd-subnav {
-  background: var(--background);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  text-transform: uppercase;
 }
 @media (max-width: 1023px) {
   .benchmark-intro {
