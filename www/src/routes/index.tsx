@@ -123,6 +123,8 @@ function Home() {
           href={`${site.repo}/releases`}
           target="_blank"
           rel="noreferrer"
+          data-umami-event="github-click"
+          data-umami-event-location="hero-release"
           className="hero-release"
         >
           <span /> BRICK v{site.version}{" "}
@@ -152,6 +154,8 @@ function Home() {
             href={site.repo}
             target="_blank"
             rel="noreferrer"
+            data-umami-event="github-click"
+            data-umami-event-location="hero"
             className="home-button home-button-secondary"
           >
             Explore the source <ArrowRightIcon className="size-3.5" />

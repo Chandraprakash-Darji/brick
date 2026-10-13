@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowUpRightIcon } from "lucide-react";
 import { exampleStats, getExamples } from "@/lib/examples";
+import { trackEvent } from "@/lib/analytics";
 
 const title = "Examples — BrickKit";
 const description =
@@ -46,6 +47,9 @@ function Examples() {
               key={example.slug}
               to="/examples/$slug"
               params={{ slug: example.slug }}
+              data-umami-event="example-open"
+              data-umami-event-slug={example.slug}
+              onClick={() => trackEvent("example-open", { slug: example.slug })}
               className="group flex flex-col rounded-lg border bg-card p-6 transition-colors hover:border-foreground/25"
             >
               <div className="flex items-start justify-between gap-4">

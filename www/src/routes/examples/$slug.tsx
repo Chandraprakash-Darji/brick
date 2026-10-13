@@ -101,6 +101,9 @@ function ExampleDetail() {
             href={exampleGitHubUrl(example.slug)}
             target="_blank"
             rel="noreferrer"
+            data-umami-event="github-click"
+            data-umami-event-location="example-detail"
+            data-umami-event-slug={example.slug}
             className="inline-flex h-11 items-center gap-2 rounded-lg border px-4 text-sm transition-colors hover:border-foreground/25"
           >
             Open in GitHub <ArrowUpRightIcon className="size-4" />

@@ -2,6 +2,7 @@ import { CheckIcon, CopyIcon } from "lucide-react";
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
+import { trackEvent } from "@/lib/analytics";
 import { Link } from "@tanstack/react-router";
 
 export function InstallOptions() {
@@ -63,8 +64,10 @@ export function InstallCommand({
     <button
       type="button"
       aria-label={`Copy "${command}"`}
+      data-umami-event="copy-install-command"
       onClick={() =>
         void navigator.clipboard.writeText(command).then(() => {
+          trackEvent("copy-install-command", { command });
           setCopied(true);
           setTimeout(() => setCopied(false), 1500);
         })

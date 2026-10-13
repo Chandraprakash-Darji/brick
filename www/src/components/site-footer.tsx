@@ -16,7 +16,13 @@ export function SiteFooter() {
             <br />
             Production execution.
           </p>
-          <a href={site.repo} target="_blank" rel="noreferrer">
+          <a
+            href={site.repo}
+            target="_blank"
+            rel="noreferrer"
+            data-umami-event="github-click"
+            data-umami-event-location="footer-brand"
+          >
             Open source, built for Bun <ArrowUpRightIcon className="size-3" />
           </a>
         </div>
@@ -54,13 +60,31 @@ export function SiteFooter() {
         <nav aria-label="Project links">
           <p className="label">Project</p>
           <Link to="/brand">Brand assets</Link>
-          <a href={site.repo} target="_blank" rel="noreferrer">
+          <a
+            href={site.repo}
+            target="_blank"
+            rel="noreferrer"
+            data-umami-event="github-click"
+            data-umami-event-location="footer"
+          >
             GitHub
           </a>
-          <a href={`${site.repo}/releases`} target="_blank" rel="noreferrer">
+          <a
+            href={`${site.repo}/releases`}
+            target="_blank"
+            rel="noreferrer"
+            data-umami-event="github-click"
+            data-umami-event-location="footer-releases"
+          >
             Releases
           </a>
-          <a href={`${site.repo}/issues`} target="_blank" rel="noreferrer">
+          <a
+            href={`${site.repo}/issues`}
+            target="_blank"
+            rel="noreferrer"
+            data-umami-event="github-click"
+            data-umami-event-location="footer-issues"
+          >
             Issues
           </a>
           <a
@@ -75,6 +99,7 @@ export function SiteFooter() {
       <div className="home-footer-bottom">
         <span>BRICK v{site.version}</span>
         <span>TYPESCRIPT IN. BACKEND OUT.</span>
+        <span>Privacy-friendly, cookieless analytics by Umami.</span>
         <a href="#site-top">BACK TO TOP ↑</a>
       </div>
     </footer>
