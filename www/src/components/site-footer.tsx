@@ -45,6 +45,10 @@ export function SiteFooter() {
           </Link>
           <Link to="/benchmarks">Benchmarks</Link>
           <Link to="/blog">Blog</Link>
+          <Link to="/docs/$" params={{ _splat: "for-ai-agents" }}>
+            For AI agents
+          </Link>
+          <a href="/llms.txt">llms.txt</a>
           <a
             href={`${site.repo}/tree/main/examples`}
             target="_blank"

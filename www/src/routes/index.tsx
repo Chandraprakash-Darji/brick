@@ -3,7 +3,7 @@ import { ArrowRightIcon } from "lucide-react";
 import * as React from "react";
 
 import { LogoMark } from "@/components/logo";
-import { InstallCommand } from "@/components/install-command";
+import { InstallOptions } from "@/components/install-command";
 import { site } from "@/lib/site";
 import { cn } from "@/lib/utils";
 import { SourceCode } from "@/components/source-code";
@@ -157,10 +157,7 @@ function Home() {
             Explore the source <ArrowRightIcon className="size-3.5" />
           </a>
         </div>
-        <InstallCommand
-          className="home-install"
-          command="bun add @brickkit/core @brickkit/cli"
-        />
+        <InstallOptions />
         <a href="#definitions" className="hero-scroll">
           DEFINE / COMPILE / RUN <span>↓</span>
         </a>

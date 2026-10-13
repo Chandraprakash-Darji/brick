@@ -10,11 +10,26 @@ export default defineConfig({
     port: 3000,
   },
   plugins: [
+    {
+      name: "docs-markdown-routes",
+      configureServer(server) {
+        server.middlewares.use((request, _response, next) => {
+          // Nitro otherwise treats .md routes as static assets in development.
+          if (request.url?.split(/[?#]/, 1)[0].match(/^\/docs\/.*\.md$/)) {
+            request.headers.accept = `${request.headers.accept ?? "*/*"}, text/html;q=0`;
+          }
+          next();
+        });
+      },
+    },
     mdx(),
     tailwindcss(),
     tanstackStart({
       prerender: {
         enabled: true,
+        // Docs need the request's Accept header; static HTML bypasses middleware.
+        filter: (page) =>
+          page.path !== "/docs" && !page.path.startsWith("/docs/"),
       },
     }),
     react(),

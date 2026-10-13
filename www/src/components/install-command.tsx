@@ -2,6 +2,54 @@ import { CheckIcon, CopyIcon } from "lucide-react";
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
+import { Link } from "@tanstack/react-router";
+
+export function InstallOptions() {
+  const [audience, setAudience] = React.useState<"you" | "agent">("you");
+  return (
+    <div className="install-options">
+      <div
+        role="group"
+        aria-label="Installation options"
+        className="install-audiences"
+      >
+        <button
+          type="button"
+          aria-pressed={audience === "you"}
+          onClick={() => setAudience("you")}
+        >
+          For you
+        </button>
+        <span aria-hidden="true">|</span>
+        <button
+          type="button"
+          aria-pressed={audience === "agent"}
+          onClick={() => setAudience("agent")}
+        >
+          For your agent
+        </button>
+      </div>
+      <InstallCommand
+        key={audience}
+        className="home-install"
+        command={
+          audience === "you"
+            ? "bun add @brickkit/core @brickkit/cli"
+            : "npx skills add Chandraprakash-Darji/brick --skill brick"
+        }
+      />
+      <Link
+        to="/docs/$"
+        params={{ _splat: "for-ai-agents" }}
+        className="install-agent-guide"
+      >
+        {audience === "agent"
+          ? "Set up your agent with Brick docs and MCP ↗"
+          : "Building with an AI agent? ↗"}
+      </Link>
+    </div>
+  );
+}
 
 export function InstallCommand({
   command = "bun add @brickkit/core @brickkit/cli",

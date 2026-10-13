@@ -74,6 +74,12 @@ const clientLoader = browserCollections.docs.createClientLoader({
             markdownUrl={markdownUrl}
             githubUrl={`https://github.com/${gitConfig.user}/${gitConfig.repo}/blob/${gitConfig.branch}/www/content/docs/${path}`}
           />
+          <a
+            href="/llms.txt"
+            className="text-xs text-fd-muted-foreground hover:text-fd-foreground"
+          >
+            llms.txt
+          </a>
         </div>
         <DocsBody>
           <MDX components={useMDXComponents()} />

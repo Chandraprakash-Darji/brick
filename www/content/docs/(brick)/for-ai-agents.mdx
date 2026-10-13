@@ -1,0 +1,86 @@
+---
+title: For AI agents
+description: Give Cursor, Claude Code, and Copilot Brick documentation, project instructions, and MCP tools
+---
+
+Give your coding agent the documentation index, then let it fetch the pages needed for the task.
+
+## Read markdown documentation
+
+- [llms.txt](/llms.txt) lists every documentation page, grouped by section with a short description.
+- [llms-full.txt](/llms-full.txt) contains all pages in sidebar order.
+- Each page has a markdown URL, such as [quickstart.md](/docs/quickstart.md).
+
+To request markdown at the regular page URL:
+
+```bash
+curl -H 'Accept: text/markdown' https://brick.rega.run/docs/quickstart
+```
+
+Start an agent task with this instruction:
+
+```text
+Read https://brick.rega.run/llms.txt. Fetch the relevant markdown pages before
+changing this Brick project. Check package.json for the installed Brick version
+and follow the existing service definitions and verification scripts.
+```
+
+In Cursor, add the index URL as documentation context or include it in your chat prompt. In Claude Code, put the instruction in your project's `CLAUDE.md`. In Copilot, put it in `.github/copilot-instructions.md`. If your agent cannot fetch URLs, download the required `.md` files and add them to its context.
+
+## Choose docs for the task
+
+Start with [Quickstart](/docs/quickstart) for a runnable CRUD service or the [REST API tutorial](/docs/tutorial) for a complete application. Fetch the focused guide when changing an existing project:
+
+- [Services and actions](/docs/services-and-actions), [Context](/docs/context), and [Validation and errors](/docs/validation-and-errors) for business logic.
+- [Resources](/docs/resources), [Access control](/docs/access-control), and [Relations](/docs/relations) for CRUD and database changes.
+- [Typed client](/docs/typed-client) for browser calls and [Tools and MCP](/docs/tools-and-mcp) for agent tools.
+- [API cheatsheet](/docs/reference/cheatsheet) for symbol lookup and [CLI reference](/docs/brick-cli) for commands.
+
+## Install the Brick skill
+
+The repository includes a [Brick skill](https://github.com/Chandraprakash-Darji/brick/blob/main/skills/brick/SKILL.md) for agents that support the skills format:
+
+```bash
+npx skills add Chandraprakash-Darji/brick --skill brick
+```
+
+Choose your agent and project scope in the installer. The skill covers documentation lookup, service registration, schemas, authorization, typed clients, and MCP tools.
+
+## Add project instructions
+
+Copy this into your project's `AGENTS.md`, or adapt it for your agent's instruction file:
+
+```md
+## Brick
+
+- Read https://brick.rega.run/llms.txt and fetch relevant markdown pages.
+- Check the installed @brickkit package versions before using an API.
+- Follow existing defineService, action, resource, and tool definitions.
+- Define input and output schemas with t from @brickkit/core.
+- Keep authorization in action and tool definitions and resource access rules.
+- Import definition modules before compiling or exporting the registry.
+- Use generated client contracts for browser calls.
+- Run this project's type checks and relevant tests after changes.
+```
+
+Add your own commands, service entry path, and migration rules to make these instructions useful for your project.
+
+## Connect to your application's MCP tools
+
+Brick provides `createMcpRegistry` and `createMcpHandler` for exposing your app's tools. Register tools with `service.tool()`, import their modules, then mount the handler in your authenticated HTTP layer. See [Tools and MCP](/docs/tools-and-mcp) for the implementation and the Pages example for an authenticated transport.
+
+Point your agent's MCP client at the endpoint your app mounts, using that app's authentication. This is an application endpoint you provide; Brick's documentation site does not run a hosted MCP server. Tool annotations describe behavior, while `authorize` enforces access.
+
+## Generate context from your app
+
+Export the service graph from your application's entry file:
+
+```bash
+bunx brick info src/app.ts > brick-architecture.json
+```
+
+Replace `src/app.ts` with your app's entry. The CLI loads its definitions before exporting the architecture. Or fetch `/_brick/services` from your running app.
+
+The export describes services, mounted action routes, resource access policies, and database metadata. See [Architecture Introspection](/docs/brick-cli/info) for its fields. The database handle is excluded, but other service options are included. Review the output for configuration values before sharing it with an agent.
+
+There is no dedicated agent-context generation command yet. Combine this architecture JSON with the relevant markdown docs and your project instructions.
