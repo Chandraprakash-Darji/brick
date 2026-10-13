@@ -1,5 +1,5 @@
-import { HomeLayout } from "fumadocs-ui/layouts/home";
-import { DefaultNotFound } from "fumadocs-ui/layouts/home/not-found";
+import { HomeLayout } from "@fumadocs/base-ui/layouts/home";
+import { DefaultNotFound } from "@fumadocs/base-ui/layouts/home/not-found";
 
 import { baseOptions, links } from "@/lib/layout.shared";
 

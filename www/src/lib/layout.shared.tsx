@@ -1,4 +1,7 @@
-import type { BaseLayoutProps, LinkItemType } from "fumadocs-ui/layouts/shared";
+import type {
+  BaseLayoutProps,
+  LinkItemType,
+} from "@fumadocs/base-ui/layouts/shared";
 
 import { appName, gitConfig } from "./shared";
 

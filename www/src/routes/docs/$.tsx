@@ -2,8 +2,7 @@ import { createFileRoute, notFound } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import browserCollections from "collections/browser";
 import { useFumadocsLoader } from "fumadocs-core/source/client";
-import { buttonVariants } from "fumadocs-ui/components/ui/button";
-import { DocsLayout } from "fumadocs-ui/layouts/docs";
+import { DocsLayout } from "@fumadocs/base-ui/layouts/spacious";
 import {
   DocsBody,
   DocsDescription,
@@ -11,17 +10,12 @@ import {
   DocsTitle,
   MarkdownCopyButton,
   ViewOptionsPopover,
-} from "fumadocs-ui/layouts/docs/page";
-import { MessageCircleIcon } from "lucide-react";
-import { Suspense } from "react";
+} from "@fumadocs/base-ui/layouts/spacious/page";
+import { Suspense, useState } from "react";
 
-import {
-  AISearch,
-  AISearchPanel,
-  AISearchTrigger,
-} from "@/components/ai/search";
+import { AISearch, AISearchPanel } from "@/components/ai/search";
+import { Wordmark } from "@/components/logo";
 import { useMDXComponents } from "@/components/mdx";
-import { cn } from "@/lib/cn";
 import { baseOptions } from "@/lib/layout.shared";
 import { gitConfig } from "@/lib/shared";
 import { slugsToMarkdownPath, source } from "@/lib/source";
@@ -64,7 +58,12 @@ const clientLoader = browserCollections.docs.createClientLoader({
     },
   ) {
     return (
-      <DocsPage toc={toc}>
+      <DocsPage
+        toc={toc}
+        tableOfContent={{
+          //   style: "clerk",
+        }}
+      >
         <DocsTitle className="docs-title">{frontmatter.title}</DocsTitle>
         <DocsDescription className="docs-description">
           {frontmatter.description}
@@ -88,33 +87,25 @@ function Page() {
   const { path, pageTree, markdownUrl } = useFumadocsLoader(
     Route.useLoaderData(),
   );
+  const [chatOpen, setChatOpen] = useState(false);
 
   return (
-    <DocsLayout
-      {...baseOptions()}
-      nav={{ title: "Documentation", url: "/docs" }}
-      themeSwitch={{ enabled: false }}
-      tree={pageTree}
-    >
-      <AISearch>
-        <AISearchPanel />
-        <AISearchTrigger
-          position="float"
-          className={cn(
-            buttonVariants({
-              className: "text-fd-muted-foreground rounded-none",
-              variant: "secondary",
-            }),
-          )}
-        >
-          <MessageCircleIcon className="size-4.5" />
-          Ask AI
-        </AISearchTrigger>
-      </AISearch>
-
-      <Suspense>
-        {clientLoader.useContent(path, { markdownUrl, path })}
-      </Suspense>
-    </DocsLayout>
+    <AISearch open={chatOpen} onOpenChange={setChatOpen}>
+      <DocsLayout
+        {...baseOptions()}
+        nav={{ title: <Wordmark />, url: "/" }}
+        themeSwitch={{ enabled: false }}
+        tree={pageTree}
+        aiChat={{
+          open: chatOpen,
+          onOpenChange: setChatOpen,
+          panel: <AISearchPanel />,
+        }}
+      >
+        <Suspense>
+          {clientLoader.useContent(path, { markdownUrl, path })}
+        </Suspense>
+      </DocsLayout>
+    </AISearch>
   );
 }
