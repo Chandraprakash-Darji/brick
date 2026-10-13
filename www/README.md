@@ -152,7 +152,9 @@ Custom events (`src/lib/analytics.ts` `trackEvent` + `data-umami-event`):
 
 Umami is cookieless. The footer notes this.
 
-Optional ad-blocker proxy: serve the script through our own domain
-(`/stats/script.js` → `${VITE_UMAMI_URL}/script.js`, and proxy
-`/stats/api/collect`), then set `VITE_UMAMI_HOST_URL` to the Umami instance so
-`data-host-url` points at the collector while `src` stays first-party.
+Optional ad-blocker proxy: set `VITE_UMAMI_URL` and `VITE_UMAMI_HOST_URL` to the
+first-party `/stats` base (e.g. `https://brick.rega.run/stats`) so `src` stays
+first-party (`/stats/script.js`) and `data-host-url` sends to `/stats/api/send`
+on our domain. Proxy `/stats/script.js` → the Umami instance's `/script.js`
+and forward `/stats/api/send` → the Umami instance's `/api/send` (`/api/collect`
+is the legacy endpoint).
