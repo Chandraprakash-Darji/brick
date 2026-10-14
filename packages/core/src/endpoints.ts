@@ -3,6 +3,7 @@ import type { Elysia } from "elysia";
 import type { Service } from "./types";
 import type { DatabaseHandle } from "./db/define";
 import { toErrorResponse } from "./error-response";
+import { ActionExecutionError, ValidationError } from "./types";
 
 export type EndpointMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -107,7 +108,31 @@ export function createEndpointHandler(
     try {
       return await def.handler(ctx);
     } catch (err) {
-      const response = toErrorResponse(err, { logger: ctx.logger, requestId });
+      const failure =
+        !(
+          err instanceof ActionExecutionError || err instanceof ValidationError
+        ) &&
+        err !== null &&
+        typeof err === "object" &&
+        "status" in err &&
+        typeof err.status === "number" &&
+        Number.isInteger(err.status) &&
+        err.status >= 400 &&
+        err.status < 500
+          ? new ActionExecutionError(
+              "HTTP_ERROR",
+              "message" in err && typeof err.message === "string"
+                ? err.message
+                : "Endpoint error",
+              err.status,
+              undefined,
+              { cause: err },
+            )
+          : err;
+      const response = toErrorResponse(failure, {
+        logger: ctx.logger,
+        requestId,
+      });
       set.status = response.status;
       return response;
     }

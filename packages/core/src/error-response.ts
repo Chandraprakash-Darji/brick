@@ -46,5 +46,14 @@ export function toErrorResponse(
       err,
     );
   }
+  if (failure instanceof ValidationError && failure.status >= 500) {
+    return {
+      name: failure.name,
+      code: failure.code,
+      message: failure.message,
+      status: failure.status,
+      requestId: context.requestId,
+    };
+  }
   return { ...failure.toJSON(), requestId: context.requestId };
 }

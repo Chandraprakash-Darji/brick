@@ -234,3 +234,162 @@ test("emitted handlers redact synchronous and asynchronous failures and log caus
     log.mockRestore();
   }
 });
+
+for (const status of [400, 404, 422, 429, 499]) {
+  test(`raw endpoint preserves client error status ${status}`, async () => {
+    const app = brick({
+      services: [],
+      requestLogging: false,
+      endpoints: [
+        {
+          method: "GET",
+          path: "/raw-error",
+          handler: () => {
+            throw { status, message: "Expected client failure" };
+          },
+        },
+      ],
+    });
+    const response = await app.handle(
+      new Request("http://localhost/raw-error", {
+        headers: { "x-request-id": "raw-error-id" },
+      }),
+    );
+    expect(response.status).toBe(status);
+    expect(await response.json()).toMatchObject({
+      name: "ActionExecutionError",
+      code: "HTTP_ERROR",
+      message: "Expected client failure",
+      status,
+      requestId: "raw-error-id",
+    });
+  });
+}
+
+test("raw endpoint rejects invalid statuses and redacts unexpected server failures", async () => {
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  try {
+    for (const status of [399, 404.5, NaN, Infinity, "404", 500, 503, 600]) {
+      const thrown = { status, message: "private endpoint failure" };
+      const app = brick({
+        services: [],
+        requestLogging: false,
+        endpoints: [
+          {
+            method: "GET",
+            path: "/raw-error",
+            handler: () => {
+              throw thrown;
+            },
+          },
+        ],
+      });
+      const response = await app.handle(
+        new Request("http://localhost/raw-error"),
+      );
+      expect(response.status).toBe(500);
+      expect(await response.json()).toMatchObject({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Internal Server Error",
+        status: 500,
+      });
+      expect(log.mock.calls.flat()).toContain(thrown);
+    }
+  } finally {
+    log.mockRestore();
+  }
+});
+
+for (const compiler of [true, false]) {
+  test(`output validation redacts failing values and logs diagnostics (${compiler})`, async () => {
+    const action = defineAction({
+      name: "invalidOutput",
+      output: t.Object({ token: t.Number() }),
+      execute: () => ({ token: "private-output-token" }),
+    });
+    const service = defineService(`output_redaction_${compiler}`).action(
+      action,
+    );
+    const log = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const app = brick({
+        services: [service],
+        compiler,
+        requestLogging: false,
+      });
+      const response = await app.handle(
+        new Request(`http://localhost/api/${service.name}/invalidOutput`, {
+          method: "POST",
+        }),
+      );
+      expect(response.status).toBe(500);
+      const body = await response.json();
+      expect(body).toMatchObject({
+        name: "ValidationError",
+        code: "VALIDATION_FAILED",
+        status: 500,
+      });
+      expect(body).not.toHaveProperty("errors");
+      expect(JSON.stringify(body)).not.toContain("private-output-token");
+      const diagnostic = log.mock.calls
+        .flat()
+        .find((item) => item instanceof ValidationError);
+      expect(diagnostic?.errors).toContainEqual(
+        expect.objectContaining({ value: "private-output-token" }),
+      );
+    } finally {
+      log.mockRestore();
+    }
+  });
+}
+
+test("input validation keeps caller-provided values and endpoint output validation redacts them", async () => {
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  try {
+    for (const status of [400, 500]) {
+      const diagnostic = new ValidationError(
+        "Validation failed",
+        [
+          {
+            path: "/value",
+            message: "Expected number",
+            value: "sensitive-value",
+          },
+        ],
+        status,
+      );
+      const app = brick({
+        services: [],
+        requestLogging: false,
+        endpoints: [
+          {
+            method: "GET",
+            path: "/validation",
+            handler: () => {
+              throw diagnostic;
+            },
+          },
+        ],
+      });
+      const response = await app.handle(
+        new Request("http://localhost/validation"),
+      );
+      expect(response.status).toBe(status);
+      const body = await response.json();
+      if (status === 400)
+        expect(body.errors).toEqual([
+          {
+            path: "/value",
+            message: "Expected number",
+            value: "sensitive-value",
+          },
+        ]);
+      else {
+        expect(body).not.toHaveProperty("errors");
+        expect(log.mock.calls.flat()).toContain(diagnostic);
+      }
+    }
+  } finally {
+    log.mockRestore();
+  }
+});
