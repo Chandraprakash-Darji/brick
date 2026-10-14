@@ -1,15 +1,18 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { dirname } from "node:path";
 import matter from "gray-matter";
 import satori from "satori";
 import { Resvg } from "@resvg/resvg-js";
 import { z } from "zod";
+import { getSlugs } from "fumadocs-core/source";
+import { marketingPages, socialImagePath } from "../src/lib/social";
 
 const root = new URL("../", import.meta.url);
-const output = new URL("public/og/blog/", root);
+const output = new URL("public/", root);
 const postSchema = z.object({
   title: z.string().min(1),
-  description: z.string(),
+  description: z.string().default(""),
 });
 const [regular, bold, logo] = await Promise.all([
   readFile(
@@ -30,12 +33,43 @@ const logoUrl = `data:image/svg+xml;base64,${Buffer.from(
   logo.replace('viewBox="0 0 1254 1254"', 'viewBox="183 150 889 924"'),
 ).toString("base64")}`;
 
-await mkdir(output, { recursive: true });
-for (const file of await readdir(new URL("content/blog/", root))) {
-  if (!/\.mdx?$/.test(file)) continue;
-  const { title, description } = postSchema.parse(
-    matter(await readFile(new URL(`content/blog/${file}`, root), "utf8")).data,
-  );
+const pages = Object.entries(marketingPages).map(([path, data]) => ({
+  path,
+  ...data,
+}));
+for (const collection of ["blog", "docs"]) {
+  for (const file of await readdir(new URL(`content/${collection}/`, root), {
+    recursive: true,
+  })) {
+    if (!/\.mdx?$/.test(file)) continue;
+    const data = postSchema.parse(
+      matter(
+        await readFile(new URL(`content/${collection}/${file}`, root), "utf8"),
+      ).data,
+    );
+    const slug = getSlugs(file);
+    pages.push({
+      path: `/${collection}${slug.length ? `/${slug.join("/")}` : ""}`,
+      ...data,
+    });
+  }
+}
+for (const file of await readdir(new URL("src/generated/examples/", root))) {
+  if (!file.endsWith(".json")) continue;
+  const data = postSchema
+    .extend({ slug: z.string() })
+    .parse(
+      JSON.parse(
+        await readFile(new URL(`src/generated/examples/${file}`, root), "utf8"),
+      ),
+    );
+  pages.push({
+    path: `/examples/${data.slug}`,
+    title: `${data.title} example — BrickKit`,
+    description: data.description,
+  });
+}
+for (const { path, title, description } of pages) {
   const svg = await satori(
     <div
       style={{
@@ -102,8 +136,7 @@ for (const file of await readdir(new URL("content/blog/", root))) {
       ],
     },
   );
-  await writeFile(
-    new URL(file.replace(/\.mdx?$/, ".png"), output),
-    new Resvg(svg).render().asPng(),
-  );
+  const destination = new URL(socialImagePath(path).slice(1), output);
+  await mkdir(dirname(fileURLToPath(destination)), { recursive: true });
+  await writeFile(destination, new Resvg(svg).render().asPng());
 }

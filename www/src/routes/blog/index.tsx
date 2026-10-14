@@ -1,3 +1,4 @@
+import { marketingPages, socialMeta } from "@/lib/social";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { ArrowUpRightIcon } from "lucide-react";
@@ -11,20 +12,7 @@ const loadPosts = createServerFn({ method: "GET" }).handler(() =>
 export const Route = createFileRoute("/blog/")({
   loader: () => loadPosts(),
   head: () => ({
-    meta: [
-      { title: "Blog — BrickKit" },
-      {
-        name: "description",
-        content:
-          "Framework updates and practical guides for building with BrickKit.",
-      },
-      { property: "og:title", content: "Blog — BrickKit" },
-      {
-        property: "og:description",
-        content:
-          "Framework updates and practical guides for building with BrickKit.",
-      },
-    ],
+    meta: socialMeta({ ...marketingPages["/blog"], path: "/blog" }),
   }),
   component: Blog,
 });

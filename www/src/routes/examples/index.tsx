@@ -1,21 +1,13 @@
+import { marketingPages, socialMeta } from "@/lib/social";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowUpRightIcon } from "lucide-react";
 import { exampleStats, getExamples } from "@/lib/examples";
 import { trackEvent } from "@/lib/analytics";
 
-const title = "Examples — BrickKit";
-const description =
-  "Runnable BrickKit examples with their service graph, routes, database tables and source.";
-
 export const Route = createFileRoute("/examples/")({
   loader: () => getExamples(),
   head: () => ({
-    meta: [
-      { title },
-      { name: "description", content: description },
-      { property: "og:title", content: title },
-      { property: "og:description", content: description },
-    ],
+    meta: socialMeta({ ...marketingPages["/examples"], path: "/examples" }),
   }),
   component: Examples,
 });

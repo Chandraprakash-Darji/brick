@@ -11,23 +11,18 @@ import { RootProvider } from "@fumadocs/base-ui/provider/tanstack";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { site } from "@/lib/site";
+import { marketingPages, socialMeta } from "@/lib/social";
 
 export const Route = createRootRoute({
   head: () => ({
     meta: [
+      ...socialMeta({ ...marketingPages["/"], path: "/" }),
       {
         charSet: "utf-8",
       },
       {
         name: "viewport",
         content: "width=device-width, initial-scale=1",
-      },
-      {
-        title: site.title,
-      },
-      {
-        name: "description",
-        content: site.description,
       },
       {
         name: "theme-color",
@@ -38,14 +33,6 @@ export const Route = createRootRoute({
         name: "theme-color",
         media: "(prefers-color-scheme: dark)",
         content: "#000000",
-      },
-      {
-        property: "og:title",
-        content: site.title,
-      },
-      {
-        property: "og:description",
-        content: site.description,
       },
     ],
     links: [
