@@ -16,6 +16,8 @@ export interface BaseContext<TDb = any> {
   logger: Logger;
   traceId: string;
   requestId?: string;
+  caller?: string;
+  tenantId?: string;
   services?: Record<string, any>;
   metadata?: Record<string, unknown>;
 }
@@ -77,8 +79,10 @@ This utility narrows `ctx.user` from `User | null` to `NonNullable<User>` at the
 
 When calling actions with `createServiceProxy("targetService")` (call signature: `proxy.actionName(input, ctx?)`), Brick isolates execution contexts:
 
-1. **Dangerous Field Stripping**: The caller's `db`, `request`, `logger`, `services`, `metadata`, and `_resolved` (from the proxy's `options.context` or the per-call `ctx`) are stripped from the invocation envelope. Other fields such as `user`, `traceId`, and `requestId` pass through.
-2. **Independent Context Resolution**: The target service resolves its own context using its own `context` resolver and uses its own configured database connection.
+1. **Envelope allowlist**: Only `caller`, `user`, `traceId`, `requestId`, and `tenantId` from the proxy's `options.context` or per-call context are forwarded. Per-call values take precedence over proxy defaults. Custom fields such as `session` and `isOwner` are dropped.
+2. **Independent Context Resolution**: The target service receives the envelope in its resolver input and uses its own database. Resolver return values take precedence over envelope values, including explicit `null` or `undefined`. Direct action calls enforce the same envelope allowlist for caller custom fields while accepting runtime fields such as `request`.
 3. **`caller` Field**: If the envelope has no `caller`, the proxy sets `ctx.caller` to the **target** service name passed to `createServiceProxy()` (not the calling service). Pass `{ caller: "..." }` in the call context if the receiver needs the originating service.
 
 Only in-process dispatch is implemented; creating a proxy with `{ isMonolith: false }` throws when an action is called.
+
+The resolver input also includes `user?: unknown`, an identity claim. Validate it before use. `tenantId` is a claim to validate against the user's access, not proof of tenant membership. Internal proxy calls have a placeholder request without browser cookies; resolve their identity from the envelope according to the receiving service's trust policy.

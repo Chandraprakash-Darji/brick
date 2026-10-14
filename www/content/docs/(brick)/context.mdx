@@ -118,5 +118,36 @@ What the receiving service sees:
 
 1. **Own context and database**: The receiving service runs its own `context` resolver and uses its own database.
 2. **Framework fields are dropped**: `db`, `request`, `logger`, `services`, and `metadata` in the call context are discarded before reaching the receiving service.
-3. **Other fields pass through**: Any other field you pass in the call context (such as `user`, `traceId`, or a custom field) is forwarded and overrides the value the receiving service's resolver returned. Only pass identity you trust.
+3. **Envelope fields pass through**: Only `caller`, `user`, `traceId`, `requestId`, and `tenantId` are forwarded. The resolver receives these fields and its returned values always take precedence. Caller custom fields such as `session` and `isOwner` are discarded for direct action calls and proxy calls. Treat `tenantId` as a claim to validate, not proof of access.
 4. **`ctx.caller`**: If you don't pass `caller`, Brick sets it to the **target** service's name, not the calling service's. To identify the caller, pass it explicitly: `users.getUser({ id }, { caller: "notifications" })`.
+
+### Internal calls without cookies
+
+A proxy call receives a placeholder request without browser cookies. A resolver that supports internal callers should validate `envelope.user` and derive its own session and helpers. For example, accept a user ID only after checking it with your identity store and caller trust policy:
+
+```ts
+const accounts = defineService("accounts", {
+  context: async (envelope) => {
+    const claim = envelope.user;
+    const userId =
+      typeof claim === "object" &&
+      claim !== null &&
+      "id" in claim &&
+      typeof claim.id === "string"
+        ? claim.id
+        : undefined;
+    // Application functions validate the caller and load an allowed identity.
+    const user =
+      userId && isTrustedCaller(envelope.caller)
+        ? await loadAllowedUser(userId, envelope.tenantId)
+        : null;
+    return {
+      user,
+      session: null,
+      isOwner: (ownerId: string) => user?.id === ownerId,
+    };
+  },
+});
+```
+
+For HTTP calls, continue resolving identity from the actual request's authentication headers or cookies. Passing `{ user }` directly cannot replace a resolver's returned `user`, even when the resolver returns `null`. Tests should provide a request or configure a resolver that explicitly validates the internal envelope.
