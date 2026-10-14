@@ -8,10 +8,9 @@ import {
 import { UnknownToolError } from "../src/mcp";
 import { defineService as definePromiseService } from "../src/service";
 
-class Identity extends Context.Tag("effect-rpc-test/Identity")<
-  Identity,
-  { name: string }
->() {}
+class Identity extends Context.Service<Identity, { name: string }>()(
+  "effect-rpc-test/Identity",
+) {}
 const identity = Layer.succeed(Identity, { name: "shared" });
 let sequence = 0;
 const name = () => `native_rpc_${++sequence}`;

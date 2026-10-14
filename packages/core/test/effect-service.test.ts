@@ -2,10 +2,9 @@ import { describe, expect, it } from "bun:test";
 import { Context, Effect, Layer } from "effect";
 import { brick, createMcpRegistry, defineService, t } from "../src/effect";
 
-class Greeting extends Context.Tag("effect-service-test/Greeting")<
-  Greeting,
-  { text: string }
->() {}
+class Greeting extends Context.Service<Greeting, { text: string }>()(
+  "effect-service-test/Greeting",
+) {}
 const greeting = Layer.succeed(Greeting, { text: "hello" });
 let sequence = 0;
 const name = () => `native_service_${++sequence}`;

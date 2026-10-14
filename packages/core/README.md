@@ -129,7 +129,9 @@ installation can roll back failed declarations.
 import { Context, Effect, Layer } from "effect";
 import { brick, defineService, t } from "@brickkit/core/effect";
 
-class Greeting extends Context.Tag("Greeting")<Greeting, { text: string }>() {}
+class Greeting extends Context.Service<Greeting, { text: string }>()(
+  "Greeting",
+) {}
 
 const service = defineService("greetings", {
   context: () => Effect.map(Greeting, ({ text }) => ({ greeting: text })),
@@ -202,4 +204,4 @@ work. Action errors include framework validation and context errors; service,
 CRUD, and dynamic MCP failure types remain broad because plugins and providers
 can reject arbitrary values. Dynamic registration does not prove at compile time
 that an application's Layer supplies every registered callback's dependencies.
-The framework uses Effect 3.
+The framework uses Effect 4.

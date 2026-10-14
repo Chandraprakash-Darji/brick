@@ -11,10 +11,9 @@ import {
 } from "@brickkit/core/effect";
 import { crud } from "../src/effect";
 
-class Policy extends Context.Tag("crud-test-policy")<
-  Policy,
-  { allow: boolean }
->() {}
+class Policy extends Context.Service<Policy, { allow: boolean }>()(
+  "crud-test-policy",
+) {}
 const records = sqliteTable("effect_records", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),

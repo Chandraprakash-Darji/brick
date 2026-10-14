@@ -145,13 +145,13 @@ export function defineAction(config: any): any {
         // Native implementations throw plain values; redact unexpected
         // failures into typed 500s like the Promise-based runtime does.
         withEffectRuntime(() => config.execute(params)).pipe(
-          Effect.catchAll((error) =>
+          Effect.catch((error) =>
             error instanceof ActionExecutionError ||
             error instanceof ValidationError
               ? Effect.fail(error)
               : Effect.fail(normalizeActionError(error, params.ctx)),
           ),
-          Effect.catchAllDefect((defect) =>
+          Effect.catchDefect((defect) =>
             Effect.fail(normalizeActionError(defect, params.ctx)),
           ),
         )),
@@ -274,7 +274,7 @@ export function createAction(
                     : normalizeActionError(error, fullCtx),
               })
         ).pipe(
-          Effect.catchAllDefect((defect) =>
+          Effect.catchDefect((defect) =>
             Effect.fail(normalizeActionError(defect, fullCtx)),
           ),
         );
@@ -297,7 +297,7 @@ export function createAction(
           error: errorHelpers,
         }),
       ).pipe(
-        Effect.catchAllDefect((defect) =>
+        Effect.catchDefect((defect) =>
           Effect.fail(normalizeActionError(defect, fullCtx)),
         ),
       );

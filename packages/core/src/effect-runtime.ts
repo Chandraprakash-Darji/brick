@@ -1,28 +1,26 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { Cause, Effect, Exit, Runtime, type ManagedRuntime } from "effect";
+import { Cause, Context, Effect, Exit, type ManagedRuntime } from "effect";
 
 const callbackRuntime = new AsyncLocalStorage<{
-  runtime: Runtime.Runtime<any>;
+  runtime: Context.Context<any>;
   signal: AbortSignal;
 }>();
-const appRuntime = new AsyncLocalStorage<Runtime.Runtime<any>>();
+const appRuntime = new AsyncLocalStorage<
+  ManagedRuntime.ManagedRuntime<any, any>
+>();
 
-export function withApplicationRuntime<R, A>(
-  runtime: ManagedRuntime.ManagedRuntime<R, any>,
+export function withApplicationRuntime<R, E, A>(
+  runtime: ManagedRuntime.ManagedRuntime<R, E>,
   callback: () => A | PromiseLike<A>,
 ): Promise<A> {
-  return runtime
-    .runtime()
-    .then((activeRuntime) =>
-      appRuntime.run(activeRuntime, async () => callback()),
-    );
+  return appRuntime.run(runtime, async () => callback());
 }
 
 /** Promise-based database/plugin code inherits the native caller's dependency context. */
 export function withEffectRuntime<A>(
   callback: () => A | PromiseLike<A>,
 ): Effect.Effect<A, unknown, any> {
-  return Effect.flatMap(Effect.runtime<any>(), (runtime) =>
+  return Effect.flatMap(Effect.context<any>(), (runtime) =>
     Effect.tryPromise({
       try: async (signal) => callbackRuntime.run({ runtime, signal }, callback),
       catch: (error) => error,
@@ -75,15 +73,21 @@ export async function runEffectPromise<A, E, R>(
     : signal;
   const options = cancellation ? { signal: cancellation } : undefined;
   const exit = inherited
-    ? await Runtime.runPromiseExit(inherited.runtime)(provided, options)
+    ? await Effect.runPromiseExit(
+        Effect.provide(provided, inherited.runtime),
+        options,
+      )
     : appContext
-      ? await Runtime.runPromiseExit(appContext)(
-          provided as Effect.Effect<A, E>,
+      ? await appContext.runPromiseExit(
+          provided as Effect.Effect<A, E, any>,
           options,
         )
       : runtime
         ? await runtime.runPromiseExit(provided, options)
-        : await Effect.runPromiseExit(provided as Effect.Effect<A, E>, options);
+        : await Effect.runPromiseExit(
+            provided as Effect.Effect<A, E, never>,
+            options,
+          );
   if (Exit.isFailure(exit)) throw Cause.squash(exit.cause);
   return exit.value;
 }

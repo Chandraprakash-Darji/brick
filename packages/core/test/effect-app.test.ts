@@ -2,14 +2,13 @@ import { expect, test } from "bun:test";
 import { Context, Effect, Layer } from "effect";
 import { brick, defineDatabase, defineService, t } from "../src/effect";
 
-class Dependency extends Context.Tag("effect-app/Dependency")<
-  Dependency,
-  { value: number }
->() {}
+class Dependency extends Context.Service<Dependency, { value: number }>()(
+  "effect-app/Dependency",
+) {}
 
 test("the app acquires one dependency layer, initializes once, and disposes once", async () => {
   const events: string[] = [];
-  const layer = Layer.scoped(
+  const layer = Layer.effect(
     Dependency,
     Effect.acquireRelease(
       Effect.sync(() => {
@@ -102,7 +101,7 @@ test("the app acquires one dependency layer, initializes once, and disposes once
 test("failed initialization runs destruction and layer finalizers", async () => {
   const events: string[] = [];
   const failure = new Error("startup failed");
-  const layer = Layer.scoped(
+  const layer = Layer.effect(
     Dependency,
     Effect.acquireRelease(Effect.succeed({ value: 1 }), () =>
       Effect.sync(() => {
@@ -137,7 +136,7 @@ test("aborting an HTTP action interrupts native execution and runs finalizers", 
     name: "wait",
     execute: () =>
       Effect.ensuring(
-        Effect.zipRight(Effect.sync(started), Effect.never),
+        Effect.andThen(Effect.sync(started), Effect.never),
         Effect.sync(() => {
           released = true;
         }),

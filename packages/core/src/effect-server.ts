@@ -170,7 +170,7 @@ export function effectBrick<R = never, E = never>(
     if (closed) return Promise.reject(new Error("Brick app has been disposed"));
     return (initializing ??= (async () => {
       try {
-        await runtime.runtime();
+        await runtime.context();
         for (const service of services) {
           initialized.push(service);
           await withApplicationRuntime(

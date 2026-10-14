@@ -332,59 +332,7 @@ export class ServiceImpl<
   resolveContextEffect(
     callCtx?: Partial<BaseContext<TDb> & TServiceContext>,
   ): Effect.Effect<BaseContext<TDb> & TServiceContext, unknown, any> {
-    return Effect.gen(this, function* () {
-      if ((callCtx as any)?.[RESOLVED_SYMBOL] === this) {
-        return callCtx as BaseContext<TDb> & TServiceContext;
-      }
-      const seq = ++_ctxSeq;
-      const req = callCtx?.request ?? DEFAULT_REQUEST;
-      // Always use this service's own database, never the caller's
-      const db = yield* Effect.try({
-        try: () => this.getDb() as TDb,
-        catch: (error) => error,
-      });
-      const logger = callCtx?.logger ?? defaultLogger;
-      const traceId = callCtx?.traceId ?? `tr_${seq.toString(36)}`;
-      const requestId = callCtx?.requestId ?? `req_${seq.toString(36)}`;
-      const services = callCtx?.services ?? EMPTY_SERVICES;
-      const metadata = callCtx?.metadata ?? EMPTY_METADATA;
-
-      const fullBaseCtx: BaseContext<TDb> = {
-        request: req,
-        db,
-        logger,
-        traceId,
-        requestId,
-        services,
-        metadata,
-        ...pickContextEnvelope(callCtx),
-      };
-
-      const nativeResolver = (
-        this as unknown as Record<
-          symbol,
-          | ((
-              base: BaseContext<TDb>,
-            ) => Effect.Effect<TServiceContext, unknown, any>)
-          | undefined
-        >
-      )[contextResolverKey];
-      const resolvedExtra = nativeResolver
-        ? yield* Effect.suspend(() => nativeResolver(fullBaseCtx))
-        : this.options.context
-          ? yield* Effect.tryPromise({
-              try: async () => this.options.context!(fullBaseCtx),
-              catch: (error) => error,
-            })
-          : {};
-      const finalCtx: any = {
-        ...fullBaseCtx,
-        ...resolvedExtra,
-        [RESOLVED_SYMBOL]: this,
-      };
-
-      return finalCtx;
-    });
+    return resolveServiceContextEffect(this, callCtx);
   }
 
   introspect(): ServiceSchema {
@@ -428,6 +376,68 @@ export class ServiceImpl<
       })),
     };
   }
+}
+
+function resolveServiceContextEffect<
+  TDb,
+  TServiceContext extends Record<string, any>,
+>(
+  service: ServiceImpl<TDb, TServiceContext>,
+  callCtx?: Partial<BaseContext<TDb> & TServiceContext>,
+): Effect.Effect<BaseContext<TDb> & TServiceContext, unknown, any> {
+  return Effect.gen(function* () {
+    if ((callCtx as any)?.[RESOLVED_SYMBOL] === service) {
+      return callCtx as BaseContext<TDb> & TServiceContext;
+    }
+    const seq = ++_ctxSeq;
+    const req = callCtx?.request ?? DEFAULT_REQUEST;
+    // Always use this service's own database, never the caller's
+    const db = yield* Effect.try({
+      try: () => service.getDb() as TDb,
+      catch: (error) => error,
+    });
+    const logger = callCtx?.logger ?? defaultLogger;
+    const traceId = callCtx?.traceId ?? `tr_${seq.toString(36)}`;
+    const requestId = callCtx?.requestId ?? `req_${seq.toString(36)}`;
+    const services = callCtx?.services ?? EMPTY_SERVICES;
+    const metadata = callCtx?.metadata ?? EMPTY_METADATA;
+
+    const fullBaseCtx: BaseContext<TDb> = {
+      request: req,
+      db,
+      logger,
+      traceId,
+      requestId,
+      services,
+      metadata,
+      ...pickContextEnvelope(callCtx),
+    };
+
+    const nativeResolver = (
+      service as unknown as Record<
+        symbol,
+        | ((
+            base: BaseContext<TDb>,
+          ) => Effect.Effect<TServiceContext, unknown, any>)
+        | undefined
+      >
+    )[contextResolverKey];
+    const resolvedExtra = nativeResolver
+      ? yield* Effect.suspend(() => nativeResolver(fullBaseCtx))
+      : service.options.context
+        ? yield* Effect.tryPromise({
+            try: async () => service.options.context!(fullBaseCtx),
+            catch: (error) => error,
+          })
+        : {};
+    const finalCtx: any = {
+      ...fullBaseCtx,
+      ...resolvedExtra,
+      [RESOLVED_SYMBOL]: service,
+    };
+
+    return finalCtx;
+  });
 }
 
 export function defineService<
