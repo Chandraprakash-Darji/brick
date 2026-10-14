@@ -35,6 +35,33 @@ await page.list.run({ where: { field: "title", op: "contains", value: "Hi" } });
 ```
 
 `access` is required: use `"public"` or an `authorize`/`scope` policy.
+
+`authorize` receives validated input as an operation-discriminated union.
+Checking `operation` narrows `input` to that operation's shape:
+
+```ts
+crud({
+  fields: { teamId: { read: true, filter: ["eq"] } },
+  access: {
+    authorize: ({ operation, input, ctx }) => {
+      if (operation === "list" && input.where && "field" in input.where) {
+        const filter = input.where;
+        return filter.field === "teamId" && filter.value === ctx.teamId;
+      }
+      return false;
+    },
+  },
+});
+```
+
+`CrudAuthorizeArgs<F>` and `CrudInputs<F>` are exported for reusable policies
+and per-operation inputs, with `F` supplied as `typeof fields`. Field policies
+constrain selections, writes, sorting, and filter operators. Explicit field
+schemas provide value types. Column-derived values and IDs remain `unknown`
+because `crud()` receives the table only when the plugin attaches to a resource.
+Create properties remain optional because column defaults and nullability are
+also unavailable at configuration time. `scope` still receives only
+`{ operation, ctx }`.
 Unlisted fields and omitted permissions stay disabled.
 
 ## Field policies

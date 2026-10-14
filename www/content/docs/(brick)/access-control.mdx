@@ -94,6 +94,16 @@ crud({
 });
 ```
 
+`operation` discriminates the authorization input type. For example, after
+`operation === "list"`, `input.where`, `input.select`, and `input.limit` are
+available; after `operation === "update"`, `input.id` and `input.data` are
+available. Field policies constrain field names and filter operators, and
+explicit field schemas supply value types. Column-derived values and IDs
+remain `unknown` because the table is supplied after `crud()` is configured.
+Create fields are optional in this callback type because column defaults and
+nullability are not yet known. The package exports `CrudAuthorizeArgs<F>` and
+`CrudInputs<F>` for reusable policies and per-operation input types.
+
 ### 3. Row-Level Tenant and Owner Scoping (`scope`)
 
 Return a trusted SQL condition to isolate multi-tenant or user-owned rows. `scope` only runs when `authorize` allowed the call, and receives `{ operation, ctx }`:
