@@ -18,3 +18,5 @@ node_modules
 .source
 
 src/generated
+
+/public/og/blog/
