@@ -1,6 +1,6 @@
 {
   "name": "@brickkit/cli",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "CLI and server engine for Brick-TS",
   "keywords": [
     "typescript",
@@ -61,7 +61,7 @@
     "format:check": "oxfmt --check ."
   },
   "dependencies": {
-    "@brickkit/core": "^0.4.1",
+    "@brickkit/core": "^0.4.2",
     "@sinclair/typebox": "^0.34.52",
     "commander": "^15.0.0",
     "elysia": "2.0.0-beta.29"
