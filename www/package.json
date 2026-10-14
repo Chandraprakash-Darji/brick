@@ -5,8 +5,8 @@
   "sideEffects": false,
   "scripts": {
     "examples:generate": "bun scripts/generate-examples.ts",
-    "dev": "bun run examples:generate && vite dev",
-    "build": "bun run docs:check && bun run examples:generate && vite build",
+    "dev": "bun run examples:generate && bun run og:generate && vite dev",
+    "build": "bun run docs:check && bun run examples:generate && bun run og:generate && vite build",
     "start": "vite preview",
     "preview": "vite preview",
     "types:check": "fumadocs-mdx && bun run examples:generate && tsc --noEmit",
@@ -16,7 +16,8 @@
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "docs:check": "bun scripts/check-docs-markdown.ts && bun test test",
-    "docs:http-check": "bun scripts/check-docs-http.ts"
+    "docs:http-check": "bun scripts/check-docs-http.ts",
+    "og:generate": "bun scripts/generate-blog-og.tsx"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.93",
@@ -56,19 +57,23 @@
     "mdast-util-mdx": "^3.0.0"
   },
   "devDependencies": {
+    "@fontsource/geist": "^5.3.0",
+    "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/vite": "^4.3.3",
     "@types/hast": "^3.0.5",
+    "@types/mdast": "^4.0.4",
     "@types/mdx": "^2.0.14",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "gray-matter": "^4.0.3",
     "nitro": "3.0.260903-beta",
-    "oxlint": "^1.88.0",
-    "tailwindcss": "^4.3.3",
-    "typescript": "^7.0.2",
     "oxfmt": "^0.73.0",
-    "@types/mdast": "^4.0.4",
-    "remark-mdx": "^3.1.1"
+    "oxlint": "^1.88.0",
+    "remark-mdx": "^3.1.1",
+    "satori": "^0.56.2",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2"
   }
 }
