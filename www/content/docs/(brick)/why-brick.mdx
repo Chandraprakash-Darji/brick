@@ -73,8 +73,8 @@ export const chargeInvoice = billingService.action({
     status: t.Union([t.Literal("succeeded"), t.Literal("pending")]),
     transactionId: t.String(),
   }),
-  authorize: ({ context }) => Boolean(context.user?.canManageBilling),
-  execute: async ({ input, context, error }) => {
+  authorize: ({ user }) => Boolean(user?.canManageBilling),
+  execute: async ({ input, ctx, error }) => {
     // Business logic runs only after input validation and authorization pass
     return { status: "succeeded", transactionId: "txn_123" };
   },
@@ -106,7 +106,9 @@ Brick's `@brickkit/crud` plugin enforces deny-by-default security:
 ```ts title="src/services/pages.ts"
 pagesService.resource({ name: "page", table: pages, id: pages.id }).use(
   crud({
-    access: ({ context }) => Boolean(context.user),
+    access: {
+      authorize: ({ ctx }) => Boolean(ctx.user),
+    },
     fields: {
       id: { read: true, filter: ["eq"] },
       title: { read: true, create: true, update: true, filter: ["contains"] },
