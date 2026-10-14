@@ -246,3 +246,20 @@ test("a failed app construction never closes handles owned by running apps", asy
   }
   expect(() => handle.getDb()).toThrow("Brick database handle is closed");
 });
+
+test("disposal releases handles swapped out by setDb", async () => {
+  const original = defineDatabase();
+  const replacement = defineDatabase();
+  const service = defineService("effect_app_swapped_db", {
+    database: original,
+  });
+  const app = brick({
+    services: [service],
+    docs: false,
+    requestLogging: false,
+  });
+  service.setDb(replacement);
+  await app.dispose();
+  expect(() => original.getDb()).toThrow("Brick database handle is closed");
+  expect(() => replacement.getDb()).toThrow("Brick database handle is closed");
+});

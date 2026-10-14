@@ -134,7 +134,10 @@ export function effectBrick<R = never, E = never>(
     void runtime.dispose().catch(() => {});
     throw error;
   }
-  for (const handle of liveDatabaseHandles(services))
+  // Retain the acquired set: setDb can swap the live handle, and disposal
+  // must release the original too instead of leaking its count forever.
+  const acquiredHandles = liveDatabaseHandles(services);
+  for (const handle of acquiredHandles)
     handleUsers.set(handle, (handleUsers.get(handle) ?? 0) + 1);
   const cleanup = (): Promise<void> =>
     (disposing ??= (async () => {
@@ -151,7 +154,10 @@ export function effectBrick<R = never, E = never>(
           errors.push(error);
         }
       }
-      for (const database of liveDatabaseHandles(services))
+      for (const database of new Set([
+        ...acquiredHandles,
+        ...liveDatabaseHandles(services),
+      ]))
         await releaseHandle(database, errors);
       for (const service of services) unbindRuntime(service, runtime);
       try {
@@ -189,7 +195,10 @@ export function effectBrick<R = never, E = never>(
           } catch {}
         }
         initialized.length = 0;
-        for (const database of liveDatabaseHandles(services))
+        for (const database of new Set([
+          ...acquiredHandles,
+          ...liveDatabaseHandles(services),
+        ]))
           await releaseHandle(database);
         await runtime.dispose();
         throw error;
