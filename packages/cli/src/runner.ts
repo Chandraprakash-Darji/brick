@@ -1,10 +1,12 @@
 import { existsSync } from "fs";
 import { watch } from "fs";
 import { resolve } from "path";
+import { fileURLToPath } from "node:url";
 import {
   brick,
   getPluginActionRoute,
-  resetGlobalRegistry,
+  isBrickApp,
+  type BrickApp,
 } from "@brickkit/core";
 
 export interface DevServerOptions {
@@ -13,21 +15,11 @@ export interface DevServerOptions {
   prefix?: string;
 }
 
-let currentServer: any = null;
-
-async function closeServer() {
-  if (currentServer) {
-    try {
-      await currentServer.stop?.();
-      currentServer = null;
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    } catch (err) {
-      console.error("Error closing server:", err);
-    }
-  }
-}
-
-async function createServer(options: DevServerOptions, label: string) {
+async function createServer(
+  options: DevServerOptions,
+  label: string,
+  application?: BrickApp,
+) {
   let port: number;
   if (options.port !== undefined) {
     port = options.port;
@@ -42,12 +34,14 @@ async function createServer(options: DevServerOptions, label: string) {
     );
   }
 
-  const app = brick({
-    port,
-    prefix: options.prefix,
-  });
+  const app =
+    application ??
+    brick({
+      port,
+      prefix: options.prefix,
+    });
 
-  currentServer = await app.listen({ port });
+  await app.listen({ port });
 
   const prefix = app.definition.prefix;
   const services = app.definition.services;
@@ -141,66 +135,112 @@ export async function startProdServer(options: DevServerOptions = {}) {
   return app;
 }
 
+export async function startDevApplication(options: DevServerOptions) {
+  const module = options.entry
+    ? await import(resolve(options.entry))
+    : undefined;
+  if (isBrickApp(module?.default) && options.prefix !== undefined) {
+    console.warn(
+      `[Brick-TS] Ignoring prefix ${options.prefix}: exported BrickApp prefix ${module.default.definition.prefix} takes precedence.`,
+    );
+  }
+  return createServer(
+    options,
+    "Development",
+    isBrickApp(module?.default) ? module.default : undefined,
+  );
+}
+
 export async function startDevServer(options: DevServerOptions = {}) {
   const entry = options.entry;
-
-  if (entry) {
-    const resolvedEntry = resolve(process.cwd(), entry);
-    if (!existsSync(resolvedEntry)) {
-      console.error(`[Brick-TS] Error: Entry file not found: ${resolvedEntry}`);
-      process.exit(1);
-    }
-    console.log(`[Brick-TS] Loading application entry: ${resolvedEntry}`);
-    await import(resolvedEntry);
+  if (!entry) return createServer(options, "Development");
+  const resolvedEntry = resolve(entry);
+  if (!existsSync(resolvedEntry)) {
+    console.error(`[Brick-TS] Error: Entry file not found: ${resolvedEntry}`);
+    process.exit(1);
   }
 
-  const app = await createServer(options, "Development");
-
-  const cwd = process.cwd();
-  const watchDirs = [
-    resolve(cwd, "src"),
-    resolve(cwd, "app"),
-    entry ? resolve(cwd, entry).replace(/\/[^/]+$/, "") : null,
-  ].filter(Boolean) as string[];
-
-  let isRestarting = false;
-
-  for (const dir of watchDirs) {
-    if (!existsSync(dir)) continue;
-
-    watch(dir, { recursive: true }, async (eventType, filename) => {
-      if (!filename || filename.includes("node_modules") || isRestarting)
-        return;
-
-      isRestarting = true;
-
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      console.log(`\n📝 Changes detected in ${filename}. Restarting server...`);
-
-      try {
-        await closeServer();
-        resetGlobalRegistry();
-
-        if (entry) {
-          const resolvedEntry = resolve(process.cwd(), entry);
-          if (existsSync(resolvedEntry)) {
-            await import(resolvedEntry);
-          }
-        }
-
-        await createServer(options, "Development");
-      } catch (err) {
-        console.error("Error restarting server:", err);
-        isRestarting = false;
-        return;
+  const worker = new URL(
+    import.meta.url.endsWith(".ts") ? "./dev-worker.ts" : "./dev-worker.js",
+    import.meta.url,
+  );
+  let stopped = false;
+  const intentionalExits = new WeakSet<ReturnType<typeof Bun.spawn>>();
+  const launch = () => {
+    const application = Bun.spawn(
+      [
+        process.execPath,
+        fileURLToPath(worker),
+        resolvedEntry,
+        String(options.port ?? ""),
+        options.prefix ?? "",
+      ],
+      {
+        cwd: process.cwd(),
+        stdout: "inherit",
+        stderr: "inherit",
+      },
+    );
+    void application.exited.then((code) => {
+      if (!stopped && !intentionalExits.has(application)) {
+        console.error(
+          `[Brick-TS] Application process exited with code ${code}. Waiting for changes to restart.`,
+        );
       }
-
-      isRestarting = false;
     });
+    return application;
+  };
+  let child = launch();
+  const watchDirs = [
+    ...new Set([resolve("src"), resolve("app"), resolve(resolvedEntry, "..")]),
+  ].filter(existsSync);
+  let pending: ReturnType<typeof setTimeout> | undefined;
+  let restarting = false;
+  let dirty = false;
+
+  async function restart() {
+    dirty = true;
+    if (restarting || stopped) return;
+    restarting = true;
+    try {
+      while (dirty && !stopped) {
+        dirty = false;
+        console.log("\n📝 Changes detected. Restarting server...");
+        intentionalExits.add(child);
+        child.kill();
+        await child.exited;
+        if (!stopped) child = launch();
+      }
+    } finally {
+      restarting = false;
+    }
   }
 
+  const watchers = watchDirs.map((dir) =>
+    watch(dir, { recursive: true }, (_event, filename) => {
+      if (!filename || filename.split(/[\\/]/).includes("node_modules")) return;
+      clearTimeout(pending);
+      pending = setTimeout(() => {
+        void restart();
+      }, 100);
+    }),
+  );
+  const stop = () => {
+    stopped = true;
+    clearTimeout(pending);
+    for (const watcher of watchers) watcher.close();
+    child.kill();
+    process.off("SIGINT", onSignal);
+    process.off("SIGTERM", onSignal);
+    process.off("exit", stop);
+  };
+  const onSignal = () => {
+    stop();
+    process.exit(0);
+  };
+  process.on("SIGINT", onSignal);
+  process.on("SIGTERM", onSignal);
+  process.on("exit", stop);
   console.log(`\n👀 Watching for changes in: ${watchDirs.join(", ")}`);
-
-  return app;
+  return { stop };
 }

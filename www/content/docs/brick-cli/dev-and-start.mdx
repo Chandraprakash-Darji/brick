@@ -19,7 +19,7 @@ When running `brick dev`:
 
 1. **Entry File Loading**: The CLI resolves the application entry file. If an entry file path is provided but does not exist, the CLI exits immediately with an error.
 2. **Watch Directories**: The CLI monitors `src/`, `app/`, and the parent folder of the entry file for changes (excluding `node_modules`).
-3. **Registry Reset**: On file modification (after a short debounce), `brick dev` closes the existing HTTP listener, resets the global service registry (`resetGlobalRegistry()`), re-imports the application entry via dynamic `import()`, and spins up a fresh server instance. Known issue: in v0.3.0 the re-import is served from Bun's module cache, so after a reload no services are registered again and actions return 404 until you restart `brick dev` ([#57](https://github.com/Chandraprakash-Darji/brick/issues/57)).
+3. **Fresh Application Process**: After a short debounce, `brick dev` stops the application process and starts a new one. The entry and all its dependencies run again with a fresh service registry and module graph. Default-exported `BrickApp` options (including the route prefix) are preserved; the CLI port takes precedence. For the programmatic `startDevServer({ prefix })` option, the exported app’s prefix takes precedence and the runner prints a warning.
 
 ### Startup Route Banner
 
