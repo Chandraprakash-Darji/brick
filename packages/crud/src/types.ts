@@ -58,11 +58,7 @@ export interface CrudOptions<
   access:
     | "public"
     | {
-        authorize?: (args: {
-          operation: Operation;
-          input: unknown;
-          ctx: ActionContext;
-        }) => boolean | Promise<boolean>;
+        authorize?: (args: CrudAuthorizeArgs<F>) => boolean | Promise<boolean>;
         scope?: (args: {
           operation: Operation;
           ctx: ActionContext;
@@ -135,18 +131,19 @@ type Operand<V, O> = O extends "isNull" | "isNotNull"
     : O extends "between"
       ? { value: readonly [NonNullable<V>, NonNullable<V>] }
       : { value: NonNullable<V> };
-type Leaf<T extends Table, F> = {
-  [K in Extract<keyof F, keyof Row<T>>]: {
+type Leaf<F, V> = {
+  [K in Extract<keyof F, keyof V>]: {
     [O in Extract<AllowedOps<F, K>, FilterOperator>]: {
       field: K;
       op: O;
-    } & Operand<Row<T>[K], O>;
+    } & Operand<V[K], O>;
   }[Extract<AllowedOps<F, K>, FilterOperator>];
-}[Extract<keyof F, keyof Row<T>>];
-export type Where<T extends Table, F> =
-  | Leaf<T, F>
-  | { and: readonly Where<T, F>[] }
-  | { or: readonly Where<T, F>[] };
+}[Extract<keyof F, keyof V>];
+type FilterWhere<F, V> =
+  | Leaf<F, V>
+  | { and: readonly FilterWhere<F, V>[] }
+  | { or: readonly FilterWhere<F, V>[] };
+export type Where<T extends Table, F> = FilterWhere<F, Row<T>>;
 export interface Query<
   T extends Table,
   F,
@@ -162,6 +159,54 @@ export interface Query<
   offset?: number;
   includeTotal?: boolean;
 }
+// The table is supplied after crud() is configured. Only explicit field
+// schemas can supply value types here; column-derived values stay unknown.
+type AuthorizeKeys<F, P extends string> = string extends keyof F
+  ? keyof F
+  : Keys<F, P>;
+type AuthorizeValues<F> = {
+  [K in keyof F]: F[K] extends { schema: infer S extends TSchema }
+    ? Static<S>
+    : unknown;
+};
+type AuthorizeWrite<F, P extends string> = {
+  [K in Extract<AuthorizeKeys<F, P>, keyof F>]?: AuthorizeValues<F>[K];
+};
+type AuthorizeQuery<F> = {
+  select?: readonly AuthorizeKeys<F, "read">[];
+  where?: string extends keyof F
+    ? FilterWhere<
+        Record<string, { filter: readonly FilterOperator[] }>,
+        Record<string, unknown>
+      >
+    : FilterWhere<F, AuthorizeValues<F>>;
+  orderBy?: readonly {
+    field: AuthorizeKeys<F, "sort">;
+    direction: "asc" | "desc";
+  }[];
+  limit?: number;
+  offset?: number;
+  includeTotal?: boolean;
+};
+/** Validated authorization inputs, indexed by CRUD operation. */
+export type CrudInputs<F extends Fields = Fields> = {
+  list: { [K in keyof AuthorizeQuery<F>]: AuthorizeQuery<F>[K] };
+  findOne: { [K in keyof AuthorizeQuery<F>]: AuthorizeQuery<F>[K] };
+  get: { id: unknown; select?: readonly AuthorizeKeys<F, "read">[] };
+  create: AuthorizeWrite<F, "create">;
+  update: { id: unknown; data: AuthorizeWrite<F, "update"> };
+  delete: { id: unknown };
+  count: { where?: AuthorizeQuery<F>["where"] };
+  exists: { where?: AuthorizeQuery<F>["where"] };
+};
+/** Narrow operation and input together in an authorize callback. */
+export type CrudAuthorizeArgs<F extends Fields = Fields> = {
+  [K in Operation]: {
+    operation: K;
+    input: CrudInputs<F>[K];
+    ctx: ActionContext;
+  };
+}[Operation];
 type Selected<T extends Table, F, S> = S extends readonly (infer K)[]
   ? Pick<ReadRow<T, F>, Extract<K, keyof ReadRow<T, F>>>
   : ReadRow<T, F>;

@@ -1,3 +1,5 @@
+import { Type } from "@sinclair/typebox";
+import type { CrudAuthorizeArgs, CrudInputs } from "../src";
 import { defineService } from "@brickkit/core";
 import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
 import { crud } from "../src";
@@ -70,3 +72,110 @@ resource.get.run({ id: 1, select: ["id"] }).then((row) => {
   // @ts-expect-error non-selected field
   void row.name;
 });
+
+crud({
+  fields: {
+    id: { read: true, filter: ["eq", "in"] },
+    name: {
+      read: true,
+      create: true,
+      update: true,
+      filter: ["eq", "contains"],
+      sort: true,
+      schema: Type.String(),
+    },
+  },
+  access: {
+    authorize: ({ operation, input }) => {
+      switch (operation) {
+        case "list":
+        case "findOne": {
+          const limit: number | undefined = input.limit;
+          const select: readonly ("id" | "name")[] | undefined = input.select;
+          const sort: "name" | undefined = input.orderBy?.[0]?.field;
+          void [limit, select, sort];
+          // @ts-expect-error query input has no id
+          void input.id;
+          break;
+        }
+        case "get":
+          void input.id;
+          void input.select;
+          // @ts-expect-error get input has no data
+          void input.data;
+          break;
+        case "create": {
+          const name: string | undefined = input.name;
+          void name;
+          // @ts-expect-error id is not createable
+          void input.id;
+          break;
+        }
+        case "update": {
+          const name: string | undefined = input.data.name;
+          void [input.id, name];
+          // @ts-expect-error id is not updateable
+          void input.data.id;
+          break;
+        }
+        case "delete":
+          void input.id;
+          // @ts-expect-error delete input has no select
+          void input.select;
+          break;
+        case "count":
+        case "exists":
+          // @ts-expect-error count and exists have no pagination
+          void input.limit;
+          break;
+        default: {
+          const exhaustive: never = operation;
+          void exhaustive;
+        }
+      }
+      if (
+        (operation === "list" ||
+          operation === "count" ||
+          operation === "exists") &&
+        input.where &&
+        "field" in input.where
+      ) {
+        if (input.where.field === "name") {
+          const value: string = input.where.value;
+          void value;
+          // @ts-expect-error schema gives string, not number
+          const number: number = input.where.value;
+          void number;
+        } else if (input.where.op === "in") {
+          const values: readonly unknown[] = input.where.value;
+          void values;
+        }
+        // @ts-expect-error only configured operators are possible
+        const invalid: "between" = input.where.op;
+        void invalid;
+      }
+      return true;
+    },
+  },
+});
+
+const policyFields = {
+  name: { read: true, create: true, schema: Type.String(), filter: ["eq"] },
+} as const;
+const query: CrudInputs<typeof policyFields>["list"] = {
+  where: { field: "name", op: "eq", value: "A" },
+};
+void query;
+const authorize = (args: CrudAuthorizeArgs<typeof policyFields>) => {
+  if (args.operation === "create") {
+    const name: string | undefined = args.input.name;
+    void name;
+  }
+  return true;
+};
+crud({ fields: policyFields, access: { authorize } });
+const broadAuthorize = ({ operation, input }: CrudAuthorizeArgs) => {
+  if (operation === "list") void input.where;
+  return true;
+};
+crud({ fields: policyFields, access: { authorize: broadAuthorize } });

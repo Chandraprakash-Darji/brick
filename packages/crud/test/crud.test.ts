@@ -361,6 +361,82 @@ test("boolean columns are sortable", async () => {
   }
 });
 
+test("authorize receives validated inputs for each operation", async () => {
+  const calls: { operation: string; input: unknown }[] = [];
+  const { resource: r, sqlite } = fixture({
+    fields: {
+      id: { read: true, filter: ["eq"] },
+      name: {
+        read: true,
+        create: true,
+        update: true,
+        filter: ["eq"],
+        sort: true,
+      },
+    },
+    access: {
+      authorize: ({ operation, input }) => {
+        calls.push({ operation, input });
+        if (operation === "list" && input.where && "field" in input.where) {
+          return (
+            input.where.field === "name" &&
+            input.where.op === "eq" &&
+            input.where.value === "A"
+          );
+        }
+        return true;
+      },
+    },
+  });
+  try {
+    await expect(r.get.run({ id: "invalid" })).rejects.toThrow(
+      "Validation failed",
+    );
+    expect(calls).toEqual([]);
+    await r.create.run({ name: "A" });
+    const query = {
+      select: ["name"],
+      where: { field: "name", op: "eq", value: "A" },
+      orderBy: [{ field: "name", direction: "asc" }],
+      limit: 1,
+      offset: 0,
+      includeTotal: true,
+    };
+    expect((await r.list.run(query)).items).toEqual([{ name: "A" }]);
+    await expect(
+      r.list.run(
+        { where: { field: "name", op: "eq", value: "B" } },
+        { user: { id: "member" } },
+      ),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await r.get.run({ id: 1, select: ["name"] });
+    await r.findOne.run({ select: ["name"] });
+    await r.count.run({ where: { field: "id", op: "eq", value: 1 } });
+    await r.exists.run({});
+    await r.update.run({ id: 1, data: { name: "B" } });
+    await r.delete.run({ id: 1 });
+    expect(calls).toEqual([
+      { operation: "create", input: { name: "A" } },
+      { operation: "list", input: query },
+      {
+        operation: "list",
+        input: { where: { field: "name", op: "eq", value: "B" } },
+      },
+      { operation: "get", input: { id: 1, select: ["name"] } },
+      { operation: "findOne", input: { select: ["name"] } },
+      {
+        operation: "count",
+        input: { where: { field: "id", op: "eq", value: 1 } },
+      },
+      { operation: "exists", input: {} },
+      { operation: "update", input: { id: 1, data: { name: "B" } } },
+      { operation: "delete", input: { id: 1 } },
+    ]);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("CRUD authorization distinguishes missing users and signed-in users", async () => {
   const { resource, sqlite } = fixture({
     fields: { name: { read: true } },

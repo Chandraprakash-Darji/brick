@@ -27,6 +27,7 @@ import {
   sql,
 } from "drizzle-orm";
 import type {
+  CrudAuthorizeArgs,
   CrudOptions,
   CrudPlugin,
   Fields,
@@ -540,7 +541,10 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
               const accessConfig = options.access;
               if (
                 !accessConfig?.authorize ||
-                !(await accessConfig.authorize({ operation, input, ctx }))
+                !(await accessConfig.authorize(
+                  // inputs[operation] validated this value before execute.
+                  { operation, input, ctx } as CrudAuthorizeArgs<F>,
+                ))
               )
                 throw new ActionExecutionError(
                   ctx.user == null ? "UNAUTHORIZED" : "FORBIDDEN",
