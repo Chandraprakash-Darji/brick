@@ -78,7 +78,11 @@ export function generateOpenApiSpec(
         };
       }
 
+      const errorAlternatives = new Set<string>();
       const addError = (code: string, status: number, message: string) => {
+        const key = `${status}:${code}`;
+        if (errorAlternatives.has(key)) return;
+        errorAlternatives.add(key);
         const schema = {
           allOf: [
             { $ref: "#/components/schemas/ErrorEnvelope" },

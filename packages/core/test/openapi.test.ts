@@ -153,3 +153,54 @@ describe("OpenAPI 3.1 Specification Generator", () => {
     expect(spec.components.securitySchemes).toBeUndefined();
   });
 });
+
+it("deduplicates declared and framework errors with the same code and status", () => {
+  const service = defineService("overrides").action(
+    defineAction({
+      name: "fail",
+      input: t.Object({ value: t.String() }),
+      output: t.String(),
+      authorize: () => false,
+      errors: {
+        INTERNAL_SERVER_ERROR: { status: 500, message: "Declared failure" },
+        VALIDATION_FAILED: { status: 400, message: "Invalid value" },
+        UNAUTHORIZED: { status: 401, message: "Sign in" },
+        FORBIDDEN: { status: 403, message: "No permission" },
+        OTHER: { status: 500, message: "Other failure" },
+      },
+      execute: () => "ok",
+    }),
+  );
+  const responses = generateOpenApiSpec({ services: [service] }).paths[
+    "/api/overrides/fail"
+  ].post.responses;
+  for (const [status, code] of [
+    [400, "VALIDATION_FAILED"],
+    [401, "UNAUTHORIZED"],
+    [403, "FORBIDDEN"],
+    [500, "INTERNAL_SERVER_ERROR"],
+  ] as const) {
+    const alternatives =
+      responses[status].content["application/json"].schema.oneOf;
+    expect(
+      alternatives.filter(
+        (schema: {
+          allOf: [
+            { $ref: string },
+            {
+              properties: {
+                code: { const: string };
+                status: { const: number };
+              };
+            },
+          ];
+        }) =>
+          schema.allOf[1].properties.code.const === code &&
+          schema.allOf[1].properties.status.const === status,
+      ),
+    ).toHaveLength(1);
+  }
+  expect(responses[500].content["application/json"].schema.oneOf).toHaveLength(
+    3,
+  );
+});
