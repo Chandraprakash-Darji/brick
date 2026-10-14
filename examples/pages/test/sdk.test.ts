@@ -8,10 +8,15 @@ import { generateClientContract } from "@brickkit/cli";
 import { appDb, appSql } from "../src/api/db";
 import { prepareTestDatabase } from "./database";
 
-// Exercise the generated metadata even when this test runs without a Vite server.
+// The client contract is generated from the live app after the test database
+// is prepared: building earlier would compile against a handle that another
+// test file's app teardown may already have closed.
 const contractFile = new URL("../_brick/contract.ts", import.meta.url);
-await Bun.write(contractFile, generateClientContract(buildApp()));
-const { contract } = await import(contractFile.href);
+
+async function loadContract() {
+  await Bun.write(contractFile, generateClientContract(buildApp()));
+  return (await import(contractFile.href)).contract;
+}
 
 describe("local Brick SDK", () => {
   it("reuses the app-owned postgres client", () => {
@@ -20,6 +25,7 @@ describe("local Brick SDK", () => {
 
   it("authenticates and performs CRUD through the real pages app", async () => {
     await prepareTestDatabase();
+    const contract = await loadContract();
     const auth = getAuth();
     const signup = await auth.api.signUpEmail({
       asResponse: true,

@@ -24,6 +24,9 @@
     "tools-and-mcp",
     "openapi",
     "type-inference",
-    "database"
+    "database",
+    "---Effect---",
+    "effect-setup",
+    "effect-runtime"
   ]
 }

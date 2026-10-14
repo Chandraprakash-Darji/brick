@@ -1,3 +1,11 @@
+import { Effect } from "effect";
+import {
+  runEffectPromise,
+  effectExecutionKey,
+  effectAuthorizationKey,
+  normalizeEffectError,
+  withEffectRuntime,
+} from "./effect-runtime";
 import type { TSchema } from "@sinclair/typebox";
 import {
   type Action,
@@ -130,6 +138,36 @@ export function defineAction<
 ): Action<TInputSchema, TOutputSchema, TErrors, TContext>;
 
 export function defineAction(config: any): any {
+  return createAction(
+    config,
+    config[effectExecutionKey] ??
+      ((params: any) =>
+        // Native implementations throw plain values; redact unexpected
+        // failures into typed 500s like the Promise-based runtime does.
+        withEffectRuntime(() => config.execute(params)).pipe(
+          Effect.catch((error) =>
+            error instanceof ActionExecutionError ||
+            error instanceof ValidationError
+              ? Effect.fail(error)
+              : Effect.fail(normalizeActionError(error, params.ctx)),
+          ),
+          Effect.catchDefect((defect) =>
+            Effect.fail(normalizeActionError(defect, params.ctx)),
+          ),
+        )),
+  );
+}
+
+export async function runActionEffect<A, E>(
+  effect: Effect.Effect<A, E>,
+): Promise<A> {
+  return runEffectPromise(effect);
+}
+
+export function createAction(
+  config: any,
+  execute: (params: any) => Effect.Effect<unknown, unknown, any>,
+): any {
   const errorHelpers = buildErrorHelpers(config.errors);
 
   const actionFn = (async (params: { input?: any; ctx?: any }) => {
@@ -159,88 +197,132 @@ export function defineAction(config: any): any {
     return actionFn.execute({ input, ctx });
   };
 
-  actionFn.execute = async (params: { input?: any; ctx?: any }) => {
-    let fullCtx: any;
-    const boundService = (actionFn as any).service;
-    // Check if context is already resolved by the bound service
-    if (params?.ctx?.[RESOLVED_SYMBOL] === boundService) {
-      fullCtx = params.ctx;
-    } else if (
-      boundService &&
-      typeof boundService.resolveContext === "function"
-    ) {
-      fullCtx = await boundService.resolveContext(params?.ctx);
-    } else {
-      fullCtx = createDefaultContext(params?.ctx);
-    }
+  actionFn.execute = (params: { input?: any; ctx?: any }) =>
+    runEffectPromise(
+      actionFn.executeEffect(params),
+      actionFn.service,
+      params?.ctx?.request?.signal,
+    );
 
-    try {
-      // Auto-populate ctx.db from the bound service or global registry if not provided in call ctx
-      if (!fullCtx.db) {
-        if ((actionFn as any).service?.getDb()) {
-          fullCtx.db = (actionFn as any).service.getDb();
-        } else if (actionFn.serviceName) {
-          const s = getGlobalRegistry().get(actionFn.serviceName);
-          if (s?.getDb()) {
-            fullCtx.db = s.getDb();
+  actionFn.executeEffect = (params: { input?: any; ctx?: any }) =>
+    Effect.gen(function* () {
+      const boundService = actionFn.service;
+      const fullCtx = yield* boundService?.resolveContextEffect
+        ? Effect.mapError(
+            boundService.resolveContextEffect(params?.ctx),
+            normalizeEffectError,
+          )
+        : Effect.tryPromise({
+            try: async () =>
+              boundService?.resolveContext
+                ? boundService.resolveContext(params?.ctx)
+                : createDefaultContext(params?.ctx),
+            catch: normalizeEffectError,
+          });
+      yield* Effect.try({
+        try: () => {
+          if (!fullCtx.db) {
+            const service =
+              boundService ??
+              (actionFn.serviceName
+                ? getGlobalRegistry().get(actionFn.serviceName)
+                : undefined);
+            if (service?.getDb()) fullCtx.db = service.getDb();
           }
-        }
-      }
+        },
+        catch: normalizeEffectError,
+      });
 
-      // 1. Validate Input
-      if (config.input) {
-        const inputValidation = actionFn.validateInput(params?.input);
-        if (!inputValidation.success) {
-          throw new ValidationError(
-            `Validation failed for action '${config.name}' input` as string,
-            inputValidation.errors,
-          );
-        }
-      }
+      yield* Effect.try({
+        try: () => {
+          // 1. Validate Input
+          if (config.input) {
+            const inputValidation = actionFn.validateInput(params?.input);
+            if (!inputValidation.success) {
+              throw new ValidationError(
+                `Validation failed for action '${config.name}' input` as string,
+                inputValidation.errors,
+              );
+            }
+          }
+        },
+        catch: (error) => error,
+      });
 
       // 2. Authorize
       if (config.authorize) {
-        const allowed = await config.authorize({
-          user: fullCtx.user,
-          input: params?.input,
-          ctx: fullCtx,
-        });
+        const allowed = yield* (
+          config[effectAuthorizationKey]
+            ? Effect.suspend(() =>
+                config[effectAuthorizationKey]({
+                  user: fullCtx.user,
+                  input: params?.input,
+                  ctx: fullCtx,
+                }),
+              )
+            : Effect.tryPromise({
+                try: async () =>
+                  config.authorize({
+                    user: fullCtx.user,
+                    input: params?.input,
+                    ctx: fullCtx,
+                  }),
+                catch: (error) =>
+                  error instanceof ActionExecutionError ||
+                  error instanceof ValidationError
+                    ? error
+                    : normalizeActionError(error, fullCtx),
+              })
+        ).pipe(
+          Effect.catchDefect((defect) =>
+            Effect.fail(normalizeActionError(defect, fullCtx)),
+          ),
+        );
         if (!allowed) {
-          throw new ActionExecutionError(
-            fullCtx.user == null ? "UNAUTHORIZED" : "FORBIDDEN",
-            `Access denied for action '${config.name}'`,
-            fullCtx.user == null ? 401 : 403,
+          return yield* Effect.fail(
+            new ActionExecutionError(
+              fullCtx.user == null ? "UNAUTHORIZED" : "FORBIDDEN",
+              `Access denied for action '${config.name}'`,
+              fullCtx.user == null ? 401 : 403,
+            ),
           );
         }
       }
 
       // 3. Execute implementation
-      const result = await config.execute({
-        input: params?.input,
-        ctx: fullCtx,
-        error: errorHelpers,
+      const result = yield* Effect.suspend(() =>
+        execute({
+          input: params?.input,
+          ctx: fullCtx,
+          error: errorHelpers,
+        }),
+      ).pipe(
+        Effect.catchDefect((defect) =>
+          Effect.fail(normalizeActionError(defect, fullCtx)),
+        ),
+      );
+
+      yield* Effect.try({
+        try: () => {
+          // 4. Validate Output
+          const runtimeOutputSchema =
+            (actionFn as { outputValidationSchema?: TSchema })
+              .outputValidationSchema ?? config.output;
+          if (runtimeOutputSchema) {
+            const outputValidation = actionFn.validateOutput(result);
+            if (!outputValidation.success) {
+              throw new ValidationError(
+                `Validation failed for action '${config.name}' output` as string,
+                outputValidation.errors,
+                500,
+              );
+            }
+          }
+        },
+        catch: (error) => error,
       });
-
-      // 4. Validate Output
-      const runtimeOutputSchema =
-        (actionFn as { outputValidationSchema?: TSchema })
-          .outputValidationSchema ?? config.output;
-      if (runtimeOutputSchema) {
-        const outputValidation = actionFn.validateOutput(result);
-        if (!outputValidation.success) {
-          throw new ValidationError(
-            `Validation failed for action '${config.name}' output` as string,
-            outputValidation.errors,
-            500,
-          );
-        }
-      }
-
       return result;
-    } catch (err) {
-      throw normalizeActionError(err, fullCtx);
-    }
-  };
+    });
 
   return actionFn;
 }

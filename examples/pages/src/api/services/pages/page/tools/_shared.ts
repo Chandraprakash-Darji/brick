@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { t } from "@brickkit/core";
 
 import { pagesTable } from "../service";
@@ -41,7 +42,7 @@ export const pageMetaProjection = {
 };
 
 export const requireUser = ({ user }: { user?: { id?: string } | null }) =>
-  !!user?.id;
+  Effect.succeed(!!user?.id);
 
 export function ownerId(ctx: any): string {
   const id: string | undefined = ctx?.user?.id;

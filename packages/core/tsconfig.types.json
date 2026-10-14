@@ -1,9 +1,16 @@
 {
   "extends": "../../tsconfig.json",
-  "compilerOptions": { "noEmit": true },
+  "compilerOptions": {
+    "noEmit": true
+  },
   "include": [
     "test/resource-types.test.ts",
     "test/tool.test.ts",
-    "test/plugin.test.ts"
+    "test/plugin.test.ts",
+    "test/effect.test.ts",
+    "test/effect-service.test.ts",
+    "test/effect-app.test.ts",
+    "test/effect-database.test.ts",
+    "test/effect-rpc.test.ts"
   ]
 }

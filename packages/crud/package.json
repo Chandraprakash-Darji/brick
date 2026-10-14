@@ -21,6 +21,10 @@
   "type": "module",
   "license": "MIT",
   "exports": {
+    "./effect": {
+      "types": "./dist/effect.d.ts",
+      "import": "./dist/effect.js"
+    },
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
@@ -39,7 +43,8 @@
     "drizzle-orm": "^0.45.2"
   },
   "peerDependencies": {
-    "@brickkit/core": "^0.4.2"
+    "@brickkit/core": "^0.4.2",
+    "effect": "^4"
   },
   "devDependencies": {
     "tsdown": "^0.23.1",

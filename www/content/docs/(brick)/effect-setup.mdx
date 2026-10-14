@@ -1,0 +1,125 @@
+---
+title: Use Effect in your Brick app
+description: Define services, actions, and tools as Effects, supply dependencies with a Layer, and run the app.
+---
+
+Brick runs every action through Effect, so an `execute` callback can return an `Effect` instead of a `Promise`. Return Effects when you need dependencies, typed failures, or cancellation. Keep Promises when you do not.
+
+## Install the dependency
+
+To add Effect to your app, install it:
+
+```bash
+bun add effect
+```
+
+Import the Effect entrypoints, not `@brickkit/core` directly:
+
+```ts title="src/services/greetings.ts"
+import { Context, Effect, Layer } from "effect";
+import { brick, defineService, t } from "@brickkit/core/effect";
+```
+
+## Define a service with an Effect context
+
+Return the service context from an `Effect`. The resolved fields merge into `ctx` for every action and tool:
+
+```ts title="src/services/greetings.ts"
+class Greeting extends Context.Service<Greeting, { text: string }>()(
+  "Greeting",
+) {}
+
+export const greetingsService = defineService("greetings", {
+  context: () => Effect.map(Greeting, (value) => ({ greeting: value.text })),
+});
+```
+
+## Register actions and tools
+
+An `execute` callback can return an `Effect`. Read dependencies with `yield*` inside `Effect.gen`, or with `Effect.map` for one-liners:
+
+```ts title="src/services/greetings.ts"
+export const hello = greetingsService.action({
+  name: "hello",
+  output: t.String(),
+  execute: ({ ctx }) => Effect.succeed(`${ctx.greeting}, world`),
+});
+
+export const farewell = greetingsService.action({
+  name: "farewell",
+  input: t.Object({ name: t.String() }),
+  output: t.String(),
+  authorize: ({ ctx }) => Effect.succeed(ctx.user != null),
+  execute: ({ ctx, input }) =>
+    Effect.gen(function* () {
+      const value = yield* Greeting;
+      return `${value.text}, ${input.name} (${ctx.greeting})`;
+    }),
+});
+```
+
+If `authorize` returns an `Effect` of `false`, the call fails with `401` when no user is present and `403` otherwise. A native `authorize` that returns `false` behaves the same way.
+
+## Supply dependencies and start the app
+
+Pass a `Layer` to `brick()`. The app builds it once and shares it across service contexts, actions, tools, and endpoints:
+
+```ts title="src/app.ts"
+import { greetingsService, hello } from "./services/greetings";
+
+const app = brick({
+  services: [greetingsService],
+  layer: Layer.succeed(Greeting, { text: "Hello" }),
+});
+
+await app.initialize();
+await hello.run();
+await app.dispose();
+```
+
+`hello.run()` returns `"Hello, world"`. Call `app.dispose()` when the process ends. Disposal runs destruction hooks, releases the `Layer`, and closes each database handle that no remaining app uses.
+
+## Use Effect callbacks in CRUD
+
+If you use CRUD, import `crud` from `@brickkit/crud/effect`. Its `authorize`, `scope`, and hook callbacks accept Effects:
+
+```ts title="src/services/pages.ts"
+import { crud } from "@brickkit/crud/effect";
+
+pagesResource.use(
+  crud({
+    fields: {
+      title: { read: true, create: true, update: true },
+    },
+    access: {
+      authorize: ({ ctx }) => Effect.succeed(ctx.user?.id != null),
+    },
+    hooks: {
+      beforeCreate: ({ data }) =>
+        Effect.sync(() => {
+          data.updatedAt = new Date().toISOString();
+        }),
+    },
+  }),
+);
+```
+
+The CRUD query pipeline stays Promise-based. The plugin runs each Effect callback through the host service runtime, so dependencies resolve the same way as in actions.
+
+## Compose outside the app
+
+`executeEffect` exposes the action as an `Effect`, including context resolution, validation, authorization, execution, and output validation. Provide dependencies yourself when no app is running:
+
+```ts
+import { Effect, Layer } from "effect";
+
+const program = Effect.gen(function* () {
+  const ctx = yield* greetingsService.resolveContextEffect();
+  return yield* hello.executeEffect({ ctx });
+});
+
+const greeting = Layer.succeed(Greeting, { text: "Hello" });
+await Effect.runPromise(Effect.provide(program, greeting));
+```
+
+Explicit `Effect.fail(value)` failures pass through the Promise boundary unchanged. Use `ActionExecutionError` when the failure needs a specific HTTP status.

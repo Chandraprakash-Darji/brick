@@ -27,15 +27,11 @@ export function createServiceProxy<T extends Record<string, any>>(
             );
           }
 
-          const envelopeCtx = {
-            ...pickContextEnvelope(options.context),
-            ...pickContextEnvelope(callCtx),
-          };
-
-          // Set caller to the originating service if not already set
-          if (!envelopeCtx.caller) {
-            envelopeCtx.caller = serviceName;
-          }
+          const envelopeCtx = createRpcEnvelope(
+            serviceName,
+            options.context,
+            callCtx,
+          );
 
           return action.execute({
             input: payload,
@@ -49,4 +45,19 @@ export function createServiceProxy<T extends Record<string, any>>(
       };
     },
   });
+}
+
+/** Keep caller fields while the receiving service owns its framework context. */
+export function createRpcEnvelope(
+  serviceName: string,
+  defaultContext?: Partial<ActionContext>,
+  callContext?: Partial<ActionContext>,
+): Partial<ActionContext> {
+  const envelope = {
+    ...pickContextEnvelope(defaultContext),
+    ...pickContextEnvelope(callContext),
+  } as Partial<ActionContext> & { caller?: string };
+  // Set caller to the originating service if not already set
+  envelope.caller ??= serviceName;
+  return envelope;
 }

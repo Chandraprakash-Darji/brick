@@ -8,6 +8,7 @@ import {
   createSQLiteDatabase,
   type SQLiteDatabaseConfig,
   type BunSQLiteDatabase,
+  type BrickSQLiteDatabase,
 } from "./sqlite";
 import {
   createPostgresDatabase,
@@ -60,6 +61,7 @@ export interface DatabaseHandle<
   readonly tables: Readonly<Record<string, Table>>;
   readonly schema: TSchema;
   getDb(): TDb;
+  close?(): void | Promise<void>;
 }
 
 export function isDatabaseHandle(
@@ -115,6 +117,9 @@ export function defineDatabase(
     : { ...declared };
   const schema = options.schema ?? tables;
   let db: unknown;
+  let closeClient: (() => void | Promise<void>) | undefined;
+  let closed = false;
+  let closing: void | Promise<void>;
 
   return {
     kind: "brick-database",
@@ -122,7 +127,14 @@ export function defineDatabase(
     engine,
     tables: Object.freeze(tables),
     schema,
+    close() {
+      if (closed) return closing;
+      closed = true;
+      closing = closeClient?.();
+      return closing;
+    },
     getDb() {
+      if (closed) throw new Error("Brick database handle is closed");
       if (db !== undefined) return db;
       const config: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(options)) {
@@ -143,8 +155,13 @@ export function defineDatabase(
           mkdirSync(dirname(path), { recursive: true });
         const instance = createSQLiteDatabase({ ...config, schema });
         db = instance;
+        if (!options.client)
+          closeClient = () => (instance as BrickSQLiteDatabase).$client.close();
       } else {
-        db = createPostgresDatabase({ ...config, schema });
+        const instance: PostgresJsDatabase & { $client: Sql } =
+          createPostgresDatabase({ ...config, schema });
+        db = instance;
+        if (!options.client) closeClient = () => instance.$client.end();
       }
       return db;
     },

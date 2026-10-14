@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import { contextResolverKey, runEffectPromise } from "./effect-runtime";
 import {
   installPlugin,
   isInstallingPlugin,
@@ -20,6 +22,8 @@ import type {
   Logger,
   Resource,
   ResourceConfig,
+  ResourceTypeOptions,
+  ResourceIdentity,
   PreparationContribution,
 } from "./types";
 import { defineTool, isTool } from "./tool";
@@ -129,9 +133,18 @@ export class ServiceImpl<
 
   // The public signature preserves config literals; runtime registration stores
   // resources with different tables in the same map.
-  resource: Service<TDb, TServiceContext>["resource"] = ((
-    config: ResourceConfig<any, BaseContext<TDb> & TServiceContext>,
-  ) => {
+  resource = <
+    TTable = any,
+    const TOptions extends ResourceTypeOptions = ResourceTypeOptions,
+  >(
+    config: ResourceConfig<TTable, BaseContext<TDb> & TServiceContext> &
+      TOptions &
+      Record<Exclude<keyof TOptions, keyof ResourceConfig>, never>,
+  ): Resource<
+    TTable,
+    BaseContext<TDb> & TServiceContext,
+    ResourceIdentity<TTable, TOptions>
+  > => {
     if (this._isBuilt)
       throw new Error("Resources must be registered before service build");
     if (this.resources.has(config.name))
@@ -139,8 +152,12 @@ export class ServiceImpl<
     const resourceInstance = defineResource(this, config);
     this.resources.set(resourceInstance.name, resourceInstance);
     getGlobalRegistry().touch();
-    return resourceInstance;
-  }) as Service<TDb, TServiceContext>["resource"];
+    return resourceInstance as Resource<
+      TTable,
+      BaseContext<TDb> & TServiceContext,
+      ResourceIdentity<TTable, TOptions>
+    >;
+  };
 
   getResource(
     name: string,
@@ -297,6 +314,10 @@ export class ServiceImpl<
     getGlobalRegistry().touch();
   }
 
+  getDatabaseHandle(): DatabaseHandle<TDb> | undefined {
+    return this.database;
+  }
+
   /**
    * Resolves the complete service execution context once per incoming request.
    * Merges framework BaseContext with the service's custom context hook.
@@ -305,47 +326,13 @@ export class ServiceImpl<
   resolveContext(
     callCtx?: Partial<BaseContext<TDb> & TServiceContext>,
   ): Promise<BaseContext<TDb> & TServiceContext> {
-    // Only accept pre-resolved context if it was resolved by THIS service instance
-    if ((callCtx as any)?.[RESOLVED_SYMBOL] === this) {
-      return Promise.resolve(callCtx as BaseContext<TDb> & TServiceContext);
-    }
-    return this._resolveContextSlow(callCtx);
+    return runEffectPromise(this.resolveContextEffect(callCtx), this);
   }
 
-  private async _resolveContextSlow(
+  resolveContextEffect(
     callCtx?: Partial<BaseContext<TDb> & TServiceContext>,
-  ): Promise<BaseContext<TDb> & TServiceContext> {
-    const seq = ++_ctxSeq;
-    const req = callCtx?.request ?? DEFAULT_REQUEST;
-    // Always use this service's own database, never the caller's
-    const db = this.getDb() as TDb;
-    const logger = callCtx?.logger ?? defaultLogger;
-    const traceId = callCtx?.traceId ?? `tr_${seq.toString(36)}`;
-    const requestId = callCtx?.requestId ?? `req_${seq.toString(36)}`;
-    const services = callCtx?.services ?? EMPTY_SERVICES;
-    const metadata = callCtx?.metadata ?? EMPTY_METADATA;
-
-    const fullBaseCtx: BaseContext<TDb> = {
-      request: req,
-      db,
-      logger,
-      traceId,
-      requestId,
-      services,
-      metadata,
-      ...pickContextEnvelope(callCtx),
-    };
-
-    const resolvedExtra = this.options.context
-      ? await this.options.context(fullBaseCtx)
-      : {};
-    const finalCtx: any = {
-      ...fullBaseCtx,
-      ...resolvedExtra,
-      [RESOLVED_SYMBOL]: this,
-    };
-
-    return finalCtx;
+  ): Effect.Effect<BaseContext<TDb> & TServiceContext, unknown, any> {
+    return resolveServiceContextEffect(this, callCtx);
   }
 
   introspect(): ServiceSchema {
@@ -389,6 +376,68 @@ export class ServiceImpl<
       })),
     };
   }
+}
+
+function resolveServiceContextEffect<
+  TDb,
+  TServiceContext extends Record<string, any>,
+>(
+  service: ServiceImpl<TDb, TServiceContext>,
+  callCtx?: Partial<BaseContext<TDb> & TServiceContext>,
+): Effect.Effect<BaseContext<TDb> & TServiceContext, unknown, any> {
+  return Effect.gen(function* () {
+    if ((callCtx as any)?.[RESOLVED_SYMBOL] === service) {
+      return callCtx as BaseContext<TDb> & TServiceContext;
+    }
+    const seq = ++_ctxSeq;
+    const req = callCtx?.request ?? DEFAULT_REQUEST;
+    // Always use this service's own database, never the caller's
+    const db = yield* Effect.try({
+      try: () => service.getDb() as TDb,
+      catch: (error) => error,
+    });
+    const logger = callCtx?.logger ?? defaultLogger;
+    const traceId = callCtx?.traceId ?? `tr_${seq.toString(36)}`;
+    const requestId = callCtx?.requestId ?? `req_${seq.toString(36)}`;
+    const services = callCtx?.services ?? EMPTY_SERVICES;
+    const metadata = callCtx?.metadata ?? EMPTY_METADATA;
+
+    const fullBaseCtx: BaseContext<TDb> = {
+      request: req,
+      db,
+      logger,
+      traceId,
+      requestId,
+      services,
+      metadata,
+      ...pickContextEnvelope(callCtx),
+    };
+
+    const nativeResolver = (
+      service as unknown as Record<
+        symbol,
+        | ((
+            base: BaseContext<TDb>,
+          ) => Effect.Effect<TServiceContext, unknown, any>)
+        | undefined
+      >
+    )[contextResolverKey];
+    const resolvedExtra = nativeResolver
+      ? yield* Effect.suspend(() => nativeResolver(fullBaseCtx))
+      : service.options.context
+        ? yield* Effect.tryPromise({
+            try: async () => service.options.context!(fullBaseCtx),
+            catch: (error) => error,
+          })
+        : {};
+    const finalCtx: any = {
+      ...fullBaseCtx,
+      ...resolvedExtra,
+      [RESOLVED_SYMBOL]: service,
+    };
+
+    return finalCtx;
+  });
 }
 
 export function defineService<
