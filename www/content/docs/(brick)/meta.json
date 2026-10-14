@@ -6,6 +6,7 @@
   "defaultOpen": true,
   "pages": [
     "---Getting Started---",
+    "why-brick",
     "index",
     "quickstart",
     "tutorial",
