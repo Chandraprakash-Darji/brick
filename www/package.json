@@ -17,7 +17,7 @@
     "format:check": "oxfmt --check .",
     "docs:check": "bun scripts/check-docs-markdown.ts && bun test test",
     "docs:http-check": "bun scripts/check-docs-http.ts",
-    "og:generate": "bun scripts/generate-blog-og.tsx"
+    "og:generate": "bun scripts/generate-og.tsx"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.93",

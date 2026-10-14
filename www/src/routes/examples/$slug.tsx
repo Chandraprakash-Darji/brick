@@ -1,3 +1,4 @@
+import { socialMeta } from "@/lib/social";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { ArrowLeftIcon, ArrowUpRightIcon } from "lucide-react";
 import { DatabaseTable } from "@/components/examples/database-table";
@@ -20,12 +21,11 @@ export const Route = createFileRoute("/examples/$slug")({
   },
   head: ({ loaderData }) => ({
     meta: loaderData
-      ? [
-          { title: `${loaderData.title} example — BrickKit` },
-          { name: "description", content: loaderData.description },
-          { property: "og:title", content: `${loaderData.title} example` },
-          { property: "og:description", content: loaderData.description },
-        ]
+      ? socialMeta({
+          title: `${loaderData.title} example — BrickKit`,
+          description: loaderData.description,
+          path: `/examples/${loaderData.slug}`,
+        })
       : [],
   }),
   component: ExampleDetail,

@@ -1,3 +1,4 @@
+import { marketingPages, socialMeta } from "@/lib/social";
 import { createFileRoute } from "@tanstack/react-router";
 import { ArrowDownIcon, ArrowUpRightIcon } from "lucide-react";
 import { LogoMark } from "@/components/logo";
@@ -5,14 +6,7 @@ import { BrandGuidelines, BrandSymbol } from "@/components/brand-guidelines";
 
 export const Route = createFileRoute("/brand")({
   head: () => ({
-    meta: [
-      { title: "Brand · Brick" },
-      {
-        name: "description",
-        content:
-          "The Brick identity: the angular knot, logo downloads, usage guidelines, and brand applications.",
-      },
-    ],
+    meta: socialMeta({ ...marketingPages["/brand"], path: "/brand" }),
   }),
   component: Brand,
 });

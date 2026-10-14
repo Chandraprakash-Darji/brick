@@ -20,6 +20,7 @@ import { useMDXComponents } from "@/components/mdx";
 import { baseOptions } from "@/lib/layout.shared";
 import { gitConfig, repoUrl } from "@/lib/shared";
 import { slugsToMarkdownPath, source } from "@/lib/source";
+import { socialMeta } from "@/lib/social";
 
 export const Route = createFileRoute("/docs/$")({
   beforeLoad: ({ params }) => {
@@ -37,6 +38,15 @@ export const Route = createFileRoute("/docs/$")({
     await clientLoader.preload(data.path);
     return data;
   },
+  head: ({ loaderData }) => ({
+    meta: loaderData
+      ? socialMeta({
+          title: loaderData.title,
+          description: loaderData.description,
+          path: loaderData.url,
+        })
+      : [],
+  }),
 });
 
 const serverLoader = createServerFn({
@@ -48,6 +58,9 @@ const serverLoader = createServerFn({
     if (!page) throw notFound();
 
     return {
+      title: page.data.title,
+      description: page.data.description ?? "",
+      url: page.url,
       markdownUrl: slugsToMarkdownPath(page.slugs).url,
       pageTree: await source.serializePageTree(source.getPageTree()),
       path: page.path,
