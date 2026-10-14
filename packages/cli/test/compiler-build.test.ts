@@ -222,7 +222,7 @@ globalThis.Function = new Proxy(Function, {
         (await fetch(`${base}/v1/page/${created.id}`, { method: "DELETE" }))
           .status,
       ).toBe(200);
-      expect((await fetch(`${base}/api/public/pages/hello`)).status).toBe(403);
+      expect((await fetch(`${base}/api/public/pages/hello`)).status).toBe(401);
       expect(
         (
           await fetch(`${base}/api/public/pages/x`, {

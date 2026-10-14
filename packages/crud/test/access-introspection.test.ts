@@ -163,7 +163,8 @@ test("CRUD without access denies by default and reports as protected (#20)", asy
       expect(action.accessPolicy).toBe("authorized");
     }
     await expect(resource.list.run({})).rejects.toMatchObject({
-      code: "FORBIDDEN",
+      code: "UNAUTHORIZED",
+      status: 401,
     });
   } finally {
     sqlite.close();

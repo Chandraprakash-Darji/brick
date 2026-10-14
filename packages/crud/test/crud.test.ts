@@ -254,7 +254,8 @@ test("authorization and scoped-create rejection do not modify storage", async ()
       code: "FORBIDDEN",
     });
     await expect(r.delete.run({ id: 1 })).rejects.toMatchObject({
-      code: "FORBIDDEN",
+      code: "UNAUTHORIZED",
+      status: 401,
     });
     expect(await db.select().from(records)).toEqual([]);
   } finally {
@@ -355,6 +356,23 @@ test("boolean columns are sortable", async () => {
       limit: 20,
       offset: 0,
     });
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("CRUD authorization distinguishes missing users and signed-in users", async () => {
+  const { resource, sqlite } = fixture({
+    fields: { name: { read: true } },
+    access: { authorize: () => false },
+  });
+  try {
+    for (const user of [undefined, { id: "guest" }]) {
+      await expect(resource.list.run({}, { user })).rejects.toMatchObject({
+        code: user == null ? "UNAUTHORIZED" : "FORBIDDEN",
+        status: user == null ? 401 : 403,
+      });
+    }
   } finally {
     sqlite.close();
   }

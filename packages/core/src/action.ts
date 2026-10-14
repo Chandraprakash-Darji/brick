@@ -11,6 +11,7 @@ import {
   ValidationError,
   type Logger,
 } from "./types";
+import { normalizeActionError } from "./error-response";
 import { validateWithSchema } from "./typebox";
 import { getGlobalRegistry } from "./registry";
 
@@ -65,20 +66,28 @@ export function buildErrorHelpers<
 
   // 1. Populate standard HTTP error helpers
   for (const [code, def] of Object.entries(standardErrorDefaults)) {
-    helpers[code] = (overrideMessage?: string, details?: unknown) => {
+    helpers[code] = (
+      overrideMessage?: string,
+      details?: unknown,
+      options?: ErrorOptions,
+    ) => {
       const message = overrideMessage || def.message;
       const status = def.status;
-      throw new ActionExecutionError(code, message, status, details);
+      throw new ActionExecutionError(code, message, status, details, options);
     };
   }
 
   // 2. Populate or override with user-defined action errors
   if (errorsDef) {
     for (const [code, def] of Object.entries(errorsDef)) {
-      helpers[code] = (overrideMessage?: string, details?: unknown) => {
+      helpers[code] = (
+        overrideMessage?: string,
+        details?: unknown,
+        options?: ErrorOptions,
+      ) => {
         const message = overrideMessage || def.message;
         const status = def.status || 400;
-        throw new ActionExecutionError(code, message, status, details);
+        throw new ActionExecutionError(code, message, status, details, options);
       };
     }
   }
@@ -165,68 +174,72 @@ export function defineAction(config: any): any {
       fullCtx = createDefaultContext(params?.ctx);
     }
 
-    // Auto-populate ctx.db from the bound service or global registry if not provided in call ctx
-    if (!fullCtx.db) {
-      if ((actionFn as any).service?.getDb()) {
-        fullCtx.db = (actionFn as any).service.getDb();
-      } else if (actionFn.serviceName) {
-        const s = getGlobalRegistry().get(actionFn.serviceName);
-        if (s?.getDb()) {
-          fullCtx.db = s.getDb();
+    try {
+      // Auto-populate ctx.db from the bound service or global registry if not provided in call ctx
+      if (!fullCtx.db) {
+        if ((actionFn as any).service?.getDb()) {
+          fullCtx.db = (actionFn as any).service.getDb();
+        } else if (actionFn.serviceName) {
+          const s = getGlobalRegistry().get(actionFn.serviceName);
+          if (s?.getDb()) {
+            fullCtx.db = s.getDb();
+          }
         }
       }
-    }
 
-    // 1. Validate Input
-    if (config.input) {
-      const inputValidation = actionFn.validateInput(params?.input);
-      if (!inputValidation.success) {
-        throw new ValidationError(
-          `Validation failed for action '${config.name}' input` as string,
-          inputValidation.errors,
-        );
+      // 1. Validate Input
+      if (config.input) {
+        const inputValidation = actionFn.validateInput(params?.input);
+        if (!inputValidation.success) {
+          throw new ValidationError(
+            `Validation failed for action '${config.name}' input` as string,
+            inputValidation.errors,
+          );
+        }
       }
-    }
 
-    // 2. Authorize
-    if (config.authorize) {
-      const allowed = await config.authorize({
-        user: fullCtx.user,
+      // 2. Authorize
+      if (config.authorize) {
+        const allowed = await config.authorize({
+          user: fullCtx.user,
+          input: params?.input,
+          ctx: fullCtx,
+        });
+        if (!allowed) {
+          throw new ActionExecutionError(
+            fullCtx.user == null ? "UNAUTHORIZED" : "FORBIDDEN",
+            `Access denied for action '${config.name}'`,
+            fullCtx.user == null ? 401 : 403,
+          );
+        }
+      }
+
+      // 3. Execute implementation
+      const result = await config.execute({
         input: params?.input,
         ctx: fullCtx,
+        error: errorHelpers,
       });
-      if (!allowed) {
-        throw new ActionExecutionError(
-          "UNAUTHORIZED",
-          `Access denied for action '${config.name}'`,
-          403,
-        );
+
+      // 4. Validate Output
+      const runtimeOutputSchema =
+        (actionFn as { outputValidationSchema?: TSchema })
+          .outputValidationSchema ?? config.output;
+      if (runtimeOutputSchema) {
+        const outputValidation = actionFn.validateOutput(result);
+        if (!outputValidation.success) {
+          throw new ValidationError(
+            `Validation failed for action '${config.name}' output` as string,
+            outputValidation.errors,
+            500,
+          );
+        }
       }
+
+      return result;
+    } catch (err) {
+      throw normalizeActionError(err, fullCtx);
     }
-
-    // 3. Execute implementation
-    const result = await config.execute({
-      input: params?.input,
-      ctx: fullCtx,
-      error: errorHelpers,
-    });
-
-    // 4. Validate Output
-    const runtimeOutputSchema =
-      (actionFn as { outputValidationSchema?: TSchema })
-        .outputValidationSchema ?? config.output;
-    if (runtimeOutputSchema) {
-      const outputValidation = actionFn.validateOutput(result);
-      if (!outputValidation.success) {
-        throw new ValidationError(
-          `Validation failed for action '${config.name}' output` as string,
-          outputValidation.errors,
-          500,
-        );
-      }
-    }
-
-    return result;
   };
 
   return actionFn;

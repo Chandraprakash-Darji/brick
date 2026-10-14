@@ -2,6 +2,7 @@ import type { RouteIR } from "./compiler/ir";
 import type { Elysia } from "elysia";
 import type { Service } from "./types";
 import type { DatabaseHandle } from "./db/define";
+import { toErrorResponse } from "./error-response";
 import { ActionExecutionError, ValidationError } from "./types";
 
 export type EndpointMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -106,24 +107,34 @@ export function createEndpointHandler(
 
     try {
       return await def.handler(ctx);
-    } catch (err: any) {
-      if (err instanceof ValidationError) {
-        set.status = err.status || 400;
-        return err.toJSON();
-      }
-      if (err instanceof ActionExecutionError) {
-        set.status = err.status || 400;
-        return err.toJSON();
-      }
-      if (typeof err?.status === "number") {
-        set.status = err.status;
-        return { message: err.message || "Endpoint error", status: err.status };
-      }
-      set.status = 500;
-      return {
-        message: err?.message || "An unexpected error occurred",
-        status: 500,
-      };
+    } catch (err) {
+      const failure =
+        !(
+          err instanceof ActionExecutionError || err instanceof ValidationError
+        ) &&
+        err !== null &&
+        typeof err === "object" &&
+        "status" in err &&
+        typeof err.status === "number" &&
+        Number.isInteger(err.status) &&
+        err.status >= 400 &&
+        err.status < 500
+          ? new ActionExecutionError(
+              "HTTP_ERROR",
+              "message" in err && typeof err.message === "string"
+                ? err.message
+                : "Endpoint error",
+              err.status,
+              undefined,
+              { cause: err },
+            )
+          : err;
+      const response = toErrorResponse(failure, {
+        logger: ctx.logger,
+        requestId,
+      });
+      set.status = response.status;
+      return response;
     }
   };
 }

@@ -52,7 +52,10 @@ function fixture(name: string, compiler: boolean) {
 const request = (method: string, path: string, body?: unknown) =>
   new Request("http://localhost" + path, {
     method,
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      "x-request-id": "parity-request",
+    },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 it("preserves defaults, mapping, write permissions, hooks and persistence across compiler modes", async () => {

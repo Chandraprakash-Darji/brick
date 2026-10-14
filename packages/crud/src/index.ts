@@ -543,9 +543,9 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
                 !(await accessConfig.authorize({ operation, input, ctx }))
               )
                 throw new ActionExecutionError(
-                  "FORBIDDEN",
+                  ctx.user == null ? "UNAUTHORIZED" : "FORBIDDEN",
                   "Access denied",
-                  403,
+                  ctx.user == null ? 401 : 403,
                 );
             }
             const db: any = ctx.db ?? service.getDb();

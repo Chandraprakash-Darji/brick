@@ -68,7 +68,7 @@ export function createServiceProxy<T extends Record<string, any>>(
           });
         } else {
           throw new Error(
-            `[Brick-TS RPC] Remote microservice dispatch for '${serviceName}.${actionName}' is not yet configured for this environment.`,
+            `[Brick-TS RPC] Remote microservice dispatch for '${serviceName}.${actionName}' is not configured. Use createClient({ baseUrl, contract }) for HTTP calls to remote services.`,
           );
         }
       };
