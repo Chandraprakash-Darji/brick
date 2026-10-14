@@ -32,7 +32,7 @@ const logoUrl = `data:image/svg+xml;base64,${Buffer.from(
 
 await mkdir(output, { recursive: true });
 for (const file of await readdir(new URL("content/blog/", root))) {
-  if (!file.endsWith(".mdx")) continue;
+  if (!/\.mdx?$/.test(file)) continue;
   const { title, description } = postSchema.parse(
     matter(await readFile(new URL(`content/blog/${file}`, root), "utf8")).data,
   );
@@ -103,7 +103,7 @@ for (const file of await readdir(new URL("content/blog/", root))) {
     },
   );
   await writeFile(
-    new URL(`${file.slice(0, -4)}.png`, output),
+    new URL(file.replace(/\.mdx?$/, ".png"), output),
     new Resvg(svg).render().asPng(),
   );
 }
