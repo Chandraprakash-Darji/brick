@@ -159,7 +159,13 @@ describe("@brickkit/cli app.endpoint()", () => {
       new Request("http://localhost/fail-unknown"),
     );
     expect(unknown.status).toBe(500);
-    expect(await unknown.json()).toEqual({ message: "kaput", status: 500 });
+    expect(await unknown.json()).toMatchObject({
+      name: "InternalServerError",
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Internal Server Error",
+      status: 500,
+      requestId: expect.any(String),
+    });
   });
 
   it("lists raw endpoints in the OpenAPI spec with {param} paths", async () => {

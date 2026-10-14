@@ -78,70 +78,42 @@ export function generateOpenApiSpec(
         };
       }
 
-      // 400 Validation Error (when input schema exists)
-      if (action.config.input) {
-        responses["400"] = {
-          description: "Validation error",
-          content: {
-            "application/json": {
-              schema: {
-                type: "object",
-                properties: {
-                  name: { type: "string" },
-                  message: { type: "string" },
-                  status: { type: "integer" },
-                  errors: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        path: { type: "string" },
-                        message: { type: "string" },
-                      },
-                    },
-                  },
-                },
-              },
+      const addError = (code: string, status: number, message: string) => {
+        const schema = {
+          allOf: [
+            { $ref: "#/components/schemas/ErrorEnvelope" },
+            {
+              type: "object",
+              properties: { code: { const: code }, status: { const: status } },
             },
-          },
+          ],
         };
-      }
-
-      // 403 Forbidden (when authorize hook exists)
+        const existing = responses[String(status)];
+        if (existing) {
+          existing.description += "; " + message;
+          existing.content["application/json"].schema.oneOf.push(schema);
+        } else {
+          responses[String(status)] = {
+            description: message,
+            content: { "application/json": { schema: { oneOf: [schema] } } },
+          };
+        }
+      };
+      if (action.config.input)
+        addError("VALIDATION_FAILED", 400, "Validation error");
       if (hasAuth) {
-        responses["403"] = {
-          description: "Access denied / Unauthorized",
-        };
+        addError("UNAUTHORIZED", 401, "Authentication required");
+        addError("FORBIDDEN", 403, "Access denied");
       }
-
-      // Map action-defined error helpers (e.g. SLUG_EXISTS -> 409)
       if (action.config.errors) {
         for (const [code, errorDef] of Object.entries(action.config.errors)) {
           const def = errorDef as ActionErrorDefinition;
-          const status = String(def.status || 400);
-          responses[status] = {
-            description: def.message || code,
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  properties: {
-                    name: { type: "string", example: "ActionExecutionError" },
-                    code: { type: "string", example: code },
-                    message: { type: "string", example: def.message },
-                    status: { type: "integer", example: def.status || 400 },
-                  },
-                },
-              },
-            },
-          };
+          addError(code, def.status || 400, def.message || code);
         }
       }
-
-      // 500 Internal Server Error
-      responses["500"] = {
-        description: "Internal server error",
-      };
+      addError("INTERNAL_SERVER_ERROR", 500, "Internal server error");
+      if (action.config.output)
+        addError("VALIDATION_FAILED", 500, "Output validation error");
 
       const operation: Record<string, any> = {
         operationId: `${service.name}_${action.name}_${method}`,
@@ -221,8 +193,36 @@ export function generateOpenApiSpec(
     })),
   };
 
+  spec.components = {
+    schemas: {
+      ErrorEnvelope: {
+        type: "object",
+        required: ["name", "code", "message", "status", "requestId"],
+        properties: {
+          name: { type: "string" },
+          code: { type: "string" },
+          message: { type: "string" },
+          status: { type: "integer" },
+          requestId: { type: "string" },
+          details: {},
+          errors: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["path", "message"],
+              properties: {
+                path: { type: "string" },
+                message: { type: "string" },
+                value: {},
+              },
+            },
+          },
+        },
+      },
+    },
+  };
   if (hasAnyAuthorizedAction) {
-    spec.components = {
+    Object.assign(spec.components, {
       securitySchemes: {
         bearerAuth: {
           type: "http",
@@ -231,7 +231,7 @@ export function generateOpenApiSpec(
           description: "Enter your Bearer authentication token",
         },
       },
-    };
+    });
   }
 
   return spec;

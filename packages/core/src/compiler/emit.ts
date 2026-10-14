@@ -39,7 +39,7 @@ export function emitHandlerFactory(route: RouteIR): string {
     ? `checkDepth(input, ${name}); validate(inputChecker, input, ${name}, "input");`
     : "";
   const authorization = route.authorize
-    ? `if (!await authorize({ ctx, input, user: ctx.user })) deny(${name});`
+    ? `if (!await authorize({ ctx, input, user: ctx.user })) deny(${name}, ctx.user);`
     : "";
   const output = route.output
     ? `validate(outputChecker, result, ${name}, "output");`
@@ -50,7 +50,7 @@ export function emitHandlerFactory(route: RouteIR): string {
 if (isThenable(result)) return Promise.resolve(result).then(value => {
   ${route.output ? `validate(outputChecker, value, ${name}, "output");` : ""}
   return value;
-}).catch(err => mapError(err, set));
+}).catch(err => mapError(err, set, ctx));
 ${output}
 return result;`;
   return `function bindAction(binding, runtime) {
@@ -69,7 +69,7 @@ ${context}
 ${validation}
 ${authorization}
 ${execute}
-} catch (err) { return mapError(err, set); }
+} catch (err) { return mapError(err, set, ctx); }
 };
 }`;
 }

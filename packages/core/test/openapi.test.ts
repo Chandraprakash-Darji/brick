@@ -149,6 +149,7 @@ describe("OpenAPI 3.1 Specification Generator", () => {
     expect(path.post.requestBody).toBeUndefined();
     expect(path.post.security).toBeUndefined();
     expect(path.post.responses["200"]).toBeDefined();
-    expect(spec.components).toBeUndefined();
+    expect(spec.components.schemas.ErrorEnvelope).toBeDefined();
+    expect(spec.components.securitySchemes).toBeUndefined();
   });
 });

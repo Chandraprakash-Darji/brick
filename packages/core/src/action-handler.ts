@@ -8,6 +8,7 @@ import {
 } from "./types";
 import { getCompiledCheck } from "./typebox";
 import { buildErrorHelpers } from "./action";
+import { toErrorResponse } from "./error-response";
 import { inputTooDeep } from "./compiler/runtime";
 
 let _srvSeq = 0;
@@ -236,9 +237,9 @@ export async function executeCompiledRoute(
       const isAuthorized = authRes instanceof Promise ? await authRes : authRes;
       if (!isAuthorized) {
         throw new ActionExecutionError(
-          "UNAUTHORIZED",
+          ctx.user == null ? "UNAUTHORIZED" : "FORBIDDEN",
           `Access denied for action '${plan.actionName}'`,
-          403,
+          ctx.user == null ? 401 : 403,
         );
       }
     }
@@ -264,17 +265,10 @@ export async function executeCompiledRoute(
     }
 
     return result;
-  } catch (err: any) {
-    if (err instanceof ValidationError || err instanceof ActionExecutionError) {
-      set.status = err.status || 400;
-      return err.toJSON();
-    }
-    set.status = 500;
-    return {
-      name: "InternalServerError",
-      message: err.message || "An unexpected error occurred",
-      status: 500,
-    };
+  } catch (err) {
+    const response = toErrorResponse(err, { logger: ctx.logger, requestId });
+    set.status = response.status;
+    return response;
   }
 }
 

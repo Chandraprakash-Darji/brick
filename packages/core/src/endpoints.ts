@@ -2,7 +2,7 @@ import type { RouteIR } from "./compiler/ir";
 import type { Elysia } from "elysia";
 import type { Service } from "./types";
 import type { DatabaseHandle } from "./db/define";
-import { ActionExecutionError, ValidationError } from "./types";
+import { toErrorResponse } from "./error-response";
 
 export type EndpointMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -106,24 +106,10 @@ export function createEndpointHandler(
 
     try {
       return await def.handler(ctx);
-    } catch (err: any) {
-      if (err instanceof ValidationError) {
-        set.status = err.status || 400;
-        return err.toJSON();
-      }
-      if (err instanceof ActionExecutionError) {
-        set.status = err.status || 400;
-        return err.toJSON();
-      }
-      if (typeof err?.status === "number") {
-        set.status = err.status;
-        return { message: err.message || "Endpoint error", status: err.status };
-      }
-      set.status = 500;
-      return {
-        message: err?.message || "An unexpected error occurred",
-        status: 500,
-      };
+    } catch (err) {
+      const response = toErrorResponse(err, { logger: ctx.logger, requestId });
+      set.status = response.status;
+      return response;
     }
   };
 }

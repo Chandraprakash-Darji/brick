@@ -63,6 +63,7 @@ export interface ValidationErrorItem {
 }
 
 export class ValidationError extends Error {
+  readonly code = "VALIDATION_FAILED";
   readonly status: number;
   readonly errors: ValidationErrorItem[];
 
@@ -80,6 +81,7 @@ export class ValidationError extends Error {
   toJSON() {
     return {
       name: this.name,
+      code: this.code,
       message: this.message,
       status: this.status,
       errors: this.errors,
@@ -92,8 +94,14 @@ export class ActionExecutionError extends Error {
   readonly status: number;
   readonly details?: unknown;
 
-  constructor(code: string, message: string, status = 400, details?: unknown) {
-    super(message);
+  constructor(
+    code: string,
+    message: string,
+    status = 400,
+    details?: unknown,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
     this.name = "ActionExecutionError";
     this.code = code;
     this.status = status;
@@ -112,21 +120,53 @@ export class ActionExecutionError extends Error {
 }
 
 export interface StandardErrorMap {
-  BAD_REQUEST: (overrideMessage?: string, details?: unknown) => never;
-  UNAUTHORIZED: (overrideMessage?: string, details?: unknown) => never;
-  FORBIDDEN: (overrideMessage?: string, details?: unknown) => never;
-  NOT_FOUND: (overrideMessage?: string, details?: unknown) => never;
-  CONFLICT: (overrideMessage?: string, details?: unknown) => never;
-  INTERNAL_SERVER_ERROR: (overrideMessage?: string, details?: unknown) => never;
+  BAD_REQUEST: (
+    overrideMessage?: string,
+    details?: unknown,
+    options?: ErrorOptions,
+  ) => never;
+  UNAUTHORIZED: (
+    overrideMessage?: string,
+    details?: unknown,
+    options?: ErrorOptions,
+  ) => never;
+  FORBIDDEN: (
+    overrideMessage?: string,
+    details?: unknown,
+    options?: ErrorOptions,
+  ) => never;
+  NOT_FOUND: (
+    overrideMessage?: string,
+    details?: unknown,
+    options?: ErrorOptions,
+  ) => never;
+  CONFLICT: (
+    overrideMessage?: string,
+    details?: unknown,
+    options?: ErrorOptions,
+  ) => never;
+  INTERNAL_SERVER_ERROR: (
+    overrideMessage?: string,
+    details?: unknown,
+    options?: ErrorOptions,
+  ) => never;
   [key: string]:
-    | ((overrideMessage?: string, details?: unknown) => never)
+    | ((
+        overrideMessage?: string,
+        details?: unknown,
+        options?: ErrorOptions,
+      ) => never)
     | undefined;
 }
 
 export type ErrorBuilder<
   TErrors extends Record<string, ActionErrorDefinition>,
 > = StandardErrorMap & {
-  [K in keyof TErrors]: (overrideMessage?: string, details?: unknown) => never;
+  [K in keyof TErrors]: (
+    overrideMessage?: string,
+    details?: unknown,
+    options?: ErrorOptions,
+  ) => never;
 };
 
 export interface BaseActionConfig<

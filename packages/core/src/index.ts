@@ -131,3 +131,6 @@ export type {
   McpRegistryOptions,
   McpHandlerOptions,
 } from "./mcp";
+
+export { toErrorResponse } from "./error-response";
+export type { ErrorEnvelope } from "./error-response";
