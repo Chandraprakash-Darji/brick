@@ -19,6 +19,8 @@ export interface BaseContext<TDb = any> {
   logger: Logger;
   traceId: string;
   requestId?: string;
+  caller?: string;
+  tenantId?: string;
   services?: Record<string, any>;
   metadata?: Record<string, unknown>;
 }
@@ -416,7 +418,7 @@ export interface ServiceOptions<
 > {
   database?: DatabaseHandle<TDb>;
   context?: (
-    baseCtx: BaseContext<TDb>,
+    baseCtx: BaseContext<TDb> & { user?: unknown },
   ) => Promise<TServiceContext> | TServiceContext;
   auth?: ServiceAuthOptions;
   rateLimit?: RateLimitOptions;

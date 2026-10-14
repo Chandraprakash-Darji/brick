@@ -11,7 +11,15 @@ import {
 let serviceCount = 0;
 function setup() {
   const service = defineService(`tool_tests_${++serviceCount}`, {
-    context: () => ({ user: null as { id: string } | null }),
+    context: ({ user: claim }) => ({
+      user:
+        typeof claim === "object" &&
+        claim !== null &&
+        "id" in claim &&
+        claim.id === "alice"
+          ? { id: claim.id }
+          : null,
+    }),
   });
   const echo = service.tool({
     name: "echo",
