@@ -32,6 +32,10 @@
     "./pg": {
       "import": "./dist/pg.js",
       "types": "./dist/pg.d.ts"
+    },
+    "./effect": {
+      "import": "./dist/effect.js",
+      "types": "./dist/effect.d.ts"
     }
   },
   "publishConfig": {
@@ -57,6 +61,7 @@
   "dependencies": {
     "@sinclair/typebox": "^0.34.52",
     "drizzle-orm": "^0.45.2",
+    "effect": "^3",
     "elysia": "2.0.0-beta.29",
     "postgres": "^3.4.9"
   },

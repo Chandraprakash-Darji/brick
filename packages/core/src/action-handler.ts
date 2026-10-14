@@ -1,3 +1,9 @@
+import { Effect } from "effect";
+import {
+  effectExecutionKey,
+  effectAuthorizationKey,
+  runEffectPromise,
+} from "./effect-runtime";
 import {
   type Service,
   type Action,
@@ -77,10 +83,28 @@ export function compileRoutePlan(
   const contextHook = service.options?.context;
   const hasContextHook = typeof contextHook === "function";
 
-  const authorize = action.config?.authorize;
+  const nativeAuthorize:
+    | ((params: any) => Effect.Effect<boolean, unknown, any>)
+    | undefined = Reflect.get(action.config, effectAuthorizationKey);
+  const authorize = nativeAuthorize
+    ? (params: any) =>
+        runEffectPromise(
+          Effect.suspend(() => nativeAuthorize(params)),
+          service,
+          params.ctx?.request?.signal,
+        )
+    : action.config?.authorize;
   const hasAuthorize = typeof authorize === "function";
 
-  const execute = action.config?.execute;
+  const nativeExecute = Reflect.get(action.config, effectExecutionKey);
+  const execute = nativeExecute
+    ? (params: any) =>
+        runEffectPromise(
+          Effect.suspend(() => nativeExecute(params)),
+          service,
+          params.ctx?.request?.signal,
+        )
+    : action.config?.execute;
 
   const tag = `[${serviceName}:${actionName}]`;
   const logger: Logger = {

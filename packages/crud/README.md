@@ -116,3 +116,35 @@ presence client-side when using `select`.
   driver supports them.
 
 See `www/content/docs/(brick)/resources.mdx` for the full guide.
+
+## Effect callbacks
+
+Import `crud` from `@brickkit/crud/effect` to author authorization, SQL scopes,
+field scrubbers, and all create, update, and delete hooks as Effects. Register
+resources on a service from `@brickkit/core/effect` and supply dependencies in
+the Effect app's Layer.
+
+```ts
+import { Effect } from "effect";
+import { crud } from "@brickkit/crud/effect";
+
+const records = service.resource({ name: "record", table }).use(
+  crud({
+    fields: {
+      id: { read: true },
+      name: {
+        read: true,
+        create: true,
+        scrub: ({ value }) => Effect.succeed(String(value).trim()),
+      },
+    },
+    access: { authorize: () => Effect.succeed(true) },
+    hooks: { afterCreate: () => Effect.void },
+  }),
+);
+```
+
+Resource actions retain their Promise API and add `executeEffect` for native
+composition. The database query pipeline remains Promise-based; the runtime
+bridge preserves the surrounding Effect dependencies for its policy and hook
+callbacks. CRUD callback failures and requirements have broad types.

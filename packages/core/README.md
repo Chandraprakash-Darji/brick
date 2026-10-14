@@ -116,3 +116,89 @@ Tools use action validation, authorization, and service context. They are stored
 The registry accepts `services` and/or an explicit `tools` array, rejects duplicate names, and reads annotations directly from definitions. The handler is a stateless POST JSON-RPC helper for initialize, ping, tools/list, and tools/call; notifications receive an empty 202 response. Authentication and mounting remain in your app. Its default protocol version is `2025-06-18`, following the [MCP tools specification](https://modelcontextprotocol.io/specification/2025-06-18/server/tools).
 
 Source: <https://github.com/Chandraprakash-Darji/brick>.
+
+## Effect APIs
+
+`@brickkit/core` keeps the existing synchronous declarations and Promise APIs.
+`@brickkit/core/effect` provides Effect callbacks for services, actions, tools,
+resource plugins, endpoints, and application lifecycle hooks. Declarations and
+plugin setup stay synchronous so the compiler can inspect them and plugin
+installation can roll back failed declarations.
+
+```ts
+import { Context, Effect, Layer } from "effect";
+import { brick, defineService, t } from "@brickkit/core/effect";
+
+class Greeting extends Context.Tag("Greeting")<Greeting, { text: string }>() {}
+
+const service = defineService("greetings", {
+  context: () => Effect.map(Greeting, ({ text }) => ({ greeting: text })),
+  lifecycle: {
+    onInit: () => Effect.void,
+    onDestroy: () => Effect.void,
+  },
+});
+
+const hello = service.action({
+  name: "hello",
+  output: t.String(),
+  authorize: () => Effect.succeed(true),
+  execute: ({ ctx }) => Effect.succeed(ctx.greeting),
+});
+
+const app = brick({
+  services: [service],
+  layer: Layer.succeed(Greeting, { text: "Hello" }),
+  endpoints: [
+    {
+      method: "GET",
+      path: "/greeting",
+      handler: () => Effect.map(Greeting, ({ text }) => ({ text })),
+    },
+  ],
+});
+
+await app.initialize();
+await hello.run(); // "Hello"
+await app.handle(new Request("http://localhost/greeting"));
+await app.dispose();
+```
+
+The app acquires its Layer once and shares it across service contexts, actions,
+tools, resource policies, plugin endpoints, and HTTP routes. Initialization runs
+before the first HTTP request or server startup. `initialize()` also lets scripts
+initialize explicitly before direct action or tool calls. `dispose()` runs service
+destruction hooks, closes framework-owned databases, and releases the Layer.
+Injected database clients remain owned by their callers. Service instances belong
+to one Effect app and cannot be rebound to another app.
+
+The app exposes `initializeEffect`, `disposeEffect`, `handleEffect(request)`, and
+`listenEffect(port)` for Effect composition. The normal `.handle()`, `.listen()`,
+and `.stop()` methods remain available. HTTP request cancellation interrupts
+native callbacks and runs their finalizers.
+
+Actions and tools expose lazy `executeEffect(params)`, including context
+resolution, input validation, authorization, execution, and output validation.
+Calling an action, `.run`, or `.execute` returns a Promise. Native action
+requirements remain in the Effect type; provide dependencies with `Effect.provide`
+when composing outside an app. Service context resolution also exposes
+`resolveContextEffect`. Resource plugin and CRUD callbacks inherit that caller's
+runtime across the Promise-based database code.
+
+Use `service.tool` for native tools. `createMcpRegistry` retains the MCP Promise
+interface and adds `callToolEffect`. `createServiceProxy` returns Effects for local
+RPC calls and preserves the caller's Layer. Remote dispatch is not implemented.
+
+Use `defineServicePlugin` and `defineResourcePlugin` from the Effect entrypoint
+for native `routes.action` and `routes.endpoint` callbacks. `defineResource` and
+`service.resource` share the existing resource identity and plugin host.
+For CRUD policies, hooks, SQL scopes, and field scrubbers, use `crud` from
+`@brickkit/crud/effect`.
+
+`Effect.fail` preserves failure values at the Promise boundary. Use
+`ActionExecutionError` for a specific HTTP status. Throwing `error` helpers also
+work. Action errors include framework validation and context errors; service,
+CRUD, and dynamic MCP failure types remain broad because plugins and providers
+can reject arbitrary values. Dynamic registration does not prove at compile time
+that an application's Layer supplies every registered callback's dependencies.
+The framework uses Effect 3.

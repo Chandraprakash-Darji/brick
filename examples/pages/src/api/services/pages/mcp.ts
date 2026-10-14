@@ -1,4 +1,4 @@
-import { createMcpRegistry } from "@brickkit/core";
+import { createMcpRegistry } from "@brickkit/core/effect";
 import { pagesService } from "./page/service";
 import { createPageTool } from "./page/tools/create";
 import { deletePageTool } from "./page/tools/delete";
