@@ -10,7 +10,6 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as BenchmarksRouteImport } from './routes/benchmarks'
 import { Route as BrandRouteImport } from './routes/brand'
 import { Route as LlmsFullDottxtRouteImport } from './routes/llms-full[.]txt'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
@@ -26,11 +25,6 @@ import { Route as ExamplesSlugRouteImport } from './routes/examples/$slug'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const BenchmarksRoute = BenchmarksRouteImport.update({
-  id: '/benchmarks',
-  path: '/benchmarks',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BrandRoute = BrandRouteImport.update({
@@ -91,7 +85,6 @@ const ExamplesSlugRoute = ExamplesSlugRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/benchmarks': typeof BenchmarksRoute
   '/brand': typeof BrandRoute
   '/llms-full.txt': typeof LlmsFullDottxtRoute
   '/llms.txt': typeof LlmsDottxtRoute
@@ -106,7 +99,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/benchmarks': typeof BenchmarksRoute
   '/brand': typeof BrandRoute
   '/llms-full.txt': typeof LlmsFullDottxtRoute
   '/llms.txt': typeof LlmsDottxtRoute
@@ -122,7 +114,6 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/benchmarks': typeof BenchmarksRoute
   '/brand': typeof BrandRoute
   '/llms-full.txt': typeof LlmsFullDottxtRoute
   '/llms.txt': typeof LlmsDottxtRoute
@@ -139,7 +130,6 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/benchmarks'
     | '/brand'
     | '/llms-full.txt'
     | '/llms.txt'
@@ -154,7 +144,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/benchmarks'
     | '/brand'
     | '/llms-full.txt'
     | '/llms.txt'
@@ -169,7 +158,6 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
-    | '/benchmarks'
     | '/brand'
     | '/llms-full.txt'
     | '/llms.txt'
@@ -185,7 +173,6 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  BenchmarksRoute: typeof BenchmarksRoute
   BrandRoute: typeof BrandRoute
   LlmsFullDottxtRoute: typeof LlmsFullDottxtRoute
   LlmsDottxtRoute: typeof LlmsDottxtRoute
@@ -206,13 +193,6 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/benchmarks': {
-      id: '/benchmarks'
-      path: '/benchmarks'
-      fullPath: '/benchmarks'
-      preLoaderRoute: typeof BenchmarksRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/brand': {
@@ -297,7 +277,6 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  BenchmarksRoute: BenchmarksRoute,
   BrandRoute: BrandRoute,
   LlmsFullDottxtRoute: LlmsFullDottxtRoute,
   LlmsDottxtRoute: LlmsDottxtRoute,

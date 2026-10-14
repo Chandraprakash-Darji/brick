@@ -27,13 +27,6 @@ export function SiteHeader() {
           Platform
         </a>
         <Link
-          to="/benchmarks"
-          className={navLink}
-          data-current={pathname.startsWith("/benchmarks") || undefined}
-        >
-          Benchmarks
-        </Link>
-        <Link
           to="/docs/$"
           params={{ _splat: "" }}
           className={navLink}

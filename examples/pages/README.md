@@ -80,7 +80,7 @@ TEST_DATABASE_URL=postgresql://localhost:5432/drafton_test bun run pages:test
 The SDK test authenticates through Better Auth, calls CRUD and a custom action
 through the real API, checks the public HTML viewer and anonymous access, and
 verifies injected-client identity. `bun run test` at the repository root runs
-framework and benchmark tests without requiring the pages Postgres database.
+framework tests without requiring the pages Postgres database.
 
 ## Layout
 
