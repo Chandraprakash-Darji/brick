@@ -254,7 +254,8 @@ test("authorization and scoped-create rejection do not modify storage", async ()
       code: "FORBIDDEN",
     });
     await expect(r.delete.run({ id: 1 })).rejects.toMatchObject({
-      code: "FORBIDDEN",
+      code: "UNAUTHORIZED",
+      status: 401,
     });
     expect(await db.select().from(records)).toEqual([]);
   } finally {
@@ -403,7 +404,10 @@ test("authorize receives validated inputs for each operation", async () => {
     };
     expect((await r.list.run(query)).items).toEqual([{ name: "A" }]);
     await expect(
-      r.list.run({ where: { field: "name", op: "eq", value: "B" } }),
+      r.list.run(
+        { where: { field: "name", op: "eq", value: "B" } },
+        { user: { id: "member" } },
+      ),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
     await r.get.run({ id: 1, select: ["name"] });
     await r.findOne.run({ select: ["name"] });
@@ -428,6 +432,23 @@ test("authorize receives validated inputs for each operation", async () => {
       { operation: "update", input: { id: 1, data: { name: "B" } } },
       { operation: "delete", input: { id: 1 } },
     ]);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("CRUD authorization distinguishes missing users and signed-in users", async () => {
+  const { resource, sqlite } = fixture({
+    fields: { name: { read: true } },
+    access: { authorize: () => false },
+  });
+  try {
+    for (const user of [undefined, { id: "guest" }]) {
+      await expect(resource.list.run({}, { user })).rejects.toMatchObject({
+        code: user == null ? "UNAUTHORIZED" : "FORBIDDEN",
+        status: user == null ? 401 : 403,
+      });
+    }
   } finally {
     sqlite.close();
   }

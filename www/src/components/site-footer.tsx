@@ -49,7 +49,6 @@ export function SiteFooter() {
           <Link to="/docs/$" params={{ _splat: "" }}>
             Documentation
           </Link>
-          <Link to="/benchmarks">Benchmarks</Link>
           <Link to="/blog">Blog</Link>
           <Link to="/docs/$" params={{ _splat: "for-ai-agents" }}>
             For AI agents

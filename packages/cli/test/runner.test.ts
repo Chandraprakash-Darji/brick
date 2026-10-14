@@ -40,6 +40,7 @@ describe("startDevServer", () => {
     const app = await startDevServer({ port: 45111 });
     expect(app).toBeDefined();
     expect(exitCode).toBeNull();
+    app.stop();
   });
 
   it("should fail with non-zero exit code when entry is provided but not found", async () => {
@@ -67,6 +68,7 @@ describe("startDevServer", () => {
       const app = await startDevServer({ entry: filename, port: 45113 });
       expect(app).toBeDefined();
       expect(exitCode).toBeNull();
+      app.stop();
     } finally {
       if (existsSync(entryPath)) {
         Bun.file(entryPath).delete();

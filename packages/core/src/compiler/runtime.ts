@@ -4,6 +4,9 @@ import {
   type CompiledRoutePlan,
 } from "../types";
 
+import { toErrorResponse } from "../error-response";
+import type { Logger } from "../types";
+
 export type CompiledHandler = (context: any) => unknown | Promise<unknown>;
 export type HandlerFactory = (
   binding: CompiledRoutePlan,
@@ -81,17 +84,14 @@ function validate(
   );
 }
 
-function mapError(err: any, set: any) {
-  if (err instanceof ValidationError || err instanceof ActionExecutionError) {
-    set.status = err.status || 400;
-    return err.toJSON();
-  }
-  set.status = 500;
-  return {
-    name: "InternalServerError",
-    message: err?.message || "An unexpected error occurred",
-    status: 500,
-  };
+function mapError(
+  err: unknown,
+  set: any,
+  options: { logger: Logger; requestId: string },
+) {
+  const response = toErrorResponse(err, options);
+  set.status = response.status;
+  return response;
 }
 
 export const compilerRuntime = Object.freeze({
@@ -104,11 +104,11 @@ export const compilerRuntime = Object.freeze({
   mapError,
   isThenable: (value: any): boolean =>
     value != null && typeof value.then === "function",
-  deny: (action: string): never => {
+  deny: (action: string, user: unknown): never => {
     throw new ActionExecutionError(
-      "UNAUTHORIZED",
+      user == null ? "UNAUTHORIZED" : "FORBIDDEN",
       `Access denied for action '${action}'`,
-      403,
+      user == null ? 401 : 403,
     );
   },
 });

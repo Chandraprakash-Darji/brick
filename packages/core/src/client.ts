@@ -233,7 +233,7 @@ export type InferActionFailure<A> = ActionExecutionError & {
     | "NOT_FOUND"
     | "CONFLICT"
     | "INTERNAL_SERVER_ERROR"
-    | "VALIDATION_ERROR";
+    | "VALIDATION_FAILED";
 };
 
 /**
@@ -399,14 +399,6 @@ function planRequest(
 function toActionError(status: number, body: unknown, url: string): Error {
   if (body !== null && typeof body === "object") {
     const record = body as Record<string, unknown>;
-    if (typeof record.code === "string") {
-      return new ActionExecutionError(
-        record.code,
-        typeof record.message === "string" ? record.message : record.code,
-        typeof record.status === "number" ? record.status : status,
-        (record.details ?? undefined) as unknown,
-      );
-    }
     if (record.name === "ValidationError") {
       return new ValidationError(
         typeof record.message === "string"
@@ -414,6 +406,14 @@ function toActionError(status: number, body: unknown, url: string): Error {
           : "Validation failed",
         Array.isArray(record.errors) ? (record.errors as any) : [],
         typeof record.status === "number" ? record.status : status,
+      );
+    }
+    if (typeof record.code === "string") {
+      return new ActionExecutionError(
+        record.code,
+        typeof record.message === "string" ? record.message : record.code,
+        typeof record.status === "number" ? record.status : status,
+        (record.details ?? undefined) as unknown,
       );
     }
   }

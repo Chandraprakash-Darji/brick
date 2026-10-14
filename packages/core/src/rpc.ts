@@ -1,5 +1,6 @@
 import type { ActionContext, ProxyOptions } from "./types";
 import { getGlobalRegistry } from "./registry";
+import { pickContextEnvelope } from "./context";
 
 export function createServiceProxy<T extends Record<string, any>>(
   serviceName: string,
@@ -26,36 +27,10 @@ export function createServiceProxy<T extends Record<string, any>>(
             );
           }
 
-          // Build envelope context: exclude dangerous framework fields
-          // This prevents the caller's database, providers, and resolver from overriding the receiving service's
-          const dangerousFields = new Set([
-            "db",
-            "request",
-            "logger",
-            "services",
-            "metadata",
-            "_resolved",
-          ]);
-
-          const envelopeCtx: any = {};
-
-          // Merge safe fields from options.context (if present)
-          if (options.context) {
-            for (const [key, value] of Object.entries(options.context)) {
-              if (!dangerousFields.has(key)) {
-                envelopeCtx[key] = value;
-              }
-            }
-          }
-
-          // Merge safe fields from callCtx (callCtx overrides options.context)
-          if (callCtx) {
-            for (const [key, value] of Object.entries(callCtx)) {
-              if (!dangerousFields.has(key)) {
-                envelopeCtx[key] = value;
-              }
-            }
-          }
+          const envelopeCtx = {
+            ...pickContextEnvelope(options.context),
+            ...pickContextEnvelope(callCtx),
+          };
 
           // Set caller to the originating service if not already set
           if (!envelopeCtx.caller) {
@@ -68,7 +43,7 @@ export function createServiceProxy<T extends Record<string, any>>(
           });
         } else {
           throw new Error(
-            `[Brick-TS RPC] Remote microservice dispatch for '${serviceName}.${actionName}' is not yet configured for this environment.`,
+            `[Brick-TS RPC] Remote microservice dispatch for '${serviceName}.${actionName}' is not configured. Use createClient({ baseUrl, contract }) for HTTP calls to remote services.`,
           );
         }
       };

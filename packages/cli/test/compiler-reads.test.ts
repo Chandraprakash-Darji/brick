@@ -70,7 +70,10 @@ function fixture(name: string, compiler: boolean) {
 const query = (input: unknown) =>
   new Request("http://localhost/api/item/query", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      "x-request-id": "parity-request",
+    },
     body: JSON.stringify(input),
   });
 

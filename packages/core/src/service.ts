@@ -28,6 +28,7 @@ import { getGlobalRegistry } from "./registry";
 import { getTableName, isDatabaseHandle, type DatabaseHandle } from "./db";
 import { defineResource } from "./resource";
 import { getActionAccess } from "./access";
+import { pickContextEnvelope } from "./context";
 
 const defaultLogger: Logger = {
   info: (...args) => console.log("[INFO]", ...args),
@@ -324,25 +325,7 @@ export class ServiceImpl<
     const services = callCtx?.services ?? EMPTY_SERVICES;
     const metadata = callCtx?.metadata ?? EMPTY_METADATA;
 
-    if (!this.options.context) {
-      const finalCtx: any = {
-        request: req,
-        db,
-        logger,
-        traceId,
-        requestId,
-        services,
-        metadata,
-        [RESOLVED_SYMBOL]: this,
-      };
-      // Preserve safe envelope fields only from callCtx
-      if (callCtx?.user !== undefined) finalCtx.user = callCtx.user;
-      if ((callCtx as any)?.caller !== undefined)
-        finalCtx.caller = (callCtx as any).caller;
-      return finalCtx;
-    }
-
-    const fullBaseCtx: any = {
+    const fullBaseCtx: BaseContext<TDb> = {
       request: req,
       db,
       logger,
@@ -350,36 +333,17 @@ export class ServiceImpl<
       requestId,
       services,
       metadata,
+      ...pickContextEnvelope(callCtx),
     };
 
-    const resolvedExtra = await this.options.context(fullBaseCtx);
+    const resolvedExtra = this.options.context
+      ? await this.options.context(fullBaseCtx)
+      : {};
     const finalCtx: any = {
       ...fullBaseCtx,
       ...resolvedExtra,
       [RESOLVED_SYMBOL]: this,
     };
-
-    // Merge safe envelope fields and custom context from callCtx
-    // But preserve the service's resolver values for all base framework fields
-    if (callCtx) {
-      for (const [key, value] of Object.entries(callCtx)) {
-        // Skip dangerous framework fields that should come from this service's db/resolver
-        const isDangerousFrameworkField = [
-          "db",
-          "request",
-          "logger",
-          "services",
-          "metadata",
-          "_resolved",
-          RESOLVED_SYMBOL,
-        ].includes(key);
-
-        if (!isDangerousFrameworkField) {
-          // Allow traceId, requestId, user, caller, and custom context fields
-          finalCtx[key] = value;
-        }
-      }
-    }
 
     return finalCtx;
   }

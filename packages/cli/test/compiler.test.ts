@@ -231,7 +231,11 @@ it("isolates request contexts and maps Promise/thenable rejections", async () =>
   ).toEqual({ ok: true });
   const failure = await app.handle(request("/api/plain/getRejected"));
   expect(failure.status).toBe(500);
-  expect((await failure.json()).message).toBe("rejected");
+  expect(await failure.json()).toMatchObject({
+    code: "INTERNAL_SERVER_ERROR",
+    message: "Internal Server Error",
+    status: 500,
+  });
 });
 
 it("loads emitted handler functions and rejects stale schemas rather than using old validation", async () => {

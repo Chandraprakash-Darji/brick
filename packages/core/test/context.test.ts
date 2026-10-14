@@ -115,34 +115,20 @@ describe("Service-Level Context Resolution & Session Injection", () => {
       }),
     ).rejects.toThrow("Access denied for action 'createDoc'");
 
-    // 4. Test zero-mock unit testing ergonomics with injected mock context
-    const mockUser: User = {
-      id: "usr_test_99",
-      email: "tester@brick.dev",
-      name: "Test Runner",
-      role: "member",
-    };
-
+    // Authenticate through the resolver's request instead of replacing its session.
     const result = await createDoc.run(
+      { title: "My Architecture Doc", content: "# Hello World" },
       {
-        title: "My Architecture Doc",
-        content: "# Hello World",
-      },
-      {
-        user: mockUser,
-        session: {
-          id: "sess_mock",
-          userId: mockUser.id,
-          expiresAt: new Date(),
-        },
-        isOwner: (id: string) => id === mockUser.id,
+        request: new Request("http://localhost", {
+          headers: { authorization: "Bearer valid-token" },
+        }),
       },
     );
 
     expect(result).toBeDefined();
     expect(result.title).toBe("My Architecture Doc");
-    expect(result.authorEmail).toBe("tester@brick.dev");
-    expect(result.authorRole).toBe("member");
+    expect(result.authorEmail).toBe("alice@example.com");
+    expect(result.authorRole).toBe("admin");
     expect(result.isOwner).toBe(true);
   });
 
@@ -238,15 +224,12 @@ describe("Service-Level Context Resolution & Session Injection", () => {
     expect(anon.user).toBe("anonymous");
 
     const authed = await getStatus.run(undefined, {
-      user: {
-        id: "usr_bob",
-        email: "bob@example.com",
-        name: "Bob",
-        role: "member",
-      },
+      request: new Request("http://localhost", {
+        headers: { authorization: "Bearer valid-token" },
+      }),
     });
     expect(authed.authenticated).toBe(true);
-    expect(authed.user).toBe("bob@example.com");
+    expect(authed.user).toBe("alice@example.com");
   });
 
   it("should isolate context when one service calls another (orders -> billing)", async () => {
@@ -398,5 +381,160 @@ describe("Service-Level Context Resolution & Session Injection", () => {
     // Verify that the fake db from caller was not used
     // (billing has its own database and should reject the caller's db)
     expect(result.db).not.toBe("isFake");
+  });
+});
+
+describe("Receiver-owned context", () => {
+  beforeEach(() => resetGlobalRegistry());
+
+  for (const dispatch of ["direct", "proxy"] as const) {
+    it(`protects resolver values and drops custom caller keys via ${dispatch}`, async () => {
+      const service = defineService("receiver", {
+        context: async () => ({
+          user: null,
+          session: "receiver-session",
+          isOwner: () => false,
+          custom: "receiver-custom",
+          tenantId: "validated-tenant",
+          traceId: "receiver-trace",
+          requestId: "receiver-request",
+          caller: "receiver-caller",
+        }),
+      });
+      const inspect = service.action({
+        name: "inspect",
+        execute: ({ ctx }) => ({
+          user: ctx.user,
+          session: ctx.session,
+          isOwner: ctx.isOwner(),
+          custom: ctx.custom,
+          extra: "extra" in ctx,
+          tenantId: ctx.tenantId,
+          traceId: ctx.traceId,
+          requestId: ctx.requestId,
+          caller: ctx.caller,
+        }),
+      });
+      const callerContext = {
+        user: { id: "caller-user" },
+        session: "caller-session",
+        isOwner: () => true,
+        custom: "caller-custom",
+        extra: "caller-extra",
+        tenantId: "claimed-tenant",
+        traceId: "caller-trace",
+        requestId: "caller-request",
+        caller: "caller-service",
+      };
+      const result =
+        dispatch === "direct"
+          ? await inspect.run(undefined, callerContext)
+          : await createServiceProxy("receiver", {
+              context: callerContext,
+            }).inspect(undefined, callerContext);
+      expect(result).toEqual({
+        user: null,
+        session: "receiver-session",
+        isOwner: false,
+        custom: "receiver-custom",
+        extra: false,
+        tenantId: "validated-tenant",
+        traceId: "receiver-trace",
+        requestId: "receiver-request",
+        caller: "receiver-caller",
+      });
+    });
+
+    it(`resolves an internal call from the envelope without cookies via ${dispatch}`, async () => {
+      const service = defineService("receiver", {
+        context: async (envelope) => {
+          const user = "user" in envelope ? envelope.user : undefined;
+          return {
+            user,
+            session: null,
+            hasCookies: envelope.request.headers.has("cookie"),
+            isOwner: (id: string) =>
+              typeof user === "object" &&
+              user !== null &&
+              "id" in user &&
+              user.id === id,
+            caller: "caller" in envelope ? envelope.caller : undefined,
+            tenantId: "tenantId" in envelope ? envelope.tenantId : undefined,
+          };
+        },
+      });
+      const inspect = service.action({
+        name: "inspect",
+        execute: ({ ctx }) => ({
+          user: ctx.user,
+          session: ctx.session,
+          hasCookies: ctx.hasCookies,
+          isOwner: ctx.isOwner("internal-user"),
+          caller: ctx.caller,
+          tenantId: ctx.tenantId,
+          traceId: ctx.traceId,
+          requestId: ctx.requestId,
+        }),
+      });
+      const envelope = {
+        user: { id: "internal-user" },
+        caller: "sender",
+        tenantId: "tenant-claim",
+        traceId: "trace",
+        requestId: "request",
+      };
+      const result =
+        dispatch === "direct"
+          ? await inspect.run(undefined, envelope)
+          : await createServiceProxy("receiver", {
+              context: {
+                user: { id: "options-user" },
+                caller: "options-sender",
+                tenantId: "options-tenant",
+              },
+            }).inspect(undefined, envelope);
+      expect(result).toEqual({
+        user: { id: "internal-user" },
+        session: null,
+        hasCookies: false,
+        isOwner: true,
+        caller: "sender",
+        tenantId: "tenant-claim",
+        traceId: "trace",
+        requestId: "request",
+      });
+    });
+  }
+
+  it("preserves all envelope fields without a resolver and drops custom keys", async () => {
+    const service = defineService("plain");
+    const inspect = service.action({
+      name: "inspect",
+      execute: ({ ctx }) => ({
+        user: ctx.user,
+        caller: ctx.caller,
+        tenantId: ctx.tenantId,
+        traceId: ctx.traceId,
+        requestId: ctx.requestId,
+        extra: "extra" in ctx,
+      }),
+    });
+    expect(
+      await inspect.run(undefined, {
+        user: { id: "u" },
+        caller: "sender",
+        tenantId: "tenant",
+        traceId: "trace",
+        requestId: "request",
+        extra: "ignored",
+      }),
+    ).toEqual({
+      user: { id: "u" },
+      caller: "sender",
+      tenantId: "tenant",
+      traceId: "trace",
+      requestId: "request",
+      extra: false,
+    });
   });
 });

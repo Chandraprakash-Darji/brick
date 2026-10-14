@@ -61,7 +61,11 @@ export function createHandlerFactory(route: RouteIR): HandlerFactory {
         runtime.validate(outputChecker, result, route.action, "output");
       return result;
     };
-    const createContext = ({ headers, request, set }: any): ActionContext => {
+    const createContext = ({
+      headers,
+      request,
+      set,
+    }: any): ActionContext & { requestId: string } => {
       const seq = runtime.nextSequence();
       const traceId = headers?.["x-trace-id"] || "tr_" + seq;
       const requestId = headers?.["x-request-id"] || "req_" + seq;
@@ -91,12 +95,12 @@ export function createHandlerFactory(route: RouteIR): HandlerFactory {
           }
           validateInput(input);
           if (authorize && !(await authorize({ ctx, input, user: ctx.user })))
-            runtime.deny(route.action);
+            runtime.deny(route.action, ctx.user);
           return validateOutput(
             await execute({ input, ctx, error: errorBuilder }),
           );
         } catch (err) {
-          return runtime.mapError(err, context.set);
+          return runtime.mapError(err, context.set, ctx);
         }
       };
     }
@@ -109,10 +113,10 @@ export function createHandlerFactory(route: RouteIR): HandlerFactory {
         if (runtime.isThenable(result))
           return Promise.resolve(result)
             .then(validateOutput)
-            .catch((err) => runtime.mapError(err, context.set));
+            .catch((err) => runtime.mapError(err, context.set, ctx));
         return validateOutput(result);
       } catch (err) {
-        return runtime.mapError(err, context.set);
+        return runtime.mapError(err, context.set, ctx);
       }
     };
   };

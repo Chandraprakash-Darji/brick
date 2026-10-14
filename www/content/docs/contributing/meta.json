@@ -1,7 +1,0 @@
-{
-  "title": "Contributing",
-  "description": "Contributor guides and benchmarking suite",
-  "icon": "GitPullRequest",
-  "root": true,
-  "pages": ["benchmarking"]
-}

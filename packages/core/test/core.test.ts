@@ -148,7 +148,7 @@ describe("@brickkit/core Engine", () => {
       expect.unreachable();
     } catch (err: any) {
       expect(err).toBeInstanceOf(ActionExecutionError);
-      expect(err.code).toBe("UNAUTHORIZED");
+      expect(err.code).toBe("FORBIDDEN");
       expect(err.status).toBe(403);
     }
 

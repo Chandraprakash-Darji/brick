@@ -5,7 +5,7 @@ export function parsePort(
   let port: number | undefined;
   if (portStr !== undefined) {
     port = Number(portStr);
-  } else if (envPort !== undefined) {
+  } else if (envPort !== undefined && envPort !== "") {
     port = Number(envPort);
   } else {
     port = 4000;
