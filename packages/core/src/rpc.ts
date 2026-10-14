@@ -28,7 +28,7 @@ export function createServiceProxy<T extends Record<string, any>>(
           }
 
           const envelopeCtx = createRpcEnvelope(
-            serviceName,
+            options.from,
             options.context,
             callCtx,
           );
@@ -47,9 +47,16 @@ export function createServiceProxy<T extends Record<string, any>>(
   });
 }
 
-/** Keep caller fields while the receiving service owns its framework context. */
+/** Build the trusted envelope for a proxy call.
+ *
+ * When `from` is provided, it identifies the service that created the proxy
+ * and always sets `caller` — any `caller` supplied via `options.context` or
+ * the per-call context is ignored so it cannot be spoofed. When `from` is
+ * omitted, an explicitly supplied `caller` still passes through for backward
+ * compatibility; otherwise `caller` stays unset (never the target service).
+ */
 export function createRpcEnvelope(
-  serviceName: string,
+  from: string | undefined,
   defaultContext?: Partial<ActionContext>,
   callContext?: Partial<ActionContext>,
 ): Partial<ActionContext> {
@@ -57,7 +64,11 @@ export function createRpcEnvelope(
     ...pickContextEnvelope(defaultContext),
     ...pickContextEnvelope(callContext),
   } as Partial<ActionContext> & { caller?: string };
-  // Set caller to the originating service if not already set
-  envelope.caller ??= serviceName;
+  // `caller` identifies the service that created this proxy, never the target.
+  // A configured `from` wins over any supplied value; without `from` we keep
+  // an explicitly supplied caller (legacy) and otherwise leave it unset.
+  if (from !== undefined) {
+    envelope.caller = from;
+  }
   return envelope;
 }
