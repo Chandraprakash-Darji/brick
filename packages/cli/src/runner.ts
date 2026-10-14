@@ -139,6 +139,11 @@ export async function startDevApplication(options: DevServerOptions) {
   const module = options.entry
     ? await import(resolve(options.entry))
     : undefined;
+  if (isBrickApp(module?.default) && options.prefix !== undefined) {
+    console.warn(
+      `[Brick-TS] Ignoring prefix ${options.prefix}: exported BrickApp prefix ${module.default.definition.prefix} takes precedence.`,
+    );
+  }
   return createServer(
     options,
     "Development",
@@ -159,8 +164,10 @@ export async function startDevServer(options: DevServerOptions = {}) {
     import.meta.url.endsWith(".ts") ? "./dev-worker.ts" : "./dev-worker.js",
     import.meta.url,
   );
-  const launch = () =>
-    Bun.spawn(
+  let stopped = false;
+  const intentionalExits = new WeakSet<ReturnType<typeof Bun.spawn>>();
+  const launch = () => {
+    const application = Bun.spawn(
       [
         process.execPath,
         fileURLToPath(worker),
@@ -174,6 +181,15 @@ export async function startDevServer(options: DevServerOptions = {}) {
         stderr: "inherit",
       },
     );
+    void application.exited.then((code) => {
+      if (!stopped && !intentionalExits.has(application)) {
+        console.error(
+          `[Brick-TS] Application process exited with code ${code}. Waiting for changes to restart.`,
+        );
+      }
+    });
+    return application;
+  };
   let child = launch();
   const watchDirs = [
     ...new Set([resolve("src"), resolve("app"), resolve(resolvedEntry, "..")]),
@@ -181,7 +197,6 @@ export async function startDevServer(options: DevServerOptions = {}) {
   let pending: ReturnType<typeof setTimeout> | undefined;
   let restarting = false;
   let dirty = false;
-  let stopped = false;
 
   async function restart() {
     dirty = true;
@@ -191,6 +206,7 @@ export async function startDevServer(options: DevServerOptions = {}) {
       while (dirty && !stopped) {
         dirty = false;
         console.log("\n📝 Changes detected. Restarting server...");
+        intentionalExits.add(child);
         child.kill();
         await child.exited;
         if (!stopped) child = launch();
