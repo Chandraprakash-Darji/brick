@@ -247,7 +247,7 @@ test("a failed app construction never closes handles owned by running apps", asy
   expect(() => handle.getDb()).toThrow("Brick database handle is closed");
 });
 
-test("disposal releases handles swapped out by setDb", async () => {
+test("disposal releases acquired handles but never a setDb replacement", async () => {
   const original = defineDatabase();
   const replacement = defineDatabase();
   const service = defineService("effect_app_swapped_db", {
@@ -258,8 +258,38 @@ test("disposal releases handles swapped out by setDb", async () => {
     docs: false,
     requestLogging: false,
   });
+  // The replacement belongs to whoever installed it: disposing this app must
+  // not close a handle it never acquired, even though it is live at disposal.
   service.setDb(replacement);
   await app.dispose();
   expect(() => original.getDb()).toThrow("Brick database handle is closed");
-  expect(() => replacement.getDb()).toThrow("Brick database handle is closed");
+  expect(() => replacement.getDb()).not.toThrow();
+  await replacement.close?.();
+});
+
+test("disposing an app never closes a replacement acquired by another app", async () => {
+  const shared = defineDatabase();
+  const ownerService = defineService("effect_app_replacement_owner", {
+    database: shared,
+  });
+  const owner = brick({
+    services: [ownerService],
+    docs: false,
+    requestLogging: false,
+  });
+  const borrowerService = defineService("effect_app_replacement_borrower");
+  const borrower = brick({
+    services: [borrowerService],
+    docs: false,
+    requestLogging: false,
+  });
+  // Installed after construction, so the borrowing app never acquired it.
+  borrowerService.setDb(shared);
+  try {
+    await borrower.dispose();
+    expect(() => shared.getDb()).not.toThrow();
+  } finally {
+    await owner.dispose();
+  }
+  expect(() => shared.getDb()).toThrow("Brick database handle is closed");
 });

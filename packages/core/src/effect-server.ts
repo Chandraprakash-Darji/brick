@@ -135,7 +135,8 @@ export function effectBrick<R = never, E = never>(
     throw error;
   }
   // Retain the acquired set: setDb can swap the live handle, and disposal
-  // must release the original too instead of leaking its count forever.
+  // releases exactly what this app acquired. A swapped-in handle belongs to
+  // whoever installed it, so releasing it here could close another live app.
   const acquiredHandles = liveDatabaseHandles(services);
   for (const handle of acquiredHandles)
     handleUsers.set(handle, (handleUsers.get(handle) ?? 0) + 1);
@@ -154,10 +155,7 @@ export function effectBrick<R = never, E = never>(
           errors.push(error);
         }
       }
-      for (const database of new Set([
-        ...acquiredHandles,
-        ...liveDatabaseHandles(services),
-      ]))
+      for (const database of acquiredHandles)
         await releaseHandle(database, errors);
       for (const service of services) unbindRuntime(service, runtime);
       try {
@@ -195,11 +193,7 @@ export function effectBrick<R = never, E = never>(
           } catch {}
         }
         initialized.length = 0;
-        for (const database of new Set([
-          ...acquiredHandles,
-          ...liveDatabaseHandles(services),
-        ]))
-          await releaseHandle(database);
+        for (const database of acquiredHandles) await releaseHandle(database);
         await runtime.dispose();
         throw error;
       }
