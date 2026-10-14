@@ -251,12 +251,14 @@ describe("Service-Level Context Resolution & Session Injection", () => {
     const billingDb = defineDatabase();
     const billingService = defineService("billing", {
       database: billingDb,
-      context: async () => {
+      context: async (baseCtx) => {
         // This context resolver should run when billing actions are called
+        // and must already see the originating service as the caller.
         return {
           serviceName: "billing",
           dbName: "billing_db",
           resolverRan: true,
+          resolverCaller: (baseCtx as { caller?: string }).caller,
         };
       },
     });
@@ -271,6 +273,8 @@ describe("Service-Level Context Resolution & Session Injection", () => {
         serviceName: t.String(),
         resolverRan: t.Boolean(),
         userId: t.Optional(t.String()),
+        caller: t.Optional(t.String()),
+        resolverCaller: t.Optional(t.String()),
       }),
       execute: async ({ ctx }) => {
         billingDbCalls.push(ctx.dbName);
@@ -280,6 +284,8 @@ describe("Service-Level Context Resolution & Session Injection", () => {
           serviceName: ctx.serviceName,
           resolverRan: ctx.resolverRan === true,
           userId: ctx.user?.id,
+          caller: ctx.caller,
+          resolverCaller: ctx.resolverCaller,
         };
       },
     });
@@ -296,13 +302,15 @@ describe("Service-Level Context Resolution & Session Injection", () => {
           serviceName: t.String(),
           resolverRan: t.Boolean(),
           userId: t.Optional(t.String()),
+          caller: t.Optional(t.String()),
+          resolverCaller: t.Optional(t.String()),
         }),
       }),
       execute: async ({ input, ctx }) => {
         ordersDbCalls.push(ctx.dbName);
 
         // Call billing service from orders
-        const billingRpc = createServiceProxy("billing");
+        const billingRpc = createServiceProxy("billing", { from: "orders" });
         const chargeResult = await billingRpc.charge(
           { amount: input.amount },
           {
@@ -342,6 +350,31 @@ describe("Service-Level Context Resolution & Session Injection", () => {
 
     // Verify user was preserved through the inter-service call
     expect(result.chargeResult.userId).toBe("usr_alice");
+
+    // Verify billing sees the originating service (orders), not itself, as the caller
+    // in both its context resolver and its action.
+    expect(result.chargeResult.caller).toBe("orders");
+    expect(result.chargeResult.resolverCaller).toBe("orders");
+  });
+
+  it("should not let callCtx override the proxy's caller identity", async () => {
+    const billingService = defineService("billing", {
+      database: defineDatabase(),
+    });
+    billingService.action({
+      name: "whoCalled",
+      output: t.Object({ caller: t.Optional(t.String()) }),
+      execute: async ({ ctx }) => ({ caller: ctx.caller }),
+    });
+
+    const billingRpc = createServiceProxy("billing", { from: "orders" });
+
+    // A caller trying to spoof its identity via callCtx must be ignored.
+    const result = await billingRpc.whoCalled({}, {
+      caller: "not-orders",
+    } as any);
+
+    expect(result.caller).toBe("orders");
   });
 
   it("should prevent caller context fields from overriding receiver's database", async () => {

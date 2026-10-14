@@ -681,5 +681,7 @@ export interface Service<
 
 export interface ProxyOptions {
   isMonolith?: boolean;
+  /** Name of the service creating this proxy. Populates ctx.caller on the target's envelope. */
+  from?: string;
   context?: Partial<ActionContext>;
 }

@@ -79,9 +79,9 @@ This utility narrows `ctx.user` from `User | null` to `NonNullable<User>` at the
 
 When calling actions with `createServiceProxy("targetService")` (call signature: `proxy.actionName(input, ctx?)`), Brick isolates execution contexts:
 
-1. **Envelope allowlist**: Only `caller`, `user`, `traceId`, `requestId`, and `tenantId` from the proxy's `options.context` or per-call context are forwarded. Per-call values take precedence over proxy defaults. Custom fields such as `session` and `isOwner` are dropped.
+1. **Envelope allowlist**: Only `user`, `traceId`, `requestId`, and `tenantId` from the proxy's `options.context` or per-call context are forwarded, plus `caller` as described below. Per-call values take precedence over proxy defaults. Custom fields such as `session` and `isOwner` are dropped.
 2. **Independent Context Resolution**: The target service receives the envelope in its resolver input and uses its own database. Resolver return values take precedence over envelope values, including explicit `null` or `undefined`. Direct action calls enforce the same envelope allowlist for caller custom fields while accepting runtime fields such as `request`.
-3. **`caller` Field**: If the envelope has no `caller`, the proxy sets `ctx.caller` to the **target** service name passed to `createServiceProxy()` (not the calling service). Pass `{ caller: "..." }` in the call context if the receiver needs the originating service.
+3. **`caller` Field**: The proxy sets `ctx.caller` to `options.from` — the name of the service that created the proxy, passed to `createServiceProxy(target, { from: "..." })` — never the target service's name. When `from` is provided, any `caller` in `options.context` or the per-call context is ignored, so it cannot be spoofed. Without `from`, an explicitly supplied `caller` still passes through; otherwise `caller` is left unset.
 
 Only in-process dispatch is implemented; creating a proxy with `{ isMonolith: false }` throws when an action is called.
 

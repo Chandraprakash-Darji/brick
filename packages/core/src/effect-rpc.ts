@@ -65,7 +65,7 @@ export function createEffectServiceProxy<
             );
           return executeNative<R>(action, {
             input: payload,
-            ctx: createRpcEnvelope(serviceName, options.context, callCtx),
+            ctx: createRpcEnvelope(options.from, options.context, callCtx),
           });
         });
     },

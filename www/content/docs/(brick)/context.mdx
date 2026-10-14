@@ -96,8 +96,9 @@ type UsersApi = {
   }) => Promise<{ id: string; name: string; email: string }>;
 };
 
-// Proxy to the "users" service, looked up by name in the global registry
-const users = createServiceProxy<UsersApi>("users");
+// Proxy to the "users" service, looked up by name in the global registry.
+// `from` identifies the calling service, so `users` actions see `ctx.caller === "notifications"`.
+const users = createServiceProxy<UsersApi>("users", { from: "notifications" });
 
 export const sendWelcome = notificationsService.action({
   name: "sendWelcome",
@@ -119,7 +120,7 @@ What the receiving service sees:
 1. **Own context and database**: The receiving service runs its own `context` resolver and uses its own database.
 2. **Framework fields are dropped**: `db`, `request`, `logger`, `services`, and `metadata` in the call context are discarded before reaching the receiving service.
 3. **Envelope fields pass through**: Only `caller`, `user`, `traceId`, `requestId`, and `tenantId` are forwarded. The resolver receives these fields and its returned values always take precedence. Caller custom fields such as `session` and `isOwner` are discarded for direct action calls and proxy calls. Treat `tenantId` as a claim to validate, not proof of access.
-4. **`ctx.caller`**: If you don't pass `caller`, Brick sets it to the **target** service's name, not the calling service's. To identify the caller, pass it explicitly: `users.getUser({ id }, { caller: "notifications" })`.
+4. **`ctx.caller`**: The proxy sets `ctx.caller` to `from` — the name you passed when creating the proxy, `createServiceProxy<UsersApi>("users", { from: "notifications" })` — never the target service's name. When `from` is provided, any `caller` in the proxy's `options.context` or the per-call context is ignored, so it cannot be spoofed. Without `from`, an explicitly supplied `caller` still passes through; otherwise `caller` is left unset.
 
 ### Internal calls without cookies
 
