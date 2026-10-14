@@ -194,6 +194,7 @@ export function effectBrick<R = never, E = never>(
         }
         initialized.length = 0;
         for (const database of acquiredHandles) await releaseHandle(database);
+        for (const service of services) unbindRuntime(service, runtime);
         await runtime.dispose();
         throw error;
       }

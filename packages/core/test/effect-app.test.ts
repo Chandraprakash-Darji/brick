@@ -293,3 +293,39 @@ test("disposing an app never closes a replacement acquired by another app", asyn
   }
   expect(() => shared.getDb()).toThrow("Brick database handle is closed");
 });
+
+test("a failed initialization restores the surviving runtime binding", async () => {
+  let failInit = false;
+  const service = defineService("effect_app_failed_init", {
+    lifecycle: {
+      onInit: () =>
+        failInit ? Effect.fail(new Error("init boom")) : Effect.void,
+    },
+  });
+  service.action({
+    name: "value",
+    output: t.Number(),
+    execute: () => Effect.map(Dependency, (d) => d.value),
+  });
+  const first = brick({
+    services: [service],
+    layer: Layer.succeed(Dependency, { value: 1 }),
+    docs: false,
+    requestLogging: false,
+  });
+  await first.initialize();
+  const second = brick({
+    services: [service],
+    layer: Layer.succeed(Dependency, { value: 2 }),
+    docs: false,
+    requestLogging: false,
+  });
+  failInit = true;
+  await expect(second.initialize()).rejects.toThrow("init boom");
+  try {
+    expect(await service.getAction("value")!.run()).toBe(1);
+  } finally {
+    await first.dispose();
+    await second.dispose().catch(() => {});
+  }
+});
