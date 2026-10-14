@@ -168,9 +168,10 @@ The app acquires its Layer once and shares it across service contexts, actions,
 tools, resource policies, plugin endpoints, and HTTP routes. Initialization runs
 before the first HTTP request or server startup. `initialize()` also lets scripts
 initialize explicitly before direct action or tool calls. `dispose()` runs service
-destruction hooks, closes framework-owned databases, and releases the Layer.
-Injected database clients remain owned by their callers. Service instances belong
-to one Effect app and cannot be rebound to another app.
+destruction hooks, releases the Layer, and releases database handles — closing
+the ones no remaining app uses. Injected database clients remain owned by their
+callers. Services may be shared across apps; the newest live binding wins for
+direct calls, and disposing an app restores the previous binding.
 
 The app exposes `initializeEffect`, `disposeEffect`, `handleEffect(request)`, and
 `listenEffect(port)` for Effect composition. The normal `.handle()`, `.listen()`,

@@ -31,6 +31,22 @@ export function withEffectRuntime<A>(
 }
 
 export const effectRuntimeKey = Symbol.for("brickkit.effect.runtime");
+
+/** AbortSignal.any is missing on Node 18 before 18.17; combine manually there. */
+function anySignal(signals: AbortSignal[]): AbortSignal {
+  if (typeof AbortSignal.any === "function") return AbortSignal.any(signals);
+  const controller = new AbortController();
+  for (const signal of signals) {
+    if (signal.aborted) {
+      controller.abort(signal.reason);
+      break;
+    }
+    signal.addEventListener("abort", () => controller.abort(signal.reason), {
+      once: true,
+    });
+  }
+  return controller.signal;
+}
 export const contextResolverKey = Symbol.for("brickkit.effect.context");
 export const effectExecutionKey = Symbol.for("brickkit.effect.execute");
 export const effectAuthorizationKey = Symbol.for("brickkit.effect.authorize");
@@ -54,7 +70,7 @@ export async function runEffectPromise<A, E, R>(
   const inherited = callbackRuntime.getStore();
   const cancellation = inherited
     ? signal
-      ? AbortSignal.any([signal, inherited.signal])
+      ? anySignal([signal, inherited.signal])
       : inherited.signal
     : signal;
   const options = cancellation ? { signal: cancellation } : undefined;

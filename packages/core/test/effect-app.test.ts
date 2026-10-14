@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Context, Effect, Layer } from "effect";
-import { brick, defineService, t } from "../src/effect";
+import { brick, defineDatabase, defineService, t } from "../src/effect";
 
 class Dependency extends Context.Tag("effect-app/Dependency")<
   Dependency,
@@ -160,4 +160,89 @@ test("aborting an HTTP action interrupts native execution and runs finalizers", 
   await response;
   expect(released).toBe(true);
   await app.dispose();
+});
+
+test("disposing a rebound app restores the previous runtime binding", async () => {
+  const service = defineService("effect_app_rebind");
+  service.action({
+    name: "value",
+    output: t.Number(),
+    execute: () => Effect.map(Dependency, (d) => d.value),
+  });
+  const first = brick({
+    services: [service],
+    layer: Layer.succeed(Dependency, { value: 1 }),
+    docs: false,
+    requestLogging: false,
+  });
+  const second = brick({
+    services: [service],
+    layer: Layer.succeed(Dependency, { value: 2 }),
+    docs: false,
+    requestLogging: false,
+  });
+  try {
+    await second.dispose();
+    const action = service.getAction("value")!;
+    expect(await action.run()).toBe(1);
+  } finally {
+    await first.dispose();
+  }
+});
+
+test("database handles close only after the last app releases them", async () => {
+  const handle = defineDatabase();
+  const service = defineService("effect_app_shared_db", {
+    database: handle,
+  });
+  service.action({
+    name: "ping",
+    output: t.String(),
+    execute: () => Effect.succeed("pong"),
+  });
+  const first = brick({
+    services: [service],
+    docs: false,
+    requestLogging: false,
+  });
+  const second = brick({
+    services: [service],
+    docs: false,
+    requestLogging: false,
+  });
+  try {
+    await first.dispose();
+    expect(() => handle.getDb()).not.toThrow();
+    expect(await service.getAction("ping")!.run()).toBe("pong");
+    await second.dispose();
+    expect(() => handle.getDb()).toThrow("Brick database handle is closed");
+  } finally {
+    await first.dispose().catch(() => {});
+    await second.dispose().catch(() => {});
+  }
+});
+
+test("a failed app construction never closes handles owned by running apps", async () => {
+  const handle = defineDatabase();
+  const service = defineService("effect_app_failed_construction", {
+    database: handle,
+  });
+  const running = brick({
+    services: [service],
+    docs: false,
+    requestLogging: false,
+  });
+  try {
+    expect(() =>
+      brick({
+        services: [service, service],
+        docs: false,
+        requestLogging: false,
+      }),
+    ).toThrow("duplicate service");
+    expect(() => handle.getDb()).not.toThrow();
+  } finally {
+    await running.dispose();
+  }
+  expect(() => handle.getDb()).toThrow("Brick database handle is closed");
 });

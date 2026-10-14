@@ -35,6 +35,46 @@ export type EffectBrickApp = BrickApp & {
   listenEffect(port: number): Effect.Effect<EffectBrickApp, unknown>;
 };
 
+/** Services can be shared across apps; the newest live binding wins for direct calls. */
+const runtimeBindings = new WeakMap<object, unknown[]>();
+
+function bindRuntime(service: object, runtime: unknown): void {
+  const stack = runtimeBindings.get(service) ?? [];
+  stack.push(runtime);
+  runtimeBindings.set(service, stack);
+  Reflect.set(service, effectRuntimeKey, runtime);
+}
+
+function unbindRuntime(service: object, runtime: unknown): void {
+  const stack = (runtimeBindings.get(service) ?? []).filter(
+    (bound) => bound !== runtime,
+  );
+  if (stack.length) {
+    runtimeBindings.set(service, stack);
+    Reflect.set(service, effectRuntimeKey, stack[stack.length - 1]);
+  } else {
+    runtimeBindings.delete(service);
+    if (Reflect.get(service, effectRuntimeKey) === runtime)
+      Reflect.deleteProperty(service, effectRuntimeKey);
+  }
+}
+
+/** Database handles are usually shared singletons; close on last release. */
+const handleUsers = new WeakMap<object, number>();
+
+function liveDatabaseHandles(services: readonly object[]): Set<object> {
+  const handles = new Set<object>();
+  for (const service of services) {
+    const handle =
+      (
+        service as { getDatabaseHandle?: () => unknown }
+      ).getDatabaseHandle?.() ??
+      (service as { options?: { database?: unknown } }).options?.database;
+    if (handle !== null && handle !== undefined) handles.add(handle as object);
+  }
+  return handles;
+}
+
 /** One runtime owns the dependency layer across every service and transport. */
 export function effectBrick<R = never, E = never>(
   options: EffectServerOptions<R, E> = {},
@@ -46,8 +86,26 @@ export function effectBrick<R = never, E = never>(
   let disposing: Promise<void> | undefined;
   const initialized: typeof services = [];
   const owner = { [effectRuntimeKey]: runtime };
-  for (const service of services)
-    Reflect.set(service, effectRuntimeKey, runtime);
+  for (const service of services) bindRuntime(service, runtime);
+  const releasedHandles = new Set<object>();
+  const releaseHandle = async (
+    handle: object,
+    errors?: unknown[],
+  ): Promise<void> => {
+    if (releasedHandles.has(handle)) return;
+    releasedHandles.add(handle);
+    const remaining = (handleUsers.get(handle) ?? 1) - 1;
+    if (remaining > 0) {
+      handleUsers.set(handle, remaining);
+      return;
+    }
+    handleUsers.delete(handle);
+    try {
+      await (handle as { close?: () => unknown }).close?.();
+    } catch (error) {
+      errors?.push(error);
+    }
+  };
   const adaptEndpoint = (
     definition: EffectEndpointDefinition<any>,
   ): EndpointDefinition => ({
@@ -70,21 +128,14 @@ export function effectBrick<R = never, E = never>(
       endpoints: options.endpoints?.map(adaptEndpoint),
     });
   } catch (error) {
-    for (const service of services)
-      if (Reflect.get(service, effectRuntimeKey) === runtime)
-        Reflect.deleteProperty(service, effectRuntimeKey);
-    for (const database of new Set(
-      services.map(
-        (service) => service.getDatabaseHandle?.() ?? service.options.database,
-      ),
-    )) {
-      try {
-        void Promise.resolve(database?.close?.()).catch(() => {});
-      } catch {}
-    }
+    // This app never acquired anything: unbind runtimes without closing
+    // handles owned by other (possibly still running) apps.
+    for (const service of services) unbindRuntime(service, runtime);
     void runtime.dispose().catch(() => {});
     throw error;
   }
+  for (const handle of liveDatabaseHandles(services))
+    handleUsers.set(handle, (handleUsers.get(handle) ?? 0) + 1);
   const cleanup = (): Promise<void> =>
     (disposing ??= (async () => {
       closed = true;
@@ -100,23 +151,9 @@ export function effectBrick<R = never, E = never>(
           errors.push(error);
         }
       }
-      for (const database of new Set(
-        services
-          .map(
-            (service) =>
-              service.getDatabaseHandle?.() ?? service.options.database,
-          )
-          .filter((database) => database !== undefined),
-      )) {
-        try {
-          await database.close?.();
-        } catch (error) {
-          errors.push(error);
-        }
-      }
-      for (const service of services)
-        if (Reflect.get(service, effectRuntimeKey) === runtime)
-          Reflect.deleteProperty(service, effectRuntimeKey);
+      for (const database of liveDatabaseHandles(services))
+        await releaseHandle(database, errors);
+      for (const service of services) unbindRuntime(service, runtime);
       try {
         await runtime.dispose();
       } catch (error) {
@@ -152,18 +189,8 @@ export function effectBrick<R = never, E = never>(
           } catch {}
         }
         initialized.length = 0;
-        for (const database of new Set(
-          services
-            .map(
-              (service) =>
-                service.getDatabaseHandle?.() ?? service.options.database,
-            )
-            .filter((database) => database !== undefined),
-        )) {
-          try {
-            await database.close?.();
-          } catch {}
-        }
+        for (const database of liveDatabaseHandles(services))
+          await releaseHandle(database);
         await runtime.dispose();
         throw error;
       }
