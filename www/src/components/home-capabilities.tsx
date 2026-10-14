@@ -79,7 +79,7 @@ export function HomeCapabilities() {
     <div className="home-capabilities">
       <section id="resources" className="capability-section capability-split">
         <div className="capability-copy">
-          <p className="label">04 / RESOURCES</p>
+          <p className="label">03 / RESOURCES</p>
           <h2>
             A table becomes an API.
             <br />
@@ -150,7 +150,7 @@ export function HomeCapabilities() {
       >
         <div className="capability-section-heading">
           <div>
-            <p className="label">05 / TYPE SAFETY</p>
+            <p className="label">04 / TYPE SAFETY</p>
             <h2>
               One definition.
               <br />
@@ -228,7 +228,7 @@ export function HomeCapabilities() {
         className="capability-section capability-split"
       >
         <div className="capability-copy">
-          <p className="label">06 / ACCESS CONTROL</p>
+          <p className="label">05 / ACCESS CONTROL</p>
           <h2>
             Put access rules
             <br />
@@ -276,7 +276,7 @@ export function HomeCapabilities() {
       <section id="databases" className="capability-section">
         <div className="capability-section-heading">
           <div>
-            <p className="label">07 / DATABASES</p>
+            <p className="label">06 / DATABASES</p>
             <h2>Drizzle at the foundation.</h2>
           </div>
           <p className="capability-heading-copy">
@@ -338,7 +338,7 @@ export function HomeCapabilities() {
         className="capability-section capability-split capability-surface"
       >
         <div className="capability-copy">
-          <p className="label">08 / EXTENSIONS</p>
+          <p className="label">07 / EXTENSIONS</p>
           <h2>
             Build once.
             <br />
@@ -374,7 +374,7 @@ export function HomeCapabilities() {
       <section id="endpoints" className="capability-section">
         <div className="capability-section-heading">
           <div>
-            <p className="label">09 / ENDPOINTS</p>
+            <p className="label">08 / ENDPOINTS</p>
             <h2>More than a JSON API.</h2>
           </div>
           <p className="capability-heading-copy">
@@ -423,7 +423,7 @@ export function HomeCapabilities() {
       <section id="tooling" className="capability-section">
         <div className="capability-section-heading">
           <div>
-            <p className="label">10 / TOOLING</p>
+            <p className="label">09 / TOOLING</p>
             <h2>
               Inspect it.
               <br />
@@ -493,7 +493,7 @@ export function HomeCapabilities() {
       </section>
 
       <section id="ecosystem" className="capability-section ecosystem-section">
-        <p className="label">11 / THE FOUNDATION</p>
+        <p className="label">10 / THE FOUNDATION</p>
         <h2>
           Tools you know.
           <br />A backend you own.

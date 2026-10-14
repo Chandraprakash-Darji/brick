@@ -11,7 +11,6 @@ import { HomeCapabilities } from "@/components/home-capabilities";
 import usersSource from "../../../examples/showcase/src/services/users.ts?raw";
 import mainSource from "../../../examples/showcase/src/main.ts?raw";
 import serverSource from "../../../examples/showcase/src/server.ts?raw";
-import { dataUrl, lastValue, type BenchmarkData } from "@/lib/benchmarks";
 
 export const Route = createFileRoute("/")({
   component: Home,
@@ -42,11 +41,6 @@ const features = [
     title: "Better Auth & Drizzle",
     text: "First-class integration with Better Auth session security and Drizzle ORM pre-compiled query caching.",
     link: "/docs/access-control",
-  },
-  {
-    title: "Continuous Benchmarking",
-    text: "Every push to main measures throughput, latency, net heap changes and process RSS on macOS, Linux and Windows.",
-    link: "/docs/contributing/benchmarking",
   },
 ];
 
@@ -79,42 +73,6 @@ const codeSamples = {
 function Home() {
   const [kind, setKind] = React.useState<Kind>("monolith");
   const activeCode = codeSamples[kind];
-  const [benchmarks, setBenchmarks] = React.useState<BenchmarkData>();
-  React.useEffect(() => {
-    const controller = new AbortController();
-    fetch(dataUrl, { signal: controller.signal, cache: "no-store" })
-      .then(async (response) => {
-        if (response.ok)
-          setBenchmarks((await response.json()) as BenchmarkData);
-      })
-      .catch(() => {});
-    return () => controller.abort();
-  }, []);
-  const measured = benchmarks?.series.darwin ?? benchmarks?.series.linux ?? {};
-  const value = (suite: string, name: string, unit: string) =>
-    lastValue(measured[suite]?.[name]?.[unit] ?? []);
-  const stats = [
-    {
-      label: "HTTP throughput",
-      value: value("compiler", "sync", "req/s"),
-      unit: "req/s",
-    },
-    {
-      label: "Cold startup",
-      value: value("footprint", "cold-start", "ms"),
-      unit: "ms",
-    },
-    {
-      label: "Idle CPU · 5s",
-      value: value("footprint", "idle-cpu", "ms"),
-      unit: "ms CPU",
-    },
-    {
-      label: "Server bundle",
-      value: value("bundle", "server-bundle", "B"),
-      unit: "KiB",
-    },
-  ];
 
   return (
     <main id="top" className="brick-landing">
@@ -281,48 +239,9 @@ function Home() {
         </div>
       </div>
 
-      <section className="brick-stats py-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="label">02 / Measured, not guessed</p>
-          <Link to="/benchmarks" className="capability-link">
-            Explore benchmarks ↗
-          </Link>
-        </div>
-        <dl className="mt-6 grid grid-cols-2 gap-y-6 md:grid-cols-4">
-          {stats.map((stat, i) => (
-            <div
-              key={stat.label}
-              className={cn(
-                "brick-stat min-w-0 border-l px-4",
-                i === 0 && "border-l-0 pl-0",
-              )}
-            >
-              <dt className="label">{stat.label}</dt>
-              <dd className="mt-3 text-3xl font-medium tracking-tight tabular-nums sm:text-4xl">
-                {(stat.value === undefined
-                  ? undefined
-                  : stat.unit === "KiB"
-                    ? stat.value / 1024
-                    : stat.value
-                )?.toLocaleString("en-US", {
-                  maximumFractionDigits: stat.unit === "req/s" ? 0 : 1,
-                }) ?? "—"}
-                <span className="mt-1 block font-mono text-xs font-normal text-muted-foreground">
-                  {stat.unit}
-                </span>
-              </dd>
-            </div>
-          ))}
-        </dl>
-        <p className="mt-6 text-xs text-muted-foreground">
-          Fixed JSON action throughput · minimal server startup and idle CPU ·
-          minified server bundle. Full methodology in benchmarks.
-        </p>
-      </section>
-
       <div id="platform" className="home-section-heading home-platform-heading">
         <div>
-          <p className="label">03 / BUILT TO FIT TOGETHER</p>
+          <p className="label">02 / BUILT TO FIT TOGETHER</p>
           <h2>
             A foundation for
             <br />
@@ -347,23 +266,15 @@ function Home() {
                 data-variant={i}
               >
                 <span className="visual-index">BRICK / 0{i + 1}</span>
-                {i === 5 ? (
-                  <div className="visual-bars">
-                    {[32, 54, 45, 70, 61, 88, 78, 100].map((height, j) => (
-                      <i key={j} style={{ height: `${height}%` }} />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="visual-flow">
-                    <span>
-                      {["ACTION", "ROUTE", "SERVICE", "HTTP", "SESSION"][i]}
-                    </span>
-                    <b>↓</b>
-                    <span>
-                      {["EXECUTE", "HANDLER", "ACTION", "SERVICE", "POLICY"][i]}
-                    </span>
-                  </div>
-                )}
+                <div className="visual-flow">
+                  <span>
+                    {["ACTION", "ROUTE", "SERVICE", "HTTP", "SESSION"][i]}
+                  </span>
+                  <b>↓</b>
+                  <span>
+                    {["EXECUTE", "HANDLER", "ACTION", "SERVICE", "POLICY"][i]}
+                  </span>
+                </div>
                 <span className="visual-caption">
                   {
                     [
@@ -372,7 +283,6 @@ function Home() {
                       "DIRECT IN-PROCESS CALLS",
                       "SAME ACTION. NEW INTERFACE.",
                       "YOUR IDENTITY. YOUR RULES.",
-                      "MEASURED ON EVERY PUSH",
                     ][i]
                   }
                 </span>

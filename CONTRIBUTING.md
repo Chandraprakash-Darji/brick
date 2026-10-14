@@ -19,7 +19,6 @@ bun install
 - `packages/crud/` is the opt-in CRUD plugin.
 - `www/` is the docs site. Content lives in `www/content/docs`. The agent skill lives in `skills/brick/SKILL.md`.
 - `examples/pages/` is the full app: TanStack Start frontend with the Brick API mounted in process. It uses workspace packages, so no npm publish is needed to try a framework change.
-- `bench/` holds the benchmarks that back performance claims.
 
 ## Make a first change
 

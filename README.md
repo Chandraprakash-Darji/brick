@@ -75,11 +75,11 @@ The full app is in `examples/pages/`. It mounts the API in process with TanStack
 
 ```sh
 bun install
-bun test packages bench
+bun test packages
 bun run pages:dev
 ```
 
-`bun test packages bench` runs the framework and benchmark tests without Postgres. `bun run pages:dev` builds the framework and starts the combined web and API server on port 5174. Rerun it after you change framework code.
+`bun test packages` runs the framework tests without Postgres. `bun run pages:dev` builds the framework and starts the combined web and API server on port 5174. Rerun it after you change framework code.
 
 The pages suite needs Postgres. It is documented in `examples/pages/README.md`.
 
