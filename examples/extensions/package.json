@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "bun test test",
     "demo": "bun src/main.ts",
     "serve": "bun src/server.ts",
     "lint": "oxlint .",
