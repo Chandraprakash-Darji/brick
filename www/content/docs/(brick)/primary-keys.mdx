@@ -108,7 +108,7 @@ Prefixed IDs improve readability in logs and API debugging:
 export const users = sqliteTable("users", {
   id: text("id")
     .primaryKey()
-    .$defaultFn(() => `usr_${crypto.randomUUID().slice(0, 8)}`),
+    .$defaultFn(() => `usr_${crypto.randomUUID().replaceAll("-", "")}`),
   email: text("email").notNull(),
 });
 ```

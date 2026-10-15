@@ -118,19 +118,14 @@ export const commentsSchemaFields = [
 
 ### Step 3: Configure Database Layer
 
-Create `src/db.ts` to manage the database connection using `@brickkit/crud`'s `database` helper:
+Create `src/db.ts` to manage the database connection using the `sqliteDatabase` factory:
 
 ```ts title="src/db.ts"
-import { database } from "@brickkit/crud";
-import { drizzle } from "drizzle-orm/libsql";
-import { Effect } from "effect";
+import { sqliteDatabase } from "@brickkit/crud/sqlite";
 
 export interface BlogDatabase {}
 export const { Service: BlogDb, layer: DatabaseLive } =
-  database<BlogDatabase>()(
-    "BlogDb",
-    Effect.sync(() => drizzle({ connection: ":memory:" })),
-  );
+  sqliteDatabase<BlogDatabase>()("BlogDb", { filename: ":memory:" });
 ```
 
 ### Step 4: Define CRUD Resources & Field Policies
@@ -213,13 +208,11 @@ const IncrementViews = Brick.action(
 export const incrementViews = IncrementViews(({ id }) =>
   Effect.gen(function* () {
     const db = yield* BlogDb;
-    const [updated] = yield* Effect.tryPromise(() =>
-      db
-        .update(articles)
-        .set({ views: sql`${articles.views} + 1` })
-        .where(eq(articles.id, id))
-        .returning(),
-    );
+    const [updated] = yield* db
+      .update(articles)
+      .set({ views: sql`${articles.views} + 1` })
+      .where(eq(articles.id, id))
+      .returning();
     if (!updated) {
       return yield* Effect.fail(new NotFound({ message: "Article not found" }));
     }

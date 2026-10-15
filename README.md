@@ -29,7 +29,7 @@ The framework is built on Effect 4: `effect/http-api` for HTTP, `effect/rpc` for
 You need Bun 1.2 or later.
 
 ```sh
-bun add @brickkit/core @brickkit/crud effect
+bun add @brickkit/core @brickkit/crud @brickkit/client effect
 bun add -d @brickkit/cli
 ```
 

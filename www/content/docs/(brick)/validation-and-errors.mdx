@@ -125,8 +125,11 @@ Each built-in error accepts `{ message: string }`:
 
 ```ts
 import { NotFound } from "@brickkit/core/contracts";
+import { Effect } from "effect";
 
-return yield * Effect.fail(new NotFound({ message: "User not found" }));
+const program = Effect.gen(function* () {
+  return yield* Effect.fail(new NotFound({ message: "User not found" }));
+});
 ```
 
 ## CRUD Error Classes

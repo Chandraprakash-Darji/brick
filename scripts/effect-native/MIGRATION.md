@@ -1,5 +1,9 @@
 # Effect-native migration
 
+> Status: complete. The public runtime, CLI, CRUD plugin, and pages
+> application run on the Effect-native implementation in `packages/`.
+> The notes below describe the migration as it happened.
+
 The target is the Effect-only framework described in the local
 `docs/effect/EFFECT_NATIVE_PLAN.md`. The current public runtime remains the 0.4
 implementation until its callers have been migrated and the replacement passes the

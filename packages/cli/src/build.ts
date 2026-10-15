@@ -21,5 +21,9 @@ export async function buildApplication(options: BuildApplicationOptions) {
   if (!Number.isInteger(port) || port < 1 || port > 65535)
     throw new Error("Brick: port must be an integer between 1 and 65535");
   const app = await loadApplication(entry);
-  return buildNativeApplication({ entry, outdir, port }, app);
+  try {
+    return await buildNativeApplication({ entry, outdir, port }, app);
+  } finally {
+    await app.dispose();
+  }
 }

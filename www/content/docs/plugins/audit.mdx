@@ -26,29 +26,25 @@ export const auditHooks = {
   afterCreate: ({ row }: { row: { id: string } }) =>
     Effect.gen(function* () {
       const db = yield* BlogDb;
-      yield* Effect.tryPromise(() =>
-        db.insert(auditLogs).values({
-          id: crypto.randomUUID(),
-          entity: "article",
-          entityId: row.id,
-          action: "create",
-          timestamp: new Date().toISOString(),
-        }),
-      );
+      yield* db.insert(auditLogs).values({
+        id: crypto.randomUUID(),
+        entity: "article",
+        entityId: row.id,
+        action: "create",
+        timestamp: new Date().toISOString(),
+      });
     }),
 
   afterDelete: ({ id }: { id: string }) =>
     Effect.gen(function* () {
       const db = yield* BlogDb;
-      yield* Effect.tryPromise(() =>
-        db.insert(auditLogs).values({
-          id: crypto.randomUUID(),
-          entity: "article",
-          entityId: id,
-          action: "delete",
-          timestamp: new Date().toISOString(),
-        }),
-      );
+      yield* db.insert(auditLogs).values({
+        id: crypto.randomUUID(),
+        entity: "article",
+        entityId: id,
+        action: "delete",
+        timestamp: new Date().toISOString(),
+      });
     }),
 };
 ```

@@ -75,28 +75,19 @@ A robust backend distinguishes between two kinds of dependencies:
 
 ### 1. Startup Dependencies (Database Pools)
 
-Use `database<Self>()` from `@brickkit/crud` to create a scoped database service:
+Use `postgresDatabase` from `@brickkit/crud/postgres` to create a scoped database service backed by the Effect SQL driver:
 
 ```ts title="src/db.ts"
-import { database } from "@brickkit/crud";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Effect, Layer } from "effect";
-import pg from "pg";
+import { postgresDatabase } from "@brickkit/crud/postgres";
+import { Redacted } from "effect";
 
 export interface DatabaseService {}
 export const { Service: Database, layer: DatabaseLive } =
-  database<DatabaseService>()(
-    "Database",
-    Effect.acquireRelease(
-      Effect.sync(() => {
-        const pool = new pg.Pool({
-          connectionString: process.env.DATABASE_URL,
-        });
-        return drizzle(pool);
-      }),
-      (db) => Effect.sync(() => {}), // pool cleanup on app shutdown
+  postgresDatabase<DatabaseService>()("Database", {
+    url: Redacted.make(
+      process.env.DATABASE_URL ?? "postgres://localhost/brick",
     ),
-  );
+  });
 ```
 
 ### 2. Request Dependencies (Authentication & Headers)
@@ -127,8 +118,13 @@ export const SessionLive = Layer.effect(
       );
     }
     const token = authHeader.slice(7);
-    // Validate token and return session
-    return { userId: token === "secret" ? "usr_admin" : "usr_user" };
+    // Replace with real verification (JWT, session lookup, etc.)
+    if (token !== "secret") {
+      return yield* Effect.fail(
+        new Unauthorized({ message: "Invalid bearer token" }),
+      );
+    }
+    return { userId: "usr_admin" };
   }),
 );
 ```

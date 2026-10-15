@@ -22,11 +22,11 @@ import appSource from "../../../examples/extensions/src/app.ts?raw";
 const resourceCode = contractSource.trim();
 const actionCode = extensionSource.trim();
 const routes = [
-  ["POST", "/api/pageComment/list", "List"],
-  ["POST", "/api/pageComment/get", "Read"],
-  ["POST", "/api/pageComment/create", "Create"],
-  ["POST", "/api/pageComment/update", "Update"],
-  ["POST", "/api/pageComment/delete", "Delete"],
+  ["POST", "/api/pageComment/query", "List"],
+  ["GET", "/api/pageComment/:id", "Read"],
+  ["POST", "/api/pageComment", "Create"],
+  ["PATCH", "/api/pageComment/:id", "Update"],
+  ["DELETE", "/api/pageComment/:id", "Delete"],
 ];
 
 function DocsLink({

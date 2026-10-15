@@ -30,5 +30,8 @@ Drizzle `1.0.0-rc.4` fails to import with Effect `4.0.4` because it still calls
 Effect `4.0.4`. The Drizzle constructor also changed from `drizzle(pool, options)` to
 `drizzle({ client: pool })`. The schema passed to better-auth's adapter stays explicit.
 
-Passing these checks does not mean the framework migration is complete. The existing
-public API, CLI, CRUD plugin, and pages application still use the previous runtime.
+Passing these checks does not mean the framework migration is complete. At the
+time of writing, the existing public API, CLI, CRUD plugin, and pages
+application still use the previous runtime. (Update: the migration has since
+landed on `feat/effect-native-migration`; the checks remain as regression
+coverage.)

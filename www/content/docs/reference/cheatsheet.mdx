@@ -35,15 +35,17 @@ A quick reference for packages, functions, types, and CLI commands in Brick-TS.
 
 ## CRUD Engine (`@brickkit/crud`)
 
-| Export                            | Kind     | Description                                                                     |
-| :-------------------------------- | :------- | :------------------------------------------------------------------------------ |
-| `crudContract(options)`           | Function | Constructs a declarative CRUD contract for a Drizzle table with field policies. |
-| `crud(options)`                   | Function | Direct factory generating implemented CRUD handlers.                            |
-| `sqliteStore(table, DbService)`   | Function | Creates a Drizzle store implementation for SQLite databases.                    |
-| `postgresStore(table, DbService)` | Function | Creates a Drizzle store implementation for PostgreSQL databases.                |
-| `database<Self>()(name, effect)`  | Function | Factory generating a scoped `Context.Service` and `Layer` for database handles. |
-| `InvalidInput`                    | Class    | Status 400 error for CRUD filter or policy violations.                          |
-| `DatabaseFailure`                 | Class    | Status 500 error for database query failures.                                   |
+| Export                                   | Kind     | Description                                                                           |
+| :--------------------------------------- | :------- | :------------------------------------------------------------------------------------ |
+| `crudContract(options)`                  | Function | Constructs a declarative CRUD contract for a Drizzle table with field policies.       |
+| `crud(options)`                          | Function | Direct factory generating implemented CRUD handlers.                                  |
+| `sqliteStore(table, DbService)`          | Function | Creates a Drizzle store implementation for SQLite databases.                          |
+| `postgresStore(table, DbService)`        | Function | Creates a Drizzle store implementation for PostgreSQL databases.                      |
+| `database<Self>()(name, effect)`         | Function | Generic factory generating a scoped `Context.Service` and `Layer` for custom handles. |
+| `sqliteDatabase<Self>()(name, config)`   | Function | SQLite service/layer factory over the Effect SQL driver (for `sqliteStore`).          |
+| `postgresDatabase<Self>()(name, config)` | Function | PostgreSQL service/layer factory over the Effect SQL driver (for `postgresStore`).    |
+| `InvalidInput`                           | Class    | Status 400 error for CRUD filter or policy violations.                                |
+| `DatabaseFailure`                        | Class    | Status 500 error for database query failures.                                         |
 
 ### REST Route Format
 

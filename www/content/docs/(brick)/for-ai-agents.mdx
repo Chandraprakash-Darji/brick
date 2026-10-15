@@ -86,6 +86,10 @@ export const searchAction = Brick.action("search", "/api/search", {
   description: "Search documents matching query keywords",
   tool: { readOnly: true },
 })((input) => Effect.succeed([`Result for ${input.query}`]));
+
+export const searchService = Brick.service("search", {
+  actions: { search: searchAction },
+});
 ```
 
 Mount the MCP transport in your application using `Brick.app`:
@@ -110,7 +114,7 @@ export default Brick.app({
 });
 ```
 
-Point your agent's MCP client at `http://localhost:4000/mcp`. Tool annotations describe behavior, while `authorize` enforces access.
+Point your agent's MCP client at `http://localhost:4000/mcp`. Tool annotations describe behavior. Authorization depends on each action's Effect requirements: require an authenticated context in protected actions and configure authentication middleware for `/mcp`.
 
 ## Generate context from your app
 

@@ -11,7 +11,7 @@ const { client, ready, dispose } = createClient(Api, {
   fetchOptions: { credentials: "include" },
 });
 
-const page = await client.pages["page.get"]({ payload: { id: "p1" } });
+const page = await client.pages["page.get"]({ params: { id: "p1" } });
 ```
 
 - `createClient` is synchronous. The native client builds in the background:

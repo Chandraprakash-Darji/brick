@@ -10,10 +10,9 @@ Brick-TS pairs Drizzle ORM with Effect's scoped resource management, providing t
 Configure an in-memory SQLite database service and provide it to your application via an Effect Layer:
 
 ```ts title="src/database.ts"
-import { database, sqliteStore } from "@brickkit/crud";
+import { sqliteStore } from "@brickkit/crud";
+import { sqliteDatabase } from "@brickkit/crud/sqlite";
 import { sqliteTable, text } from "drizzle-orm/sqlite-core";
-import { drizzle } from "drizzle-orm/libsql";
-import { Effect } from "effect";
 
 // 1. Declare schema with Drizzle
 export const users = sqliteTable("users", {
@@ -26,10 +25,7 @@ export const users = sqliteTable("users", {
 // 2. Define scoped database service and Layer
 export interface AppDatabase {}
 export const { Service: Database, layer: DatabaseLive } =
-  database<AppDatabase>()(
-    "Database",
-    Effect.sync(() => drizzle({ connection: ":memory:" })),
-  );
+  sqliteDatabase<AppDatabase>()("Database", { filename: ":memory:" });
 ```
 
 ### Schema
@@ -56,58 +52,39 @@ export const usersSchemaFields = [
 
 ## Configuring Databases with Effect
 
-In Brick-TS, database handles are managed through the `database<Self>()` helper from `@brickkit/crud`. It defines a typed `Context.Service` and a corresponding `Layer`.
+In Brick-TS, database handles are managed through the `sqliteDatabase` and `postgresDatabase` factories from `@brickkit/crud/sqlite` and `@brickkit/crud/postgres`. Each defines a typed `Context.Service` and a corresponding `Layer` over the Effect SQL drivers, which is exactly what `sqliteStore` and `postgresStore` require.
 
 ### 1. SQLite Configuration
 
 For local development, integration tests, or edge deployments with LibSQL or Bun SQLite:
 
 ```ts title="src/db/sqlite.ts"
-import { database } from "@brickkit/crud";
-import { drizzle } from "drizzle-orm/libsql";
-import { Effect } from "effect";
+import { sqliteDatabase } from "@brickkit/crud/sqlite";
 
 export interface SqliteDb {}
-export const { Service: SqliteDb, layer: SqliteLive } = database<SqliteDb>()(
-  "SqliteDb",
-  Effect.sync(() => {
-    const url = process.env.DATABASE_URL ?? "file:local.db";
-    return drizzle({ connection: url });
-  }),
-);
+export const { Service: SqliteDb, layer: SqliteLive } =
+  sqliteDatabase<SqliteDb>()("SqliteDb", {
+    filename: process.env.DATABASE_URL ?? "local.db",
+  });
 ```
 
 Use `sqliteStore(table, SqliteDb)` when implementing CRUD contracts.
 
 ### 2. PostgreSQL Configuration
 
-For production PostgreSQL workloads using connection pooling (via `pg`, `postgres.js`, or Neon):
+For production PostgreSQL workloads using connection pooling:
 
 ```ts title="src/db/postgres.ts"
-import { database } from "@brickkit/crud";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Effect } from "effect";
-import pg from "pg";
+import { postgresDatabase } from "@brickkit/crud/postgres";
+import { Redacted } from "effect";
 
 export interface PostgresDb {}
 export const { Service: PostgresDb, layer: PostgresLive } =
-  database<PostgresDb>()(
-    "PostgresDb",
-    Effect.acquireRelease(
-      Effect.sync(() => {
-        const pool = new pg.Pool({
-          connectionString: process.env.DATABASE_URL,
-          max: 20,
-        });
-        return drizzle({ client: pool });
-      }),
-      (db) =>
-        Effect.promise(async () => {
-          // Drains pool connections when app.dispose() is called
-          await (db as any).$client?.end();
-        }),
+  postgresDatabase<PostgresDb>()("PostgresDb", {
+    url: Redacted.make(
+      process.env.DATABASE_URL ?? "postgres://localhost/brick",
     ),
-  );
+  });
 ```
 
 Use `postgresStore(table, PostgresDb)` when implementing CRUD contracts.

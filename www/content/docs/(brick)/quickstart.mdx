@@ -77,6 +77,7 @@ export default Brick.app({
   services: [usersService],
   layer: Layer.empty,
   docs: { path: "/reference" },
+  client: { module: "./contract", exportName: "Api" },
 });
 ```
 
@@ -85,6 +86,7 @@ export default Brick.app({
 - `services`: An array of immutable services to mount.
 - `layer`: An Effect `Layer` supplying dependencies (such as database pools or external clients). For this in-memory service, `Layer.empty` is used.
 - `docs`: Automatically mounts interactive Scalar API documentation at `/reference`.
+- `client`: Points `brick gen client` at the browser-safe contract module (`src/contract.ts`, created below).
 
 ## 4. Start the Server
 
@@ -97,13 +99,9 @@ bunx brick dev src/app.ts --port 4000
 The CLI loads your entry and prints the registered services and routes:
 
 ```text
-🧱 Brick-TS Development Server
-   Registered Services: 1
-   • users (1 action)
-     -> POST   /api/users/getUser
-
 ⚡ API Gateway running on: http://localhost:4000
-📖 Interactive Docs:     http://localhost:4000/reference
+🩺 Health check:        http://localhost:4000/_health
+🗺️ Architecture graph:  http://localhost:4000/_brick/services
 ```
 
 ## 5. Test the API Endpoints
@@ -164,7 +162,22 @@ Response (HTTP status 400):
 }
 ```
 
-## 6. Consume from a Frontend Client
+## 6. Create the Browser Contract
+
+`src/client.ts` imports `Api` from `./contract`. Create that browser-safe module from the action contract (no handlers, no layers):
+
+```ts title="src/contract.ts"
+import { HttpApi, HttpApiGroup } from "effect/http-api";
+import { GetUser } from "./users";
+
+export const Api = HttpApi.make("quickstart").add(
+  HttpApiGroup.make("users").add(GetUser.endpoint),
+);
+```
+
+`brick gen client` verifies this module against the running app before generating `_brick/contract.ts`. See [typed client](/docs/typed-client) for the full contract workflow.
+
+## 7. Consume from a Frontend Client
 
 Frontend clients consume endpoints using `@brickkit/client` with zero build steps or manual code generation:
 
@@ -184,7 +197,7 @@ try {
 }
 ```
 
-## 7. Interactive Documentation
+## 8. Interactive Documentation
 
 Visit the interactive Scalar API documentation mounted at:
 

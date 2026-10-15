@@ -11,10 +11,9 @@ Define a Drizzle database table, configure a declarative CRUD contract with fiel
 
 ```ts title="src/server.ts"
 import { Brick } from "@brickkit/core";
-import { crudContract, database, sqliteStore } from "@brickkit/crud";
+import { crudContract, sqliteStore } from "@brickkit/crud";
+import { sqliteDatabase } from "@brickkit/crud/sqlite";
 import { sqliteTable, text } from "drizzle-orm/sqlite-core";
-import { drizzle } from "drizzle-orm/libsql";
-import { Effect, Layer } from "effect";
 
 // 1. Declare schema with Drizzle
 export const pages = sqliteTable("pages", {
@@ -28,10 +27,7 @@ export const pages = sqliteTable("pages", {
 // 2. Define the scoped database service and layer
 export interface DatabaseService {}
 export const { Service: PagesDb, layer: DatabaseLive } =
-  database<DatabaseService>()(
-    "PagesDb",
-    Effect.sync(() => drizzle({ connection: ":memory:" })),
-  );
+  sqliteDatabase<DatabaseService>()("PagesDb", { filename: ":memory:" });
 
 // 3. Define the CRUD contract with explicit access and field policies
 export const pageContract = crudContract({

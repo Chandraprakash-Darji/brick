@@ -144,7 +144,7 @@ bun run --cwd examples/extensions serve
 Test creating a comment via curl:
 
 ```bash
-curl -X POST http://localhost:3001/api/pageComment/create \
+curl -X POST http://localhost:3001/api/pageComment \
   -H "Content-Type: application/json" \
   -d '{"targetId": "page-1", "body": "Great article!"}'
 ```

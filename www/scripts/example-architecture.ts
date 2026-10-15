@@ -29,7 +29,7 @@ try {
     tables: [],
     actions: Object.values(service.actions).map((action) => ({
       name: action.endpoint.identifier,
-      method: "POST",
+      method: action.method,
       path: action.path,
     })),
   }));

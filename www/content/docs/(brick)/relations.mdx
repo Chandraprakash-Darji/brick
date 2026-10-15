@@ -228,18 +228,16 @@ export const getArticleWithComments = ArticleWithComments(({ id }) =>
   Effect.gen(function* () {
     const db = yield* BlogDb;
 
-    const rows = yield* Effect.tryPromise(() =>
-      db
-        .select({
-          articleId: articles.id,
-          title: articles.title,
-          commentId: comments.id,
-          commentBody: comments.body,
-        })
-        .from(articles)
-        .leftJoin(comments, eq(comments.targetId, articles.id))
-        .where(eq(articles.id, id)),
-    );
+    const rows = yield* db
+      .select({
+        articleId: articles.id,
+        title: articles.title,
+        commentId: comments.id,
+        commentBody: comments.body,
+      })
+      .from(articles)
+      .leftJoin(comments, eq(comments.targetId, articles.id))
+      .where(eq(articles.id, id));
 
     if (rows.length === 0) {
       return yield* Effect.fail(new NotFound({ message: "Article not found" }));
