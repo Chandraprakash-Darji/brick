@@ -1,13 +1,13 @@
 ---
 title: Quickstart
-description: Build and run an in-memory SQLite CRUD service in less than 5 minutes.
+description: Build and run an Effect-native action service in less than 5 minutes.
 ---
 
-This guide gets a runnable Brick-TS service running locally with Bun and SQLite in less than five minutes.
+This guide gets a runnable Effect-native Brick-TS service running locally with Bun and Effect in less than five minutes.
 
 ## 1. Install Dependencies
 
-Initialize a new Bun project and install `@brickkit/core`, `@brickkit/crud`, and `@brickkit/cli`:
+Initialize a new Bun project and install `@brickkit/core`, `@brickkit/cli`, and `effect`:
 
 <Tabs items={["bun", "pnpm", "npm"]}>
   <Tab value="bun">
@@ -15,113 +15,78 @@ Initialize a new Bun project and install `@brickkit/core`, `@brickkit/crud`, and
 ```bash
 mkdir my-brick-app && cd my-brick-app
 bun init -y
-bun add @brickkit/core @brickkit/crud @brickkit/cli
+bun add @brickkit/core @brickkit/cli effect
 ```
 
   </Tab>
   <Tab value="pnpm">
 
 ```bash
-pnpm add @brickkit/core @brickkit/crud @brickkit/cli
+pnpm add @brickkit/core @brickkit/cli effect
 ```
 
   </Tab>
   <Tab value="npm">
 
 ```bash
-npm install @brickkit/core @brickkit/crud @brickkit/cli
+npm install @brickkit/core @brickkit/cli effect
 ```
 
   </Tab>
 </Tabs>
 
-## 2. Create the Application
+## 2. Define the Action and Service
 
-Create `src/app.ts` with a SQLite table, a database handle, and a CRUD resource:
+Create `src/users.ts` with an action definition, Effect Schema contracts, a typed error, and a service container:
 
-```ts title="src/app.ts"
-import {
-  brick,
-  defineDatabase,
-  defineService,
-  sqliteTable,
-  syncSchema,
-  text,
-} from "@brickkit/core";
-import { crud } from "@brickkit/crud";
+```ts title="src/users.ts"
+import { Brick } from "@brickkit/core";
+import { NotFound } from "@brickkit/core/contracts";
+import { Effect, Schema } from "effect";
 
-// Define the database table with Drizzle
-export const pages = sqliteTable("pages", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  title: text("title").notNull(),
-  content: text("content"),
+const GetUser = Brick.action("getUser", "/api/users/getUser", {
+  input: Schema.Struct({ id: Schema.String }),
+  output: Schema.Struct({ id: Schema.String, name: Schema.String }),
+  errors: [NotFound],
 });
-
-// Configure an in-memory database for immediate development
-const database = defineDatabase({ tables: { pages } });
-export const pagesService = defineService("pages", { database });
-
-// Register the CRUD resource. CRUD requires an explicit access policy.
-pagesService.resource({ name: "page", table: pages, id: pages.id }).use(
-  crud({
-    access: "public",
-    fields: {
-      id: { read: true, filter: ["eq"] },
-      title: {
-        read: true,
-        create: true,
-        update: true,
-        filter: ["eq", "contains"],
-        sort: true,
-      },
-      content: { read: true, create: true, update: true },
-    },
-  }),
+const getUser = GetUser(({ id }) =>
+  id === "usr_42"
+    ? Effect.succeed({ id, name: "Ada" })
+    : Effect.fail(new NotFound({ message: "User not found" })),
 );
-
-// Prepare the in-memory SQLite table schema
-syncSchema(pagesService);
-
-// Export the default application for the brick CLI or embedded runtime
-export const app = brick({
-  services: [pagesService],
-  title: "Pages API",
-  version: "1.0.0",
-});
-
-export default app;
+export const usersService = Brick.service("users", { actions: { getUser } });
 ```
 
-### Schema
+### Understanding the Action Definition
 
-These columns match the Drizzle tables in the example. Defaults marked as application defaults run in Drizzle, rather than in SQL.
+- `Brick.action(name, path, schemas)`: Defines an action contract. It specifies the unique action name, HTTP route, input and output schemas, and declared error classes.
+- Calling `GetUser(handler)`: Attaches the handler function. The handler receives decoded input (`{ id: string }`) and returns an `Effect`.
+- `NotFound`: A built-in tagged error schema annotated with HTTP status 404.
+- `Brick.service(name, { actions })`: Groups actions into an immutable domain service.
 
-export const pagesSchemaFields = [
-  {
-    name: "id",
-    type: "text",
-    description: "Row identifier.",
-    isPrimaryKey: true,
-    defaultValue: "crypto.randomUUID() (application)",
-  },
-  {
-    name: "title",
-    type: "text",
-    description: "Display title.",
-  },
-  {
-    name: "content",
-    type: "text",
-    description: "Page content.",
-    isOptional: true,
-  },
-];
+## 3. Export the Application
 
-<DatabaseTable name="pages" fields={pagesSchemaFields} />
+Create `src/app.ts` to compose the services and export the scoped application:
 
-## 3. Start the Server
+```ts title="src/app.ts"
+import { Brick } from "@brickkit/core";
+import { Layer } from "effect";
+import { usersService } from "./users";
+
+export default Brick.app({
+  services: [usersService],
+  layer: Layer.empty,
+  docs: { path: "/reference" },
+});
+```
+
+`Brick.app` takes:
+
+- `services`: An array of immutable services to mount.
+- `layer`: An Effect `Layer` supplying dependencies (such as database pools or external clients). For this in-memory service, `Layer.empty` is used.
+- `docs`: Automatically mounts interactive Scalar API documentation at `/reference`.
+
+## 4. Start the Server
 
 Run the development server with live reload using the `brick` CLI:
 
@@ -129,99 +94,98 @@ Run the development server with live reload using the `brick` CLI:
 bunx brick dev src/app.ts --port 4000
 ```
 
-The CLI loads your entry, then prints the registered services and the route each action is mounted on:
+The CLI loads your entry and prints the registered services and routes:
 
 ```text
-[Brick-TS] Loading application entry: /path/to/my-brick-app/src/app.ts
-
 🧱 Brick-TS Development Server
    Registered Services: 1
-   • pages (8 actions)
-     -> POST   /api/page/query
-     -> GET    /api/page/:id
-     -> POST   /api/page
-     -> PATCH  /api/page/:id
-     -> DELETE /api/page/:id
-     -> POST   /api/page/find-one
-     -> POST   /api/page/count
-     -> POST   /api/page/exists
+   • users (1 action)
+     -> POST   /api/users/getUser
 
 ⚡ API Gateway running on: http://localhost:4000
-🩺 Health check:        http://localhost:4000/_health
-🗺️ Architecture graph:  http://localhost:4000/_brick/services
+📖 Interactive Docs:     http://localhost:4000/reference
 ```
 
-CRUD routes are mounted under the resource name (`page`), not the service name. The action names are still `page.list`, `page.get`, `page.create`, and so on.
+## 5. Test the API Endpoints
 
-<Callout type="info">
-  `brick dev` imports your entry to register its services, then builds its own
-  server with the default `/api` prefix. Options you pass to `brick()` in the
-  entry (such as `title`) don't apply under `brick dev`. Without `--port`, the
-  port comes from the `PORT` environment variable, then defaults to `4000`.
-</Callout>
+Execute HTTP requests against the generated endpoint. Custom actions accept POST requests with JSON payloads, while CRUD resources map to standard REST endpoints (GET, POST, PATCH, DELETE):
 
-## 4. Test the API Endpoints
-
-Execute HTTP requests against the generated CRUD endpoints. Successful calls return `200` with the JSON result.
-
-### Create a Record
+### Successful Request (200 OK)
 
 ```bash
-curl -X POST http://localhost:4000/api/page \
+curl -X POST http://localhost:4000/api/users/getUser \
   -H "Content-Type: application/json" \
-  -d '{"title": "First Page", "content": "Welcome to Brick-TS!"}'
+  -d '{"id": "usr_42"}'
 ```
 
 Response:
 
 ```json
 {
-  "id": "e379b38c-8f19-485a-a71c-3b91ef5246a4",
-  "title": "First Page",
-  "content": "Welcome to Brick-TS!"
+  "id": "usr_42",
+  "name": "Ada"
 }
 ```
 
-### List Records with Filtering
+### Missing Record (404 Not Found)
 
-`page.list` is a `POST` to `/api/page/query`. The body is validated against the filter operators and sortable fields you enabled in `fields`:
+When an action fails with a declared `NotFound` tagged error:
 
 ```bash
-curl -X POST http://localhost:4000/api/page/query \
+curl -X POST http://localhost:4000/api/users/getUser \
   -H "Content-Type: application/json" \
-  -d '{
-    "where": {
-      "field": "title",
-      "op": "contains",
-      "value": "First"
-    },
-    "orderBy": [{ "field": "title", "direction": "asc" }],
-    "limit": 10
-  }'
+  -d '{"id": "usr_999"}'
 ```
 
-Response:
+Response (HTTP status 404):
 
 ```json
 {
-  "items": [
-    {
-      "id": "e379b38c-8f19-485a-a71c-3b91ef5246a4",
-      "title": "First Page",
-      "content": "Welcome to Brick-TS!"
-    }
-  ],
-  "limit": 10,
-  "offset": 0
+  "_tag": "NotFound",
+  "message": "User not found"
 }
 ```
 
-### View Interactive API Documentation
+### Schema Validation Error (400 Bad Request)
 
-Visit the interactive API documentation and spec endpoints provided out of the box. They're mounted at the root, not under the `/api` prefix:
+If an invalid payload is sent (such as a number instead of a string `id`), Effect Schema validation rejects the request before the handler runs:
 
-- Scalar API Docs: `http://localhost:4000/docs`
-- Swagger UI: `http://localhost:4000/swagger`
-- OpenAPI 3.1 Spec: `http://localhost:4000/openapi.json`
-- Service Architecture Graph: `http://localhost:4000/_brick/services`
-- Health Check: `http://localhost:4000/_health`
+```bash
+curl -X POST http://localhost:4000/api/users/getUser \
+  -H "Content-Type: application/json" \
+  -d '{"id": 123}'
+```
+
+Response (HTTP status 400):
+
+```json
+{
+  "message": "Expected string, actual 123"
+}
+```
+
+## 6. Consume from a Frontend Client
+
+Frontend clients consume endpoints using `@brickkit/client` with zero build steps or manual code generation:
+
+```ts title="src/client.ts"
+import { createClient } from "@brickkit/client";
+import { Api } from "./contract";
+
+const { client, dispose } = createClient(Api, {
+  baseUrl: "http://localhost:4000",
+});
+
+try {
+  const user = await client.users.getUser({ payload: { id: "usr_42" } });
+  console.log("Found user:", user.name);
+} finally {
+  await dispose();
+}
+```
+
+## 7. Interactive Documentation
+
+Visit the interactive Scalar API documentation mounted at:
+
+- Scalar UI: `http://localhost:4000/reference`

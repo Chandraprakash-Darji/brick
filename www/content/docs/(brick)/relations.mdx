@@ -7,17 +7,13 @@ Brick-TS leverages standard relational database patterns and Drizzle ORM to mode
 
 ## Minimal Example: One-to-Many Relationships
 
-Model parent entities and related records using standard foreign keys:
+Model parent entities and related records using standard foreign keys and `@brickkit/crud` contracts:
 
 ```ts title="src/services/blog.ts"
-import {
-  defineDatabase,
-  defineService,
-  eq,
-  sqliteTable,
-  text,
-} from "@brickkit/core";
-import { crud } from "@brickkit/crud";
+import { Brick } from "@brickkit/core";
+import { crudContract, sqliteStore } from "@brickkit/crud";
+import { sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { BlogDb } from "./db";
 
 // 1. Parent table: Articles
 export const articles = sqliteTable("articles", {
@@ -36,34 +32,46 @@ export const comments = sqliteTable("comments", {
   body: text("body").notNull(),
 });
 
-const database = defineDatabase({ tables: { articles, comments } });
-export const blogService = defineService("blog", { database });
+// 3. Declare CRUD contracts for both tables
+export const articleContract = crudContract({
+  name: "article",
+  path: "/api/article",
+  table: articles,
+  id: "id",
+  errors: [],
+  fields: {
+    id: { read: true, filter: ["eq", "in"] },
+    title: { read: true, create: true },
+  },
+});
 
-// 3. Expose articles and comments as explicit CRUD resources
-export const articleResource = blogService
-  .resource({ name: "article", table: articles, id: articles.id })
-  .use(
-    crud({
-      access: "public",
-      fields: {
-        id: { read: true },
-        title: { read: true, create: true },
-      },
-    }),
-  );
+export const commentContract = crudContract({
+  name: "comment",
+  path: "/api/comment",
+  table: comments,
+  id: "id",
+  errors: [],
+  fields: {
+    id: { read: true },
+    targetId: { read: true, create: true, filter: ["eq"] },
+    body: { read: true, create: true },
+  },
+});
 
-export const commentResource = blogService
-  .resource({ name: "comment", table: comments, id: comments.id })
-  .use(
-    crud({
-      access: "public",
-      fields: {
-        id: { read: true, filter: ["eq"] },
-        targetId: { read: true, create: true, filter: ["eq"] },
-        body: { read: true, create: true, filter: ["contains"] },
-      },
-    }),
-  );
+// 4. Implement actions
+export const articleActions = articleContract.implement({
+  store: sqliteStore(articles, BlogDb),
+  access: "public",
+});
+
+export const commentActions = commentContract.implement({
+  store: sqliteStore(comments, BlogDb),
+  access: "public",
+});
+
+export const blogService = Brick.service("blog", {
+  actions: { ...articleActions, ...commentActions },
+});
 ```
 
 ### Schema
@@ -162,147 +170,145 @@ export const app_settingsSchemaFields = [
   {
     name: "site_name",
     type: "text",
-    description: "Site display name.",
-  },
-  {
-    name: "maintenanceMode",
-    type: "boolean",
-    description: "Whether maintenance mode is enabled.",
-    isOptional: true,
-    defaultValue: false,
+    description: "Application name.",
+    defaultValue: "My Brick App",
   },
 ];
 
 <DatabaseTable name="app_settings" fields={app_settingsSchemaFields} />
 
-To fetch all comments for an article over HTTP, call the `comment.list` action. CRUD routes are scoped to the resource name, and `list` is mounted at `POST {prefix}/{resource}/query`:
+## Querying Related Child Records
+
+Because `commentContract` enables `filter: ["eq"]` on `targetId`, clients can query all comments for an article via `POST /api/comment/query`:
 
 ```bash
 curl -X POST http://localhost:4000/api/comment/query \
   -H "Content-Type: application/json" \
-  -d '{"where": {"field": "targetId", "op": "eq", "value": "ARTICLE_UUID"}}'
+  -d '{
+    "where": {
+      "field": "targetId",
+      "op": "eq",
+      "value": "art_123"
+    }
+  }'
 ```
 
 ## Relational Joins in Custom Actions
 
-When an endpoint needs composite parent-and-child data in a single round-trip, write an action using Drizzle joins:
+When you need an aggregated response that combines parent and child records into a single payload, write a custom `Brick.action` using Drizzle's `leftJoin`:
 
-```ts title="src/services/articles-with-comments.ts"
-import { eq, t } from "@brickkit/core";
-import { articles, comments } from "./blog";
-import { blogService } from "./blog";
+```ts title="src/actions/getArticleWithComments.ts"
+import { Brick } from "@brickkit/core";
+import { NotFound } from "@brickkit/core/contracts";
+import { Effect, Schema } from "effect";
+import { eq } from "drizzle-orm";
+import { articles, comments } from "../schema";
+import { BlogDb } from "../db";
 
-export const getArticleDetails = blogService.action({
-  name: "getArticleDetails",
-  method: "GET",
-  path: "/api/blog/articles/:id/details",
-  input: t.Object({ id: t.String() }),
-  output: t.Object({
-    id: t.String(),
-    title: t.String(),
-    comments: t.Array(
-      t.Object({
-        id: t.String(),
-        body: t.String(),
-      }),
-    ),
-  }),
-  execute: async ({ input, ctx, error }) => {
-    // 1. Fetch parent article
-    const articleRows = await ctx.db
-      .select()
-      .from(articles)
-      .where(eq(articles.id, input.id))
-      .limit(1);
+const ArticleWithComments = Brick.action(
+  "getArticleWithComments",
+  "/api/articles/details",
+  {
+    input: Schema.Struct({ id: Schema.String }),
+    output: Schema.Struct({
+      id: Schema.String,
+      title: Schema.String,
+      comments: Schema.Array(
+        Schema.Struct({
+          id: Schema.String,
+          body: Schema.String,
+        }),
+      ),
+    }),
+    errors: [NotFound],
+  },
+);
 
-    if (!articleRows.length) {
-      error.NOT_FOUND("Article not found");
+export const getArticleWithComments = ArticleWithComments(({ id }) =>
+  Effect.gen(function* () {
+    const db = yield* BlogDb;
+
+    const rows = yield* Effect.tryPromise(() =>
+      db
+        .select({
+          articleId: articles.id,
+          title: articles.title,
+          commentId: comments.id,
+          commentBody: comments.body,
+        })
+        .from(articles)
+        .leftJoin(comments, eq(comments.targetId, articles.id))
+        .where(eq(articles.id, id)),
+    );
+
+    if (rows.length === 0) {
+      return yield* Effect.fail(new NotFound({ message: "Article not found" }));
     }
 
-    // 2. Fetch associated comments
-    const commentRows = await ctx.db
-      .select({ id: comments.id, body: comments.body })
-      .from(comments)
-      .where(eq(comments.targetId, input.id));
+    const first = rows[0];
+    const commentsList = rows
+      .filter((r) => r.commentId !== null)
+      .map((r) => ({ id: r.commentId!, body: r.commentBody! }));
 
     return {
-      id: articleRows[0].id,
-      title: articleRows[0].title,
-      comments: commentRows,
+      id: first.articleId,
+      title: first.title,
+      comments: commentsList,
     };
-  },
-});
+  }),
+);
 ```
 
-## Many-to-Many Relationships (Join Tables)
+## Many-to-Many Relationships (Junction Tables)
 
-Model many-to-many connections using a dedicated join table with a composite primary key:
+For many-to-many associations (such as Articles and Tags), declare a junction table:
 
 ```ts title="src/schema/tags.ts"
-import { primaryKey, sqliteTable, text } from "@brickkit/core";
-import { articles } from "./blog";
+import { sqliteTable, text, primaryKey } from "drizzle-orm/sqlite-core";
 
 export const tags = sqliteTable("tags", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
 });
 
-// Join table linking articles and tags
 export const articleTags = sqliteTable(
   "article_tags",
   {
     articleId: text("article_id").notNull(),
     tagId: text("tag_id").notNull(),
   },
-  (t) => [primaryKey({ columns: [t.articleId, t.tagId] })],
+  (t) => ({
+    pk: primaryKey({ columns: [t.articleId, t.tagId] }),
+  }),
 );
 ```
 
-## Modeling Singleton Records
+## Relational Transactions
 
-When an application requires exactly one configuration row per tenant or global system, enforce the constraint in the database with a `unique()` column:
-
-```ts title="src/services/settings.ts"
-import { integer, sqliteTable, text } from "@brickkit/core";
-import { crud } from "@brickkit/crud";
-import { defineDatabase, defineService } from "@brickkit/core";
-
-export const appSettings = sqliteTable("app_settings", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => "global_settings"),
-  // Single-row constraint: always 1 with unique index
-  singletonKey: integer("singleton_key").unique().default(1),
-  siteName: text("site_name").notNull(),
-  maintenanceMode: integer({ mode: "boolean" }).default(false),
-});
-
-const database = defineDatabase({ tables: { appSettings } });
-export const settingsService = defineService("settings", { database });
-
-export const settings = settingsService
-  .resource({ name: "settings", table: appSettings, id: appSettings.id })
-  .use(
-    crud({
-      access: "public",
-      operations: {
-        delete: false, // Prevent deleting singleton
-      },
-      fields: {
-        id: { read: true, filter: ["eq"] }, // findOne can only filter on declared operators
-        siteName: { read: true, create: true, update: true },
-        maintenanceMode: { read: true, update: true },
-      },
-    }),
-  );
-```
-
-Retrieve the single record via `findOne`:
+To perform atomic updates across multiple tables, use the store's `transaction` method or Drizzle's `$client.withTransaction`:
 
 ```ts
-const config = await settings.findOne({
-  input: {
-    where: { field: "id", op: "eq", value: "global_settings" },
-  },
-});
+import { Effect } from "effect";
+
+export const createArticleWithTags = (data: {
+  title: string;
+  tagIds: string[];
+}) =>
+  Effect.gen(function* () {
+    const db = yield* BlogDb;
+    return yield* db.$client.withTransaction(
+      Effect.gen(function* () {
+        const [article] = yield* db
+          .insert(articles)
+          .values({ title: data.title })
+          .returning();
+        for (const tagId of data.tagIds) {
+          yield* db
+            .insert(articleTags)
+            .values({ articleId: article.id, tagId });
+        }
+        return article;
+      }),
+    );
+  });
 ```

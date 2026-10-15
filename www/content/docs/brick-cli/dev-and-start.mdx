@@ -3,14 +3,14 @@ title: Development & Production Server
 description: Run development servers with live reload and start production instances.
 ---
 
-The `brick dev` and `brick start` commands run your service mesh with automatic route discovery, port validation, and live reload.
+The `brick dev` and `brick start` commands run your Brick-TS application with automatic route discovery, port validation, and live reload.
 
 ## Development Server (`brick dev`)
 
 Start local development with recursive file watching and debounced server restarts:
 
 ```bash
-brick dev src/server.ts --port 4000
+brick dev src/app.ts --port 4000
 ```
 
 ### Live Reload Behavior
@@ -19,42 +19,37 @@ When running `brick dev`:
 
 1. **Entry File Loading**: The CLI resolves the application entry file. If an entry file path is provided but does not exist, the CLI exits immediately with an error.
 2. **Watch Directories**: The CLI monitors `src/`, `app/`, and the parent folder of the entry file for changes (excluding `node_modules`).
-3. **Fresh Application Process**: After a short debounce, `brick dev` stops the application process and starts a new one. The entry and all its dependencies run again with a fresh service registry and module graph. Default-exported `BrickApp` options (including the route prefix) are preserved; the CLI port takes precedence. For the programmatic `startDevServer({ prefix })` option, the exported app’s prefix takes precedence and the runner prints a warning.
+3. **Application Lifecycle**: When files change, `brick dev` stops the existing server process, disposes the active application `Scope`, and starts a fresh instance with the updated module graph.
 
 ### Startup Route Banner
 
-Upon startup, `brick dev` logs registered services and their public HTTP endpoints:
+Upon startup, `brick dev` logs the gateway URL plus the built-in diagnostics endpoints:
 
 ```text
-🧱 Brick-TS Development Server
-   Registered Services: 2
-   • pages (8 actions)
-     -> POST   /api/pages/page.list
-     -> POST   /api/pages/page.get
-     -> POST   /api/pages/page.create
-   • users (2 actions)
-     -> GET    /api/users/:id
-     -> POST   /api/users/login
-
 ⚡ API Gateway running on: http://localhost:4000
 🩺 Health check:        http://localhost:4000/_health
 🗺️ Architecture graph:  http://localhost:4000/_brick/services
-
-👀 Watching for changes in: /Users/project/src
 ```
+
+### Built-in Diagnostics
+
+Every `Brick.app` serves two framework routes alongside your services:
+
+- `GET /_health` returns `{ "status": "ok", "uptime": 12.3, "timestamp": 1699999999999 }`.
+- `GET /_brick/services` returns the architecture graph (`{ "version": "1.0.0", "services": [...] }`) with each service's actions, HTTP methods, paths, and MCP flags. `brick info` exposes the same metadata from the CLI.
 
 ## Production Server (`brick start`)
 
 Start the production server without file system watchers or development restarts:
 
 ```bash
-brick start src/server.ts --port 8080
+brick start src/app.ts --port 8080
 ```
 
 Or pass the port via environment variable:
 
 ```bash
-PORT=8080 brick start src/server.ts
+PORT=8080 brick start src/app.ts
 ```
 
 ## Port Resolution and Validation
@@ -71,18 +66,13 @@ Examples:
 
 ```bash
 # 1. Defaults to 4000:
-brick dev src/server.ts
+brick dev src/app.ts
 
 # 2. Uses PORT=3000 from environment:
-PORT=3000 brick dev src/server.ts
+PORT=3000 brick dev src/app.ts
 
 # 3. CLI --port 5000 overrides PORT=3000:
-PORT=3000 brick dev src/server.ts --port 5000
+PORT=3000 brick dev src/app.ts --port 5000
 ```
 
-Port numbers must be integers between `1` and `65535`. Invalid ports cause immediate process termination:
-
-```bash
-brick dev src/server.ts --port 99999
-# Error: Invalid port: 99999. Port must be an integer between 1 and 65535
-```
+Port numbers must be integers between `1` and `65535`. Invalid ports cause immediate process termination.

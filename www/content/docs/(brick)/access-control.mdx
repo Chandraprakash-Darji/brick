@@ -3,177 +3,153 @@ title: Access Control and Policies
 description: Secure actions and CRUD operations with role-based authorization and row scoping.
 ---
 
-Brick-TS provides two complementary layers of access control: operation-level authorization guards on actions and row-level scoping on CRUD resources.
+Brick-TS provides two complementary layers of access control: operation-level authorization in actions and row-level scoping on CRUD resources.
 
-## Action Authorization (`authorize`)
+## Action Authorization
 
-Actions support an `authorize` guard that runs after input validation and before `execute`. It receives `{ user, input, ctx }`, where `user` is `ctx.user`:
+Actions enforce authorization within their Effect pipeline. By requiring authentication dependencies in the Effect environment, actions ensure that unauthorized requests reject before business logic executes:
 
 ```ts title="src/services/articles.ts"
-import { defineService, t } from "@brickkit/core";
+import { Brick } from "@brickkit/core";
+import { Forbidden, Unauthorized } from "@brickkit/core/contracts";
+import { Context, Effect, Schema } from "effect";
 
-interface User {
+export interface User {
   id: string;
   role: "reader" | "editor" | "admin";
 }
 
-export const articlesService = defineService("articles", {
-  context: async (baseCtx): Promise<{ user: User | null }> => {
-    // Resolve the user from baseCtx.request here
-    return { user: null };
-  },
-});
+export class CurrentUser extends Context.Service<CurrentUser, User>()(
+  "CurrentUser",
+) {}
 
-export const publishArticle = articlesService.action({
-  name: "publishArticle",
-  input: t.Object({ articleId: t.String() }),
-  output: t.Object({ published: t.Boolean() }),
-  authorize: ({ user }) => {
-    // Return true to allow execution, false to reject
-    return user?.role === "editor" || user?.role === "admin";
+export const PublishArticle = Brick.action(
+  "publishArticle",
+  "/api/articles/publish",
+  {
+    input: Schema.Struct({ articleId: Schema.String }),
+    output: Schema.Struct({ published: Schema.Boolean }),
+    errors: [Unauthorized, Forbidden],
   },
-  execute: ({ ctx }) => {
-    // ctx.user is typed User here, not User | null
-    ctx.logger.info(`Article published by ${ctx.user.id}`);
+);
+
+export const publishArticle = PublishArticle(({ articleId }) =>
+  Effect.gen(function* () {
+    const user = yield* CurrentUser;
+
+    // Check permissions
+    if (user.role !== "editor" && user.role !== "admin") {
+      return yield* Effect.fail(
+        new Forbidden({
+          message: "Only editors or admins can publish articles",
+        }),
+      );
+    }
+
     return { published: true };
-  },
-});
+  }),
+);
 ```
 
-### Automatic Type Narrowing
-
-When an action declares an `authorize` guard, Brick's types use `NarrowAuthorizedContext<TCtx>`: inside `execute({ ctx })`, `ctx.user` is narrowed from `User | null` to `User`. This is a type-level assumption. Brick doesn't check `ctx.user` at runtime, so your `authorize` must return `false` when there's no user. Narrowing only applies when your context resolver returns a typed `user`.
+If `CurrentUser` cannot be resolved (for instance, if the request lacks a valid token), the authentication layer fails with `Unauthorized` (HTTP 401). If the user is authenticated but lacks required permissions, the action fails with `Forbidden` (HTTP 403).
 
 ## CRUD Access Policies
 
-CRUD resources from `@brickkit/crud` are **deny-by-default**. `access` is a required option, and an access object without `authorize` rejects every operation with `FORBIDDEN` (403). CRUD `authorize` runs after input validation and receives `{ operation, input, ctx }`.
+CRUD resources from `@brickkit/crud` are **deny-by-default**. `access` is a required option when implementing a contract. An access configuration without `authorize` rejects every operation with `Forbidden` (403).
 
 ### 1. Public Access
 
 Allow unrestricted access across all CRUD operations:
 
 ```ts title="src/services/catalog.ts"
-crud({
+export const catalogActions = catalogContract.implement({
+  store: sqliteStore(catalogTable, CatalogDb),
   access: "public",
-  fields: {
-    id: { read: true },
-    title: { read: true },
-  },
 });
 ```
 
-### 2. Operation Authorization (`authorize`)
+### 2. Operation-Level Authorization (`authorize`)
 
-Verify caller identity and role for specific CRUD operations:
-
-```ts title="src/services/posts.ts"
-crud({
-  access: {
-    authorize: ({ operation, input, ctx }) => {
-      // Anyone can read posts
-      if (
-        operation === "list" ||
-        operation === "get" ||
-        operation === "findOne"
-      ) {
-        return true;
-      }
-      // Only authenticated users can write
-      if (!ctx.user) return false;
-      // Only admins can delete posts
-      if (operation === "delete") {
-        return ctx.user.role === "admin";
-      }
-      return true;
-    },
-  },
-  fields: {
-    id: { read: true },
-    title: { read: true, create: true },
-  },
-});
-```
-
-`operation` discriminates the authorization input type. For example, after
-`operation === "list"`, `input.where`, `input.select`, and `input.limit` are
-available; after `operation === "update"`, `input.id` and `input.data` are
-available. Field policies constrain field names and filter operators, and
-explicit field schemas supply value types. Column-derived values and IDs
-remain `unknown` because the table is supplied after `crud()` is configured.
-Create fields are optional in this callback type because column defaults and
-nullability are not yet known. The package exports `CrudAuthorizeArgs<F>` and
-`CrudInputs<F>` for reusable policies and per-operation input types.
-
-### 3. Row-Level Tenant and Owner Scoping (`scope`)
-
-Return a trusted SQL condition to isolate multi-tenant or user-owned rows. `scope` only runs when `authorize` allowed the call, and receives `{ operation, ctx }`:
+The `authorize` callback runs before database queries are executed. It receives `{ operation, input }` and returns an `Effect` resolving to a boolean:
 
 ```ts title="src/services/documents.ts"
-import { eq } from "@brickkit/core";
-import { documentsTable } from "./schema";
+import { crudContract, sqliteStore } from "@brickkit/crud";
+import { Unauthorized, Forbidden } from "@brickkit/core/contracts";
+import { CurrentUser } from "../auth";
+import { Effect } from "effect";
 
-crud({
+export const docActions = docContract.implement({
+  store: sqliteStore(documentsTable, DocDb),
   access: {
-    authorize: ({ ctx }) => !!ctx.user,
-    scope: ({ operation, ctx }) => {
-      // Admins bypass row-level isolation
-      if (ctx.user?.role === "admin") return undefined;
-
-      // A scope can't constrain an INSERT; set ownerId in a beforeCreate hook
-      if (operation === "create") return undefined;
-
-      // Regular users only see and mutate their own documents
-      return eq(documentsTable.ownerId, ctx.user.id);
-    },
-  },
-  fields: {
-    id: { read: true },
-    title: { read: true, create: true, update: true },
-    ownerId: { read: true },
+    authorize: ({ operation }) =>
+      Effect.gen(function* () {
+        const user = yield* CurrentUser;
+        // Admins can perform any operation
+        if (user.role === "admin") return true;
+        // Members can read, but cannot delete
+        if (operation === "delete") return false;
+        return true;
+      }),
   },
 });
 ```
 
-When `scope` returns a Drizzle SQL condition, Brick combines it with the client's `where` filter and, for `get`, `update`, and `delete`, the ID match, using `and(...)`. A user can't read, update, or delete another tenant's rows even if they know the record ID; those calls fail with `NOT_FOUND` (404).
+If `authorize` returns `false`, `@brickkit/crud` rejects the request with `Forbidden` (HTTP 403).
 
-If `scope` returns a condition for `create`, the call is rejected with `FORBIDDEN` (403): row-scoped creation needs an explicit create policy. Return `undefined` for `create` and assign the owner or tenant column in a [`beforeCreate` hook](/docs/hooks).
+### 3. Row-Level Scoping (`scope`)
 
-## Status Codes and Error Codes Today
+The `scope` callback generates a Drizzle SQL expression that restricts which rows an operation can read, update, or delete:
 
-Understanding current runtime behavior:
+```ts title="src/services/pages.ts"
+import { crudContract, sqliteStore } from "@brickkit/crud";
+import { Unauthorized } from "@brickkit/core/contracts";
+import { pagesTable } from "./schema";
+import { PagesDb } from "./db";
+import { CurrentUser } from "../auth";
+import { eq } from "drizzle-orm";
+import { Effect } from "effect";
 
-| Mechanism                                   | Code           | Status          | Location in Code              |
-| :------------------------------------------ | :------------- | :-------------- | :---------------------------- |
-| Action `authorize` rejection                | `UNAUTHORIZED` | `403 Forbidden` | `packages/core/src/action.ts` |
-| CRUD `authorize` rejection or missing       | `FORBIDDEN`    | `403 Forbidden` | `packages/crud/src/index.ts`  |
-| CRUD `scope` returned a condition on create | `FORBIDDEN`    | `403 Forbidden` | `packages/crud/src/index.ts`  |
-| `error.UNAUTHORIZED()` in your own code     | `UNAUTHORIZED` | `401`           | `packages/core/src/action.ts` |
+export const pageActions = pageContract.implement({
+  store: sqliteStore(pagesTable, PagesDb),
+  access: {
+    authorize: () =>
+      Effect.gen(function* () {
+        const user = yield* CurrentUser;
+        return Boolean(user.id);
+      }),
+    scope: ({ operation }) =>
+      Effect.gen(function* () {
+        // Create operations do not filter existing rows
+        if (operation === "create") return undefined;
 
-<Callout type="info">
-  **Planned Status Code Alignment**: Currently, failed action authorization
-  throws code `UNAUTHORIZED` with HTTP status 403. A planned update tracked in
-  [GitHub Issue #53](https://github.com/Chandraprakash-Darji/brick/issues/53)
-  will align unauthenticated requests to HTTP 401 and forbidden role/scope
-  rejections to HTTP 403.
-</Callout>
-
-### Schema
-
-The owner-scoping example expects these columns on the application-owned `documentsTable`. Brick does not generate `owner_id`; populate it in a `beforeCreate` hook from the authenticated context.
-
-export const documentFields = [
-  {
-    name: "id",
-    type: "text",
-    description: "Document identifier.",
-    isPrimaryKey: true,
+        const user = yield* CurrentUser;
+        // Restrict all queries to rows where userId matches the authenticated user
+        return eq(pagesTable.userId, user.id);
+      }),
   },
-  { name: "title", type: "text", description: "Document title." },
-  {
-    name: "owner_id",
-    type: "text",
-    description: "Owner identifier used by the scope policy.",
+  hooks: {
+    // Automatically attach authenticated user ID on creation
+    beforeCreate: ({ data }) =>
+      Effect.gen(function* () {
+        const user = yield* CurrentUser;
+        return {
+          ...data,
+          id: crypto.randomUUID(),
+          userId: user.id,
+        };
+      }),
   },
-];
+});
+```
 
-<DatabaseTable name="documents" fields={documentFields} />
+### How Scoping Works at Runtime
+
+When a user calls `page.list`, `page.get`, `page.update`, or `page.delete`:
+
+1. `authorize` runs. If it fails or returns `false`, execution halts immediately.
+2. `scope` runs and produces a SQL predicate: `pagesTable.userId = 'usr_42'`.
+3. `@brickkit/crud` combines the scope predicate with any client-supplied filter criteria using SQL `AND`:
+   ```sql
+   WHERE (pages.user_id = 'usr_42') AND (pages.title LIKE '%Guide%')
+   ```
+4. Even if a malicious caller supplies `id: "page_owned_by_someone_else"` to `page.get` or `page.delete`, the scoped query returns zero rows, resulting in `NotFound` (404). Data cannot leak across tenant boundaries.

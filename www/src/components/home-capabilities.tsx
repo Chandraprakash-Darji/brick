@@ -16,26 +16,17 @@ import { LogoMark } from "@/components/logo";
 import { InstallCommand } from "@/components/install-command";
 import { cn } from "@/lib/utils";
 import extensionSource from "../../../examples/extensions/src/extensions/comments/index.ts?raw";
+import contractSource from "../../../examples/extensions/src/extensions/comments/contract.ts?raw";
 import appSource from "../../../examples/extensions/src/app.ts?raw";
 
-const resourceCode = extensionSource
-  .slice(
-    extensionSource.indexOf("  const comments ="),
-    extensionSource.indexOf("  const countComments ="),
-  )
-  .trim();
-const actionCode = extensionSource
-  .slice(
-    extensionSource.indexOf("  const countComments ="),
-    extensionSource.indexOf("  return { comments,"),
-  )
-  .trim();
+const resourceCode = contractSource.trim();
+const actionCode = extensionSource.trim();
 const routes = [
-  ["POST", "/api/comment/query", "List"],
-  ["GET", "/api/comment/:id", "Read"],
-  ["POST", "/api/comment", "Create"],
-  ["PATCH", "/api/comment/:id", "Update"],
-  ["DELETE", "/api/comment/:id", "Delete"],
+  ["POST", "/api/pageComment/list", "List"],
+  ["POST", "/api/pageComment/get", "Read"],
+  ["POST", "/api/pageComment/create", "Create"],
+  ["POST", "/api/pageComment/update", "Update"],
+  ["POST", "/api/pageComment/delete", "Delete"],
 ];
 
 function DocsLink({
@@ -159,7 +150,7 @@ export function HomeCapabilities() {
           </div>
           <div className="capability-heading-copy">
             <p>
-              TypeBox schemas supply action types and runtime validation.
+              Effect Schema supplies action types and runtime validation.
               Drizzle tables supply row types and resource shapes. OpenAPI
               describes the same registered API.
             </p>
@@ -175,21 +166,21 @@ export function HomeCapabilities() {
               "01",
               "Inputs",
               "Request validation",
-              "t.Object({ id: t.String() })",
+              "Schema.Struct({ id: Schema.String })",
               "validation-and-errors",
             ],
             [
               "02",
               "Handlers",
               "Inferred action types",
-              "execute: ({ input, ctx })",
+              "(input) => Effect.gen(function* () { ... })",
               "services-and-actions",
             ],
             [
               "03",
               "Resources",
               "Table-derived shapes",
-              "table.$inferSelect",
+              "InferSelectModel<typeof table>",
               "resources",
             ],
             [
@@ -297,7 +288,7 @@ export function HomeCapabilities() {
               "PostgreSQL",
               "CONNECTED / PRODUCTION",
               "Connect PostgreSQL with a URL and Drizzle tables. Keep production schema changes in your migration workflow.",
-              "Postgres.js driver",
+              "Effect SQL PostgreSQL driver",
               "Drizzle table definitions",
             ],
           ].map(([title, label, text, first, second]) => (
@@ -448,7 +439,7 @@ export function HomeCapabilities() {
             },
             {
               title: "A documented API",
-              text: "Serve generated OpenAPI with Scalar and Swagger views. Export a spec or inspect the registered service architecture.",
+              text: "Serve generated OpenAPI with Scalar. Export a spec or inspect the registered service architecture.",
               icon: FileJsonIcon,
               visual: "OpenAPI 3.1",
               detail: "SCHEMA → CONTRACT",
@@ -499,9 +490,11 @@ export function HomeCapabilities() {
           <br />A backend you own.
         </h2>
         <div className="ecosystem-tools">
-          {["TypeScript", "Bun", "Elysia", "TypeBox", "Drizzle"].map((tool) => (
-            <span key={tool}>{tool}</span>
-          ))}
+          {["TypeScript", "Bun", "Effect", "Effect Schema", "Drizzle"].map(
+            (tool) => (
+              <span key={tool}>{tool}</span>
+            ),
+          )}
         </div>
         <p>
           A backend authoring layer over a familiar runtime and database

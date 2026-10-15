@@ -1,103 +1,100 @@
 ---
 title: Services and Actions
-description: Define modular backend services and typed actions with runtime schema validation.
+description: Define modular backend services and typed actions with Effect Schema and Effect handlers.
 ---
 
-Services structure backend domains in Brick-TS, while actions provide typed business logic executable both in-process and over HTTP.
+Services structure backend domains in Brick-TS, while actions provide typed business logic executable both in-process and over HTTP, RPC, and MCP.
 
 ## Minimal Example
 
-Define a service, register an action with TypeBox input/output schemas, and invoke it either directly in TypeScript or through HTTP:
+Define an immutable service, register a typed action with Effect Schema input/output contracts and declared error types, and invoke it either in-process or over HTTP:
 
 ```ts title="src/services/users.ts"
-import { defineService, t } from "@brickkit/core";
+import { Brick } from "@brickkit/core";
+import { NotFound } from "@brickkit/core/contracts";
+import { Effect, Schema } from "effect";
 
 // Mock data store
 const users = new Map([
   ["usr_1", { id: "usr_1", name: "Ada Lovelace", email: "ada@example.com" }],
 ]);
 
-// 1. Define the service domain
-export const usersService = defineService("users");
-
-// 2. Define a typed action
-export const getUser = usersService.action({
-  name: "getUser",
+// 1. Declare the action contract
+export const GetUser = Brick.action("getUser", "/api/users/getUser", {
+  input: Schema.Struct({
+    id: Schema.String.check(Schema.isMinLength(1)),
+  }),
+  output: Schema.Struct({
+    id: Schema.String,
+    name: Schema.String,
+    email: Schema.String,
+  }),
+  errors: [NotFound],
   description: "Retrieve a user profile by unique ID",
-  method: "GET",
-  path: "/api/users/:id",
-  input: t.Object({
-    id: t.String({ minLength: 1 }),
-  }),
-  output: t.Object({
-    id: t.String(),
-    name: t.String(),
-    email: t.String(),
-  }),
-  execute: ({ input, error }) => {
-    const user = users.get(input.id);
-    if (!user) {
-      // Error helpers throw; `return` lets TypeScript narrow `user`
-      return error.NOT_FOUND(`User with ID '${input.id}' not found`);
-    }
-    return user;
-  },
+});
+
+// 2. Attach the Effect handler
+export const getUser = GetUser(({ id }) => {
+  const user = users.get(id);
+  if (!user) {
+    return Effect.fail(
+      new NotFound({ message: `User with ID '${id}' not found` }),
+    );
+  }
+  return Effect.succeed(user);
+});
+
+// 3. Group actions into an immutable service
+export const usersService = Brick.service("users", {
+  actions: { getUser },
 });
 ```
 
-<Callout type="warn">
-  Brick doesn't register TypeBox string formats such as `email` or `uuid`. A
-  schema with an unregistered `format` fails validation ("Unknown format"), so
-  register formats with TypeBox's `FormatRegistry` before using them.
+<Callout type="info">
+  In Brick-TS, action keys in `Brick.service({actions})` must match the action's
+  declared identifier. This guarantees that typed clients, HTTP routes, and RPC
+  registrations stay perfectly aligned.
 </Callout>
 
-## Services (`defineService`)
+## Services (`Brick.service`)
 
-A service groups a database handle, a context resolver, resources, and custom actions:
+A service groups cohesive actions into an immutable domain boundary:
 
 ```ts title="src/services/orders.ts"
-import { defineDatabase, defineService } from "@brickkit/core";
-import { ordersTable } from "./schema";
+import { Brick } from "@brickkit/core";
+import { createOrder, cancelOrder } from "./actions";
 
-const database = defineDatabase({ tables: { ordersTable } });
-
-export const ordersService = defineService("orders", {
-  database,
-  context: async (baseCtx) => {
-    const token = baseCtx.request.headers.get("authorization");
-    return { token, tenantId: "tenant_default" };
-  },
+export const ordersService = Brick.service("orders", {
+  actions: { createOrder, cancelOrder },
 });
 ```
 
 ### Service Options Table
 
-| Option     | Type                                        | Description                                                                               |
-| :--------- | :------------------------------------------ | :---------------------------------------------------------------------------------------- |
-| `database` | `DatabaseHandle`                            | Database handle created via `defineDatabase()`. Accessible in actions as `ctx.db`.        |
-| `context`  | `(baseCtx: BaseContext) => Promise<T> \| T` | Context resolver function. Injects user, session, or tenant properties into every action. |
+| Option    | Type                               | Description                                                                                            |
+| :-------- | :--------------------------------- | :----------------------------------------------------------------------------------------------------- |
+| `name`    | `string`                           | Unique identifier for the service domain (e.g. `"orders"`). Used in routes, OpenAPI tags, and clients. |
+| `actions` | `Record<string, ActionConstraint>` | Object map of action implementations whose keys match action identifiers.                              |
 
-`ServiceOptions` also declares `auth`, `rateLimit`, `cache`, `resilience`, `telemetry`, and `lifecycle`. The runtime doesn't act on them today: no lifecycle hooks run and no rate limits or auth defaults are enforced. They're only echoed in the service's introspection output (`/_brick/services`). Enforce access with `authorize` on actions and `access` on CRUD resources.
+`Brick.service` returns a frozen object containing `{ name, actions, group }`, where `group` is a native Effect `HttpApiGroup`.
 
-## Actions (`service.action` / `defineAction`)
+## Actions (`Brick.action`)
 
-Actions are the core unit of compute in Brick-TS. Every action is registered with TypeBox schemas and an execution function.
+Actions are the core unit of compute in Brick-TS. Every action is defined with Effect Schema contracts and an Effect handler function.
 
 ### Action Configuration Table
 
-| Property      | Type                                              | Default                          | Description                                                                                   |
-| :------------ | :------------------------------------------------ | :------------------------------- | :-------------------------------------------------------------------------------------------- |
-| `name`        | `string`                                          | _(Required)_                     | Unique name within the service (e.g. `"createOrder"`).                                        |
-| `description` | `string`                                          | `undefined`                      | Human-readable description exported to the OpenAPI 3.1 operation.                             |
-| `input`       | `TSchema`                                         | `undefined`                      | TypeBox schema for validating input payload or query parameters.                              |
-| `output`      | `TSchema`                                         | `undefined`                      | TypeBox schema for validating return data. Mismatches throw `ValidationError` (status 500).   |
-| `method`      | `"GET" \| "POST" \| "PUT" \| "PATCH" \| "DELETE"` | `"POST"`                         | HTTP method exposed on the API gateway.                                                       |
-| `path`        | `string`                                          | `${prefix}/${service}/${action}` | Full HTTP route, including the prefix (it isn't prefixed for you). Can include `/:id`.        |
-| `authorize`   | `(params) => boolean \| Promise<boolean>`         | `undefined`                      | Guard run after input validation. Returning `false` rejects with `UNAUTHORIZED` (status 403). |
-| `errors`      | `Record<string, { status?, message }>`            | `undefined`                      | Custom error catalog added to `error` helpers. `status` defaults to `400`.                    |
-| `tags`        | `string[]`                                        | `[service name]`                 | OpenAPI tags for the operation; also included in introspection.                               |
-| `emits`       | `string[]`                                        | `undefined`                      | Metadata included in introspection.                                                           |
-| `execute`     | `({ input, ctx, error }) => Promise<T> \| T`      | _(Required)_                     | Implementation function. Receives validated input, resolved context, and error helpers.       |
+| Property      | Type                    | Default      | Description                                                                       |
+| :------------ | :---------------------- | :----------- | :-------------------------------------------------------------------------------- |
+| `name`        | `string`                | _(Required)_ | Unique identifier for the action within the service (e.g. `"getUser"`).           |
+| `path`        | `` `/${string}` ``      | _(Required)_ | HTTP route path (e.g. `"/api/users/getUser"`).                                    |
+| `input`       | `Schema.Top`            | _(Required)_ | Effect Schema validating the incoming JSON payload.                               |
+| `output`      | `Schema.Top`            | _(Required)_ | Effect Schema validating the returned data.                                       |
+| `errors`      | `readonly Schema.Top[]` | _(Required)_ | Array of `Schema.TaggedError` classes declared as possible domain failures.       |
+| `description` | `string`                | `undefined`  | Description exported to OpenAPI 3.1 and MCP tool metadata.                        |
+| `title`       | `string`                | `undefined`  | Human-readable title exported to OpenAPI and MCP tool metadata.                   |
+| `mcp`         | `boolean`               | `false`      | When `true`, exposes the action as a Model Context Protocol tool for AI agents.   |
+| `tool`        | `ToolAnnotations`       | `undefined`  | Tool behavior annotations (`readOnly`, `destructive`, `idempotent`, `openWorld`). |
 
 ### Monomorphic Execution (In-Process vs HTTP)
 
@@ -105,42 +102,74 @@ An action can be called in-process without network overhead or data serializatio
 
 ```ts title="src/example-call.ts"
 import { getUser } from "./services/users";
+import { Effect } from "effect";
 
-// Direct in-process execution with full validation and authorization:
-const user = await getUser({ input: { id: "usr_1" } });
-console.log(user.name); // "Ada Lovelace"
+// 1. Direct in-process execution as an Effect:
+const program = Effect.gen(function* () {
+  const user = yield* getUser({ id: "usr_1" });
+  console.log("User name:", user.name); // "Ada Lovelace"
+});
 
-// Alternative shorthand:
-const result = await getUser.run({ id: "usr_1" });
+await Effect.runPromise(program);
 ```
 
-When the app is served via `brick()`, the gateway mounts the action as an HTTP endpoint:
+When mounted in an application via `Brick.app()`, the HTTP gateway exposes the action as a POST endpoint:
 
 ```bash
-curl http://localhost:4000/api/users/usr_1
+curl -X POST http://localhost:4000/api/users/getUser \
+  -H "Content-Type: application/json" \
+  -d '{"id": "usr_1"}'
 ```
 
-Both invocations run the same steps in the same order: input validation, `authorize`, `execute`, then output validation.
+Both invocations run the same steps: input decoding and validation, OpenTelemetry span creation (`brick.action.getUser`), handler execution, and output validation.
 
-## Path Parameters and Custom Routes
+## HTTP Endpoints with REST Methods (`Brick.endpoint`)
 
-When an action declares `path` with parameters (e.g., `/api/users/:id`), Brick merges path parameters into `input`. Declare them in the `input` schema so they're validated:
+While `Brick.action` standardizes on JSON POST payloads, `Brick.endpoint` lets you define full REST endpoints with distinct parameter sources:
 
-```ts title="src/services/users.ts"
-export const deleteUser = usersService.action({
-  name: "deleteUser",
-  method: "DELETE",
-  path: "/api/users/:id",
-  input: t.Object({
-    id: t.String(),
-  }),
-  output: t.Object({
-    success: t.Boolean(),
-  }),
-  execute: async ({ input, error }) => {
-    return { success: true };
+- `params`: URL path parameters (e.g. `/:id`)
+- `query`: URL query string parameters
+- `payload`: Request body payload (for POST, PUT, PATCH)
+- `headers`: HTTP request headers
+
+```ts title="src/services/users-rest.ts"
+import { Brick } from "@brickkit/core";
+import { NotFound } from "@brickkit/core/contracts";
+import { Effect, Schema } from "effect";
+
+export const deleteUser = Brick.endpoint(
+  "deleteUser",
+  "DELETE",
+  "/api/users/:id",
+  {
+    input: {
+      params: Schema.Struct({ id: Schema.String }),
+    },
+    output: Schema.Struct({ success: Schema.Literal(true) }),
+    errors: [NotFound],
   },
-});
+)((input) =>
+  Effect.gen(function* () {
+    // input.params.id is fully typed and validated
+    return { success: true as const };
+  }),
+);
 ```
 
-When called via HTTP `DELETE /api/users/usr_1`, Brick extracts `id` from the path and validates it against `input`. When called in-process, pass `{ id: "usr_1" }` in the `input` object.
+## Low-Level Routes (`Brick.route`)
+
+For health checks, webhooks, or custom streaming endpoints that bypass schema serialization, use `Brick.route`:
+
+```ts title="src/routes/health.ts"
+import { Brick } from "@brickkit/core";
+import { HttpServerResponse } from "effect/http";
+import { Effect } from "effect";
+
+export const healthRoute = Brick.route(
+  "GET",
+  "/health",
+  Effect.sync(() => HttpServerResponse.jsonUnsafe({ status: "ok" })),
+);
+```
+
+Pass custom routes into `Brick.app({ routes: healthRoute })` to mount them alongside your services.

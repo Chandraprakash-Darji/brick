@@ -1,156 +1,159 @@
 ---
 title: Validation and Errors
-description: Validate inputs and outputs with TypeBox schemas and throw structured errors with HTTP statuses.
+description: Validate inputs and outputs with Effect Schema and declare structured errors with HTTP statuses.
 ---
 
-Brick-TS enforces strict runtime schema validation using TypeBox and provides structured error helpers for consistent error envelopes.
+Brick-TS enforces strict runtime schema validation using Effect Schema and provides typed error models through `Schema.TaggedError`.
 
 ## Minimal Example
 
-Define an action with TypeBox schemas and use the injected `error` builder to return typed HTTP errors:
+Define an action with Effect Schema contracts and declare custom domain errors that map directly to HTTP statuses:
 
 ```ts title="src/services/checkout.ts"
-import { defineService, t } from "@brickkit/core";
+import { Brick } from "@brickkit/core";
+import { Effect, Schema } from "effect";
 
-export const checkoutService = defineService("checkout");
-
-export const processPayment = checkoutService.action({
-  name: "processPayment",
-  input: t.Object({
-    orderId: t.String({ minLength: 1 }),
-    amount: t.Number({ minimum: 1 }),
-  }),
-  output: t.Object({
-    transactionId: t.String(),
-    status: t.String(),
-  }),
-  // Declare custom action-specific error codes
-  errors: {
-    INSUFFICIENT_FUNDS: { status: 400, message: "Account balance is too low" },
-    CARD_EXPIRED: { status: 400, message: "Payment method has expired" },
+// 1. Declare custom domain errors
+export class InsufficientFunds extends Schema.TaggedError<InsufficientFunds>()(
+  "InsufficientFunds",
+  {
+    message: Schema.String,
+    limit: Schema.Number,
+    requested: Schema.Number,
   },
-  execute: async ({ input, error }) => {
-    if (input.amount > 10000) {
-      error.INSUFFICIENT_FUNDS("Amount exceeds single-transaction limit", {
-        limit: 10000,
-        requested: input.amount,
-      });
+  { httpApiStatus: 400 },
+) {}
+
+// 2. Define action contract with declared errors
+const ProcessPayment = Brick.action("processPayment", "/api/checkout/pay", {
+  input: Schema.Struct({
+    orderId: Schema.String.check(Schema.isMinLength(1)),
+    amount: Schema.Number.check(Schema.isGreaterThan(0)),
+  }),
+  output: Schema.Struct({
+    transactionId: Schema.String,
+    status: Schema.String,
+  }),
+  errors: [InsufficientFunds],
+});
+
+// 3. Implement handler returning typed effects
+export const processPayment = ProcessPayment(({ orderId, amount }) =>
+  Effect.gen(function* () {
+    if (amount > 10000) {
+      return yield* Effect.fail(
+        new InsufficientFunds({
+          message: "Amount exceeds single-transaction limit",
+          limit: 10000,
+          requested: amount,
+        }),
+      );
     }
 
     return {
       transactionId: `tx_${crypto.randomUUID()}`,
       status: "succeeded",
     };
-  },
+  }),
+);
+
+export const checkoutService = Brick.service("checkout", {
+  actions: { processPayment },
 });
 ```
 
-## Schema Validation with TypeBox
+## Schema Validation with Effect Schema
 
-TypeBox provides zero-dependency JSON Schema builders that validate at runtime and infer static TypeScript types simultaneously:
+Effect Schema provides composable schema combinators that validate payloads at runtime and infer static TypeScript types:
 
 ```ts title="src/schemas/user.ts"
-import { type Static, t } from "@brickkit/core";
+import { Schema } from "effect";
 
-export const CreateUserSchema = t.Object({
-  name: t.String({ minLength: 2, maxLength: 100 }),
-  email: t.String({ pattern: "^[^@\\s]+@[^@\\s]+$" }),
-  role: t.Union([t.Literal("admin"), t.Literal("member")]),
-  tags: t.Optional(t.Array(t.String())),
+export const CreateUserSchema = Schema.Struct({
+  name: Schema.String.check(Schema.isMinLength(2), Schema.isMaxLength(100)),
+  email: Schema.String.check(Schema.isPattern(/^[^@\s]+@[^@\s]+$/)),
+  role: Schema.Literals(["admin", "member"]),
+  tags: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
-// Infer static TypeScript type without codegen:
-export type CreateUserInput = Static<typeof CreateUserSchema>;
+// Infer static TypeScript type:
+export type CreateUserInput = typeof CreateUserSchema.Type;
 ```
 
-<Callout type="warn">
-  TypeBox only validates string `format`s that are registered in its `FormatRegistry`. Brick-TS core registers none, so `t.String({ format: "email" })` rejects every value with `Unknown format 'email'`. Use `pattern`, or register the format yourself with `FormatRegistry.Set()` from `@sinclair/typebox`. (`@brickkit/crud` registers `date-time` only.)
-</Callout>
+### Boundary Validation
 
-### Input Validation
+When an HTTP request arrives, Brick decodes the incoming JSON payload against the action's `input` schema before invoking your handler. If validation fails, Brick automatically returns HTTP status 400 with details about the failed schema check. Handlers only ever execute with fully validated, decoded data.
 
-Input validation runs before `execute()`. If an incoming payload violates the schema, Brick aborts execution and responds with `ValidationError` (HTTP status 400):
+## Tagged Error Classes
+
+Domain errors are defined as subclasses of `Schema.TaggedError`:
+
+```ts title="src/errors.ts"
+import { Schema } from "effect";
+
+export class OrderNotFound extends Schema.TaggedError<OrderNotFound>()(
+  "OrderNotFound",
+  { message: Schema.String, orderId: Schema.String },
+  { httpApiStatus: 404 },
+) {}
+```
+
+The `{ httpApiStatus: 404 }` annotation instructs Brick's HTTP gateway to serialize the error with HTTP status 404. Over the wire, the response body preserves the tagged structure:
 
 ```json
 {
-  "name": "ValidationError",
-  "status": 400,
-  "message": "Validation failed for action 'processPayment' input",
-  "errors": [
-    {
-      "path": "/amount",
-      "message": "Expected number to be greater or equal to 1",
-      "value": 0
-    }
-  ]
+  "_tag": "OrderNotFound",
+  "message": "Order not found",
+  "orderId": "ord_123"
 }
 ```
 
-### Output Validation
+## Standard Built-in Error Classes
 
-Output validation runs after `execute()` resolves. If an action returns data that does not conform to its declared `output` schema, Brick throws `ValidationError` with HTTP status 500 and the message `Validation failed for action '<name>' output`.
+`@brickkit/core/contracts` exports standard HTTP error classes for common failure cases:
 
-### Unexpected Errors
+| Error Class           | Status | Description                                                |
+| :-------------------- | :----- | :--------------------------------------------------------- |
+| `BadRequest`          | 400    | Malformed request or invalid parameters.                   |
+| `Unauthorized`        | 401    | Authentication required or token invalid.                  |
+| `Forbidden`           | 403    | Authenticated caller lacks permission.                     |
+| `NotFound`            | 404    | Requested resource does not exist.                         |
+| `Conflict`            | 409    | Unique constraint violation or conflicting resource state. |
+| `InternalServerError` | 500    | Unexpected internal failure or database error.             |
 
-Any other error thrown from an action is returned as HTTP 500 with `{ "name": "InternalServerError", "message": <error message>, "status": 500 }`.
+Each built-in error accepts `{ message: string }`:
 
-## Standard Error Helpers
+```ts
+import { NotFound } from "@brickkit/core/contracts";
 
-The `error` helper is passed to `execute({ input, ctx, error })` and to every CRUD lifecycle hook (`beforeCreate`, `afterCreate`, `beforeUpdate`, `afterUpdate`, `beforeDelete`, `afterDelete`). Each helper takes an optional message override and optional `details`, and throws an `ActionExecutionError`:
-
-| Helper                                        | HTTP Status | Default Error Code      | Default Message           |
-| :-------------------------------------------- | :---------- | :---------------------- | :------------------------ |
-| `error.BAD_REQUEST(msg?, details?)`           | `400`       | `BAD_REQUEST`           | `"Bad Request"`           |
-| `error.UNAUTHORIZED(msg?, details?)`          | `401`       | `UNAUTHORIZED`          | `"Unauthorized"`          |
-| `error.FORBIDDEN(msg?, details?)`             | `403`       | `FORBIDDEN`             | `"Forbidden"`             |
-| `error.NOT_FOUND(msg?, details?)`             | `404`       | `NOT_FOUND`             | `"Not Found"`             |
-| `error.CONFLICT(msg?, details?)`              | `409`       | `CONFLICT`              | `"Conflict"`              |
-| `error.INTERNAL_SERVER_ERROR(msg?, details?)` | `500`       | `INTERNAL_SERVER_ERROR` | `"Internal Server Error"` |
-
-When an action's `authorize()` returns `false`, Brick throws `ActionExecutionError` with code `"UNAUTHORIZED"` and status `403` (not 401). CRUD access denial uses code `"FORBIDDEN"` with status `403`.
-
-### Error Envelope Format
-
-All `ActionExecutionError` instances format automatically into consistent JSON responses:
-
-```json
-{
-  "name": "ActionExecutionError",
-  "code": "NOT_FOUND",
-  "status": 404,
-  "message": "User with ID 'usr_99' not found",
-  "details": {
-    "entity": "user",
-    "id": "usr_99"
-  }
-}
+return yield * Effect.fail(new NotFound({ message: "User not found" }));
 ```
 
-## Custom Declared Action Errors
+## CRUD Error Classes
 
-Actions can declare custom domain errors in their `errors` configuration map:
+`@brickkit/crud` provides standard error types for database operations:
 
-```ts title="src/services/auth.ts"
-export const resetPassword = authService.action({
-  name: "resetPassword",
-  input: t.Object({ token: t.String(), newPassword: t.String() }),
-  output: t.Object({ success: t.Boolean() }),
-  errors: {
-    TOKEN_EXPIRED: { status: 400, message: "Password reset token has expired" },
-    WEAK_PASSWORD: {
-      status: 422,
-      message: "Password does not meet complexity requirements",
-    },
-  },
-  execute: ({ input, error }) => {
-    if (input.newPassword.length < 8) {
-      error.WEAK_PASSWORD("Password must be at least 8 characters long");
-    }
-    return { success: true };
-  },
-});
+| Error Class       | Status | Description                                         |
+| :---------------- | :----- | :-------------------------------------------------- |
+| `InvalidInput`    | 400    | Filter operator or mutation field policy violation. |
+| `Forbidden`       | 403    | CRUD `authorize` predicate returned `false`.        |
+| `NotFound`        | 404    | Primary key not found or row excluded by `scope`.   |
+| `Conflict`        | 409    | Unique key or database constraint violation.        |
+| `DatabaseFailure` | 500    | Database driver error during query execution.       |
+
+## Typed Failure Handling in Handlers
+
+Because Brick-TS uses Effect, domain errors are tracked in the Effect's error channel (`E`). You can catch, map, and transform errors with full compiler assistance:
+
+```ts
+import { Effect } from "effect";
+import { NotFound, Conflict } from "@brickkit/core/contracts";
+
+const program = findRecord.pipe(
+  Effect.catchTag("NotFound", (err) =>
+    Effect.fail(new Conflict({ message: `Cannot proceed: ${err.message}` })),
+  ),
+);
 ```
 
-If you omit `status` on a declared error, it defaults to `400`. A declared error with the same name as a standard helper (for example `NOT_FOUND`) overrides it.
-
-Custom error keys are typed onto the `error` argument, ensuring compile-time safety and autocompletion for error codes.
+If a handler attempts to return an error class that was not declared in the action's `errors` array, **TypeScript will raise a compilation error**.

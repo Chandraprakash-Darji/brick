@@ -1,9 +1,9 @@
 ---
-title: brick CLI Overview
-description: Command-line developer and build tooling for Brick-TS applications.
+title: CLI Overview
+description: Command-line developer and build tooling for Effect-native Brick applications.
 ---
 
-The `brick` CLI ships with `@brickkit/cli` to provide development live reload, production servers, ahead-of-time compilation, and code generation tooling.
+The `brick` CLI ships with `@brickkit/cli` to provide development live reload, production servers, ahead-of-time bundling with Bun, and client contract generation.
 
 ## Installation
 
@@ -38,26 +38,27 @@ Run commands with `bunx brick` or add them to your `package.json` scripts:
 ```json title="package.json"
 {
   "scripts": {
-    "dev": "brick dev src/server.ts --port 4000",
-    "start": "brick start src/server.ts",
-    "build": "brick build src/server.ts --outdir dist/brick",
-    "gen:openapi": "brick gen openapi src/server.ts --output openapi.json",
-    "gen:client": "brick gen client src/server.ts --output src/_brick/contract.ts",
-    "info": "brick info src/server.ts"
+    "dev": "brick dev src/app.ts --port 4000",
+    "start": "brick start src/app.ts",
+    "build": "brick build src/app.ts --outdir dist/brick",
+    "gen:openapi": "brick gen openapi src/app.ts --output openapi.json",
+    "gen:client": "brick gen client src/app.ts --output src/_brick/contract.ts",
+    "info": "brick info src/app.ts"
   }
 }
 ```
 
 ## Command Summary
 
-| Command                         | Arguments & Flags                                       | Description                                                                  |
-| :------------------------------ | :------------------------------------------------------ | :--------------------------------------------------------------------------- |
-| `brick dev`                     | `[entry] [--port <number>]`                             | Start local development server with file watching and live reload.           |
-| `brick start`                   | `[entry] [--port <number>]`                             | Start production server without file watchers.                               |
-| `brick build`                   | `<entry> [--outdir <dir>] [--port <number>] [--no-aot]` | Compile a default-exported `BrickApp` into a standalone Bun server bundle.   |
-| `brick gen openapi`             | `<entry> [--output <file>]`                             | Generate OpenAPI 3.1 JSON specification from services.                       |
-| `brick gen client`              | `<entry> [--output <file>]`                             | Generate typed browser client contract file (`_brick/contract.ts`).          |
-| `brick info` / `brick services` | `<entry>`                                               | Export the complete runtime architecture JSON schema (`ArchitectureSchema`). |
+| Command             | Arguments & Flags                            | Description                                                                |
+| :------------------ | :------------------------------------------- | :------------------------------------------------------------------------- |
+| `brick dev`         | `[entry] [--port <number>]`                  | Start local development server with file watching and live reload.         |
+| `brick start`       | `[entry] [--port <number>]`                  | Start production server without file watchers.                             |
+| `brick build`       | `<entry> [--outdir <dir>] [--port <number>]` | Bundle a default-exported `Brick.app` into a standalone Bun server bundle. |
+| `brick gen openapi` | `<entry> [--output <file>]`                  | Generate OpenAPI 3.1 JSON specification from services.                     |
+| `brick gen client`  | `<entry> [--output <file>]`                  | Generate typed browser client contract file (`_brick/contract.ts`).        |
+| `brick info`        | `<entry>`                                    | Introspect services, routes, and metadata from the application.            |
+| `brick migrate`     |                                              | Run database migrations.                                                   |
 
 ## Port Resolution Rules
 
