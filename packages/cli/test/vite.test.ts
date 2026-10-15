@@ -188,12 +188,18 @@ export default service;
       {
         name: "observe-updates",
         hotUpdate() {
-          hotUpdates++;
+          if (this.environment.name === "ssr") hotUpdates++;
         },
       },
     ],
-    server: { middlewareMode: true },
+    server: { middlewareMode: true, watch: null },
   });
+  // Drive Vite's change handler directly: Chokidar throttles rapid fixture writes.
+  // The other HMR tests cover delivery through the real filesystem watcher.
+  async function update(source: string) {
+    await Bun.write(file, source);
+    server.watcher.emit("change", file);
+  }
   // The real Vite error channel drives its browser overlay.
   const hot = server.environments.ssr!.hot;
   const send = hot.send.bind(hot);
@@ -212,12 +218,11 @@ export default service;
   try {
     const initial = await Bun.file(output).text();
     const timestamp = (await stat(output)).mtimeMs;
-    await Bun.write(file, source("implementation only"));
+    await update(source("implementation only"));
     await waitFor(async () => hotUpdates > 0);
-    await Bun.sleep(100);
     expect(await Bun.file(output).text()).toBe(initial);
     expect((await stat(output)).mtimeMs).toBe(timestamp);
-    await Bun.write(file, "export default { syntax error");
+    await update("export default { syntax error");
     await waitFor(async () =>
       errors.some(
         (value) =>
@@ -228,8 +233,7 @@ export default service;
       ),
     );
     expect(await Bun.file(output).text()).toBe(initial);
-    await Bun.write(
-      file,
+    await update(
       source(
         "fixed",
         "PATCH",
@@ -242,7 +246,7 @@ export default service;
     );
     expect(await Bun.file(output).text()).toContain("PATCH");
     expect(await Bun.file(output).text()).toContain("/after/:id");
-    await Bun.write(file, source("removed", "GET", "/final"));
+    await update(source("removed", "GET", "/final"));
     await waitFor(
       async () => !(await Bun.file(output).text()).includes('"added"'),
     );

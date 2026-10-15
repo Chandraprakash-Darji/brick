@@ -2,7 +2,8 @@
 // One-command release: bump version(s) -> commit -> tag -> push ->
 // npm publish and GitHub release via the publish-npm.yml workflow.
 //
-//   bun run release [patch|minor|major|beta] [--dry-run]
+//   bun run release [patch|minor|major|beta] [--dry-run|--prepare]
+// --prepare stages manifests and the lockfile for CI validation without shipping.
 // A stable bump from X.Y.Z-beta.N promotes it to X.Y.Z.
 // All packages use the same version and ship under one v<version> tag.
 //
@@ -19,7 +20,10 @@ import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
 const DRY = process.argv.includes("--dry-run");
-const args = process.argv.slice(2).filter((a) => a !== "--dry-run");
+const PREPARE = process.argv.includes("--prepare");
+const args = process.argv
+  .slice(2)
+  .filter((a) => a !== "--dry-run" && a !== "--prepare");
 const [bump = "patch"] = args;
 
 // Resolve binaries from fixed, unwriteable system directories instead of
@@ -46,7 +50,6 @@ function resolveBin(name: string): string {
   );
 }
 const GIT = resolveBin("git");
-const GH = resolveBin("gh");
 
 const CORE_PKG = join(ROOT, "packages/core/package.json");
 const CLI_PKG = join(ROOT, "packages/cli/package.json");
@@ -60,7 +63,7 @@ function sh(cmd: string[], cwd = ROOT): string {
   const [bin, ...rest] = cmd;
   // git/gh run push/fetch, so resolve them to absolute paths above.
   // Other tools (e.g. bun, often under ~/.bun/bin) keep PATH lookup.
-  const resolved = bin === "git" ? GIT : bin === "gh" ? GH : bin;
+  const resolved = bin === "git" ? GIT : bin === "gh" ? resolveBin("gh") : bin;
   return execFileSync(resolved, rest, {
     cwd,
     encoding: "utf-8",
@@ -108,8 +111,12 @@ function bumpVersion(v: string, kind: string): string {
   return `${major}.${minor}.${patch}`;
 }
 
-if (args.length > 1 || !["patch", "minor", "major", "beta"].includes(bump))
-  fail("usage: bun run release [patch|minor|major|beta] [--dry-run]");
+if (
+  args.length > 1 ||
+  (DRY && PREPARE) ||
+  !["patch", "minor", "major", "beta"].includes(bump)
+)
+  fail("usage: bun run release [patch|minor|major|beta] [--dry-run|--prepare]");
 
 // --- preconditions ---
 const dirty = execFileSync(GIT, ["status", "--porcelain"], {
@@ -140,10 +147,13 @@ const behind = execFileSync(
 ).trim();
 if (!DRY && behind !== "0")
   fail(`local ${releaseBranch} is behind origin/${releaseBranch} — pull first`);
-try {
-  execFileSync(GH, ["auth", "status"], { cwd: ROOT, stdio: "ignore" });
-} catch {
-  fail("gh is not authenticated — run `gh auth login` first");
+if (!PREPARE) {
+  const GH = resolveBin("gh");
+  try {
+    execFileSync(GH, ["auth", "status"], { cwd: ROOT, stdio: "ignore" });
+  } catch {
+    fail("gh is not authenticated — run `gh auth login` first");
+  }
 }
 
 // --- compute new versions ---
@@ -186,6 +196,10 @@ for (const r of releases) {
   writeJson(r.file, r.data);
 }
 sh(["bun", "install"]);
+if (PREPARE) {
+  console.log(`prepared ${tag}; refs and registry are unchanged`);
+  process.exit(0);
+}
 sh(["bun", "run", "build"]);
 sh(["bun", "test", "packages/core", "packages/crud", "packages/cli"]);
 

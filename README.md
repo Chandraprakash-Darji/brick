@@ -104,7 +104,11 @@ Releases run from a clean, up-to-date `main` checkout:
 bun run release patch
 ```
 
-The script in `scripts/release.ts` bumps all three packages to one version and pushes one `v<version>` tag. The `publish-npm.yml` workflow publishes the packages and creates the GitHub release. `dry_run` previews the bump and validates tarballs without publishing. Beta releases run from the `beta` branch.
+The GitHub `publish-npm.yml` workflow stages candidate versions without changing Git refs. Its `validate` matrix builds, typechecks, tests, and packs `core`, `crud`, and `cli` separately. Only when all three validations pass does it commit and tag the version, then publish each validated tarball. No builds or tests run again inside the individual publish jobs, so a later test failure cannot leave only some packages published.
+
+Set `dry_run` to validate and pack the next version without creating a commit, tag, or npm release. Beta releases run from `beta`. If npm itself fails after some uploads, rerun the failed jobs for that same candidate; already-published package versions are skipped.
+
+For local releases, `scripts/release.ts` builds and tests before committing. Its `--prepare` mode changes only package manifests and the lockfile; the workflow uses that mode to validate the candidate before creating a release commit.
 
 ## Star history
 
