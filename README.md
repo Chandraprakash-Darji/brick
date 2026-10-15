@@ -20,66 +20,71 @@
 
 # Brick-TS
 
-Brick-TS is a TypeScript backend framework on Bun. You define services with validated actions, mount them with `brick()`, and get an Elysia HTTP server with OpenAPI output and a typed client.
+Brick-TS is an Effect-native TypeScript backend framework on Bun. You declare typed actions once, and Brick serves them as HTTP endpoints with OpenAPI, as RPC methods, and as MCP tools. Errors are typed values, dependencies are checked by the compiler, and resources are scoped.
 
-The framework runs on Bun, Elysia, TypeBox, and Drizzle ORM. The pages example adds Better Auth and Postgres.
+The framework is built on Effect 4: `effect/http-api` for HTTP, `effect/rpc` for RPC, `effect/ai` for MCP, and Drizzle ORM through its Effect drivers. The pages example adds Better Auth and Postgres.
 
 ## Install
 
 You need Bun 1.2 or later.
 
 ```sh
-bun add @brickkit/core @brickkit/cli @brickkit/crud
+bun add @brickkit/core @brickkit/crud effect
+bun add -d @brickkit/cli
 ```
 
 ## Build a minimal API
 
-Define a service, mount it, and start the server.
-
 ```ts
-import { brick, defineAction, defineService } from "@brickkit/core";
+import { Brick } from "@brickkit/core";
+import { NotFound } from "@brickkit/core/contracts";
+import { Effect, Layer, Schema } from "effect";
 
-const healthService = defineService("system");
-const ping = defineAction({
-  name: "ping",
-  execute: async () => ({ status: "ok" }),
+const GetUser = Brick.action("getUser", "/api/users/getUser", {
+  input: Schema.Struct({ id: Schema.String }),
+  output: Schema.Struct({ id: Schema.String, name: Schema.String }),
+  errors: [NotFound],
 });
-healthService.action(ping);
+const getUser = GetUser(({ id }) =>
+  id === "usr_42"
+    ? Effect.succeed({ id, name: "Ada" })
+    : Effect.fail(new NotFound({ message: "User not found" })),
+);
 
-const app = brick({ services: [healthService] });
-app.listen(4000);
+const users = Brick.service("users", { actions: { getUser } });
+export default Brick.app({ services: [users], layer: Layer.empty });
 ```
 
-This serves `POST /api/system/ping`.
-
-Inspect the same app without starting it:
-
 ```sh
+brick dev src/app.ts
 brick gen openapi src/app.ts --output openapi.json
 brick info src/app.ts
 ```
 
-The entry module must default-export the `BrickApp` and must not call `.listen()` inside it. Keep the listener in a separate bootstrap file. The CLI reference is in `packages/cli/README.md`.
+This serves `POST /api/users/getUser`. The entry module must default-export the app and must not start a listener; `brick dev` and `brick start` do that.
 
 ## Packages
 
-| Package          | Directory        | What it holds                                                                                |
-| ---------------- | ---------------- | -------------------------------------------------------------------------------------------- |
-| `@brickkit/core` | `packages/core/` | Services, actions, the `brick()` server, and the typed client at `@brickkit/core/client`.    |
-| `@brickkit/crud` | `packages/crud/` | Opt-in CRUD plugin with field policies, filtering, and hooks.                                |
-| `@brickkit/cli`  | `packages/cli/`  | The `brick` binary: `dev`, `start`, `build`, `gen`, and `info`, plus the Vite client plugin. |
+| Package            | Directory          | What it holds                                                                               |
+| ------------------ | ------------------ | ------------------------------------------------------------------------------------------- |
+| `@brickkit/core`   | `packages/core/`   | `Brick` actions, services, apps, typed errors, secrets.                                     |
+| `@brickkit/crud`   | `packages/crud/`   | CRUD contracts and handlers for Drizzle tables, with field policies, hooks, and typed rows. |
+| `@brickkit/client` | `packages/client/` | Promise and Effect clients typed from the same contract.                                    |
+| `@brickkit/cli`    | `packages/cli/`    | The `brick` binary: `dev`, `start`, `build`, `gen`, `info`, plus the Vite client plugin.    |
 
-The full app is in `examples/pages/`. It mounts the API in process with TanStack Start and uses workspace packages directly. The docs site is in `www/`, with content in `www/content/docs`.
+The full app is in `examples/pages/`. It mounts the API in process with TanStack Start. Smaller examples are `examples/showcase` and `examples/extensions`. The docs site is in `www/`.
+
+The long-term plans for this Effect-native direction are in `docs/effect/`.
 
 ## Develop and test
 
 ```sh
 bun install
-bun test packages
+bun test ./packages
 bun run pages:dev
 ```
 
-`bun test packages` runs the framework tests without Postgres. `bun run pages:dev` builds the framework and starts the combined web and API server on port 5174. Rerun it after you change framework code.
+`bun test ./packages` runs the framework tests without Postgres. `bun run pages:dev` builds the framework and starts the combined web and API server on port 5174. Rerun it after you change framework code.
 
 The pages suite needs Postgres. It is documented in `examples/pages/README.md`.
 
@@ -104,7 +109,7 @@ Releases run from a clean, up-to-date `main` checkout:
 bun run release patch
 ```
 
-The script in `scripts/release.ts` bumps all three packages to one version and pushes one `v<version>` tag. The `publish-npm.yml` workflow publishes the packages and creates the GitHub release. `dry_run` previews the bump and validates tarballs without publishing. Beta releases run from the `beta` branch.
+The script in `scripts/release.ts` bumps all four packages to one version and pushes one `v<version>` tag. The `publish-npm.yml` workflow publishes the packages and creates the GitHub release. `dry_run` previews the bump and validates tarballs without publishing. Beta releases run from the `beta` branch.
 
 ## Star history
 
