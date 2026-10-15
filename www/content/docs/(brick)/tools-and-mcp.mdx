@@ -131,4 +131,4 @@ Because actions in Brick-TS are monomorphic:
 - The same tool can be invoked over HTTP POST at `/api/docs/search`.
 - The same tool can be called in-process by other services as an `Effect`.
 
-All three call sites share identical schema validation and error handling. Authorization depends on the action's Effect requirements and the authentication layer configured for each transport.
+All three call sites share identical schema validation and declared errors. Each transport renders failures in its own format: HTTP denies with a status code (for example 403), RPC surfaces a typed failure, and MCP returns a tool result with `isError: true`. Authorization depends on the action's Effect requirements and the authentication layer configured for each transport.

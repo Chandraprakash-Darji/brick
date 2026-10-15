@@ -7,7 +7,7 @@ import { McpProtocol } from "effect/ai";
 import { requireMcpAuth } from "@better-auth/mcp";
 import { Brick } from "@brickkit/core";
 import { and, eq } from "drizzle-orm";
-import { Auth, authLayer } from "./auth";
+import { Auth, authLayer, type PagesAuth } from "./auth";
 import { authDatabaseLayer, databaseLayer, PagesDatabase } from "./db";
 import {
   pagesService,
@@ -39,28 +39,28 @@ const metadata = Brick.route(
     }),
   ),
 );
+const mcpBearerGuard = (auth: PagesAuth) =>
+  HttpRouter.use((router) =>
+    router.addGlobalMiddleware((effect) =>
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        if (new URL(request.url, "http://localhost").pathname !== "/mcp")
+          return yield* effect;
+        const web = yield* HttpServerRequest.toWeb(request).pipe(Effect.orDie);
+        const response = yield* Effect.promise(() =>
+          requireMcpAuth(auth, () => new Response(null, { status: 204 }), {
+            resource: mcpResourceSecret.require(),
+          })(web),
+        );
+        if (!response.ok) return HttpServerResponse.fromWeb(response);
+        return yield* effect;
+      }),
+    ),
+  );
 const bearerGuard = Layer.unwrap(
   Effect.gen(function* () {
     const auth = yield* Auth;
-    return HttpRouter.use((router) =>
-      router.addGlobalMiddleware((effect) =>
-        Effect.gen(function* () {
-          const request = yield* HttpServerRequest.HttpServerRequest;
-          if (new URL(request.url, "http://localhost").pathname !== "/mcp")
-            return yield* effect;
-          const web = yield* HttpServerRequest.toWeb(request).pipe(
-            Effect.orDie,
-          );
-          const response = yield* Effect.promise(() =>
-            requireMcpAuth(auth, () => new Response(null, { status: 204 }), {
-              resource: mcpResourceSecret.require(),
-            })(web),
-          );
-          if (!response.ok) return HttpServerResponse.fromWeb(response);
-          return yield* effect;
-        }),
-      ),
-    );
+    return mcpBearerGuard(auth);
   }),
 );
 const routes = Layer.mergeAll(

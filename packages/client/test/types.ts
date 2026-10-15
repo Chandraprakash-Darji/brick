@@ -22,9 +22,9 @@ async function compilerFixtures() {
   // @ts-expect-error Each endpoint retains its own success type.
   const wrong: string = await client.pages.count({});
   // @ts-expect-error The input is not widened to unknown.
-  client.pages.create({ payload: { slug: 123 } });
+  void client.pages.create({ payload: { slug: 123 } });
   // @ts-expect-error No unknown actions.
-  client.pages.remove({});
+  void client.pages.remove({});
   // @ts-expect-error Missing required schema AND middleware layers.
   createClient(securedApi, { baseUrl: "http://localhost" });
   createClient(securedApi, {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { prepareTestDatabase } from "./database";
+import { prepareTestDatabase, testPassword } from "./database";
 import { hash } from "bcryptjs";
 const suite = process.env.TEST_DATABASE_URL ? describe : describe.skip;
 suite("scoped better-auth and request identity", () => {
@@ -9,7 +9,7 @@ suite("scoped better-auth and request identity", () => {
       const owner = await db.signup("auth@example.com");
       const signin = await db.request("/api/auth/sign-in/email", {
         email: "auth@example.com",
-        password: "correct-horse-8",
+        password: testPassword,
       });
       expect(signin.status).toBe(200);
       expect(signin.headers.get("set-cookie")).toContain(

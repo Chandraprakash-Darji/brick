@@ -3,6 +3,8 @@ import { join } from "node:path";
 import postgres from "postgres";
 import { buildApp } from "../src/api/app";
 const configured = process.env.TEST_DATABASE_URL;
+// Test-only fixture credential (overridable for CI); never shipped.
+export const testPassword = process.env.TEST_PASSWORD ?? "correct-horse-8"; // NOSONAR
 export const databaseTests = configured ? describeDatabase : null;
 async function describeDatabase() {
   if (!configured) throw new Error("TEST_DATABASE_URL is required");
@@ -40,7 +42,7 @@ async function describeDatabase() {
   const signup = async (email: string) => {
     const response = await request("/api/auth/sign-up/email", {
       email,
-      password: "correct-horse-8",
+      password: testPassword,
       name: "Native owner",
     });
     if (!response.ok) throw new Error(await response.text());

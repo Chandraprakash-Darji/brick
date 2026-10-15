@@ -167,9 +167,11 @@ export function createProgram(): Command {
   return program;
 }
 async function main() {
-  await createProgram().parseAsync(process.argv);
+  try {
+    await createProgram().parseAsync(process.argv);
+  } catch (error) {
+    console.error("Fatal error:", error);
+    process.exit(1);
+  }
 }
-main().catch((error) => {
-  console.error("Fatal error:", error);
-  process.exit(1);
-});
+await main();

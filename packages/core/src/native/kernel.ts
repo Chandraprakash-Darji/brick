@@ -237,13 +237,14 @@ export const mount = <A, E>(
   };
   const dispose = (): Promise<void> => {
     disposed = true;
-    return (closing ??= (async () => {
+    closing ??= (async () => {
       if (startupFiber) await Effect.runPromise(Fiber.interrupt(startupFiber));
       const requests = [...active.values()];
       for (const request of requests) request.controller.abort();
       await Promise.all(requests.map((request) => request.done));
       await Effect.runPromise(Scope.close(scope, Exit.void));
-    })());
+    })();
+    return closing;
   };
   return Object.freeze({ fetch, ready, dispose });
 };
