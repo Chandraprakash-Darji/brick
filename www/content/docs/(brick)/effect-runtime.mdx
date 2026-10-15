@@ -1,92 +1,30 @@
 ---
-title: Effect Runtime & Scopes
-description: Application resource ownership, fiber cancellation, and explicit local execution.
+title: Effect runtime
+description: Runtime bindings, disposal and handle lifetime, and error mapping at the Effect boundary.
 ---
 
-`Brick.app({ services, layer })` composes native protocol Layers around a single closed application dependency graph. Every application owns its resources explicitly within an Effect `Scope`.
+## Runtime bindings
 
-## Application Lifecycle (`ready`, `fetch`, `dispose`)
+Each `brick()` call builds one `ManagedRuntime` and binds it to every service it owns. Direct calls (`action.run`, `executeEffect`, MCP `callTool`) resolve dependencies through the bound runtime. `app.handle` runs inside the app runtime instead.
 
-A Brick application is a self-contained, scoped entity:
+Services can be shared across apps. The newest live binding wins for direct calls. Disposing an app restores the previous binding. A failed `initialize()` also unbinds before it disposes its runtime.
 
-```ts title="src/server.ts"
-import app from "./app";
+## Disposal and handle lifetime
 
-// 1. Initialize dependencies and layers
-await app.ready();
+`dispose()` runs service destruction hooks, releases the `Layer`, and releases each database handle the app acquired at construction. A handle closes only after the last app that acquired it is disposed.
 
-// 2. Serve HTTP requests
-const server = Bun.serve({
-  port: 4000,
-  fetch: (request) => app.fetch(request),
-});
+The rules, in order:
 
-// 3. Graceful shutdown handler
-const shutdown = async () => {
-  server.stop(true);
-  await app.dispose();
-  process.exit(0);
-};
+- Handles are acquired after `brick()` succeeds. A construction failure acquires nothing and closes nothing.
+- Each app releases exactly the handles it acquired, at most once. A handle installed later with `setDb` belongs to whoever installed it.
+- A failed `initialize()` releases the acquired handles and unbinds the services.
 
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
-```
+## Error mapping
 
-### Lifecycle Guarantees
+Typed errors pass through unchanged. Anything else becomes a redacted `500`.
 
-- **`app.ready()`**: Builds the merged dependency graph, initializes connection pools, and prepares the routing pipeline.
-- **`app.fetch(request)`**: Executes requests using standard Fetch API primitives.
-- **`app.dispose()`**: Cancels in-flight request fibers and closes the application `Scope`, executing finalizers in reverse acquisition order.
-
-## Request Cancellation & Fiber Interruption
-
-In traditional Node/Bun web frameworks, when a client closes their browser tab or cancels a fetch request, the server continues executing database queries and expensive computations in the background, wasting CPU and database capacity.
-
-In Brick-TS, HTTP requests are bound to native Effect fibers and standard `AbortSignal` listeners:
-
-1. When a client aborts an HTTP request, Brick automatically triggers **fiber interruption** on the handler's active fiber.
-2. Any active SQL queries, HTTP calls, or async effects stop immediately.
-3. Registered Effect finalizers (e.g. `Effect.addFinalizer`) run cleanly, releasing locks and temporary resources.
-
-## Failure Channels vs Defects
-
-Brick maintains a strict separation between expected domain failures and unexpected defects:
-
-### 1. Declared Domain Errors
-
-When a handler returns a declared `Schema.TaggedError`:
-
-- The error is encoded with its declared schema.
-- The HTTP response status code matches its `{ httpApiStatus }` annotation (e.g. 404 for `NotFound`).
-- The tagged JSON payload (`{ "_tag": "NotFound", "message": "..." }`) is delivered to the client.
-
-### 2. Unexpected Defects (500 Internal Server Error)
-
-When an unexpected exception, unhandled promise rejection, or runtime defect occurs:
-
-- The defect is logged to server telemetry.
-- The wire response is automatically redacted to prevent leaking internal stack traces or database connection strings:
-  ```json
-  {
-    "message": "Internal server error"
-  }
-  ```
-- HTTP status code 500 is returned.
-
-## In-Process Execution with Layers
-
-When invoking actions directly in TypeScript without an HTTP server, provide dependencies explicitly using `Effect.provide`:
-
-```ts title="src/scripts/seed.ts"
-import { getUser } from "../services/users";
-import { UserDatabaseLive } from "../db";
-import { Effect } from "effect";
-
-const program = Effect.gen(function* () {
-  const user = yield* getUser({ id: "usr_42" });
-  console.log("Seeded user:", user.name);
-});
-
-// Run directly with the database layer:
-await Effect.runPromise(program.pipe(Effect.provide(UserDatabaseLive)));
-```
+- `authorize: false` fails with `UNAUTHORIZED` (`401`) when `ctx.user` is missing and `FORBIDDEN` (`403`) otherwise.
+- A thrown `ActionExecutionError` or `ValidationError` keeps its code, status, and message.
+- Any other thrown or rejected value becomes `INTERNAL_SERVER_ERROR` (`500`) with the message `"Internal Server Error"`. The framework logs the original value with the request id.
+- An explicit `Effect.fail(value)` passes `value` through the action boundary unchanged, including across the Promise boundary.
+- An `Effect` defect (`Effect.die`) becomes `INTERNAL_SERVER_ERROR` (`500`) at the action boundary.

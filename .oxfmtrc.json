@@ -12,7 +12,6 @@
     "**/routeTree.gen.ts",
     "**/.output/**",
     "**/.tanstack/**",
-    "bun.lock",
-    "**/vendor/**"
+    "bun.lock"
   ]
 }

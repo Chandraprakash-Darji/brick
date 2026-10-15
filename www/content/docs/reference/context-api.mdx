@@ -1,69 +1,88 @@
 ---
-title: Context Reference
-description: Effect Context services, tags, and dependency injection patterns.
+title: Context API Reference
+description: Detailed specification of BaseContext, ActionContext, and context lifecycle guarantees.
 ---
 
-Brick-TS uses Effect's **`Context.Service`** pattern for dependency injection, eliminating untyped ambient bags and global state.
+This reference documents the TypeScript interfaces, fields, and lifecycle guarantees of the Brick-TS context system.
 
-## Defining Services (`Context.Service`)
+## `BaseContext` Interface
 
-Create a service tag by extending `Context.Service`:
+`BaseContext` is the foundational object passed to all service context resolvers and action executions:
 
-```ts title="src/services/logger.ts"
-import { Context } from "effect";
-
-export interface LoggerService {
-  readonly log: (message: string) => void;
+```ts
+export interface BaseContext<TDb = any> {
+  request: Request;
+  db: TDb;
+  logger: Logger;
+  traceId: string;
+  requestId?: string;
+  caller?: string;
+  tenantId?: string;
+  services?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
-
-export class AppLogger extends Context.Service<AppLogger, LoggerService>()(
-  "AppLogger",
-) {}
 ```
 
-## Requiring Services in Action Handlers
+### Properties Breakdown
 
-In any action handler, access the service using `yield*`:
+| Property    | Type                      | Description                                                                                                                                                                       |
+| :---------- | :------------------------ | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `request`   | `Request`                 | Standard web `Request` for the active HTTP call. In-process calls without a request receive a placeholder `Request("http://localhost")`.                                          |
+| `db`        | `TDb`                     | The database client from the service's database handle (`service.getDb()`). Undefined when the service has no database.                                                           |
+| `logger`    | `Logger`                  | Logger with `.info()`, `.warn()`, `.error()`, and `.debug()` methods. The default logger prefixes output with the level (e.g. `[INFO]`).                                          |
+| `traceId`   | `string`                  | Correlation id. Over HTTP it is taken from the `x-trace-id` request header or minted (e.g. `tr_1`), and echoed back as an `x-trace-id` response header.                           |
+| `requestId` | `string \| undefined`     | Request id. Over HTTP it is taken from the `x-request-id` header or minted (e.g. `req_1`), and echoed back as an `x-request-id` response header. The HTTP runtime always sets it. |
+| `services`  | `Record<string, any>`     | Reserved. The HTTP runtime and default context set it to an empty object.                                                                                                         |
+| `metadata`  | `Record<string, unknown>` | Free-form metadata. The HTTP action runtime sets it to `{ headers }` (the request headers).                                                                                       |
+
+## Logger Interface
+
+The `logger` property on `BaseContext` adheres to:
 
 ```ts
-const myAction = MyAction(() =>
-  Effect.gen(function* () {
-    const logger = yield* AppLogger;
-    logger.log("Executing action...");
-    return { success: true };
-  }),
-);
+export interface Logger {
+  info: (...args: any[]) => void;
+  warn: (...args: any[]) => void;
+  error: (...args: any[]) => void;
+  debug: (...args: any[]) => void;
+}
 ```
 
-TypeScript automatically adds `AppLogger` to the Effect's requirement channel (`R`).
+## `ActionContext`
 
-## Providing Services with Layers
-
-Create a `Layer` implementing the service:
+`ActionContext` is the intersection of `BaseContext` and your service's custom context resolver return type:
 
 ```ts
-import { Layer } from "effect";
-
-export const LoggerLive = Layer.succeed(AppLogger, {
-  log: (msg) => console.log(`[APP] ${msg}`),
-});
+export type ActionContext<
+  TDb = any,
+  TServiceContext = DefaultServiceContext,
+> = BaseContext<TDb> & TServiceContext;
 ```
 
-Combine all service layers and supply them to `Brick.app({ layer })`.
+Inside an action's `execute({ ctx })` or CRUD hook, `ctx` includes all fields from `BaseContext` plus whatever your service `context` resolver returned.
 
-## Request-Level Context (`HttpServerRequest`)
+## `NarrowAuthorizedContext<TCtx>`
 
-To access request-specific information (such as HTTP headers or client IP), read the `HttpServerRequest.HttpServerRequest` service provided automatically by Brick's HTTP server:
+When an action declares an `authorize` guard, Brick wraps the context with `NarrowAuthorizedContext`:
 
 ```ts
-import { HttpServerRequest } from "effect/http";
-import { Effect } from "effect";
-
-const whoami = WhoamiAction(() =>
-  Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    const userAgent = request.headers["user-agent"] ?? "unknown";
-    return { userAgent };
-  }),
-);
+export type NarrowAuthorizedContext<TCtx> = TCtx extends { user: infer U }
+  ? [U] extends [null | undefined]
+    ? TCtx
+    : Omit<TCtx, "user"> & { user: NonNullable<U> }
+  : TCtx;
 ```
+
+This utility narrows `ctx.user` from `User | null` to `NonNullable<User>` at the type level. Inside `execute({ ctx })` of an action with `authorize`, you do not need optional chaining or null assertions on `ctx.user`. The narrowing is a type assertion only: it is your `authorize` function that must actually reject calls without a user.
+
+## Context Isolation Across Service Proxies
+
+When calling actions with `createServiceProxy("targetService")` (call signature: `proxy.actionName(input, ctx?)`), Brick isolates execution contexts:
+
+1. **Envelope allowlist**: Only `user`, `traceId`, `requestId`, and `tenantId` from the proxy's `options.context` or per-call context are forwarded, plus `caller` as described below. Per-call values take precedence over proxy defaults. Custom fields such as `session` and `isOwner` are dropped.
+2. **Independent Context Resolution**: The target service receives the envelope in its resolver input and uses its own database. Resolver return values take precedence over envelope values, including explicit `null` or `undefined`. Direct action calls enforce the same envelope allowlist for caller custom fields while accepting runtime fields such as `request`.
+3. **`caller` Field**: The proxy sets `ctx.caller` to `options.from` — the name of the service that created the proxy, passed to `createServiceProxy(target, { from: "..." })` — never the target service's name. When `from` is provided, any `caller` in `options.context` or the per-call context is ignored, so it cannot be spoofed. Without `from`, an explicitly supplied `caller` still passes through; otherwise `caller` is left unset.
+
+Only in-process dispatch is implemented; creating a proxy with `{ isMonolith: false }` throws when an action is called.
+
+The resolver input also includes `user?: unknown`, an identity claim. Validate it before use. `tenantId` is a claim to validate against the user's access, not proof of tenant membership. Internal proxy calls have a placeholder request without browser cookies; resolve their identity from the envelope according to the receiving service's trust policy.

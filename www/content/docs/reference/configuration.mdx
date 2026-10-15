@@ -1,42 +1,76 @@
 ---
-title: Application Configuration
-description: Complete options reference for Brick.app, services, and transports.
+title: Server & Environment Configuration
+description: Complete configuration reference for brick() server options, environment variables, and secrets.
 ---
 
-`Brick.app` is the primary entry point for composing and scoping an Effect-native application.
+This reference documents all configuration options for the `brick()` HTTP server runtime, CLI environment variables, and secrets management.
 
-## `Brick.app` Options Table
+## `CreateServerOptions` for `brick()`
 
-| Option           | Type                                      | Default       | Description                                                                              |
-| :--------------- | :---------------------------------------- | :------------ | :--------------------------------------------------------------------------------------- |
-| `services`       | `readonly ServiceConstraint[]`            | _(Required)_  | Array of immutable services created with `Brick.service()`.                              |
-| `layer`          | `Layer<AppRequirements, E, never>`        | _(Required)_  | Closed Effect Layer supplying all required services for handlers, routes, and stores.    |
-| `routes`         | `Layer<RoutesA, RoutesE, RoutesR>`        | `Layer.empty` | Optional custom HTTP routes defined with `Brick.route()`.                                |
-| `docs`           | `{ path: '/${string}' }`                  | `undefined`   | Mounts interactive Scalar API documentation at the specified path (e.g. `"/reference"`). |
-| `client`         | `{ module: string, exportName?: string }` | `undefined`   | Configures the client contract module relative to entry for `brick gen client`.          |
-| `transports.rpc` | `{ path: '/${string}' }`                  | `undefined`   | Configures native JSON-RPC transport route.                                              |
-| `transports.mcp` | `McpServerOptions`                        | `undefined`   | Configures native Model Context Protocol HTTP/SSE server for AI agents.                  |
+When constructing the server gateway via `brick(options)`, configure the following settings:
 
-## Validation Rules
+| Option           | Type                               | Default                 | Description                                                                                                     |
+| :--------------- | :--------------------------------- | :---------------------- | :-------------------------------------------------------------------------------------------------------------- |
+| `port`           | `number`                           | `undefined`             | Accepted by the type but not read by `brick()`. Pass the port to `app.listen(port)` instead.                    |
+| `prefix`         | `string`                           | `"/api"`                | Base path prefix for service action routes (`${prefix}/<service>/<action>`) and plugin routes.                  |
+| `services`       | `Service[]`                        | All registered services | Array of services to mount. Defaults to `getGlobalRegistry().list()`.                                           |
+| `title`          | `string`                           | `"Brick-TS API Mesh"`   | Application title rendered in OpenAPI 3.1 and documentation headers.                                            |
+| `version`        | `string`                           | `"1.0.0"`               | Application API version in OpenAPI `info.version`.                                                              |
+| `description`    | `string`                           | `undefined`             | Narrative API description for OpenAPI specifications.                                                           |
+| `docs`           | `boolean`                          | `true`                  | Enables or disables the OpenAPI specification, Scalar, and Swagger UI routes.                                   |
+| `openApiPath`    | `string`                           | `"/openapi.json"`       | Path where raw OpenAPI 3.1 JSON is served. Not affected by `prefix`.                                            |
+| `docsPath`       | `string`                           | `"/docs"`               | Path where Scalar interactive API documentation is mounted. Not affected by `prefix`.                           |
+| `swaggerPath`    | `string`                           | `"/swagger"`            | Path where Swagger UI documentation is mounted. Not affected by `prefix`.                                       |
+| `requestLogging` | `boolean \| RequestLoggingOptions` | `true`                  | Logs `METHOD path → status (ms)` per request. Options: `{ enabled?: boolean; logger?: (msg: string) => void }`. |
+| `reference`      | `boolean \| ReferenceOptions`      | `false`                 | Mounts an optional dedicated Scalar API reference page (defaults to `/reference`).                              |
+| `compiler`       | `boolean`                          | `true`                  | When true, generates specialized request handlers at server construction; `false` uses the generic handler.     |
+| `compilation`    | `CompiledApplication`              | `undefined`             | Precompiled handlers (used by the bundle that `brick build` emits).                                             |
+| `secrets`        | `{ source?, validate? }`           | `undefined`             | Secret source and boot validation. `resolveSecrets()` runs at construction unless `validate: false`.            |
+| `endpoints`      | `EndpointDefinition[]`             | `undefined`             | Raw HTTP routes mounted outside the JSON action mesh.                                                           |
 
-During application composition:
+`brick()` always mounts `GET /_health` and `GET /_brick/services` at the root, regardless of `prefix`.
 
-1. **Service Names**: Duplicate service names throw an error.
-2. **Action Paths**: Duplicate HTTP method + path routes throw an error.
-3. **Action Keys**: In `Brick.service("name", { actions })`, each key must strictly equal its action's `endpoint.identifier`.
-4. **Compile-Time Dependencies**: The supplied `layer` must resolve all requirements (`R`) from all actions in all mounted services. Missing requirements trigger TypeScript compiler errors.
+## Environment Variables
 
-## Application Instance Properties
+The framework and CLI inspect the following environment variables:
 
-`Brick.app` returns an immutable application object exposing:
+### `PORT`
 
-| Property   | Type                                      | Description                                                             |
-| :--------- | :---------------------------------------- | :---------------------------------------------------------------------- |
-| `kind`     | `"brick-native-app"`                      | Discriminator literal for native Brick applications.                    |
-| `services` | `readonly ServiceConstraint[]`            | Frozen array of all mounted services.                                   |
-| `api`      | `HttpApi`                                 | The compiled Effect `HttpApi` instance.                                 |
-| `layer`    | `Layer`                                   | The closed routing layer.                                               |
-| `fetch`    | `(request: Request) => Promise<Response>` | Web-standard Fetch handler for Bun, Node, or Cloudflare Workers.        |
-| `ready`    | `() => Promise<void>`                     | Initializes startup layers and verifies application readiness.          |
-| `dispose`  | `() => Promise<void>`                     | Gracefully interrupts active fibers and closes the application `Scope`. |
-| `openApi`  | `() => OpenApiDocument`                   | Generates the OpenAPI 3.1 schema representation of the application.     |
+- **Used by**: `brick dev`, `brick start`, and compiled bundles (`dist/brick/server.js`). `brick()` itself does not read `PORT`.
+- **Precedence**: For `dev`/`start`, an explicit `--port <number>` flag wins over `PORT`, which wins over the default `4000`. Compiled bundles use `PORT`, falling back to the `--port` value given to `brick build` (default `4000`).
+- **Constraints**: Must be an integer between `1` and `65535`. Out-of-range values or non-numeric strings make the process exit with an error.
+
+## Secrets Management (`@brickkit/core`)
+
+Brick-TS includes a secret referencing utility. Each `secret()` call registers a reference; values resolve from `process.env` (or a custom `SecretSource`) when you read them. A secret without a `default` is required:
+
+```ts title="src/secrets.ts"
+import { secret, resolveSecrets } from "@brickkit/core";
+
+// 1. Declare references to environment variables:
+export const dbPassword = secret("DB_PASSWORD");
+export const apiKey = secret("STRIPE_API_KEY").default(""); // a default makes it optional
+export const port = secret("PORT").default("4000").transform(Number);
+
+// 2. Access secrets at runtime:
+const password = dbPassword.require(); // Throws if missing or invalid
+const key = apiKey.value(); // Returns the value, or undefined when unset
+
+// 3. Validate all declared secrets (brick() also does this at construction):
+resolveSecrets(); // Throws one error listing every missing required secret
+```
+
+`SecretRef` methods: `.default(value)`, `.transform(fn)`, `.validate(fn)`, `.url()`, `.value(source?)`, `.require(source?)`, and `.isSet(source?)`. `listSecrets()` returns `{ name, hasDefault, isSet }` metadata without values.
+
+### Overriding Secrets in Tests
+
+In integration tests, override secret values without mutating `process.env`:
+
+```ts title="test/helpers.ts"
+import { overrideSecret, resetSecrets } from "@brickkit/core";
+
+overrideSecret("DB_PASSWORD", "test-secret");
+
+// Clears all overrides AND the secret registry:
+resetSecrets();
+```

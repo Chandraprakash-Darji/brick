@@ -1,19 +1,22 @@
 ---
 title: Primary Keys and Identifiers
-description: Configure custom primary keys, UUIDs, and auto-minted column IDs with Drizzle and CRUD.
+description: Configure custom primary keys, UUIDs, and auto-minted column IDs.
 ---
 
 Brick-TS uses whatever primary key your Drizzle table defines: autoincrement integers, UUIDs, or custom prefixed string identifiers minted with `$defaultFn()`.
 
 ## Minimal Example
 
-Define an auto-minted UUID primary key in Drizzle and register it with `crudContract`:
+Define an auto-minted UUID primary key and register it with the resource:
 
 ```ts title="src/services/items.ts"
-import { Brick } from "@brickkit/core";
-import { crudContract, sqliteStore } from "@brickkit/crud";
-import { sqliteTable, text } from "drizzle-orm/sqlite-core";
-import { ItemsDb } from "./db";
+import {
+  defineDatabase,
+  defineService,
+  sqliteTable,
+  text,
+} from "@brickkit/core";
+import { crud } from "@brickkit/crud";
 
 export const items = sqliteTable("items", {
   // Auto-minted UUID primary key
@@ -23,28 +26,25 @@ export const items = sqliteTable("items", {
   name: text("name").notNull(),
 });
 
-// 1. Declare the CRUD contract with the primary key field name
-export const itemContract = crudContract({
-  name: "item",
-  path: "/api/item",
-  table: items,
-  id: "id",
-  errors: [],
-  fields: {
-    id: { read: true, filter: ["eq", "in"] },
-    name: { read: true, create: true, update: true },
-  },
-});
+const database = defineDatabase({ tables: { items } });
+export const itemsService = defineService("items", { database });
 
-// 2. Implement the actions
-export const itemActions = itemContract.implement({
-  store: sqliteStore(items, ItemsDb),
-  access: "public",
-});
-
-export const itemsService = Brick.service("items", {
-  actions: itemActions,
-});
+// Register resource identity using items.id
+export const itemResource = itemsService
+  .resource({
+    name: "item",
+    table: items,
+    id: items.id, // Optional here: items has a single primary key
+  })
+  .use(
+    crud({
+      access: "public",
+      fields: {
+        id: { read: true, filter: ["eq", "in"] },
+        name: { read: true, create: true, update: true },
+      },
+    }),
+  );
 ```
 
 ### Schema
@@ -68,15 +68,66 @@ export const itemsSchemaFields = [
 
 <DatabaseTable name="items" fields={itemsSchemaFields} />
 
-## Primary Key Strategies
+export const documentsSchemaFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+    defaultValue: "crypto.randomUUID() (application)",
+  },
+  {
+    name: "title",
+    type: "text",
+    description: "Display title.",
+  },
+];
+
+<DatabaseTable name="documents" fields={documentsSchemaFields} />
+
+export const usersSchemaFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+    defaultValue: 'mintId("usr") (application)',
+  },
+  {
+    name: "name",
+    type: "text",
+    description: "Display name.",
+  },
+];
+
+<DatabaseTable name="users" fields={usersSchemaFields} />
+
+export const logsSchemaFields = [
+  {
+    name: "id",
+    type: "integer",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+    defaultValue: "autoincrement",
+  },
+  {
+    name: "message",
+    type: "text",
+    description: "Log message.",
+  },
+];
+
+<DatabaseTable name="logs" fields={logsSchemaFields} />
+
+## Supported Primary Key Strategies
+
+Drizzle column builders define primary key generation strategies:
 
 ### 1. Auto-Minted UUIDs
 
-Using UUIDs generated in application code avoids sequential guessing attacks and lets clients generate valid IDs offline:
+Generates random RFC 4122 UUID strings on row creation:
 
-```ts
-import { sqliteTable, text } from "drizzle-orm/sqlite-core";
-
+```ts title="src/schema.ts"
 export const documents = sqliteTable("documents", {
   id: text("id")
     .primaryKey()
@@ -85,12 +136,29 @@ export const documents = sqliteTable("documents", {
 });
 ```
 
-### 2. Autoincrement Integers
+### 2. Prefixed Identifiers (Stripe-Style)
 
-For internal catalogs or high-volume append-only sequences:
+Prefix IDs with entity tags (e.g. `usr_...`, `inv_...`) to improve readability and debugging:
 
-```ts
-import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
+```ts title="src/schema.ts"
+function mintId(prefix: string): string {
+  return `${prefix}_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+}
+
+export const users = sqliteTable("users", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => mintId("usr")),
+  name: text("name").notNull(),
+});
+```
+
+### 3. Autoincrement Integers
+
+Standard sequential integer identifiers:
+
+```ts title="src/schema.ts"
+import { integer, sqliteTable, text } from "@brickkit/core";
 
 export const logs = sqliteTable("logs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -98,49 +166,24 @@ export const logs = sqliteTable("logs", {
 });
 ```
 
-Pass `id: "id"` into `crudContract({ table: logs, id: "id", ... })`. Brick automatically derives an integer schema for route inputs, so `log.get({ id })` requires a number.
+When using integer keys, Brick automatically types action parameters such as `id` in `item.get` and `item.update` as `number`.
 
-### 3. Custom Prefixed Identifiers (e.g. `usr_...`, `inv_...`)
+## Resource Identity Registration
 
-Prefixed IDs improve readability in logs and API debugging:
+`service.resource()` takes an optional `id` column. If you omit it, Brick uses the table's primary key when the table has exactly one primary-key column. Pass `id` explicitly when the table has no single primary key (for example a composite key) or when you want lookups to use a different unique column; the column must belong to the resource's table, otherwise `resource()` throws `Resource '<name>' requires an id column belonging to its table`.
 
-```ts
-export const users = sqliteTable("users", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => `usr_${crypto.randomUUID().replaceAll("-", "")}`),
-  email: text("email").notNull(),
-});
+```ts title="src/services/catalog.ts"
+const product = service
+  .resource({
+    name: "product",
+    table: productsTable,
+    id: productsTable.id, // Column CRUD uses for get/update/delete lookups
+  })
+  .use(crud({ access: "public", fields: {/* ... */} }));
 ```
 
-## How Routes Use Primary Keys
+The CRUD plugin uses this column for single-record operations, and types `id` from the column's data type:
 
-When `crudContract` creates endpoints, the primary key column dictates the schema for individual row operations:
-
-- **Get Row** (`page.get`): Accepts `{ id }`. Fails with `NotFound` (404) if the row doesn't exist.
-- **Update Row** (`page.update`): Accepts `{ id, data }`. Applies changes only to the matching row.
-- **Delete Row** (`page.delete`): Accepts `{ id }`. Removes the row and returns `{ success: true }`.
-
-### Batch Fetching with `in`
-
-To fetch multiple records by ID in a single query, enable the `in` filter operator on the primary key:
-
-```ts
-fields: {
-  id: { read: true, filter: ["eq", "in"] },
-}
-```
-
-Then query via `page.list`:
-
-```bash
-curl -X POST http://localhost:4000/api/page/list \
-  -H "Content-Type: application/json" \
-  -d '{
-    "where": {
-      "field": "id",
-      "op": "in",
-      "value": ["id_1", "id_2", "id_3"]
-    }
-  }'
-```
+- `product.get({ input: { id: "prod_1" } })`
+- `product.update({ input: { id: "prod_1", data: { name: "New Name" } } })`
+- `product.delete({ input: { id: "prod_1" } })`

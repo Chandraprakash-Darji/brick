@@ -68,8 +68,6 @@ jobs:
         working-directory: packages/cli
       - run: npm pack --dry-run
         working-directory: packages/crud
-      - run: npm pack --dry-run
-        working-directory: packages/client
 
   prepare:
     if: github.event_name != 'pull_request'
@@ -141,7 +139,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pkg: [core, crud, client, cli]
+        pkg: [core, crud, cli]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -167,7 +165,7 @@ jobs:
         working-directory: .
 
       - name: Test packages
-        run: bun test ./packages/core ./packages/crud ./packages/client ./packages/cli
+        run: bun test packages/core packages/crud packages/cli
 
       - name: Resolve name and version
         id: meta
@@ -187,9 +185,8 @@ jobs:
           core_version="$(node -p "require('../core/package.json').version")"
           cli_version="$(node -p "require('../cli/package.json').version")"
           crud_version="$(node -p "require('../crud/package.json').version")"
-          client_version="$(node -p "require('../client/package.json').version")"
-          if [[ "$core_version" != "$cli_version" || "$core_version" != "$crud_version" || "$core_version" != "$client_version" ]]; then
-            echo "::error::core, cli, crud and client versions must match"
+          if [[ "$core_version" != "$cli_version" || "$core_version" != "$crud_version" ]]; then
+            echo "::error::core, cli and crud versions must match"
             exit 1
           fi
           expected="${RELEASE_TAG#v}"

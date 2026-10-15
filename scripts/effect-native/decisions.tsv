@@ -1,9 +1,0 @@
-ts	phase	decision	why	evidence	result
-2026-10-15T03:25:00Z	frame	Use EFFECT_NATIVE_PLAN.md as the migration target	The user chose Effect-only authoring before asking to complete the migration	docs/effect/EFFECT_NATIVE_PLAN.md	open
-2026-10-15T03:25:01Z	baseline	Run bun run check before changing source	Preserve a reference for existing behavior	/tmp/brick-effect-baseline.log	282 tests passed; full check passed
-2026-10-15T03:25:02Z	design	Compare class and immutable functional service designs	The type derivation must work before replacing the runtime	/tmp/brick-effect-design-a.md; /tmp/brick-effect-design-b.md	open
-2026-10-15T03:25:03Z	design	Replace unavailable Grok design seat with Codex	The Grok provider is disabled in the live catalog	T3 delegated task effect-native-design-b-codex-20261015	open
-2026-10-15T03:19:16Z	audit	Supersede the timestamps on the first four rows; those decisions occurred between 03:14 and 03:19 UTC	The initial timestamps were entered before checking the clock	docs/effect/migration-decisions.tsv	corrected by this row
-2026-10-15T03:19:16Z	design	Stop the Claude candidate and use no Claude tasks going forward	The user explicitly requested this during the migration	T3 task stop-claude-design-20261015	cancellation requested
-2026-10-15T03:19:16Z	data	Reject Drizzle 1.0.0-rc.4 with Effect 4.0.4	Both Effect drivers fail to import because TaggedErrorClass was removed	/tmp/brick-effect-spikes/node_modules/drizzle-orm/effect-core/errors.js	failed import reproduction
-2026-10-15T03:19:16Z	data	Test Drizzle 1.0.0-rc.5-5935859 in isolation	This snapshot imports against Effect 4.0.4 and preserves native Effect queries	/tmp/brick-effect-spikes/database.ts	SQLite query, commit, rollback passed; PostgreSQL import passed

@@ -65,7 +65,7 @@ const codeSamples = {
     serviceCode: serverSource.trim(),
     sideFile: "src/server.ts",
     sideDesc:
-      "Expose the users service over HTTP. Run bun run --cwd examples/showcase serve, then POST JSON to /api/users/getUser.",
+      "Expose the users service over HTTP. Run bun run --cwd examples/showcase serve, then request /api/users/getUser?id=usr_42.",
     sideCode: serverSource.trim(),
   },
 };
@@ -219,7 +219,8 @@ function Home() {
                   port 3000.
                 </p>
                 <p>
-                  POST JSON to /api/users/getUser to call the action over HTTP.
+                  Request /api/users/getUser?id=usr_42 to call the action over
+                  HTTP.
                 </p>
               </div>
               <figure className="mt-auto border-t">
@@ -230,9 +231,7 @@ function Home() {
                   <span className="text-gopher-ink select-none">$ </span>
                   {"bun run --cwd examples/showcase serve\n"}
                   <span className="text-gopher-ink select-none">$ </span>
-                  {
-                    "curl http://localhost:3000/api/users/getUser -H 'content-type: application/json' -d '{\"id\":\"usr_42\"}'"
-                  }
+                  {"curl 'http://localhost:3000/api/users/getUser?id=usr_42'"}
                 </pre>
               </figure>
             </div>

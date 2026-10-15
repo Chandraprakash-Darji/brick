@@ -1,52 +1,136 @@
-import { describe, expect, test } from "bun:test";
-import { prepareTestDatabase, testPassword } from "./database";
+import { describe, it, expect, beforeEach } from "bun:test";
+
+import { defineDatabase, eq } from "@brickkit/core";
 import { hash } from "bcryptjs";
-const suite = process.env.TEST_DATABASE_URL ? describe : describe.skip;
-suite("scoped better-auth and request identity", () => {
-  test("signs in, rejects invalid passwords, preserves bcrypt accounts and request isolation", async () => {
-    const db = await prepareTestDatabase();
-    try {
-      const owner = await db.signup("auth@example.com");
-      const signin = await db.request("/api/auth/sign-in/email", {
-        email: "auth@example.com",
-        password: testPassword,
-      });
-      expect(signin.status).toBe(200);
-      expect(signin.headers.get("set-cookie")).toContain(
-        "better-auth.session_token",
-      );
-      expect(
-        (
-          await db.request("/api/auth/sign-in/email", {
-            email: "auth@example.com",
-            password: "wrong-password",
-          })
-        ).status,
-      ).toBe(401);
-      const legacy = await hash("legacy-password", 4);
-      await db.sql`update account set password=${legacy} where user_id=${owner.body.user.id}`;
-      expect(
-        (
-          await db.request("/api/auth/sign-in/email", {
-            email: "auth@example.com",
-            password: "legacy-password",
-          })
-        ).status,
-      ).toBe(200);
-      expect(
-        (
-          await db.sql`select password from account where user_id=${owner.body.user.id}`
-        )[0]?.password,
-      ).toBe(legacy);
-      const [authed, anonymous] = await Promise.all([
-        db.request("/api/pages/echo", { message: "ok" }, owner.cookie),
-        db.request("/api/pages/echo", { message: "no" }),
-      ]);
-      expect(authed.status).toBe(200);
-      expect(anonymous.status).toBe(401);
-      expect(await authed.json()).toContain(owner.body.user.id);
-    } finally {
-      await db.close();
-    }
-  }, 30000);
+
+import { createAuthInstance, initAuth } from "../src/api/auth/index";
+import { account, user } from "../src/api/auth/schema";
+import { authTables } from "../src/api/db";
+import { listPagesTool } from "../src/api/services/pages/mcp";
+import { pagesService } from "../src/api/services/pages/service";
+import { TEST_DATABASE_URL, prepareTestDatabase } from "./database";
+
+const EMAIL = "auth.case@example.com";
+const PASSWORD = "correct-horse-8";
+
+function isolatedAuth() {
+  const database = defineDatabase({
+    engine: "postgres",
+    tables: authTables,
+    url: TEST_DATABASE_URL,
+  });
+  return initAuth(database);
+}
+
+function authedHeaders(auth: ReturnType<typeof createAuthInstance>) {
+  return {
+    signIn: (email = EMAIL, password = PASSWORD) =>
+      auth.api.signInEmail({ body: { email, password } }),
+    /** Raw Response carrying set-cookie (API returns data-only by default). */
+    signInResponse: (email = EMAIL, password = PASSWORD) =>
+      auth.api.signInEmail({
+        asResponse: true,
+        body: { email, password },
+      }) as unknown as Promise<Response>,
+    signup: (email = EMAIL, password = PASSWORD) =>
+      auth.api.signUpEmail({ body: { email, name: "Auth Case", password } }),
+  };
+}
+
+function sessionCookie(res: Response): string {
+  const cookie = res.headers.get("set-cookie");
+  if (!cookie) throw new Error("sign-in response carried no set-cookie");
+  return cookie;
+}
+
+describe("better-auth + service context loading", () => {
+  beforeEach(async () => {
+    await prepareTestDatabase();
+  });
+
+  it("signs up and signs in with email+password (min length 8)", async () => {
+    const auth = isolatedAuth();
+    const api = authedHeaders(auth);
+    const signedUp = await api.signup();
+    expect(signedUp.user.email).toBe(EMAIL);
+    const cookie = sessionCookie(await api.signInResponse());
+    expect(cookie).toContain("better-auth.session_token");
+    await expect(api.signup()).rejects.toThrow();
+    await expect(api.signIn(EMAIL, "wrong-password")).rejects.toThrow();
+  });
+
+  it("shares a defined database between auth and pages", async () => {
+    const database = await prepareTestDatabase();
+    const auth = createAuthInstance(database);
+    const signedUp = await authedHeaders(auth).signup();
+    expect(pagesService.getDb()).toBe(database.getDb());
+    const rows = await database.getDb().select({ id: user.id }).from(user);
+    expect(rows[0]?.id).toBe(signedUp.user.id);
+    expect(database.tables.pagesTable).toBeDefined();
+  });
+
+  it("signs in with a restored bcrypt account without rewriting its hash", async () => {
+    const database = await prepareTestDatabase();
+    const auth = createAuthInstance(database);
+    const api = authedHeaders(auth);
+    const signedUp = await api.signup();
+    const legacyHash = await hash(PASSWORD, 4);
+    const db = database.getDb();
+    await db
+      .update(account)
+      .set({ password: legacyHash })
+      .where(eq(account.userId, signedUp.user.id));
+
+    expect(sessionCookie(await api.signInResponse())).toContain(
+      "better-auth.session_token",
+    );
+    await expect(api.signIn(EMAIL, "wrong-password")).rejects.toThrow();
+    const rows = await db
+      .select({ password: account.password })
+      .from(account)
+      .where(eq(account.userId, signedUp.user.id));
+    expect(rows[0]?.password).toBe(legacyHash);
+  });
+
+  it("loads user/session into service context from the session cookie", async () => {
+    const auth = isolatedAuth();
+    const api = authedHeaders(auth);
+    const signedUp = await api.signup();
+    const cookie = sessionCookie(await api.signInResponse());
+
+    const ctx = await pagesService.resolveContext({
+      request: new Request("http://localhost/api/page", {
+        headers: { cookie },
+      }),
+    });
+    expect(ctx.user?.id).toBe(signedUp.user.id);
+    expect(ctx.user?.email).toBe(EMAIL);
+    expect(ctx.session).toBeDefined();
+  });
+
+  it("leaves user null without a session cookie (protected tools reject)", async () => {
+    isolatedAuth();
+    const ctx = await pagesService.resolveContext({
+      request: new Request("http://localhost/api/page"),
+    });
+    expect(ctx.user).toBeNull();
+    await expect(listPagesTool({ ctx, input: {} })).rejects.toThrow(
+      /unauthorized|access denied/i,
+    );
+  });
+
+  it("session-authenticated requests pass protected tools", async () => {
+    const auth = isolatedAuth();
+    const api = authedHeaders(auth);
+    await api.signup();
+    const cookie = sessionCookie(await api.signInResponse());
+    const ctx = await pagesService.resolveContext({
+      request: new Request("http://localhost/api/page", {
+        headers: { cookie },
+      }),
+    });
+    const listed = await listPagesTool({ ctx, input: {} });
+    expect(Array.isArray(listed)).toBe(true);
+    expect(listed).toHaveLength(0);
+  });
 });

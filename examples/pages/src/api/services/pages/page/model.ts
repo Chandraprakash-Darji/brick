@@ -1,4 +1,3 @@
-import type { InferSelectModel } from "drizzle-orm";
 import { boolean, pgTable, text } from "@brickkit/core/pg";
 
 export type Theme = "github-dark" | "github-light" | "dracula" | "nord";
@@ -28,7 +27,7 @@ export const pagesTable = pgTable("pages", {
   userId: text("user_id"),
 });
 
-export type Page = InferSelectModel<typeof pagesTable>;
+export type Page = typeof pagesTable.$inferSelect;
 
 /** Page metadata without the content body (Go `pageMeta` parity). */
 export type PageMeta = Omit<Page, "content">;

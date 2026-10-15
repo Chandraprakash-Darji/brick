@@ -1,67 +1,125 @@
 ---
-title: Effect Setup and Integration
-description: Configure TypeScript and Effect in your Brick-TS project.
+title: Use Effect in your Brick app
+description: Define services, actions, and tools as Effects, supply dependencies with a Layer, and run the app.
 ---
 
-Brick-TS is built from the ground up as an Effect-native framework. Business actions, CRUD operations, database handles, error envelopes, and AI tools are all first-class Effect programs.
+Brick runs every action through Effect, so an `execute` callback can return an `Effect` instead of a `Promise`. Return Effects when you need dependencies, typed failures, or cancellation. Keep Promises when you do not.
 
-## Dependencies
+## Install the dependency
 
-Install the Brick packages and `effect`:
+To add Effect to your app, install it:
 
 ```bash
-bun add @brickkit/core @brickkit/crud @brickkit/client @brickkit/cli effect drizzle-orm
+bun add effect
 ```
 
-Brick-TS is designed for `effect@4.x`.
+Import the Effect entrypoints, not `@brickkit/core` directly:
 
-## TypeScript Configuration
-
-Effect leverages advanced TypeScript features for precise type inference and compile-time requirement checking. Ensure your `tsconfig.json` includes:
-
-```json title="tsconfig.json"
-{
-  "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "strict": true,
-    "skipLibCheck": true,
-    "noEmit": true
-  }
-}
+```ts title="src/services/greetings.ts"
+import { Context, Effect, Layer } from "effect";
+import { brick, defineService, t } from "@brickkit/core/effect";
 ```
 
-## Core Effect Modules in Brick
+## Define a service with an Effect context
 
-When building applications with Brick-TS, you will interact with the following Effect modules:
+Return the service context from an `Effect`. The resolved fields merge into `ctx` for every action and tool:
 
-| Module            | Role in Brick-TS                                                                         |
-| :---------------- | :--------------------------------------------------------------------------------------- |
-| `effect/Effect`   | Pure computations, async control flow, typed errors (`E`), and requirements (`R`).       |
-| `effect/Schema`   | Runtime input and output validation, schema refinements, and tagged error classes.       |
-| `effect/Context`  | Declaring dependency tags via `Context.Service` for compile-time dependency injection.   |
-| `effect/Layer`    | Assembling and composing dependencies (database pools, auth services) into applications. |
-| `effect/http-api` | Transport definitions, OpenAPI 3.1 generation, and HTTP client infrastructure.           |
-| `effect/ai`       | Model Context Protocol (MCP) server protocols and tool behavior annotations.             |
+```ts title="src/services/greetings.ts"
+class Greeting extends Context.Service<Greeting, { text: string }>()(
+  "Greeting",
+) {}
 
-## Recommended Project Structure
-
-An Effect-native Brick application separates contract declarations from server implementations:
-
-```text
-my-brick-app/
-├── src/
-│   ├── contract.ts       # Browser-safe contracts (Schema, HttpApi, errors)
-│   ├── schema.ts         # Drizzle database tables
-│   ├── db.ts             # Database service tag and acquisition layer
-│   ├── services/
-│   │   ├── users/        # Action handlers and service definitions
-│   │   └── pages/        # CRUD implementations and hooks
-│   ├── app.ts            # Brick.app() composition with Layer
-│   └── client.ts         # Frontend createClient re-export
-├── tsconfig.json
-└── package.json
+export const greetingsService = defineService("greetings", {
+  context: () => Effect.map(Greeting, (value) => ({ greeting: value.text })),
+});
 ```
 
-By keeping `src/contract.ts` free of database drivers and server dependencies, you can import it into frontend applications or generate client wrappers with `brick gen client` without bundle pollution.
+## Register actions and tools
+
+An `execute` callback can return an `Effect`. Read dependencies with `yield*` inside `Effect.gen`, or with `Effect.map` for one-liners:
+
+```ts title="src/services/greetings.ts"
+export const hello = greetingsService.action({
+  name: "hello",
+  output: t.String(),
+  execute: ({ ctx }) => Effect.succeed(`${ctx.greeting}, world`),
+});
+
+export const farewell = greetingsService.action({
+  name: "farewell",
+  input: t.Object({ name: t.String() }),
+  output: t.String(),
+  authorize: ({ ctx }) => Effect.succeed(ctx.user != null),
+  execute: ({ ctx, input }) =>
+    Effect.gen(function* () {
+      const value = yield* Greeting;
+      return `${value.text}, ${input.name} (${ctx.greeting})`;
+    }),
+});
+```
+
+If `authorize` returns an `Effect` of `false`, the call fails with `401` when no user is present and `403` otherwise. A native `authorize` that returns `false` behaves the same way.
+
+## Supply dependencies and start the app
+
+Pass a `Layer` to `brick()`. The app builds it once and shares it across service contexts, actions, tools, and endpoints:
+
+```ts title="src/app.ts"
+import { greetingsService, hello } from "./services/greetings";
+
+const app = brick({
+  services: [greetingsService],
+  layer: Layer.succeed(Greeting, { text: "Hello" }),
+});
+
+await app.initialize();
+await hello.run();
+await app.dispose();
+```
+
+`hello.run()` returns `"Hello, world"`. Call `app.dispose()` when the process ends. Disposal runs destruction hooks, releases the `Layer`, and closes each database handle that no remaining app uses.
+
+## Use Effect callbacks in CRUD
+
+If you use CRUD, import `crud` from `@brickkit/crud/effect`. Its `authorize`, `scope`, and hook callbacks accept Effects:
+
+```ts title="src/services/pages.ts"
+import { crud } from "@brickkit/crud/effect";
+
+pagesResource.use(
+  crud({
+    fields: {
+      title: { read: true, create: true, update: true },
+    },
+    access: {
+      authorize: ({ ctx }) => Effect.succeed(ctx.user?.id != null),
+    },
+    hooks: {
+      beforeCreate: ({ data }) =>
+        Effect.sync(() => {
+          data.updatedAt = new Date().toISOString();
+        }),
+    },
+  }),
+);
+```
+
+The CRUD query pipeline stays Promise-based. The plugin runs each Effect callback through the host service runtime, so dependencies resolve the same way as in actions.
+
+## Compose outside the app
+
+`executeEffect` exposes the action as an `Effect`, including context resolution, validation, authorization, execution, and output validation. Provide dependencies yourself when no app is running:
+
+```ts
+import { Effect, Layer } from "effect";
+
+const program = Effect.gen(function* () {
+  const ctx = yield* greetingsService.resolveContextEffect();
+  return yield* hello.executeEffect({ ctx });
+});
+
+const greeting = Layer.succeed(Greeting, { text: "Hello" });
+await Effect.runPromise(Effect.provide(program, greeting));
+```
+
+Explicit `Effect.fail(value)` failures pass through the Promise boundary unchanged. Use `ActionExecutionError` when the failure needs a specific HTTP status.

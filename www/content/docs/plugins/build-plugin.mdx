@@ -1,125 +1,145 @@
 ---
-title: Build an Extension
-description: Step-by-step guide to authoring reusable Effect-native extensions.
+title: Authoring Plugins
+description: Create custom service and resource plugins with scoped routes and typed APIs.
 ---
 
-This guide walks through creating a reusable extension that packages a database table, an Effect Schema contract, and an action factory.
+Plugins package modular capabilities into reusable TypeScript descriptors that install onto services or resources.
 
-<Steps>
+## Authoring a Service Plugin (`defineServicePlugin`)
 
-### Step 1: Declare the Database Table
+A service plugin registers actions and raw HTTP endpoints onto a host service using `setup({ service, routes })`:
 
-Create `schema.ts` with your Drizzle table definition:
+```ts title="src/plugins/greeting.ts"
+import { defineServicePlugin, t, type PluginRoutes } from "@brickkit/core";
 
-```ts title="src/extensions/notes/schema.ts"
-import { sqliteTable, text } from "drizzle-orm/sqlite-core";
+export interface GreetingOptions {
+  salutation?: string;
+  routes?: PluginRoutes<"app" | "service">;
+}
 
-export const notesTable = sqliteTable("notes", {
-  id: text("id").primaryKey(),
-  targetId: text("target_id").notNull(),
-  content: text("content").notNull(),
-  createdAt: text("created_at").notNull(),
-});
-```
+export function greeting(options: GreetingOptions = {}) {
+  const salutation = options.salutation ?? "Hello";
 
-### Step 2: Define the Browser-Safe Contract
-
-Create `contract.ts` using `crudContract` and declare custom `Schema.TaggedError` classes. Keep this module free of database drivers so it can be imported safely by frontend applications:
-
-```ts title="src/extensions/notes/contract.ts"
-import { crudContract } from "@brickkit/crud";
-import { Schema } from "effect";
-import { notesTable } from "./schema";
-
-export class InvalidNote extends Schema.TaggedError<InvalidNote>()(
-  "InvalidNote",
-  { message: Schema.String },
-  { httpApiStatus: 400 },
-) {}
-
-export const NotesContract = crudContract({
-  name: "note",
-  path: "/api/notes",
-  table: notesTable,
-  id: "id",
-  errors: [InvalidNote],
-  fields: {
-    id: { read: true, filter: ["eq"] },
-    targetId: { read: true, create: true, filter: ["eq"] },
-    content: { read: true, create: true, update: true },
-    createdAt: { read: true, sort: true },
-  },
-});
-```
-
-### Step 3: Implement the Handler Factory
-
-In `index.ts`, export a factory function that accepts configuration (or uses host database tags) and returns implemented actions:
-
-```ts title="src/extensions/notes/index.ts"
-import { sqliteStore } from "@brickkit/crud";
-import { Effect } from "effect";
-import { notesTable } from "./schema";
-import { NotesContract, InvalidNote } from "./contract";
-import { AppDatabase } from "../../db";
-
-export { NotesContract, InvalidNote } from "./contract";
-export { notesTable } from "./schema";
-
-export function notesExtension() {
-  return NotesContract.implement({
-    store: sqliteStore(notesTable, AppDatabase),
-    access: "public",
-    hooks: {
-      beforeCreate: ({ data }) =>
-        Effect.gen(function* () {
-          const content = String(data.content ?? "").trim();
-          if (!content) {
-            return yield* Effect.fail(
-              new InvalidNote({ message: "Note content cannot be empty" }),
-            );
-          }
-          return {
-            ...data,
-            id: crypto.randomUUID(),
-            content,
-            createdAt: new Date().toISOString(),
-          };
+  return defineServicePlugin({
+    name: "example/greeting",
+    routes: options.routes,
+    setup({ service, routes }) {
+      // 1. Register an action onto the service mesh
+      const hello = routes.action({
+        name: "hello",
+        method: "GET",
+        path: `/${service.name}/hello`,
+        input: t.Object({
+          name: t.String({ minLength: 1 }),
         }),
+        output: t.String(),
+        execute: ({ input }) => `${salutation}, ${input.name}!`,
+      });
+
+      // 2. Register a raw HTML endpoint (outside the JSON action mesh)
+      routes.endpoint({
+        name: "welcome",
+        method: "GET",
+        path: `/${service.name}/welcome.html`,
+        handler: async ({ set }) => {
+          set.headers["content-type"] = "text/html; charset=utf-8";
+          return `<!DOCTYPE html><html><body><h1>${salutation}!</h1></body></html>`;
+        },
+      });
+
+      // Return a typed API namespace for callers
+      return {
+        hello,
+        salutation,
+      };
     },
   });
 }
 ```
 
-### Step 4: Mount on a Service
+### Installing the Service Plugin
 
-In your host application, invoke the factory and register its actions onto a service:
+Install onto a service using `service.use()`:
 
-```ts title="src/app.ts"
-import { Brick } from "@brickkit/core";
-import { notesExtension } from "./extensions/notes";
-import { DatabaseLive } from "./db";
+```ts title="src/services/greeter.ts"
+import { defineService } from "@brickkit/core";
+import { greeting } from "../plugins/greeting";
 
-const noteActions = notesExtension();
+export const greeterService = defineService("greeter");
 
-export const notesService = Brick.service("notes", {
-  actions: noteActions,
-});
+// Install the plugin
+export const api = greeterService.use(greeting({ salutation: "Welcome" }));
 
-export default Brick.app({
-  services: [notesService],
-  layer: DatabaseLive,
-});
+// In-process TypeScript calls are fully typed:
+const message = await api.hello({ input: { name: "Ada" } });
+console.log(message); // "Welcome, Ada!"
 ```
 
-</Steps>
+## Authoring a Resource Plugin (`defineResourcePlugin`)
 
-## Testing Your Extension
+A resource plugin attaches behavior to a specific database table and entity:
 
-Test extensions locally using Bun and Effect test runners:
+```ts title="src/plugins/slugify.ts"
+import { defineResourcePlugin, eq } from "@brickkit/core";
 
-```bash
-bun test src/extensions/notes
+export function slugLookup(options: { slugColumn: any }) {
+  return defineResourcePlugin({
+    name: "example/slugLookup",
+    setup({ resource, service, routes }) {
+      // Return helper methods attached directly onto the resource object
+      return {
+        findBySlug: async (slug: string, ctx: any) => {
+          if (!ctx.db) throw new Error("Database required");
+          const rows = await ctx.db
+            .select()
+            .from(resource.table)
+            .where(eq(options.slugColumn, slug))
+            .limit(1);
+          return rows[0] ?? null;
+        },
+      };
+    },
+  });
+}
 ```
 
-You can execute actions directly in-process by supplying `DatabaseLive` with `Effect.provide`, testing both valid flows and tagged error conditions.
+### Installing the Resource Plugin
+
+Install onto a resource using `resource.use()`:
+
+```ts title="src/services/articles.ts"
+const article = service
+  .resource({ name: "article", table: articlesTable, id: articlesTable.id })
+  .use(slugLookup({ slugColumn: articlesTable.slug }));
+
+// The returned resource is augmented with findBySlug:
+const found = await article.findBySlug("my-post-slug", ctx);
+```
+
+## Plugin Design Principles
+
+1. **Synchronous Setup**: `setup()` must execute synchronously. Asynchronous connection initialization or network lookups are prohibited during registration.
+2. **Connection Flow**: Use `ctx.db` provided during request handling. Never create persistent connection pools inside plugin constructors.
+3. **Collision Avoidance**: Resource plugin contributions must not overwrite existing resource properties or prototype methods.
+4. **Isolated Descriptors**: Reinstalling a plugin with a different descriptor of the same name fails. Reuse descriptors when sharing instances.
+
+### Schema
+
+The resource-plugin example expects an application-owned `articles` table with an identity column and a slug column. Declare the table before registering the resource. A unique slug makes `findBySlug` unambiguous.
+
+export const articleFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Article identifier.",
+    isPrimaryKey: true,
+  },
+  {
+    name: "slug",
+    type: "text",
+    description: "Slug used by findBySlug.",
+    isUnique: true,
+  },
+];
+
+<DatabaseTable name="articles" fields={articleFields} />

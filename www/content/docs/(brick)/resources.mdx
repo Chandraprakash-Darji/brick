@@ -3,19 +3,21 @@ title: Resources and CRUD
 description: Expose database tables via CRUD resources with field-level access, filtering, and security policies.
 ---
 
-Resources link Drizzle database tables to services, while the `@brickkit/crud` package provides type-safe, deny-by-default data operations.
+Resources link Drizzle database tables to services, while the `@brickkit/crud` plugin provides type-safe, field-level data operations.
 
 ## Minimal Example
 
-Attach a declarative CRUD contract to a Drizzle table with explicit field policies and public access:
+Attach a declarative CRUD resource to a table with field policies and public access:
 
 ```ts title="src/services/pages.ts"
-import { Brick } from "@brickkit/core";
-import { crudContract, sqliteStore } from "@brickkit/crud";
-import { sqliteTable, text } from "drizzle-orm/sqlite-core";
-import { PagesDb } from "./db";
+import {
+  defineDatabase,
+  defineService,
+  sqliteTable,
+  text,
+} from "@brickkit/core";
+import { crud } from "@brickkit/crud";
 
-// 1. Declare the database table with Drizzle
 export const pages = sqliteTable("pages", {
   id: text("id")
     .primaryKey()
@@ -25,42 +27,34 @@ export const pages = sqliteTable("pages", {
   internalNotes: text("internal_notes"),
 });
 
-// 2. Define the CRUD contract with field policies
-export const pageContract = crudContract({
-  name: "page",
-  path: "/api/page",
-  table: pages,
-  id: "id",
-  errors: [],
-  fields: {
-    id: { read: true, filter: ["eq", "in"] },
-    title: {
-      read: true,
-      create: true,
-      update: true,
-      filter: ["eq", "contains"],
-      sort: true,
-    },
-    content: { read: true, create: true, update: true },
-    // internalNotes is omitted: completely hidden from reads, writes, and filters
-  },
-});
+const database = defineDatabase({ tables: { pages } });
+export const pagesService = defineService("pages", { database });
 
-// 3. Implement the contract with a database store and access policy
-export const pageActions = pageContract.implement({
-  store: sqliteStore(pages, PagesDb),
-  access: "public",
-});
-
-// 4. Register the CRUD actions on the service
-export const pagesService = Brick.service("pages", {
-  actions: pageActions,
-});
+// Register resource and attach the crud() plugin
+export const page = pagesService
+  .resource({ name: "page", table: pages, id: pages.id })
+  .use(
+    crud({
+      access: "public",
+      fields: {
+        id: { read: true, filter: ["eq", "in"] },
+        title: {
+          read: true,
+          create: true,
+          update: true,
+          filter: ["eq", "contains"],
+          sort: true,
+        },
+        content: { read: true, create: true, update: true },
+        // internalNotes is omitted: hidden from reads, writes, and filters
+      },
+    }),
+  );
 ```
 
 ### Schema
 
-Brick does not generate owner or timestamp columns automatically. Declare them in your table and populate them with Drizzle defaults or CRUD hooks when needed.
+Brick does not generate owner or timestamp columns. Declare them in your table and populate them with Drizzle defaults or CRUD hooks when needed.
 
 These columns match the Drizzle tables in the example. Defaults marked as application defaults run in Drizzle, rather than in SQL.
 
@@ -94,150 +88,90 @@ export const pagesSchemaFields = [
 <DatabaseTable name="pages" fields={pagesSchemaFields} />
 
 <Callout type="warn">
-  **CRUD is Deny-by-Default**: `access` is a required option. `access: "public"` allows every call. `access: { authorize, scope }` runs your `authorize` check on every operation and adds your `scope` condition to SQL queries. An access object without `authorize` rejects every call with `Forbidden` (HTTP 403).
+  **CRUD is Deny-by-Default**: `access` is a required option. `access: "public"` allows every call. `access: { authorize, scope }` calls your `authorize` on every operation and adds your `scope` condition to queries. An access object without `authorize` rejects every call with `FORBIDDEN` (HTTP 403).
 </Callout>
 
-## Generated Operations
+## Public Action Names
 
-When `crudContract` is implemented, it produces a dictionary of typed action implementations:
+When `crud()` installs onto `pagesService.resource({ name: "page", ... })`, actions are registered on the service under dot-separated names prefixed by the resource name. Routes are mounted under `${prefix}/${resource}`, not under the service name:
 
-| Operation | Action Name    | Route                     | Description                                                               |
-| :-------- | :------------- | :------------------------ | :------------------------------------------------------------------------ |
-| `list`    | `page.list`    | `POST /api/page/query`    | Query rows with filtering, pagination (`limit`/`offset`), and sorting.    |
-| `findOne` | `page.findOne` | `POST /api/page/find-one` | Query for a single row matching criteria. Returns `null` if not found.    |
-| `get`     | `page.get`     | `GET /api/page/:id`       | Fetch a single row by primary key. Fails with `NotFound` (404) if absent. |
-| `create`  | `page.create`  | `POST /api/page`          | Insert a new row using fields marked with `create: true`.                 |
-| `update`  | `page.update`  | `PATCH /api/page/:id`     | Update an existing row by ID using fields marked with `update: true`.     |
-| `delete`  | `page.delete`  | `DELETE /api/page/:id`    | Delete a row by primary key. Returns `{ success: true }`.                 |
-| `count`   | `page.count`   | `POST /api/page/count`    | Count total rows matching a filter condition.                             |
-| `exists`  | `page.exists`  | `POST /api/page/exists`   | Check whether any row matches a filter condition. Returns a boolean.      |
+| Action         | Route                     | Input                                                           |
+| :------------- | :------------------------ | :-------------------------------------------------------------- |
+| `page.list`    | `POST /api/page/query`    | `{ select?, where?, orderBy?, limit?, offset?, includeTotal? }` |
+| `page.get`     | `GET /api/page/:id`       | `{ id, select? }`                                               |
+| `page.findOne` | `POST /api/page/find-one` | Same as `list`; returns the first row or `null`                 |
+| `page.create`  | `POST /api/page`          | Fields with `create: true`                                      |
+| `page.update`  | `PATCH /api/page/:id`     | `{ id, data }` with fields that have `update: true`             |
+| `page.delete`  | `DELETE /api/page/:id`    | `{ id }`; returns `{ success: true }`                           |
+| `page.count`   | `POST /api/page/count`    | `{ where? }`; returns `{ count }`                               |
+| `page.exists`  | `POST /api/page/exists`   | `{ where? }`; returns `{ exists }`                              |
 
-## Field Policies (`fields`)
+The action names appear in architecture introspection and client contracts; OpenAPI summaries use `service.action` (for example, `pages.page.list`). `.use(crud(...))` also returns the resource with these actions attached, so you can call `page.list({ input: {} })` in-process. Use the `routes` option to change a route's `path` or `scope`, or set a route to `false` to keep the action but not mount it over HTTP.
 
-The `fields` option governs column-level read, write, filter, and sort permissions:
+## Field Policies
 
-| Policy Property | Type               | Default | Description                                                               |
-| :-------------- | :----------------- | :------ | :------------------------------------------------------------------------ |
-| `read`          | `boolean`          | `false` | When `true`, column is included in output schemas for `list`, `get`, etc. |
-| `create`        | `boolean`          | `false` | When `true`, column is accepted in the input schema for `create`.         |
-| `update`        | `boolean`          | `false` | When `true`, column is accepted in the input schema for `update`.         |
-| `filter`        | `FilterOperator[]` | `false` | Array of allowed filter operators when querying via `list`, `count`, etc. |
-| `sort`          | `boolean`          | `false` | When `true`, column can be specified in `orderBy` clauses.                |
+Each column requires explicit permission toggles in the `fields` object:
 
-### Allowed Filter Operators
-
-The following operators can be enabled in `filter`:
-
-- Equality: `"eq"`, `"ne"`
-- Comparison: `"gt"`, `"gte"`, `"lt"`, `"lte"`
-- Sets: `"in"`, `"notIn"` (enforces array length between 1 and 1000)
-- Ranges: `"between"` (expects a 2-element tuple `[min, max]`)
-- Nullability: `"isNull"`, `"isNotNull"`
-- String search: `"contains"`
-
-## Querying Resources (`page.list`)
-
-The `list` operation accepts a type-safe JSON query payload:
-
-```bash
-curl -X POST http://localhost:4000/api/page/query \
-  -H "Content-Type: application/json" \
-  -d '{
-    "where": {
-      "and": [
-        { "field": "title", "op": "contains", "value": "Release" },
-        { "field": "id", "op": "in", "value": ["pg_1", "pg_2"] }
-      ]
+```ts title="src/services/users.ts"
+crud({
+  access: "public",
+  fields: {
+    id: { read: true, filter: ["eq", "in"] },
+    email: {
+      read: true,
+      create: true,
+      filter: ["eq"],
+      scrub: ({ value, ctx }) => {
+        // Redact email for unauthorized callers
+        return ctx.user?.role === "admin" ? value : "[REDACTED]";
+      },
     },
-    "orderBy": [
-      { "field": "title", "direction": "asc" }
-    ],
-    "limit": 20,
-    "offset": 0,
-    "includeTotal": true
-  }'
+    passwordHash: {
+      create: true, // Write-only column
+      read: false,
+    },
+  },
+});
 ```
 
-Response:
+### Field Policy Configuration Table
 
-```json
-{
-  "items": [{ "id": "pg_1", "title": "Release 1.0", "content": "..." }],
-  "total": 1,
-  "limit": 20,
-  "offset": 0
-}
-```
+| Option   | Type                          | Description                                                                                                                                                                                                                                   |
+| :------- | :---------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read`   | `boolean`                     | Allows column to be returned in `list`, `findOne`, `get`, `create`, and `update` responses, and selected via `select`.                                                                                                                        |
+| `create` | `boolean`                     | Accepts column in `create` input payload.                                                                                                                                                                                                     |
+| `update` | `boolean`                     | Accepts column in `update` input payload.                                                                                                                                                                                                     |
+| `filter` | `FilterOperator[]`            | Enables filtering on this column. Allowed operators: `eq`, `ne`, `in`, `notIn`, `gt`, `gte`, `lt`, `lte`, `between`, `contains`, `startsWith`, `endsWith`, `isNull`, `isNotNull`. `contains`/`startsWith`/`endsWith` require a string column. |
+| `sort`   | `boolean`                     | Enables ascending/descending ordering on this column.                                                                                                                                                                                         |
+| `schema` | `TSchema`                     | Custom TypeBox schema to override automatic Drizzle column schema inference.                                                                                                                                                                  |
+| `scrub`  | `({ value, ctx }) => unknown` | Transforms a readable field's value before it's returned. Scrubbed fields are typed `unknown` in the output schema.                                                                                                                           |
 
-### Fetch a Single Row (`page.get`)
+Every key in `fields` must be a column of the table, or `crud()` throws at setup. The primary key can't have `update: true`.
 
-```bash
-curl http://localhost:4000/api/page/pg_1
-```
+## Operations Selection and Limits
 
-### Create a Row (`page.create`)
+You can turn off individual operations (or all of them with `operations: false`) and set pagination limits. `defaultLimit` defaults to `20` and `maxLimit` to `100`; a `limit` above `maxLimit` fails validation:
 
-```bash
-curl -X POST http://localhost:4000/api/page \
-  -H "Content-Type: application/json" \
-  -d '{"title": "New Page", "content": "Hello World"}'
-```
-
-### Update a Row (`page.update`)
-
-```bash
-curl -X PATCH http://localhost:4000/api/page/pg_1 \
-  -H "Content-Type: application/json" \
-  -d '{"title": "Updated Title"}'
-```
-
-### Delete a Row (`page.delete`)
-
-```bash
-curl -X DELETE http://localhost:4000/api/page/pg_1
-```
-
-## Disabling Specific Operations
-
-You can disable operations by setting them to `false` in `crudContract({ operations })`:
-
-```ts title="src/services/readonly-pages.ts"
-export const readOnlyPageContract = crudContract({
-  name: "page",
-  path: "/api/page",
-  table: pages,
-  id: "id",
-  errors: [],
+```ts title="src/services/readonly.ts"
+crud({
+  access: "public",
+  operations: {
+    delete: false, // Disables page.delete endpoint entirely
+    update: false, // Disables page.update endpoint entirely
+  },
+  defaultLimit: 25, // Default page size for list queries
+  maxLimit: 100, // Maximum allowed limit
   fields: {
     id: { read: true },
     title: { read: true },
   },
-  operations: {
-    create: false,
-    update: false,
-    delete: false,
-  },
 });
 ```
 
-Only `list`, `findOne`, `get`, `count`, and `exists` will be generated. The mutation endpoints will not exist on the router.
+## Performance & Prepared Statement Caching
 
-## Supported Database Stores
+When the database client supports `prepare()` (Bun SQLite), CRUD reuses prepared statements:
 
-`@brickkit/crud` provides first-class stores for SQLite and PostgreSQL:
-
-```ts
-import { sqliteStore, postgresStore } from "@brickkit/crud";
-
-// SQLite (via Bun native SQLite or LibSQL)
-const sqliteActions = pageContract.implement({
-  store: sqliteStore(pages, SqliteDb),
-  access: "public",
-});
-
-// PostgreSQL (via node-postgres or Neon)
-const pgActions = pageContract.implement({
-  store: postgresStore(pages, PgDb),
-  access: "public",
-});
-```
+- Statements are cached per query shape (operation, filter structure, selected fields, ordering), up to 128 per database, with filter values bound as placeholders.
+- Caching is skipped when a call has a non-empty `scope` condition, and for any table with a column that uses `$defaultFn` or `$onUpdateFn` (such as the `$defaultFn` UUID in the example above).
+- For resources with no `scope` function and no such columns, `brick()` prepares the default `list` and `get` statements when it builds the app.

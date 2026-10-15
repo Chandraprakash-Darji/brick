@@ -21,21 +21,13 @@
   "type": "module",
   "license": "MIT",
   "exports": {
+    "./effect": {
+      "types": "./dist/effect.d.ts",
+      "import": "./dist/effect.js"
+    },
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./native": {
-      "types": "./dist/native.d.ts",
-      "import": "./dist/native.js"
-    },
-    "./sqlite": {
-      "types": "./dist/sqlite.d.ts",
-      "import": "./dist/sqlite.js"
-    },
-    "./postgres": {
-      "types": "./dist/postgres.d.ts",
-      "import": "./dist/postgres.js"
     }
   },
   "files": [
@@ -48,13 +40,11 @@
   },
   "dependencies": {
     "@sinclair/typebox": "^0.34.52",
-    "drizzle-orm": "1.0.0-rc.5-5935859",
-    "@effect/sql-pg": "4.0.4",
-    "@effect/sql-sqlite-bun": "4.0.4"
+    "drizzle-orm": "^0.45.2"
   },
   "peerDependencies": {
-    "@brickkit/core": "^0.6.1",
-    "effect": "4.0.4"
+    "@brickkit/core": "^0.4.2",
+    "effect": "^4"
   },
   "devDependencies": {
     "tsdown": "^0.23.1",

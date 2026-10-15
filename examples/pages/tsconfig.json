@@ -16,13 +16,12 @@
     "paths": {
       "@/*": ["./src/*"],
       "@brickkit/crud": ["../../packages/crud/src/index.ts"],
+      "@brickkit/crud/effect": ["../../packages/crud/src/effect.ts"],
       "@brickkit/core": ["../../packages/core/src/index.ts"],
       "@brickkit/core/*": ["../../packages/core/src/*"],
       "@brickkit/cli": ["../../packages/cli/src/index.ts"],
-      "@brickkit/cli/compiler": ["../../packages/cli/src/compiler.ts"],
-      "@brickkit/crud/*": ["../../packages/crud/src/*"],
-      "@brickkit/client": ["../../packages/client/src/index.ts"]
+      "@brickkit/cli/compiler": ["../../packages/cli/src/compiler.ts"]
     }
   },
-  "include": ["src", "app.config.ts", "vite.config.ts", "test"]
+  "include": ["src", "app.config.ts", "vite.config.ts", "test/sdk.test.ts"]
 }

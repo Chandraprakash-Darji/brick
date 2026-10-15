@@ -34,21 +34,23 @@ npm install @brickkit/core
     expect(markdown).toContain("**bun**");
     expect(markdown).toContain("**pnpm**");
     expect(markdown).toContain("**npm**");
-    expect(markdown).toContain("pnpm add @brickkit/core @brickkit/cli effect");
-    expect(markdown).toContain("/api/users/getUser");
+    expect(markdown).toContain(
+      "pnpm add @brickkit/core @brickkit/crud @brickkit/cli",
+    );
+    expect(markdown).toContain("POST   /api/page/query");
   });
 
-  test("keeps native tutorial steps and guide links", async () => {
+  test("keeps tutorial steps and card links from the rewritten docs", async () => {
     const markdown = renderDocsMarkdown(
       await Bun.file(
         new URL("../content/docs/(brick)/tutorial.mdx", import.meta.url),
       ).text(),
     );
-    expect(markdown).toContain("## Run a service");
+    expect(markdown).toContain("### Step 1: Project Setup and Dependencies");
     expect(markdown).toContain(
-      "[services and actions](/docs/services-and-actions)",
+      "[Services & Actions](/docs/services-and-actions)",
     );
-    expect(markdown).toContain("[relational data](/docs/relations)");
+    expect(markdown).toContain("[Relational Data Modeling](/docs/relations)");
   });
 
   test("renders exported schema fields with constraints and escaped cells", () => {

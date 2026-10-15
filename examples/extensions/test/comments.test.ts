@@ -1,98 +1,50 @@
 import { expect, test } from "bun:test";
-import { createApp } from "../src/app";
-import { Effect } from "effect";
-import { DatabaseLive } from "../src/database";
-import { comments, InvalidComment } from "../src/extensions/comments";
+import {
+  defineDatabase,
+  defineService,
+  sqliteTable,
+  syncSchema,
+  text,
+  ValidationError,
+} from "@brickkit/core";
+import { comments, commentsTable } from "../src/extensions/comments";
 
-const request = (
-  app: ReturnType<typeof createApp>["app"],
-  method: string,
-  path: string,
-  body?: unknown,
-) =>
-  app.fetch(
-    new Request(`http://localhost${path}`, {
-      method,
-      headers:
-        body !== undefined ? { "content-type": "application/json" } : undefined,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    }),
-  );
+const pages = sqliteTable("pages", { id: text("id").primaryKey() });
 
-test("comments reject missing, null and blank bodies without inserting", async () => {
-  const { app } = createApp();
-  try {
-    for (const input of [
-      { targetId: "page-1" },
-      { targetId: "page-1", body: null },
-      ...["", "   ", "\n\t"].map((body) => ({ targetId: "page-1", body })),
-    ]) {
-      expect(
-        (await request(app, "POST", "/api/pageComment", input)).status,
-      ).toBe(400);
-      expect(
-        await (await request(app, "POST", "/api/pageComment/count", {})).json(),
-      ).toEqual({
-        count: 0,
-      });
-    }
-    expect(
-      (
-        await request(app, "POST", "/api/pageComment", {
-          targetId: "missing",
-          body: "Hello",
-        })
-      ).status,
-    ).toBe(404);
-    const created = await request(app, "POST", "/api/pageComment", {
-      targetId: "page-1",
-      body: "  Hello  ",
-    });
-    expect(created.status).toBe(200);
-    const row = await created.json();
-    expect(row.body).toBe("Hello");
-    const blankUpdate = await request(
-      app,
-      "PATCH",
-      `/api/pageComment/${row.id}`,
-      { body: " " },
+test("comment creation rejects missing, null and blank bodies without inserting", async () => {
+  const database = defineDatabase({ tables: { pages, commentsTable } });
+  const db = database.getDb();
+  syncSchema(database.tables, db);
+  await db.insert(pages).values({ id: "page-1" });
+  const page = defineService("comment_body_validation", { database })
+    .resource({ name: "page", table: pages, id: pages.id })
+    .use(comments({ table: commentsTable }));
+
+  for (const input of [
+    { targetId: "page-1" },
+    { targetId: "page-1", body: undefined },
+    { targetId: "page-1", body: null },
+  ]) {
+    // @ts-expect-error Exercise invalid inputs that can arrive from external callers.
+    await expect(page.comments.create.run(input)).rejects.toBeInstanceOf(
+      ValidationError,
     );
-    expect(blankUpdate.status).toBe(400);
-    expect(
-      (await (await request(app, "GET", `/api/pageComment/${row.id}`)).json())
-        .body,
-    ).toBe("Hello");
-    expect(
-      await (await request(app, "POST", "/api/pageComment/count", {})).json(),
-    ).toEqual({
-      count: 1,
-    });
-  } finally {
-    await app.dispose();
+    expect(await db.select().from(commentsTable)).toEqual([]);
   }
-});
 
-test("comment handlers run locally with the database supplied by a Layer", async () => {
-  const actions = comments();
-  await Effect.runPromise(
-    Effect.gen(function* () {
-      const row = yield* actions["pageComment.create"].handler({
-        payload: {
-          targetId: "page-1",
-          body: "  Local  ",
-        },
-      });
-      expect(row.body).toBe("Local");
-      expect(
-        yield* actions["pageComment.count"].handler({ payload: {} }),
-      ).toEqual({
-        count: 1,
-      });
-      expect(
-        yield* actions["pageComment.create"]
-          .handler({ payload: { targetId: "page-1", body: " " } })
-          .pipe(Effect.flip),
-      ).toBeInstanceOf(InvalidComment);
-    }).pipe(Effect.provide(DatabaseLive)),
-  );
+  for (const body of ["", "   ", "\n\t"]) {
+    await expect(
+      page.comments.create.run({ targetId: "page-1", body }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Comment body cannot be blank",
+      status: 400,
+    });
+    expect(await db.select().from(commentsTable)).toEqual([]);
+  }
+
+  await page.comments.create.run({ targetId: "page-1", body: "  Hello  " });
+  expect(
+    await db.select({ body: commentsTable.body }).from(commentsTable),
+  ).toEqual([{ body: "Hello" }]);
 });

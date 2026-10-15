@@ -7,6 +7,7 @@
     "bun",
     "cli",
     "dev-server",
+    "elysia",
     "openapi-generator",
     "typed-client",
     "vite-plugin",
@@ -25,6 +26,10 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./compiler": {
+      "import": "./dist/compiler.js",
+      "types": "./dist/compiler.d.ts"
     },
     "./vite": {
       "import": "./dist/vite.js",
@@ -56,9 +61,10 @@
     "format:check": "oxfmt --check ."
   },
   "dependencies": {
-    "@brickkit/core": "^0.6.1",
+    "@brickkit/core": "^0.4.2",
+    "@sinclair/typebox": "^0.34.52",
     "commander": "^15.0.0",
-    "effect": "4.0.4"
+    "elysia": "2.0.0-beta.29"
   },
   "devDependencies": {
     "@types/bun": "^1.4.3",

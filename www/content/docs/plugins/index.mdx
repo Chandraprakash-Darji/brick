@@ -1,84 +1,86 @@
 ---
-title: Extensions Overview
-description: Package reusable contracts, handlers, and stores as modular TypeScript extensions.
+title: Plugins Overview
+description: Extend services and resources with modular plugins, typed APIs, and scoped routes.
 ---
 
-In Brick-TS, extensions are modular TypeScript packages that encapsulate domain tables, Effect Schema contracts, and handler factories.
-
-## Architecture of an Extension
-
-An Effect-native extension separates schema contracts from server implementations:
-
-```mermaid
-flowchart TD
-    subgraph Extension["Extension Package"]
-        Contract["contract.ts: crudContract / Schema / TaggedErrors"]
-        Schema["schema.ts: Drizzle Table Definition"]
-        Factory["index.ts: Handler Factory (e.g. comments())"]
-    end
-
-    subgraph HostApp["Host Application"]
-        DB["db.ts: Database Service & Layer"]
-        Service["Brick.service('pages', { actions })"]
-        App["Brick.app({ services, layer })"]
-    end
-
-    Contract --> Factory
-    Schema --> Factory
-    Factory --> Service
-    DB --> App
-```
-
-1. **Contract (`contract.ts`)**: Browser-safe schemas, `crudContract`, and `Schema.TaggedError` classes. Zero server or database dependencies.
-2. **Table Schema (`schema.ts`)**: Drizzle table definitions.
-3. **Handler Factory (`index.ts`)**: A function (such as `comments()`) that binds the contract to a store (`sqliteStore` / `postgresStore`), access policies, and lifecycle hooks.
-4. **Host Integration (`app.ts`)**: The host application imports the actions, registers them on a `Brick.service()`, and supplies the database `Layer`.
+Brick-TS provides modular plugin primitives—`defineServicePlugin` and `defineResourcePlugin`—to package reusable capabilities, custom endpoints, and typed resource extensions.
 
 ## Minimal Example
 
-Install and mount an extension on a service:
+Define a reusable service plugin that registers a health check action and install it with `service.use()`:
 
-```ts title="src/app.ts"
-import { Brick } from "@brickkit/core";
-import { comments } from "./extensions/comments";
-import { DatabaseLive } from "./db";
+```ts title="src/plugins/ping.ts"
+import { defineServicePlugin, defineService, t } from "@brickkit/core";
 
-// 1. Instantiate extension actions
-const commentActions = comments();
+// 1. Declare the plugin descriptor
+export function pingPlugin(options: { endpointPath?: string } = {}) {
+  return defineServicePlugin({
+    name: "ping",
+    setup({ routes }) {
+      const ping = routes.action({
+        name: "ping",
+        method: "GET",
+        path: options.endpointPath ?? "/ping",
+        output: t.Object({ status: t.String(), timestamp: t.Number() }),
+        execute: () => ({ status: "ok", timestamp: Date.now() }),
+      });
 
-// 2. Register actions onto a service
-export const pagesService = Brick.service("pages", {
-  actions: {
-    ...commentActions,
+      return { ping };
+    },
+  });
+}
+
+// 2. Install the plugin onto a service
+const service = defineService("system");
+const api = service.use(pingPlugin());
+
+// The returned API is fully typed in TypeScript:
+const result = await api.ping({});
+console.log(result.status); // "ok"
+```
+
+## Two Plugin Kinds
+
+Brick-TS divides plugins into two distinct scopes:
+
+### 1. Service Plugins (`defineServicePlugin`)
+
+- Installed with `service.use(plugin)`.
+- Scope: Service-level capabilities (e.g. rate limiters, health endpoints, event emitters).
+- Returns a typed API object that becomes accessible to callers.
+
+### 2. Resource Plugins (`defineResourcePlugin`)
+
+- Installed with `resource.use(plugin)`.
+- Scope: Table-level capabilities (e.g. `@brickkit/crud`, comments, audit logs, file attachments).
+- Receives `{ resource, service, routes }` and attaches properties directly onto the host resource.
+
+```ts title="src/example-resource-plugin.ts"
+// Attaching CRUD plugin to a resource:
+const page = service
+  .resource({ name: "page", table: pages, id: pages.id })
+  .use(crud({ access: "public", fields: { id: { read: true } } }));
+```
+
+## Plugin Lifecycle & Guarantees
+
+All plugins follow strict design rules:
+
+- **Synchronous Registration**: The `setup()` function must be synchronous. Plugins register actions, routes, and hooks before the server compiles.
+- **Connection Isolation**: Plugins do not open database pools or mutate schemas during setup. Database connections flow through `ctx.db` at runtime.
+- **Namespaced Actions**: Actions registered by plugins stay scoped to their host resource or service, preventing naming collisions.
+
+### Schema
+
+The ping service plugin requires no database table. The resource-plugin example requires a host table; its CRUD field policy exposes only `id`.
+
+export const pageFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Page identifier.",
+    isPrimaryKey: true,
   },
-});
+];
 
-// 3. Compose the application with dependencies
-export default Brick.app({
-  services: [pagesService],
-  layer: DatabaseLive,
-});
-```
-
-## Raw HTTP Routes (`Brick.route`)
-
-For extensions that need custom HTTP endpoints (such as OAuth redirect callbacks, health probes, or webhook listeners), export a route using `Brick.route`:
-
-```ts title="src/extensions/webhook.ts"
-import { Brick } from "@brickkit/core";
-import { HttpServerRequest, HttpServerResponse } from "effect/http";
-import { Effect } from "effect";
-
-export const webhookRoute = Brick.route(
-  "POST",
-  "/webhooks/stripe",
-  Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    const body = yield* HttpServerRequest.toText(request);
-    // Process webhook payload...
-    return HttpServerResponse.jsonUnsafe({ received: true });
-  }),
-);
-```
-
-Pass custom routes into `Brick.app({ routes: webhookRoute })` to mount them alongside your services.
+<DatabaseTable name="pages" fields={pageFields} />

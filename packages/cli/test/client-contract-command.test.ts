@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 const cli = resolve(import.meta.dir, "../src/bin.ts");
-const entry = join(import.meta.dir, "fixtures/native-app.ts");
+const entry = join(import.meta.dir, "fixtures/client-app.ts");
 
 async function run(cwd: string, ...args: string[]) {
   const child = Bun.spawn([process.execPath, cli, "gen", "client", ...args], {
@@ -33,17 +33,17 @@ it("generates a browser-safe contract with default/custom output and preserves u
     expect(result.stdout).toContain(output);
     const source = await Bun.file(output).text();
     expect(await readdir(join(root, "_brick"))).toEqual(["contract.ts"]);
-    expect(source).toContain("native-contract");
-    expect(source).toContain("@brickkit/client");
-    expect(source).not.toContain("No such message");
+    expect(source).toContain("BrickClientAction<");
+    expect(source).toContain("export type BrickJsonValue =");
+    expect(source).toContain("{ [key: string]: BrickJsonValue }");
+    expect(source).toContain("/v2/records/:doctype/value");
+    expect(source).not.toContain("private_tool");
     const modified = (await stat(output)).mtimeMs;
     await Bun.sleep(20);
     expect((await run(root, entry)).code).toBe(0);
     expect((await stat(output)).mtimeMs).toBe(modified);
     expect((await run(root, entry, "--output", "web/api.ts")).code).toBe(0);
-    expect(await Bun.file(join(root, "web/api.ts")).text()).toContain(
-      "native-contract",
-    );
+    expect(await Bun.file(join(root, "web/api.ts")).text()).toBe(source);
     const bundle = await Bun.build({
       entrypoints: [output],
       target: "browser",

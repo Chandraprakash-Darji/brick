@@ -1,12 +1,8 @@
-# Website example
+# Website showcase
 
-The website imports these files as highlighted source. The users service uses a
-seeded Map and needs no database. Effect Schema defines its input, output and
-NotFound error. The same handler runs locally and through native HTTP routes.
+The website imports these files directly as highlighted source. The tiny users
+service uses a seeded in-memory Map so it runs without a database.
 
-Run `bun run --cwd examples/showcase call`, or start the server with
-`bun run --cwd examples/showcase serve`.
-
-```sh
-curl http://localhost:3000/api/users/getUser -H 'content-type: application/json' -d '{"id":"usr_42"}'
-```
+From the repository root, invoke the action with `bun run --cwd examples/showcase call`,
+or serve it with `bun run --cwd examples/showcase serve`.
+The HTTP route is `GET /api/users/getUser?id=usr_42` on port 3000.

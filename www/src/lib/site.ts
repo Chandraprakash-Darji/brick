@@ -6,7 +6,7 @@ export const site = {
   url: "https://brick.rega.run",
   title: "Brick — High-Throughput TypeScript Platform",
   description:
-    "High-Throughput, Logical-Monolith / Physical-Microservices TypeScript Platform powered by Bun, Effect, Effect Schema, and Drizzle ORM.",
+    "High-Throughput, Logical-Monolith / Physical-Microservices TypeScript Platform powered by Bun, Elysia, TypeBox, and Drizzle ORM.",
   repo: repoUrl,
   version: corePackage.version,
 };

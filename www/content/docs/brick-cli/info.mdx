@@ -1,58 +1,79 @@
 ---
-title: Architecture Inspection
-description: Inspect services, action routes, and metadata in an Effect-native application.
+title: Architecture Introspection
+description: Export and inspect the runtime architecture JSON schema of your application.
 ---
 
-The `brick info` command inspects an application entry file and exports its complete runtime architecture as structured JSON.
+The `brick info` command exports the complete runtime service graph, mounted endpoints, access policies, and database configurations as JSON.
 
-## Usage
+## Minimal Example
 
-Run `brick info` against your application entry:
+Run `brick info` against an application entry file:
 
 ```bash
-bunx brick info src/app.ts
+brick info src/server.ts
 ```
 
-Output:
+Alias:
+
+```bash
+brick services src/server.ts
+```
+
+The CLI loads the application and prints the `ArchitectureSchema` JSON to stdout:
 
 ```json
 {
-  "version": 2,
-  "target": "effect-http-api",
+  "version": "1.0.0",
   "services": [
     {
       "name": "pages",
+      "hasDatabase": true,
+      "databaseConfig": {
+        "engine": "sqlite",
+        "tables": ["pages"]
+      },
+      "resources": [{ "name": "page" }],
       "actions": [
         {
-          "name": "list",
+          "name": "page.list",
           "method": "POST",
-          "path": "/api/pages/page/list"
+          "path": "/api/pages/page.list",
+          "serviceName": "pages",
+          "plugin": "@brickkit/crud",
+          "resource": "page",
+          "hasAuthorize": false,
+          "hasScope": false,
+          "accessPolicy": "public"
         },
         {
-          "name": "get",
+          "name": "page.create",
           "method": "POST",
-          "path": "/api/pages/page/get"
+          "path": "/api/pages/page.create",
+          "serviceName": "pages",
+          "plugin": "@brickkit/crud",
+          "resource": "page",
+          "hasAuthorize": true,
+          "hasScope": false,
+          "accessPolicy": "authorized"
         }
       ]
-    }
-  ],
-  "routes": [
-    {
-      "service": "pages",
-      "name": "list",
-      "method": "POST",
-      "path": "/api/pages/page/list"
     }
   ]
 }
 ```
 
-## Using with AI Coding Agents
+## Runtime Architecture Endpoint
 
-When equipping AI coding agents (such as Claude Code, Cursor, or Copilot) with context about your application, save the architecture JSON:
+In addition to the CLI command, every running Brick server exposes the exact same architecture snapshot over HTTP at:
 
 ```bash
-bunx brick info src/app.ts > brick-architecture.json
+curl http://localhost:4000/_brick/services
 ```
 
-Agents can read this file to understand all registered services, available actions, and HTTP endpoint paths without parsing complex server code.
+This endpoint is read-only and provides an up-to-date representation of all mounted services and security policies. The database handle itself is excluded from the export (`options.database` is omitted), but the remaining service `options` are included; do not treat the output as free of configuration values.
+
+## Use Cases for Introspection
+
+- **Security Auditing**: Verify in CI that no internal or administrative actions are accidentally exposed with `accessPolicy: "public"`.
+- **Microservice Graph Visualization**: Ingest the architecture JSON to render dynamic service dependency graphs and infrastructure maps.
+- **Contract Verification**: Ensure that paths and methods match expected API gateway routing rules.

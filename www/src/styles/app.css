@@ -1738,7 +1738,3 @@ html > body[data-scroll-locked] {
     padding: 16px;
   }
 }
-
-div.overflow-auto.fd-scroll-container.text-\[0\.8125rem\] {
-  max-height: none !important;
-}

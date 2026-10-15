@@ -1,19 +1,19 @@
 ---
-title: Input validation
-description: Validate external values before calling a local handler.
+title: Input and Output Validation
+description: Validating actions with TypeBox schemas and error helpers.
 ---
 
-Action validation belongs to its Effect Schema. Add schema checks for
-structural constraints and use typed handler failures for business rules.
+<Callout type="info">
+  This guide has been moved to **[Validation and
+  Errors](/docs/validation-and-errors)**.
+</Callout>
 
-```ts
-const Title = Schema.String.check(Schema.isMinLength(1));
-```
+In Brick-TS, validation is powered directly by TypeBox schemas on actions (`input` and `output`) and the injected `error` helpers.
 
-Native HTTP validates the input and output schemas. A direct handler call
-assumes decoded input. Use `Schema.decodeUnknownEffect(schema)(value)` when a
-local caller receives an unknown value from a file, message, or other boundary.
+Please see the canonical guide: **[Validation and Errors](/docs/validation-and-errors)**.
 
-For database write normalization, use an Effect-returning
-[before hook](/docs/hooks). The native API does not have a separate `validate`
-hook that changes a handler's inferred input type.
+## Error responses
+
+Input validation throws `ValidationError` with code `VALIDATION_FAILED` and status 400. Output validation uses the same code with status 500. Authorization failures use `UNAUTHORIZED` with status 401 when `ctx.user` is absent, and `FORBIDDEN` with status 403 when a signed-in user lacks access.
+
+HTTP errors share `{ name, code, message, status, requestId, details?, errors? }`. Unexpected errors return `INTERNAL_SERVER_ERROR` with a generic message. The server logs the original error and its cause with the request ID. Error helpers accept an optional third argument, such as `error.CONFLICT("Already exists", { id }, { cause })`; causes are never serialized.

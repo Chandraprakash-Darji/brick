@@ -12,30 +12,28 @@
   "scripts": {
     "prepare": "lefthook install",
     "check": "bun run lint && bun run format:check && bun run build && bun run typecheck && bun run test",
-    "build": "bun run --filter @brickkit/core build && bun run --filter @brickkit/crud build && bun run --filter @brickkit/client build && bun run --filter @brickkit/cli build",
+    "build": "bun run --filter @brickkit/core build && bun run --filter @brickkit/crud build && bun run --filter @brickkit/cli build",
     "release": "bun scripts/release.ts",
-    "test": "bun test ./packages ./examples/extensions/test ./examples/showcase/test",
-    "typecheck": "bun run --filter @brickkit/core typecheck && bun run --filter @brickkit/crud typecheck && bun run --filter @brickkit/client typecheck && bun run --filter @brickkit/cli typecheck && bun run --cwd examples/showcase typecheck && bun run --cwd examples/extensions typecheck",
-    "effect:check": "bun run --cwd scripts/effect-native check",
-    "lint": "oxlint --ignore-pattern '**/vendor/**' .",
-    "lint:fix": "oxlint --ignore-pattern '**/vendor/**' --fix .",
+    "test": "bun test packages examples/extensions/test",
+    "typecheck": "bun run --filter @brickkit/core typecheck && bun run --filter @brickkit/crud typecheck && bun run --filter @brickkit/cli typecheck",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "pages:dev": "bun run build && bun run --cwd examples/pages dev",
     "pages:test": "bun run build && bun run --cwd examples/pages test",
     "pages:typecheck": "bun run build && bun run --cwd examples/pages typecheck",
-    "pages:build": "bun run build && bun run --cwd examples/pages build",
-    "check:effect": "bun run check && bun run pages:typecheck && bun run pages:build && bun run --cwd www types:check && bun run --cwd www docs:check && bun run --cwd www docs:examples-check && bun run effect:check"
+    "pages:build": "bun run build && bun run --cwd examples/pages build"
   },
   "overrides": {
-    "drizzle-orm": "1.0.0-rc.5-5935859",
-    "effect": "4.0.4",
+    "drizzle-orm": "0.45.2",
     "esbuild": "0.28.2",
     "mdast-util-to-markdown": "2.1.2",
     "postcss-selector-parser": "7.1.6"
   },
   "devDependencies": {
     "@types/bun": "^1.4.3",
+    "elysia": "2.0.0-beta.29",
     "lefthook": "^2.2.2",
     "oxfmt": "^0.73.0",
     "oxlint": "^1.88.0",

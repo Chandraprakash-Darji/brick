@@ -1,20 +1,13 @@
 ---
-title: Contracts and generation
-description: Keep runtime schemas in a shared contract module.
+title: Type Inference Without Codegen
+description: Static types from schemas and tables with no build step.
 ---
 
-The native client generator re-exports a schema-only HttpApi. It does not
-reconstruct schemas from JSON or erase tagged error classes.
+<Callout type="info">
+  This guide has been moved to **[Zero-Codegen Type
+  Inference](/docs/type-inference)**.
+</Callout>
 
-Set `client: { module: "./contract", exportName: "Api" }` on `Brick.app`. The
-module path is relative to the server entry. It must be a separate file and its
-OpenAPI paths and components must match the app.
+Brick-TS delivers instant static typing from runtime TypeBox schemas and Drizzle models without intermediate code generation.
 
-```sh
-brick gen client src/app.ts --output src/generated.ts
-brick gen openapi src/app.ts --output openapi.json
-```
-
-The generated client module exports `api`, `createClient`, `createEffectClient`,
-and an `AppClient` type. See [typed clients](/docs/typed-client) for a complete
-contract module and browser call.
+Please see the canonical guide: **[Zero-Codegen Type Inference](/docs/type-inference)**.

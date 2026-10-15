@@ -1,48 +1,134 @@
 ---
-title: Built-In CRUD Extension
-description: The native declarative CRUD engine and database stores.
+title: Built-in Capabilities
+description: Explore built-in framework plugins for CRUD, request logging, and interactive documentation.
 ---
 
-The core database capabilities of Brick-TS are packaged in `@brickkit/crud`.
+Brick-TS ships with built-in capabilities and plugins for declarative database operations, request timing, health checks, and API documentation.
 
-## Features
+## The CRUD Plugin (`@brickkit/crud`)
 
-- **Deny-by-Default Security**: Database columns are completely hidden until explicitly opted into via field policies.
-- **Composable Stores**: First-class support for SQLite (`sqliteStore`) and PostgreSQL (`postgresStore`).
-- **Standard Operations**: Automatically generates `list`, `findOne`, `get`, `create`, `update`, `delete`, `count`, and `exists`.
-- **Row-Level Scoping**: Seamlessly combines tenant or ownership SQL predicates with client filters.
-- **Lifecycle Hooks**: `beforeCreate`, `afterCreate`, `beforeUpdate`, `afterUpdate`, `beforeDelete`, `afterDelete`.
+The primary resource plugin in Brick-TS is `crud()`, published in `@brickkit/crud`. It installs declarative, field-guarded operations onto any table resource:
 
-## Store Architecture
+```ts title="src/services/catalog.ts"
+import {
+  defineDatabase,
+  defineService,
+  sqliteTable,
+  text,
+} from "@brickkit/core";
+import { crud } from "@brickkit/crud";
 
-A store in Brick-TS implements the `Store<T, Db>` interface:
+export const products = sqliteTable("products", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull(),
+  price: text("price").notNull(),
+});
 
-```ts
-export interface Store<T extends Table, Db> {
-  readonly list: (args: {
-    where: SQL | undefined;
-    order: SQL[];
-    limit: number;
-    offset: number;
-  }) => Effect.Effect<InferSelectModel<T>[], EffectDrizzleQueryError, Db>;
-  readonly count: (
-    where: SQL | undefined,
-  ) => Effect.Effect<number, EffectDrizzleQueryError, Db>;
-  readonly create: (
-    data: InferInsertModel<T>,
-  ) => Effect.Effect<InferSelectModel<T>[], EffectDrizzleQueryError, Db>;
-  readonly update: (
-    data: Partial<InferInsertModel<T>>,
-    where: SQL | undefined,
-  ) => Effect.Effect<InferSelectModel<T>[], EffectDrizzleQueryError, Db>;
-  readonly remove: (
-    id: Column,
-    where: SQL | undefined,
-  ) => Effect.Effect<unknown[], EffectDrizzleQueryError, Db>;
-  readonly transaction: <A, E, R>(
-    effect: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, E | SqlError, R | Db>;
+const database = defineDatabase({ tables: { products } });
+const service = defineService("catalog", { database });
+
+// Install the CRUD plugin onto the product resource:
+export const product = service
+  .resource({ name: "product", table: products, id: products.id })
+  .use(
+    crud({
+      access: "public",
+      fields: {
+        id: { read: true, filter: ["eq", "in"] },
+        name: {
+          read: true,
+          create: true,
+          update: true,
+          filter: ["contains"],
+          sort: true,
+        },
+        price: { read: true, create: true, update: true },
+      },
+    }),
+  );
+```
+
+### Schema
+
+These columns match the Drizzle tables in the example. Defaults marked as application defaults run in Drizzle, rather than in SQL.
+
+export const productsSchemaFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+    defaultValue: "crypto.randomUUID() (application)",
+  },
+  {
+    name: "name",
+    type: "text",
+    description: "Display name.",
+  },
+  {
+    name: "price",
+    type: "text",
+    description: "Product price stored as text.",
+  },
+];
+
+<DatabaseTable name="products" fields={productsSchemaFields} />
+
+For full field policy options, query filter syntax, and operations control, see **[Resources and CRUD](/docs/resources)**.
+
+## Request Logging Plugin
+
+Request timing and logging are enabled by default in `brick()`. Every incoming route is measured and logged with status code and duration:
+
+```ts title="src/server.ts"
+import { brick } from "@brickkit/core";
+
+// Enabled by default:
+const app = brick({
+  requestLogging: true,
+});
+
+// Or customize options:
+const customApp = brick({
+  requestLogging: {
+    enabled: true,
+    logger: (msg) => console.log(msg),
+  },
+});
+```
+
+To disable logging entirely, pass `requestLogging: false`.
+
+## Interactive API Documentation
+
+Interactive documentation is built into `brick()` and requires no separate middleware:
+
+- **Scalar API Docs**: Modern documentation available at `/docs` (e.g. `http://localhost:4000/docs`).
+- **Swagger UI**: Traditional Swagger documentation available at `/swagger` (e.g. `http://localhost:4000/swagger`).
+- **Raw OpenAPI 3.1 Spec**: Machine-readable specification at `/openapi.json`.
+
+These documentation routes mount at the root and are not affected by `prefix`.
+
+For configuration options and mounting custom reference routes, see **[OpenAPI 3.1 & Interactive Documentation](/docs/openapi)**.
+
+## Diagnostics & Health Check (`/_health`)
+
+Every Brick server automatically mounts a diagnostics route at `/_health`:
+
+```bash
+curl http://localhost:4000/_health
+```
+
+Response:
+
+```json
+{
+  "status": "ok",
+  "uptime": 12.45,
+  "timestamp": 1728821400000
 }
 ```
 
-By decoupling the store from the contract, the exact same CRUD actions can run against in-memory SQLite in test suites and pooled PostgreSQL in production environments.
+This endpoint is ideal for Kubernetes liveness/readiness probes, Docker health checks, and load balancer pinging.

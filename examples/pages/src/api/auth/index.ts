@@ -1,10 +1,11 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { mcp } from "@better-auth/mcp";
-import { Context, Effect, Layer } from "effect";
+import type { DatabaseHandle } from "@brickkit/core";
+import type { PgDatabase } from "@brickkit/core/pg";
 import { betterAuth } from "better-auth/minimal";
 import { jwt } from "better-auth/plugins";
 
-import { AuthDatabase } from "../db";
+import { appDb } from "../db";
 import { authSecret, baseUrlSecret, mcpResourceSecret } from "../secrets";
 import { password } from "./password";
 import * as schema from "./schema";
@@ -14,8 +15,10 @@ import * as schema from "./schema";
  * Go `server/main.go` parity). Schema must be prepared by the caller.
  */
 export function createAuthInstance(
-  db: Context.Service.Shape<typeof AuthDatabase>,
+  database: DatabaseHandle<PgDatabase<any>> = appDb,
 ) {
+  const db = database.getDb();
+
   const baseURL = baseUrlSecret.value() as string;
   const secretValue = authSecret.require();
 
@@ -52,13 +55,19 @@ export function createAuthInstance(
 
 export type PagesAuth = ReturnType<typeof createAuthInstance>;
 
-export class Auth extends Context.Service<Auth, PagesAuth>()("pages/Auth") {}
-export const authLayer = Layer.effect(
-  Auth,
-  Effect.gen(function* () {
-    const db = yield* AuthDatabase;
-    const auth = createAuthInstance(db);
-    yield* Effect.promise(() => auth.$context);
-    return auth;
-  }),
-);
+let current: PagesAuth | null = null;
+
+export function initAuth(
+  database: DatabaseHandle<PgDatabase<any>> = appDb,
+): PagesAuth {
+  current = createAuthInstance(database);
+  return current;
+}
+
+/** Module auth instance; initAuth accepts a separate database when needed. */
+export function getAuth(): PagesAuth {
+  if (!current) {
+    current = createAuthInstance();
+  }
+  return current;
+}

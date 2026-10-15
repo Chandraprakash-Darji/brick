@@ -1,6 +1,35 @@
 ---
-title: Database migrations
-description: Read the current native guide.
+title: Database Migrations
+description: Database configuration in development and caller-owned PostgreSQL migrations.
 ---
 
-Read the [current guide](/docs/database) for the Effect-native API.
+<Callout type="info">
+  This guide has been moved to **[Database Management &
+  Migrations](/docs/database)**.
+</Callout>
+
+Brick-TS uses explicit `syncSchema` helpers for SQLite in development and caller-owned migrations via Drizzle Kit for PostgreSQL.
+
+Please see the canonical guide: **[Database Management & Migrations](/docs/database)**.
+
+### Schema
+
+The database guide uses this application-owned table. Apply migrations to the tables declared in your Drizzle schema.
+
+export const usersSchemaFields = [
+  {
+    name: "id",
+    type: "text",
+    description: "Row identifier.",
+    isPrimaryKey: true,
+    defaultValue: "crypto.randomUUID() (application)",
+  },
+  {
+    name: "email",
+    type: "text",
+    description: "Unique email address.",
+    isUnique: true,
+  },
+];
+
+<DatabaseTable name="users" fields={usersSchemaFields} />

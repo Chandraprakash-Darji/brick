@@ -1,28 +1,163 @@
-import { existsSync, watch } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync } from "fs";
+import { watch } from "fs";
+import { resolve } from "path";
 import { fileURLToPath } from "node:url";
-import { loadApplication } from "./app-entry";
-import { startNativeServer } from "./native-server";
+import {
+  brick,
+  getPluginActionRoute,
+  isBrickApp,
+  type BrickApp,
+} from "@brickkit/core";
 
 export interface DevServerOptions {
   port?: number;
   entry?: string;
+  prefix?: string;
+}
+
+async function createServer(
+  options: DevServerOptions,
+  label: string,
+  application?: BrickApp,
+) {
+  let port: number;
+  if (options.port !== undefined) {
+    port = options.port;
+  } else if (process.env.PORT !== undefined && process.env.PORT !== "") {
+    port = Number(process.env.PORT);
+  } else {
+    port = 4000;
+  }
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(
+      `Invalid port: ${port}. Port must be an integer between 1 and 65535`,
+    );
+  }
+
+  const app =
+    application ??
+    brick({
+      port,
+      prefix: options.prefix,
+    });
+
+  await app.listen({ port });
+
+  const prefix = app.definition.prefix;
+  const services = app.definition.services;
+
+  console.log(`\n🧱 Brick-TS ${label} Server`);
+  console.log(`   Registered Services: ${services.length}`);
+
+  for (const svc of services) {
+    const actions = svc.listActions();
+    console.log(`   • ${svc.name} (${actions.length} actions)`);
+    for (const act of actions) {
+      const pluginRoute = getPluginActionRoute(act, prefix);
+      if (pluginRoute === false) continue;
+      const method = pluginRoute?.method ?? act.config.method ?? "POST";
+      const path =
+        pluginRoute?.path ??
+        act.config.path ??
+        `${prefix}/${svc.name}/${act.name}`;
+      console.log(`     -> ${method.padEnd(6)} ${path}`);
+    }
+  }
+
+  console.log(`\n⚡ API Gateway running on: http://localhost:${port}`);
+  console.log(`🩺 Health check:        http://localhost:${port}/_health`);
+  console.log(
+    `🗺️ Architecture graph:  http://localhost:${port}/_brick/services\n`,
+  );
+
+  return app;
+}
+
+export async function startProdServer(options: DevServerOptions = {}) {
+  const entry = options.entry;
+
+  if (entry) {
+    const resolvedEntry = resolve(process.cwd(), entry);
+    if (!existsSync(resolvedEntry)) {
+      console.error(`[Brick-TS] Error: Entry file not found: ${resolvedEntry}`);
+      process.exit(1);
+    }
+    console.log(`[Brick-TS] Loading application entry: ${resolvedEntry}`);
+    await import(resolvedEntry);
+  }
+
+  const port =
+    options.port !== undefined
+      ? options.port
+      : process.env.PORT !== undefined && process.env.PORT !== ""
+        ? Number(process.env.PORT)
+        : 4000;
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(
+      `Invalid port: ${port}. Port must be an integer between 1 and 65535`,
+    );
+  }
+
+  const app = brick({
+    port,
+    prefix: options.prefix,
+  });
+
+  const prefix = app.definition.prefix;
+  const services = app.definition.services;
+
+  console.log(`\n🧱 Brick-TS Production Server`);
+  console.log(`   Registered Services: ${services.length}`);
+
+  for (const svc of services) {
+    const actions = svc.listActions();
+    console.log(`   • ${svc.name} (${actions.length} actions)`);
+    for (const act of actions) {
+      const pluginRoute = getPluginActionRoute(act, prefix);
+      if (pluginRoute === false) continue;
+      const method = pluginRoute?.method ?? act.config.method ?? "POST";
+      const path =
+        pluginRoute?.path ??
+        act.config.path ??
+        `${prefix}/${svc.name}/${act.name}`;
+      console.log(`     -> ${method.padEnd(6)} ${path}`);
+    }
+  }
+
+  app.listen(port);
+
+  console.log(`\n⚡ API Gateway running on: http://localhost:${port}`);
+  console.log(`🩺 Health check:        http://localhost:${port}/_health`);
+  console.log(
+    `🗺️ Architecture graph:  http://localhost:${port}/_brick/services\n`,
+  );
+
+  return app;
 }
 
 export async function startDevApplication(options: DevServerOptions) {
-  if (!options.entry)
-    throw new Error("Brick: an application entry is required.");
-  return startNativeServer(await loadApplication(options.entry), options);
+  const module = options.entry
+    ? await import(resolve(options.entry))
+    : undefined;
+  if (isBrickApp(module?.default) && options.prefix !== undefined) {
+    console.warn(
+      `[Brick-TS] Ignoring prefix ${options.prefix}: exported BrickApp prefix ${module.default.definition.prefix} takes precedence.`,
+    );
+  }
+  return createServer(
+    options,
+    "Development",
+    isBrickApp(module?.default) ? module.default : undefined,
+  );
 }
-
-export const startProdServer = startDevApplication;
 
 export async function startDevServer(options: DevServerOptions = {}) {
   const entry = options.entry;
-  if (!entry) throw new Error("Brick: an application entry is required.");
+  if (!entry) return createServer(options, "Development");
   const resolvedEntry = resolve(entry);
   if (!existsSync(resolvedEntry)) {
-    throw new Error(`Brick: entry not found: ${resolvedEntry}`);
+    console.error(`[Brick-TS] Error: Entry file not found: ${resolvedEntry}`);
+    process.exit(1);
   }
 
   const worker = new URL(
@@ -38,6 +173,7 @@ export async function startDevServer(options: DevServerOptions = {}) {
         fileURLToPath(worker),
         resolvedEntry,
         String(options.port ?? ""),
+        options.prefix ?? "",
       ],
       {
         cwd: process.cwd(),

@@ -1,53 +1,73 @@
 ---
-title: Extension Best Practices
-description: Guidelines for building robust, decoupled Effect-native extensions.
+title: Plugin Best Practices
+description: Architectural guidelines for building maintainable, safe, and isolated plugins.
 ---
 
-Follow these best practices when building extensions for Brick-TS.
+Adhering to plugin best practices ensures your extensions maintain high performance, avoid naming collisions, and preserve security boundaries.
 
-## 1. Separate Contracts from Implementations
+## 1. Keep Setup Synchronous
 
-Always split your extension into separate modules:
+The `setup()` function must be completely synchronous:
 
-- `contract.ts`: Pure Effect Schema definitions, `crudContract`, and `Schema.TaggedError` classes. Never import database drivers, file system modules, or server secrets here.
-- `index.ts`: The handler factory and store implementation.
+```ts title="src/plugins/bad-practice.ts"
+// ❌ Anti-pattern: Async setup functions throw an error at runtime
+setup: async ({ service }) => {
+  await fetchRemoteConfig();
+}
 
-This ensures frontend applications can import the contract without pulling database drivers into browser bundles.
-
-## 2. Accept Explicit Dependencies
-
-Do not open database connection pools or instantiate global clients inside module scope. Instead:
-
-- Require dependencies through `Context.Service` tags.
-- Let the host application supply the `Layer` during `Brick.app({ layer })`.
-
-This allows consumers to manage connection pooling, transaction boundaries, and scoped disposal.
-
-## 3. Enforce Deny-by-Default Access
-
-When authoring reusable CRUD extensions:
-
-- Expose only the fields that are necessary for the extension to function.
-- Require an explicit `access` configuration or default to authenticated access rules.
-- Validate and sanitize input in `beforeCreate` and `beforeUpdate` hooks.
-
-## 4. Declare All Error Schemas
-
-Never throw untyped exceptions or return generic strings. Define every domain error as a `Schema.TaggedError` with an `{ httpApiStatus }` annotation:
-
-```ts
-export class DuplicateSlug extends Schema.TaggedError<DuplicateSlug>()(
-  "DuplicateSlug",
-  { message: Schema.String },
-  { httpApiStatus: 409 },
-) {}
+// ✅ Correct: Synchronous registration of declarations
+setup: ({ service, routes }) => {
+  routes.action({ ... });
+}
 ```
 
-Include all error classes in the contract's `errors` array so OpenAPI schemas and client types stay accurate.
+Never initiate database migrations, connect to external network endpoints, or execute queries during `setup()`. Plugin installation occurs when defining services before the server boots.
 
-## 5. Verify In-Process and Over HTTP
+## 2. Depend on Runtime Context (`ctx.db`)
 
-Test extensions both ways:
+Plugins should not instantiate their own database connections or cache clients:
 
-1. In-process: Calling actions directly as Effects with `Effect.provide(TestDatabaseLive)`.
-2. Over HTTP: Starting an application with `brick dev` or `app.fetch()` and testing HTTP requests with curl or fetch.
+```ts title="src/plugins/good-practice.ts"
+// ✅ Correct: Use ctx.db injected from the host service
+execute: async ({ input, ctx }) => {
+  const db = ctx.db;
+  return db.select().from(table);
+};
+```
+
+Using `ctx.db` guarantees that plugins respect transaction boundaries, tenant routing, and context isolation.
+
+## 3. Explicit Access and Validation
+
+When registering actions inside a plugin via `routes.action()`, always specify:
+
+- TypeBox `input` and `output` schemas.
+- Explicit `method` and `path`.
+- An authorization check or clear documentation indicating the action is public.
+
+## 4. Avoid Property Collisions on Host Resources
+
+Resource plugins return objects that are assigned directly to the host resource. Never return keys that conflict with core resource properties:
+
+- Reserved resource keys: `name`, `serviceName`, `table`, `id`, `idField`, `config`, `use`.
+- Avoid prototype keys: `__proto__`, `prototype`, `constructor`.
+
+Brick checks for collisions during plugin installation and throws an immediate error if a collision is detected.
+
+## 5. Structured Error Handling
+
+When rejecting operations in plugins or hooks, throw `ActionExecutionError` with standard HTTP error codes:
+
+```ts title="src/plugins/error-handling.ts"
+import { ActionExecutionError } from "@brickkit/core";
+
+if (!isValid) {
+  throw new ActionExecutionError(
+    "BAD_REQUEST",
+    "Invalid plugin parameter",
+    400,
+  );
+}
+```
+
+This ensures errors format into the standard Brick-TS JSON envelope expected by typed clients.
