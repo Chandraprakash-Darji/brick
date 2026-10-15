@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
-// One-command release: bump version(s) -> commit -> tag -> push ->
-// npm publish and GitHub release via the publish-npm.yml workflow.
+// Dispatch a release through publish-npm.yml. The workflow validates and
+// publishes every package before creating the release commit and tag.
 //
 //   bun run release [patch|minor|major|beta] [--dry-run|--prepare]
 // --prepare stages manifests and the lockfile for CI validation without shipping.
@@ -137,16 +137,18 @@ execFileSync(GIT, ["fetch", "origin"], {
   cwd: ROOT,
   stdio: DRY ? "ignore" : "inherit",
 });
-const behind = execFileSync(
+const divergence = execFileSync(
   GIT,
-  ["rev-list", "--count", `HEAD..origin/${releaseBranch}`],
+  ["rev-list", "--left-right", "--count", `HEAD...origin/${releaseBranch}`],
   {
     cwd: ROOT,
     encoding: "utf-8",
   },
 ).trim();
-if (!DRY && behind !== "0")
-  fail(`local ${releaseBranch} is behind origin/${releaseBranch} — pull first`);
+if (!DRY && divergence !== "0\t0")
+  fail(
+    `local ${releaseBranch} differs from origin/${releaseBranch} — synchronize it first`,
+  );
 if (!PREPARE) {
   const GH = resolveBin("gh");
   try {
@@ -190,39 +192,30 @@ if (DRY) {
   process.exit(0);
 }
 
-// --- apply, verify, ship ---
+// Local releases use the same post-publication commit gate as manual dispatches.
+if (!PREPARE) {
+  const result = sh([
+    "gh",
+    "workflow",
+    "run",
+    "publish-npm.yml",
+    "--repo",
+    "Chandraprakash-Darji/brick",
+    "--ref",
+    releaseBranch,
+    "-f",
+    `bump=${bump}`,
+    "-f",
+    "dry_run=false",
+  ]);
+  console.log(result || "Release workflow queued.");
+  process.exit(0);
+}
+
+// CI stages manifests for validation; this mode never creates release refs.
 for (const r of releases) {
   r.data.version = version;
   writeJson(r.file, r.data);
 }
 sh(["bun", "install"]);
-if (PREPARE) {
-  console.log(`prepared ${tag}; refs and registry are unchanged`);
-  process.exit(0);
-}
-sh(["bun", "run", "build"]);
-sh(["bun", "test", "packages/core", "packages/crud", "packages/cli"]);
-
-const msg = `chore(release): ${tag}`;
-sh([
-  "git",
-  "add",
-  "packages/core/package.json",
-  "packages/cli/package.json",
-  "packages/crud/package.json",
-  "bun.lock",
-]);
-sh(["git", "commit", "-m", msg]);
-sh(["git", "tag", tag]);
-sh(["git", "push", "--atomic", "origin", releaseBranch, tag]);
-console.log(
-  `  queued ${tag}; GitHub Actions publishes all packages, then creates one release`,
-);
-
-console.log("\nshipped. The publish workflow now publishes via OIDC:");
-console.log(
-  "  https://github.com/Chandraprakash-Darji/brick/actions/workflows/publish-npm.yml",
-);
-console.log(
-  "Requires npm trusted-publisher entries or an NPM_TOKEN secret with publish access.",
-);
+console.log(`prepared ${tag}; release refs and registry are unchanged`);

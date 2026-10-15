@@ -4,7 +4,7 @@ import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-test("prepares candidate versions without building, committing, or tagging", async () => {
+test("prepares candidates and dispatches releases without creating release refs", async () => {
   const root = await mkdtemp(join(tmpdir(), "brick-release-prepare-"));
   const checkout = join(root, "checkout");
   const origin = join(root, "origin.git");
@@ -77,6 +77,47 @@ test("prepares candidate versions without building, committing, or tagging", asy
     expect(await Bun.file(join(checkout, "bun.lock")).text()).toContain(
       '"version": "0.7.3"',
     );
+    git("checkout", "--", ".");
+    await writeFile(
+      join(checkout, "mock-github.ts"),
+      `
+import { mock } from "bun:test";
+import * as childProcess from "node:child_process";
+import * as fs from "node:fs";
+import { basename } from "node:path";
+const execute = childProcess.execFileSync;
+const exists = fs.existsSync;
+mock.module("node:fs", () => ({ ...fs, existsSync: (path) => basename(path) === "gh" || exists(path) }));
+mock.module("node:child_process", () => ({ ...childProcess, execFileSync: (file, args, options) => {
+  if (basename(file) !== "gh") return execute(file, args, options);
+  if (args[0] === "auth") return "";
+  if (args[0] !== "workflow") throw new Error("Unexpected GitHub command");
+  fs.writeFileSync("dispatch.json", JSON.stringify(args));
+  return "queued";
+} }));
+`,
+    );
+    execFileSync(
+      process.execPath,
+      ["--preload", "./mock-github.ts", "scripts/release.ts", "patch"],
+      { cwd: checkout, stdio: "pipe" },
+    );
+    expect(await Bun.file(join(checkout, "dispatch.json")).json()).toEqual([
+      "workflow",
+      "run",
+      "publish-npm.yml",
+      "--repo",
+      "Chandraprakash-Darji/brick",
+      "--ref",
+      "main",
+      "-f",
+      "bump=patch",
+      "-f",
+      "dry_run=false",
+    ]);
+    expect(git("rev-parse", "HEAD")).toBe(head);
+    expect(git("tag", "--list")).toBe("");
+    expect(git("diff", "--name-only")).toBe("");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
