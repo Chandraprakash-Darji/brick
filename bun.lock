@@ -97,7 +97,7 @@
     },
     "packages/cli": {
       "name": "@brickkit/cli",
-      "version": "0.4.2",
+      "version": "0.5.0",
       "bin": {
         "brick": "dist/bin.js",
       },
@@ -123,7 +123,7 @@
     },
     "packages/client": {
       "name": "@brickkit/client",
-      "version": "0.4.2",
+      "version": "0.5.0",
       "dependencies": {
         "effect": "4.0.4",
       },
@@ -135,7 +135,7 @@
     },
     "packages/core": {
       "name": "@brickkit/core",
-      "version": "0.4.2",
+      "version": "0.5.0",
       "dependencies": {
         "@effect/sql-pg": "4.0.4",
         "@effect/sql-sqlite-bun": "4.0.4",
@@ -155,7 +155,7 @@
     },
     "packages/crud": {
       "name": "@brickkit/crud",
-      "version": "0.4.2",
+      "version": "0.5.0",
       "dependencies": {
         "@effect/sql-pg": "4.0.4",
         "@effect/sql-sqlite-bun": "4.0.4",
