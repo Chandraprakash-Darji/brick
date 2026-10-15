@@ -1,6 +1,6 @@
 {
   "name": "@brickkit/crud",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "Opt-in resource CRUD plugin for Brick",
   "keywords": [
     "typescript",
@@ -43,7 +43,7 @@
     "drizzle-orm": "^0.45.2"
   },
   "peerDependencies": {
-    "@brickkit/core": "^0.4.2",
+    "@brickkit/core": "^0.7.0",
     "effect": "^4"
   },
   "devDependencies": {

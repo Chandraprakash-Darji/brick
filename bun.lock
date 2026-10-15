@@ -96,12 +96,12 @@
     },
     "packages/cli": {
       "name": "@brickkit/cli",
-      "version": "0.6.1",
+      "version": "0.7.0",
       "bin": {
         "brick": "dist/bin.js",
       },
       "dependencies": {
-        "@brickkit/core": "^0.4.2",
+        "@brickkit/core": "^0.7.0",
         "@sinclair/typebox": "^0.34.52",
         "commander": "^15.0.0",
         "elysia": "2.0.0-beta.29",
@@ -123,7 +123,7 @@
     },
     "packages/core": {
       "name": "@brickkit/core",
-      "version": "0.6.1",
+      "version": "0.7.0",
       "dependencies": {
         "@sinclair/typebox": "^0.34.52",
         "drizzle-orm": "^0.45.2",
@@ -141,7 +141,7 @@
     },
     "packages/crud": {
       "name": "@brickkit/crud",
-      "version": "0.6.1",
+      "version": "0.7.0",
       "dependencies": {
         "@sinclair/typebox": "^0.34.52",
         "drizzle-orm": "^0.45.2",
@@ -152,7 +152,7 @@
         "typescript": "^5.7.0",
       },
       "peerDependencies": {
-        "@brickkit/core": "^0.4.2",
+        "@brickkit/core": "^0.7.0",
         "effect": "^4",
       },
     },
