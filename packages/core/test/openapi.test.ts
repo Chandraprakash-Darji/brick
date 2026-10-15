@@ -4,6 +4,7 @@ import {
   defineDatabase,
   defineAction,
   t,
+  Type,
   resetGlobalRegistry,
   generateOpenApiSpec,
 } from "../src";
@@ -203,4 +204,55 @@ it("deduplicates declared and framework errors with the same code and status", (
   expect(responses[500].content["application/json"].schema.oneOf).toHaveLength(
     3,
   );
+});
+
+it("hoists TypeBox $id/$ref anchors into components.schemas", () => {
+  // TypeBox expresses recursion with bare anchors (`$id: "T0"` plus
+  // `$ref: "T0"`). OpenAPI reads a bare `$ref` as an external file, so
+  // the raw anchors must never reach the emitted spec.
+  const JsonValue = Type.Recursive(
+    (This: any) => Type.Union([Type.Null(), Type.String(), Type.Array(This)]),
+    { $id: "T0" },
+  );
+  const LeadWhere = Type.Recursive(
+    (This: any) => Type.Object({ and: Type.Optional(Type.Array(This)) }),
+    { $id: "CrudWhere:lead" },
+  );
+
+  const anchoredService = defineService("anchored", {
+    database: defineDatabase(),
+  });
+  anchoredService.action(
+    defineAction({
+      name: "echoJson",
+      input: t.Object({ filter: LeadWhere }),
+      output: t.Object({ value: JsonValue }),
+      execute: async ({ input }: any) => ({ value: input.filter }),
+    }),
+  );
+
+  const spec = generateOpenApiSpec();
+  const raw = JSON.stringify(spec);
+  expect(raw).not.toContain('"$ref": "T0"');
+  expect(raw).not.toContain('"$ref": "CrudWhere:lead"');
+  expect(raw).not.toContain('"$id"');
+
+  // Anchors land in components under sanitized keys (`:` is not a
+  // valid OpenAPI component key character).
+  expect(spec.components.schemas.T0).toBeDefined();
+  expect(spec.components.schemas.CrudWhere_lead).toBeDefined();
+
+  // Self-recursion resolves locally (compared through JSON so TypeBox
+  // symbol keys don't affect the assertion).
+  expect(
+    JSON.parse(JSON.stringify(spec.components.schemas.T0)).anyOf[2],
+  ).toEqual({
+    type: "array",
+    items: { $ref: "#/components/schemas/T0" },
+  });
+  expect(
+    spec.paths["/api/anchored/echoJson"].post.requestBody.content[
+      "application/json"
+    ].schema.properties.filter,
+  ).toEqual({ $ref: "#/components/schemas/CrudWhere_lead" });
 });

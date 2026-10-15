@@ -115,7 +115,7 @@ export { Type, t, getCompiledCheck, validateWithSchema } from "./typebox";
 export type { TSchema, Static } from "./typebox";
 
 // OpenAPI 3.1 Specification Generation
-export { generateOpenApiSpec } from "./openapi";
+export { generateOpenApiSpec, hoistAnchoredSchemas } from "./openapi";
 export type { OpenApiGeneratorOptions } from "./openapi";
 
 // Database Integration

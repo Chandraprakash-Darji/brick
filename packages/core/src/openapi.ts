@@ -13,6 +13,90 @@ export interface OpenApiGeneratorOptions {
   registry?: ServiceRegistry;
 }
 
+function isAnchor(
+  node: unknown,
+): node is { $id: string } & Record<string, any> {
+  return (
+    typeof node === "object" &&
+    node !== null &&
+    typeof (node as Record<string, any>).$id === "string"
+  );
+}
+
+function isBareRef(node: unknown): node is { $ref: string } {
+  return (
+    typeof node === "object" &&
+    node !== null &&
+    typeof (node as Record<string, any>).$ref === "string" &&
+    !(node as { $ref: string }).$ref.startsWith("#")
+  );
+}
+
+function toComponentKey(id: string): string {
+  return id.replace(/[^A-Za-z0-9.\-_]+/g, "_");
+}
+
+/**
+ * TypeBox expresses recursive schemas with bare `$id`/`$ref` anchors
+ * (`{ $id: "T0", ..., { $ref: "T0" } }`). OpenAPI interprets a bare `$ref`
+ * as an external file reference, so downstream tooling tries to load a
+ * file named `T0` and fails. Hoist every anchored subschema into
+ * `#/components/schemas/` and rewrite the refs to local pointers.
+ * First definition wins when one `$id` is declared twice.
+ */
+export function hoistAnchoredSchemas(spec: Record<string, any>): string[] {
+  const anchored = new Map<string, any>();
+  const conflicts: string[] = [];
+
+  const collect = (node: any): any => {
+    if (Array.isArray(node)) return node.map(collect);
+    if (typeof node !== "object" || node === null) return node;
+    if (isAnchor(node)) {
+      const id = node.$id;
+      const { $id: _dropped, ...rest } = node;
+      const collected = collect(rest);
+      if (anchored.has(id)) {
+        if (JSON.stringify(anchored.get(id)) !== JSON.stringify(collected)) {
+          conflicts.push(id);
+        }
+      } else {
+        anchored.set(id, collected);
+      }
+      return { $ref: `#/components/schemas/${toComponentKey(id)}` };
+    }
+    for (const key of Object.keys(node)) {
+      node[key] = collect(node[key]);
+    }
+    return node;
+  };
+
+  const rewrite = (node: any): void => {
+    if (Array.isArray(node)) {
+      for (const child of node) rewrite(child);
+      return;
+    }
+    if (typeof node !== "object" || node === null) return;
+    if (isBareRef(node)) {
+      node.$ref = `#/components/schemas/${toComponentKey(node.$ref)}`;
+    }
+    for (const key of Object.keys(node)) rewrite(node[key]);
+  };
+
+  collect(spec);
+
+  const components = (spec.components ??= {}) as Record<string, any>;
+  const schemas = (components.schemas ??= {}) as Record<string, any>;
+  for (const [id, schema] of anchored) {
+    schemas[toComponentKey(id)] = schema;
+  }
+
+  // Second pass covers refs inside the hoisted copies themselves
+  // (e.g. the self-recursive JSON-value schema).
+  rewrite(spec);
+
+  return [...anchored.keys()];
+}
+
 export function generateOpenApiSpec(
   options: OpenApiGeneratorOptions = {},
 ): Record<string, any> {
@@ -237,6 +321,8 @@ export function generateOpenApiSpec(
       },
     });
   }
+
+  hoistAnchoredSchemas(spec);
 
   return spec;
 }
