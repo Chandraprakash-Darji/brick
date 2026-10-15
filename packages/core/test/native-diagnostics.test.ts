@@ -29,7 +29,13 @@ test("built-in diagnostics serve GET /_health and GET /_brick/services", async (
         {
           name: "diagnostics",
           actions: [
-            { name: "ping", method: "POST", path: "/ping", mcp: false },
+            {
+              name: "ping",
+              method: "POST",
+              path: "/ping",
+              mcp: false,
+              http: true,
+            },
           ],
         },
       ],

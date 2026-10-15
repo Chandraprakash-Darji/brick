@@ -88,7 +88,7 @@ Brick.app({
 });
 ```
 
-Only actions declared with `mcp: true` are exposed as MCP tools. The MCP
+Only actions with `expose: "mcp"` or `expose: "both"` are exposed as MCP tools. The MCP
 options are those of Effect's `McpServer.layerHttp`.
 
 ## Entry points

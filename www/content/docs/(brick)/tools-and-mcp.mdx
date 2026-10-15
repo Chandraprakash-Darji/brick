@@ -7,7 +7,7 @@ Brick-TS provides first-class support for AI agents through Effect's native `eff
 
 ## Minimal Example
 
-Declare an action with `mcp: true` and tool behavior annotations, then mount the MCP transport in your application:
+Declare an action with `expose: "both"` and tool behavior annotations, then mount the MCP transport in your application:
 
 ```ts title="src/services/documents.ts"
 import { Brick } from "@brickkit/core";
@@ -31,7 +31,7 @@ const SearchDocs = Brick.action("search_docs", "/api/docs/search", {
     }),
   ),
   errors: [NotFound],
-  mcp: true,
+  expose: "both",
   title: "Search Knowledge Base",
   description: "Search documents matching query keywords",
   tool: {
@@ -91,6 +91,22 @@ AI agents like Claude Code, Cursor, and Copilot use tool behavior annotations to
 | `destructive` | `boolean` | `false` | When `true`, indicates the tool performs irreversible actions (e.g. deletion). |
 | `idempotent`  | `boolean` | `false` | When `true`, calling the tool multiple times produces the identical outcome.   |
 | `openWorld`   | `boolean` | `false` | When `true`, indicates the tool interacts with external systems or web APIs.   |
+
+## Tool-only Actions (no HTTP route)
+
+Actions serve HTTP by default (`expose: "http"`). For agent-only tools with no HTTP surface, pass `expose: "mcp"` — no path needed:
+
+```ts
+const secret = Brick.action("secret", {
+  input: Schema.Struct({ value: Schema.String }),
+  output: Schema.String,
+  errors: [],
+  expose: "mcp",
+  tool: { readOnly: true },
+})((input) => Effect.succeed(`tool:${input.value}`));
+```
+
+Use `expose: "both"` for actions served over HTTP and MCP. A tool-only action stays callable in-process and over MCP/RPC. It mounts no HTTP route (so it never collides with same-path routes), is omitted from OpenAPI and the typed HTTP client, and is reported in `GET /_brick/services` with `http: false`.
 
 ## MCP Protocol Support
 

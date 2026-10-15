@@ -18,6 +18,25 @@ const errorWrapper = <E extends Schema.Top>(error: E) =>
     httpApiStatus:
       SchemaAST.resolveAt<number>("httpApiStatus")(error.ast) ?? 500,
   });
+type ActionSchemas<
+  I extends Schema.Top,
+  O extends Schema.Top,
+  Errors extends readonly Schema.Top[],
+> = {
+  input: I;
+  output: O;
+  errors: Errors;
+  expose?: "http" | "mcp" | "both";
+  description?: string;
+  title?: string;
+  tool?: {
+    readonly readOnly?: boolean;
+    readonly destructive?: boolean;
+    readonly idempotent?: boolean;
+    readonly openWorld?: boolean;
+  };
+};
+
 export const action = <
   const N extends string,
   I extends Schema.Top,
@@ -25,67 +44,63 @@ export const action = <
   const Errors extends readonly Schema.Top[],
 >(
   name: N,
-  path: `/${string}`,
-  schemas: {
-    input: I;
-    output: O;
-    errors: Errors;
-    mcp?: boolean;
-    description?: string;
-    title?: string;
-    tool?: {
-      readonly readOnly?: boolean;
-      readonly destructive?: boolean;
-      readonly idempotent?: boolean;
-      readonly openWorld?: boolean;
-    };
-  },
+  path: `/${string}` | ActionSchemas<I, O, Errors>,
+  schemas?: ActionSchemas<I, O, Errors>,
 ) => {
-  const errors = schemas.errors.map((error) => errorWrapper(error));
-  const typedEndpoint = HttpApiEndpoint.post(name, path, {
-    payload: schemas.input,
-    success: schemas.output,
-    error: Schema.Union([Schema.Union(schemas.errors)]),
+  const options = (typeof path === "string" ? schemas : path) as
+    | ActionSchemas<I, O, Errors>
+    | undefined;
+  if (!options)
+    throw new Error(
+      `Brick.action("${name}") requires input, output and error schemas`,
+    );
+  const route = (typeof path === "string" ? path : `/${name}`) as `/${string}`;
+  const errors = options.errors.map((error) => errorWrapper(error));
+  const typedEndpoint = HttpApiEndpoint.post(name, route, {
+    payload: options.input,
+    success: options.output,
+    error: Schema.Union([Schema.Union(options.errors)]),
   });
   // Native private ErrorNoStream cannot reduce arrays with open schema members.
   // Mapping the identical error schemas preserves all Type/EncodingServices slots.
-  let endpoint = HttpApiEndpoint.post(name, path, {
-    payload: schemas.input,
-    success: schemas.output,
+  let endpoint = HttpApiEndpoint.post(name, route, {
+    payload: options.input,
+    success: options.output,
     error: errors,
   }) as unknown as typeof typedEndpoint;
-  if (schemas.description)
-    endpoint = endpoint.annotate(OpenApi.Description, schemas.description);
-  if (schemas.title)
-    endpoint = endpoint.annotate(OpenApi.Summary, schemas.title);
+  if (options.description)
+    endpoint = endpoint.annotate(OpenApi.Description, options.description);
+  if (options.title)
+    endpoint = endpoint.annotate(OpenApi.Summary, options.title);
   let tool = Tool.make(name, {
-    parameters: schemas.input,
-    success: schemas.output,
-    failure: Schema.Union(schemas.errors),
-    description: schemas.description,
+    parameters: options.input,
+    success: options.output,
+    failure: Schema.Union(options.errors),
+    description: options.description,
   });
-  if (schemas.title) tool = tool.annotate(Tool.Title, schemas.title);
-  if (schemas.tool?.readOnly !== undefined)
-    tool = tool.annotate(Tool.Readonly, schemas.tool.readOnly);
-  if (schemas.tool?.destructive !== undefined)
-    tool = tool.annotate(Tool.Destructive, schemas.tool.destructive);
-  if (schemas.tool?.idempotent !== undefined)
-    tool = tool.annotate(Tool.Idempotent, schemas.tool.idempotent);
-  if (schemas.tool?.openWorld !== undefined)
-    tool = tool.annotate(Tool.OpenWorld, schemas.tool.openWorld);
+  if (options.title) tool = tool.annotate(Tool.Title, options.title);
+  if (options.tool?.readOnly !== undefined)
+    tool = tool.annotate(Tool.Readonly, options.tool.readOnly);
+  if (options.tool?.destructive !== undefined)
+    tool = tool.annotate(Tool.Destructive, options.tool.destructive);
+  if (options.tool?.idempotent !== undefined)
+    tool = tool.annotate(Tool.Idempotent, options.tool.idempotent);
+  if (options.tool?.openWorld !== undefined)
+    tool = tool.annotate(Tool.OpenWorld, options.tool.openWorld);
   const contract = Object.freeze({
     name,
     endpoint,
     method: "POST" as HttpMethod,
-    path,
+    path: route,
+    http: (options.expose ?? "http") !== "mcp",
     rpc: Rpc.make(name, {
-      payload: schemas.input,
-      success: schemas.output,
-      error: Schema.Union(schemas.errors),
+      payload: options.input,
+      success: options.output,
+      error: Schema.Union(options.errors),
       defect: redactedDefect,
     }),
     tool,
-    mcp: schemas.mcp === true,
+    mcp: (options.expose ?? "http") !== "http",
   });
   const implement = <Failure extends Errors[number]["Type"], R>(
     handler: (input: I["Type"]) => Effect.Effect<O["Type"], Failure, R>,
@@ -131,6 +146,22 @@ type ErrorCodec<E extends readonly Schema.Top[]> = [E] extends [never]
   ? never
   : Schema.toCodecJson<Schema.Union<[Schema.Union<E>]>>;
 
+type EndpointSchemas<
+  M extends HttpMethod,
+  I extends Record<string, Schema.Top>,
+  O extends Schema.Top,
+  Errors extends readonly Schema.Top[],
+> = {
+  readonly input: I &
+    Record<Exclude<keyof I, HttpInputKey>, never> &
+    (M extends HttpMethod.NoBody ? { readonly payload?: never } : unknown);
+  readonly output: O;
+  readonly errors: Errors;
+  readonly expose?: "http" | "mcp" | "both";
+  readonly description?: string;
+  readonly title?: string;
+};
+
 /** Typed HTTP request parts also form the input contract for local/RPC/tool calls. */
 export const endpoint = <
   const N extends string,
@@ -141,21 +172,20 @@ export const endpoint = <
 >(
   name: N,
   method: M,
-  path: `/${string}`,
-  schemas: {
-    readonly input: I &
-      Record<Exclude<keyof I, HttpInputKey>, never> &
-      (M extends HttpMethod.NoBody ? { readonly payload?: never } : unknown);
-    readonly output: O;
-    readonly errors: Errors;
-    readonly mcp?: boolean;
-    readonly description?: string;
-    readonly title?: string;
-  },
+  path: `/${string}` | EndpointSchemas<M, I, O, Errors>,
+  schemas?: EndpointSchemas<M, I, O, Errors>,
 ) => {
-  const requestSchema = Schema.Struct(schemas.input);
-  const base = action(name, path, { ...schemas, input: requestSchema });
-  const parts = schemas.input;
+  const options = (typeof path === "string" ? schemas : path) as
+    | EndpointSchemas<M, I, O, Errors>
+    | undefined;
+  if (!options)
+    throw new Error(
+      `Brick.endpoint("${name}") requires input, output and error schemas`,
+    );
+  const route = (typeof path === "string" ? path : `/${name}`) as `/${string}`;
+  const requestSchema = Schema.Struct(options.input);
+  const base = action(name, route, { ...options, input: requestSchema });
+  const parts = options.input;
   const endpointOptions = {
     ...(parts.params !== undefined
       ? { params: parts.params as Part<I, "params"> }
@@ -172,12 +202,12 @@ export const endpoint = <
     ...(parts.headers !== undefined
       ? { headers: parts.headers as Part<I, "headers"> }
       : {}),
-    success: schemas.output,
-    error: Schema.Union([Schema.Union(schemas.errors)]),
+    success: options.output,
+    error: Schema.Union([Schema.Union(options.errors)]),
   };
   const typed = (HttpApiEndpoint.make(method) as any)(
     name,
-    path,
+    route,
     endpointOptions,
   ) as HttpApiEndpoint.HttpApiEndpoint<
     N,
@@ -191,13 +221,13 @@ export const endpoint = <
     ErrorCodec<Errors>
   >;
 
-  const http = (HttpApiEndpoint.make(method) as any)(name, path, {
+  const http = (HttpApiEndpoint.make(method) as any)(name, route, {
     ...(parts.params !== undefined ? { params: parts.params } : {}),
     ...(parts.query !== undefined ? { query: parts.query } : {}),
     ...(parts.payload !== undefined ? { payload: parts.payload } : {}),
     ...(parts.headers !== undefined ? { headers: parts.headers } : {}),
-    success: schemas.output,
-    error: schemas.errors.map(errorWrapper),
+    success: options.output,
+    error: options.errors.map(errorWrapper),
   }) as unknown as typeof typed;
   const metadata = {
     ...base,

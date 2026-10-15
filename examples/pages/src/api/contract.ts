@@ -165,7 +165,7 @@ const tool = <
     input,
     output,
     errors,
-    mcp: true,
+    expose: "both",
     ...toolMetadata[name],
   });
 const id = Schema.Struct({ id: Schema.String });

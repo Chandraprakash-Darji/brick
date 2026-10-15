@@ -211,7 +211,7 @@ The properties that make Brick codebases legible to developers make them excepti
 
 - **Predictable mental model**: Coding agents (Cursor, Claude Code, Copilot) don't hallucinate arbitrary middleware order or complex controller layers. The pattern is always Service → Action / Resource → Effect Handler.
 - **Architecture Introspection**: With `brick info src/app.ts` or `brick build`, Brick exports the complete service graph, registered action routes, and metadata into structured JSON (`brick-ir.json`) that agents can inspect.
-- **Native Model Context Protocol (MCP)**: Every action can be exposed directly to AI workflows using `mcp: true` and tool annotations, turning your backend into an agent-ready tool platform with zero manual wrapping.
+- **Native Model Context Protocol (MCP)**: Every action can be exposed directly to AI workflows using `expose: "both"` (or `"mcp"` for tool-only actions with no HTTP route) and tool annotations, turning your backend into an agent-ready tool platform with zero manual wrapping.
 
 ## How Brick Compares
 

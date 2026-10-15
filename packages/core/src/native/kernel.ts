@@ -30,6 +30,8 @@ export interface ActionConstraint {
   readonly rpc: Rpc.Any;
   readonly tool: Tool.Any;
   readonly mcp: boolean;
+  /** False for tool-only actions: served over MCP/RPC but never mounted on HTTP. */
+  readonly http: boolean;
   readonly endpoint: HttpApiEndpoint.Constraint;
   readonly method: string;
   readonly path: `/${string}`;
@@ -81,7 +83,10 @@ export const service = <
       N,
       HttpApiEndpoint.Constraint
     >;
-  for (const a of Object.values(actions)) group = group.add(a.endpoint);
+  // Tool-only actions (expose: "mcp") stay in the record for MCP/RPC and
+  // in-process calls, but mount no HTTP route.
+  for (const a of Object.values(actions))
+    if (a.http) group = group.add(a.endpoint);
   return Object.freeze({
     name,
     actions: Object.freeze({ ...actions }),
@@ -125,6 +130,7 @@ export function compileService<
         HttpApiEndpoint.Handler<HttpApiEndpoint.Constraint, unknown, never>
       > = {};
       for (const a of Object.values(s.actions)) {
+        if (!a.http) continue;
         handlers[a.endpoint.identifier] = (input) =>
           Effect.flatMap(Effect.context<never>(), (requestContext) =>
             a
@@ -313,6 +319,7 @@ export function app<
     if (names.has(s.name)) throw new Error(`Duplicate service: ${s.name}`);
     names.add(s.name);
     for (const a of Object.values(s.actions)) {
+      if (!a.http) continue;
       const route = `${a.method} ${a.path}`;
       if (paths.has(route)) throw new Error(`Duplicate route: ${route}`);
       paths.add(route);
@@ -359,6 +366,7 @@ export function app<
         method: a.method,
         path: a.path,
         mcp: a.mcp,
+        http: a.http,
       })),
     })),
   };

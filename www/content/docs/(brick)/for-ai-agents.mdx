@@ -71,7 +71,7 @@ Add your own commands, service entry path, and migration rules to make these ins
 
 ## Connect to your application's MCP tools
 
-Brick provides first-class support for Model Context Protocol (MCP) through Effect's native `effect/ai` integration. Register tools directly on actions using `mcp: true` and tool annotations:
+Brick provides first-class support for Model Context Protocol (MCP) through Effect's native `effect/ai` integration. Register tools directly on actions using `expose: "both"` and tool annotations:
 
 ```ts title="src/services/tools.ts"
 import { Brick } from "@brickkit/core";
@@ -81,7 +81,7 @@ export const searchAction = Brick.action("search", "/api/search", {
   input: Schema.Struct({ query: Schema.String }),
   output: Schema.Array(Schema.String),
   errors: [],
-  mcp: true,
+  expose: "both",
   title: "Search Knowledge Base",
   description: "Search documents matching query keywords",
   tool: { readOnly: true },

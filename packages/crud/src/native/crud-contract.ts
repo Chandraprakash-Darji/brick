@@ -69,6 +69,8 @@ export function crudContract<
     return `${base}${subpath}` as `/${string}`;
   };
   const int = Schema.Number.check(Schema.isInt());
+  // CRUD actions always serve HTTP; the flag only opts them into MCP too.
+  const expose: "http" | "both" = options.mcp ? "both" : "http";
   type ID = InferSelectModel<T>[K];
   const idParams = Schema.Struct({
     id: schemas.idSchema,
@@ -83,25 +85,25 @@ export function crudContract<
         offset: int,
       }),
       errors,
-      mcp: options.mcp,
+      expose,
     }),
     findOne: endpoint(`${options.name}.findOne`, "POST", route("/find-one"), {
       input: { payload: schemas.querySchema },
       output: Schema.NullOr(schemas.rowSchema),
       errors,
-      mcp: options.mcp,
+      expose,
     }),
     get: endpoint(`${options.name}.get`, "GET", route("/:id"), {
       input: { params: idParams },
       output: schemas.rowSchema,
       errors,
-      mcp: options.mcp,
+      expose,
     }),
     create: endpoint(`${options.name}.create`, "POST", route("/"), {
       input: { payload: schemas.createSchema },
       output: schemas.rowSchema,
       errors,
-      mcp: options.mcp,
+      expose,
     }),
     update: endpoint(`${options.name}.update`, "PATCH", route("/:id"), {
       input: {
@@ -110,25 +112,25 @@ export function crudContract<
       },
       output: schemas.rowSchema,
       errors,
-      mcp: options.mcp,
+      expose,
     }),
     delete: endpoint(`${options.name}.delete`, "DELETE", route("/:id"), {
       input: { params: idParams },
       output: Schema.Struct({ success: Schema.Literal(true) }),
       errors,
-      mcp: options.mcp,
+      expose,
     }),
     count: endpoint(`${options.name}.count`, "POST", route("/count"), {
       input: { payload: schemas.filterSchema },
       output: Schema.Struct({ count: int }),
       errors,
-      mcp: options.mcp,
+      expose,
     }),
     exists: endpoint(`${options.name}.exists`, "POST", route("/exists"), {
       input: { payload: schemas.filterSchema },
       output: Schema.Struct({ exists: Schema.Boolean }),
       errors,
-      mcp: options.mcp,
+      expose,
     }),
   };
   type Declared = Errors[number]["Type"];

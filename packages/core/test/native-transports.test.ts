@@ -15,7 +15,7 @@ const Define = Brick.action("lookup", "/lookup", {
   input: Schema.Struct({ value: Schema.String }),
   output: Schema.String,
   errors: [Brick.errors.Forbidden],
-  mcp: true,
+  expose: "both",
 });
 const lookup = Define((input) =>
   Effect.gen(function* () {
