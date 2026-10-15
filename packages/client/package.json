@@ -1,6 +1,6 @@
 {
   "name": "@brickkit/client",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Schema-backed Promise and Effect clients for Brick",
   "keywords": [
     "brick",

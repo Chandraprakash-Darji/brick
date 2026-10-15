@@ -1,6 +1,6 @@
 {
   "name": "@brickkit/cli",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "CLI and server engine for Brick-TS",
   "keywords": [
     "typescript",
@@ -56,7 +56,7 @@
     "format:check": "oxfmt --check ."
   },
   "dependencies": {
-    "@brickkit/core": "^0.6.0",
+    "@brickkit/core": "^0.6.1",
     "commander": "^15.0.0",
     "effect": "4.0.4"
   },
