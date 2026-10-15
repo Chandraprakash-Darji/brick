@@ -10,6 +10,7 @@
     "**/.source/**",
     "**/routeTree.gen.ts",
     "**/.output/**",
-    "**/.tanstack/**"
+    "**/.tanstack/**",
+    "**/vendor/**"
   ]
 }
