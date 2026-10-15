@@ -322,7 +322,10 @@ export function generateOpenApiSpec(
     });
   }
 
-  hoistAnchoredSchemas(spec);
+  // Operations reference live TypeBox schemas. Rewrite only the serialized
+  // document so OpenAPI pointers cannot corrupt runtime validation schemas.
+  const document: Record<string, any> = JSON.parse(JSON.stringify(spec));
+  hoistAnchoredSchemas(document);
 
-  return spec;
+  return document;
 }

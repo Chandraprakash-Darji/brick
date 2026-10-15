@@ -193,3 +193,33 @@ and rerun after changing backend definitions. You can add a package script:
 Import the generated `contract` with `createBrickClient({ baseUrl, contract })`
 as shown above. The command creates parent directories and leaves an unchanged
 contract file untouched. Add the generated output to `.gitignore`.
+
+## Coordinate backend and frontend development
+
+For a separate frontend tool, generate the contract before its compiler starts:
+
+```sh
+brick dev src/app.ts --client frontend/src/contract.ts --frontend 'bun run --cwd frontend dev'
+```
+
+The app entry must default-export a BrickApp without calling `.listen()`.
+Brick generates the initial contract, starts the frontend command once, and
+restarts the backend on edits. Imported local dependencies outside the entry's
+directory are watched too. Changes coalesce before restart; every restart evaluates
+the app in a fresh process and generates the contract before starting the server.
+Generation failures preserve the previous contract and print the error. The next
+valid edit retries. Stopping `brick dev` stops its backend and frontend children.
+`--client` also works without `--frontend` if another process owns the frontend.
+
+For an embedded Vite app such as Pages, keep using `brickClient` in `vite.config.ts`.
+Vite owns backend loading and frontend startup in that setup. It generates before
+startup and production compilation, reloads the app definition graph, including imported service instances, and reports generation errors through its terminal and browser overlay.
+A valid edit regenerates the contract after an error. Both integrations atomically
+replace changed contracts and preserve unchanged files, so implementation-only
+edits do not trigger frontend contract updates. Generated files are excluded from
+regeneration triggers.
+
+For non-Vite production builds and type checks, run `brick gen client` as the first
+command in the build or typecheck script. It uses the same generator and atomic
+writer as development. Keep startup jobs and listeners outside the app definition,
+since all generation paths evaluate the entry.

@@ -1,0 +1,163 @@
+---
+title: TanStack Query
+description: Use typed query options, mutation options, and cache keys with Brick's HTTP client.
+---
+
+Use `createBrickQueryClient` to call generated actions through standard TanStack Query options. It shares the transport and configuration of the [typed HTTP client](/docs/typed-client).
+
+## Create a Query client
+
+Install the browser SDK and TanStack Query v5:
+
+```bash
+bun add @brickkit/core @tanstack/query-core@^5 @tanstack/react-query@^5
+```
+
+Configure [automatic contract generation](/docs/typed-client#generate-the-contract-automatically), then pass the generated contract to the browser entry:
+
+```ts title="src/lib/api.ts"
+import { createBrickQueryClient } from "@brickkit/core/tanstack-query";
+import { contract } from "../../_brick/contract";
+
+export const api = createBrickQueryClient({
+  baseUrl: "http://localhost:4000",
+  contract,
+  fetch: (input, init) => fetch(input, { ...init, credentials: "include" }),
+});
+```
+
+The examples below assume your app exposes a CRUD resource named `page`. Custom actions use `api.<service>.<action>`, with dotted action names mapped to nested namespaces. The generated contract supplies input and output types and exact HTTP routes, including plugin actions.
+
+Wrap React consumers in TanStack Query's `QueryClientProvider`. The Brick Query client builds request options; your TanStack `QueryClient` owns the cache.
+
+## Load data with query options
+
+Pass action input under `input` and spread native TanStack options alongside the generated options:
+
+```tsx title="src/hooks/use-pages.ts"
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { api } from "../lib/api";
+
+export function usePages(page: number) {
+  return useQuery({
+    ...api.page.list.queryOptions({
+      input: { offset: page * 20, limit: 20 },
+    }),
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+    select: (response) => response.items,
+  });
+}
+```
+
+`queryOptions` returns `queryKey` and `queryFn`. Required action input remains required. For an action whose input includes `undefined`, you can call `.queryOptions()` without arguments.
+
+Both query and mutation helpers are available on every action. Choose a helper by how you use the action. Calling `queryOptions` for a POST action sends POST. Brick preserves GET, POST, PUT, PATCH, DELETE, custom paths, and URL-encoded path parameters. It uses its existing HTTP protocol.
+
+Direct calls such as `await api.page.list({ limit: 20 })` also work.
+
+## Mutate and invalidate related queries
+
+Pass the action input to `mutate` or `mutateAsync`. Use an action-wide key to invalidate every cached input for a related action:
+
+```tsx title="src/hooks/use-create-page.ts"
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "../lib/api";
+
+export function useCreatePage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...api.page.create.mutationOptions(),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: api.page.list.queryKey() }),
+  });
+}
+```
+
+`mutationOptions` returns `mutationKey` and `mutationFn`. Add native callbacks such as `onSuccess` and `onError` beside those properties. Brick does not infer which queries a mutation affects.
+
+To target one input, include it in the key:
+
+```ts
+await queryClient.invalidateQueries({
+  queryKey: api.page.get.queryKey({ input: { id: pageId } }),
+  exact: true,
+});
+```
+
+Keys contain the server URL, prefix, action namespace path, contract method and route identity, and input. TanStack Query hashes object inputs deterministically. Different actions and inputs have separate cache entries. Headers are excluded, so clear or partition the cache when the authenticated user changes.
+
+## Use QueryClient methods and Router loaders
+
+The same options work outside React hooks:
+
+```ts
+const options = api.page.get.queryOptions({ input: { id: pageId } });
+const page = await queryClient.ensureQueryData(options);
+await queryClient.prefetchQuery(options);
+const cached = queryClient.getQueryData(options.queryKey);
+```
+
+`page` and `cached` infer the action output. Input-specific `queryKey({ input })` calls also carry the cached output type. A bare `queryKey()` is an action-wide filter for invalidation.
+
+For a TanStack Router route, use the `queryClient` supplied through your router context:
+
+```ts title="src/routes/pages/$id.tsx"
+import { createFileRoute } from "@tanstack/react-router";
+import { api } from "../../lib/api";
+
+export const Route = createFileRoute("/pages/$id")({
+  loader: ({ context, params }) =>
+    context.queryClient.ensureQueryData(
+      api.page.get.queryOptions({ input: { id: params.id } }),
+    ),
+});
+```
+
+## Cancel requests and set request options
+
+TanStack Query's cancellation signal reaches fetch. You can also supply per-request headers, an abort signal, and a timeout:
+
+```ts
+const controller = new AbortController();
+const options = api.page.list.queryOptions({
+  input: { limit: 20 },
+  request: {
+    signal: controller.signal,
+    timeoutMs: 5_000,
+    headers: { "X-Request-ID": "page-list" },
+  },
+});
+
+const pending = queryClient.prefetchQuery(options);
+await queryClient.cancelQueries({ queryKey: options.queryKey });
+await pending;
+```
+
+Query cancellation, the configured request signal, and the timeout remain active together. A per-request signal replaces the client's default signal. Mutations accept the same request options through `.mutationOptions({ request })`; TanStack Query does not automatically cancel mutations.
+
+Request failures follow the typed HTTP client's [error handling](/docs/typed-client#error-handling). Native signal cancellation rejects with `AbortError`; timeout failures are reported as `BrickTransportError`.
+
+## Connect a TanStack DB collection
+
+Pass the generated options to `queryCollectionOptions` and supply the collection's row identity and response selection:
+
+```ts
+import { createCollection } from "@tanstack/react-db";
+import { queryCollectionOptions } from "@tanstack/query-db-collection";
+import { api } from "./api";
+import { queryClient } from "./query-client";
+
+export const pages = createCollection(
+  queryCollectionOptions({
+    ...api.page.list.queryOptions({ input: { limit: 100 } }),
+    queryClient,
+    getKey: (page) => page.id,
+    select: (response) => response.items,
+  }),
+);
+```
+
+This collection contains the requested page of results. Implement pagination yourself when you need all rows. Brick does not create collection identity, optimistic writes, or mutation synchronization. Explicitly invalidate the collection's query or call `pages.utils.refetch()` after relevant mutations.
+
+The Pages example uses Query options for editor loads and saves. Successful saves invalidate typed list and detail keys and explicitly refetch the collection used by the dashboard and command bar.

@@ -1,9 +1,9 @@
 ---
 title: Typed Client SDK
-description: Call backend actions with full end-to-end type safety in frontend applications without build-time codegen.
+description: Call backend actions through a typed HTTP client with automatically generated browser contracts.
 ---
 
-The Brick-TS client SDK provides end-to-end typed HTTP communication between frontend applications and backend services without code generation.
+The Brick-TS client SDK uses a generated browser contract to infer action inputs and outputs and preserve exact HTTP routes. Use [TanStack Query options](/docs/tanstack-query) for query hooks, mutations, and typed cache keys.
 
 ## Minimal Example
 
@@ -95,7 +95,7 @@ const pages = await api.page.list(
 );
 ```
 
-Only one signal is applied per call, in this order: per-call `signal`, then the timeout signal (per-call `timeoutMs`, else the client `timeoutMs`), then the client `signal`. Passing both `signal` and `timeoutMs` on the same call ignores the timeout. Cancelling through a `signal` is never wrapped: it rejects with the native `AbortError`. A `timeoutMs` expiry behaves differently — it aborts with a `TimeoutError`, which the client reports as a `BrickTransportError`.
+A per-call `signal` replaces the client's default signal. The timeout remains active alongside that signal, using per-call `timeoutMs` when supplied and client `timeoutMs` otherwise. Signal cancellation rejects with the native `AbortError`. A timeout aborts with `TimeoutError`, which the client reports as `BrickTransportError`.
 
 ## Error Handling
 
@@ -155,3 +155,30 @@ export type GetUserInput = InferActionInput<typeof getUser>;
 export type GetUserOutput = InferActionOutput<typeof getUser>;
 export type GetUserErrorCodes = InferActionErrorCodes<typeof getUser>;
 ```
+
+## Generate the contract automatically
+
+For Vite 8 apps, use the `brickClient` plugin shown above. It generates the contract before frontend startup and production compilation. For type checks on a clean checkout, initialize and close a Vite server before running `tsc`, as demonstrated in `examples/pages/scripts/typecheck.ts`.
+
+The plugin tracks the app entry and imported dependencies. Schema changes, HTTP method and path edits, and action additions or removals regenerate the contract. Rapid changes coalesce. The app definition graph, including imported service instances, is invalidated before evaluation so removed actions cannot persist in cached service objects.
+
+Changed contracts are replaced atomically. Implementation-only edits leave an unchanged contract's content and timestamp intact, so they do not trigger frontend contract updates. The generated output is excluded from regeneration triggers. If an edit breaks generation, Vite reports it in the terminal and browser overlay, preserves the previous contract, and retries after a valid edit.
+
+For separate backend and frontend processes, use the CLI's [coordinated development workflow](/docs/brick-cli/dev-and-start#generate-contracts-before-frontend-startup):
+
+```bash
+brick dev src/api/app.ts --client frontend/src/contract.ts --frontend 'bun run --cwd frontend dev'
+```
+
+For a non-Vite frontend, put generation first in build and typecheck scripts:
+
+```json title="package.json"
+{
+  "scripts": {
+    "build": "brick gen client src/api/app.ts --output frontend/src/contract.ts && bun run --cwd frontend build",
+    "typecheck": "brick gen client src/api/app.ts --output frontend/src/contract.ts && bun run --cwd frontend typecheck"
+  }
+}
+```
+
+All paths use the same contract generator and atomic writer. Generated browser modules contain transport types and route metadata, without backend implementations or database imports. Generation evaluates the app entry, so keep listeners, startup jobs, and other startup side effects in a separate bootstrap. Required configuration must be available during generation.

@@ -49,7 +49,11 @@ export default brick({ services: [service], requestLogging: false });
     await Bun.write(join(root, "actions.ts"), actions("after"));
     let result = "before";
     const deadline = Date.now() + 5000;
-    while (result !== "after" && Date.now() < deadline) {
+    while (
+      (result !== "after" ||
+        !(await Bun.file(contractFile).text()).includes('"locale": string')) &&
+      Date.now() < deadline
+    ) {
       await Bun.sleep(50);
       const updated = (await environment.runner.import("virtual:brick-app"))
         .default;
@@ -107,9 +111,10 @@ it("generates the contract before a cold production build without bundling the b
   const entry = resolve(import.meta.dir, "fixtures/client-app.ts");
   await Bun.write(
     join(root, "client.ts"),
-    `import { createBrickClient } from "@brickkit/core/client";
+    `import { createBrickQueryClient } from "@brickkit/core/tanstack-query";
 import { contract } from "./_brick/contract";
-export const api = createBrickClient({ baseUrl: "http://localhost", contract });
+export const api = createBrickQueryClient({ baseUrl: "http://localhost", contract });
+export const options = api.records.search.queryOptions({ input: { term: "typed" } });
 `,
   );
   try {
@@ -149,3 +154,141 @@ export const api = createBrickClient({ baseUrl: "http://localhost", contract });
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it("preserves unchanged contracts and recovers from invalid edits with updated schemas and routes", async () => {
+  const { stat } = await import("node:fs/promises");
+  const root = await mkdtemp(resolve(import.meta.dir, "../.brick-vite-test-"));
+  const file = join(root, "actions.ts");
+  const output = join(root, "_brick/contract.ts");
+  const source = (
+    implementation: string,
+    method = "POST",
+    path = "/before",
+    extra = "",
+  ) => `
+import { defineService, t } from "@brickkit/core";
+const service = defineService("watched");
+service.action({ name: "value", input: t.Object({ id: t.String() }), output: t.String(), method: ${JSON.stringify(method)}, path: ${JSON.stringify(path)}, execute: () => ${JSON.stringify(implementation)} });
+${extra}
+export default service;
+`;
+  await Bun.write(file, source("before"));
+  await Bun.write(
+    join(root, "app.ts"),
+    `import { brick } from "@brickkit/core"; import service from "./actions"; export default brick({ services: [service] });`,
+  );
+  let hotUpdates = 0;
+  const errors: unknown[] = [];
+  const server = await createServer({
+    configFile: false,
+    root,
+    logLevel: "silent",
+    plugins: [
+      brickClient({ entry: "app.ts" }),
+      {
+        name: "observe-updates",
+        hotUpdate() {
+          hotUpdates++;
+        },
+      },
+    ],
+    server: { middlewareMode: true },
+  });
+  // The real Vite error channel drives its browser overlay.
+  const hot = server.environments.ssr!.hot;
+  const send = hot.send.bind(hot);
+  hot.send = ((...args: Parameters<typeof send>) => {
+    errors.push(args[0]);
+    return send(...args);
+  }) as typeof hot.send;
+  async function waitFor(check: () => Promise<boolean>) {
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      if (await check()) return;
+      await Bun.sleep(25);
+    }
+    throw new Error("Timed out waiting for contract update");
+  }
+  try {
+    const initial = await Bun.file(output).text();
+    const timestamp = (await stat(output)).mtimeMs;
+    await Bun.write(file, source("implementation only"));
+    await waitFor(async () => hotUpdates > 0);
+    await Bun.sleep(100);
+    expect(await Bun.file(output).text()).toBe(initial);
+    expect((await stat(output)).mtimeMs).toBe(timestamp);
+    await Bun.write(file, "export default { syntax error");
+    await waitFor(async () =>
+      errors.some(
+        (value) =>
+          !!value &&
+          typeof value === "object" &&
+          "type" in value &&
+          value.type === "error",
+      ),
+    );
+    expect(await Bun.file(output).text()).toBe(initial);
+    await Bun.write(
+      file,
+      source(
+        "fixed",
+        "PATCH",
+        "/after/:id",
+        'service.action({ name: "added", output: t.Number(), execute: () => 1 });',
+      ),
+    );
+    await waitFor(async () =>
+      (await Bun.file(output).text()).includes('"added"'),
+    );
+    expect(await Bun.file(output).text()).toContain("PATCH");
+    expect(await Bun.file(output).text()).toContain("/after/:id");
+    await Bun.write(file, source("removed", "GET", "/final"));
+    await waitFor(
+      async () => !(await Bun.file(output).text()).includes('"added"'),
+    );
+    expect(await Bun.file(output).text()).toContain("GET");
+  } finally {
+    await server.close();
+    await rm(root, { recursive: true, force: true });
+  }
+}, 15000);
+
+it("removes actions registered on an imported service singleton after edits", async () => {
+  const root = await mkdtemp(resolve(import.meta.dir, "../.brick-vite-test-"));
+  const registration = join(root, "actions.ts");
+  const contractFile = join(root, "_brick/contract.ts");
+  await Bun.write(
+    join(root, "service.ts"),
+    'import { defineService } from "@brickkit/core"; export const service = defineService("singleton");',
+  );
+  const source = (name: string) =>
+    `import { service } from "./service"; service.action({ name: ${JSON.stringify(name)}, execute: () => "ok" });`;
+  await Bun.write(registration, source("removed"));
+  await Bun.write(
+    join(root, "app.ts"),
+    'import { brick } from "@brickkit/core"; import { service } from "./service"; import "./actions"; export default brick({ services: [service] });',
+  );
+  const server = await createServer({
+    configFile: false,
+    root,
+    logLevel: "silent",
+    plugins: [brickClient({ entry: "app.ts" })],
+    server: { middlewareMode: true },
+  });
+  try {
+    expect(await Bun.file(contractFile).text()).toContain('"removed"');
+    await Bun.write(registration, source("added"));
+    const deadline = Date.now() + 5000;
+    while (
+      !(await Bun.file(contractFile).text()).includes('"added"') &&
+      Date.now() < deadline
+    )
+      await Bun.sleep(25);
+    const updatedSource = await Bun.file(contractFile).text();
+    expect(updatedSource).toContain('"added"');
+    expect(updatedSource).not.toContain('"removed"');
+  } finally {
+    await server.close();
+    await rm(root, { recursive: true, force: true });
+  }
+}, 10000);

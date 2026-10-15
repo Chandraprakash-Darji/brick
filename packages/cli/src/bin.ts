@@ -71,13 +71,31 @@ ${PORT_RESOLUTION_HELP}`,
   program
     .command("dev")
     .description("Start development server with live reload")
+    .option(
+      "--client <file>",
+      "Generate and watch a browser contract before startup",
+    )
+    .option(
+      "--frontend <command>",
+      "Start frontend after contract generation; requires --client",
+    )
     .argument("[entry]", "Application entry file")
     .option("--port <number>", PORT_HELP, parsePortOption)
     .addHelpText("after", PORT_RESOLUTION_HELP)
-    .action(async (entry: string | undefined, opts: { port?: number }) => {
-      const port = resolveDevPort(opts.port);
-      await startDevServer({ entry, port });
-    });
+    .action(
+      async (
+        entry: string | undefined,
+        opts: { port?: number; client?: string; frontend?: string },
+      ) => {
+        const port = resolveDevPort(opts.port);
+        await startDevServer({
+          entry,
+          port,
+          clientOutput: opts.client,
+          frontend: opts.frontend,
+        });
+      },
+    );
 
   program
     .command("start")

@@ -21,6 +21,24 @@ When running `brick dev`:
 2. **Watch Directories**: The CLI monitors `src/`, `app/`, and the parent folder of the entry file for changes (excluding `node_modules`).
 3. **Fresh Application Process**: After a short debounce, `brick dev` stops the application process and starts a new one. The entry and all its dependencies run again with a fresh service registry and module graph. Default-exported `BrickApp` options (including the route prefix) are preserved; the CLI port takes precedence. For the programmatic `startDevServer({ prefix })` option, the exported app’s prefix takes precedence and the runner prints a warning.
 
+### Generate contracts before frontend startup
+
+For a separate frontend tool, pass a contract destination and a frontend command:
+
+```bash
+brick dev src/api/app.ts --client frontend/src/contract.ts --frontend 'bun run --cwd frontend dev'
+```
+
+The entry must default-export a `BrickApp` without calling `.listen()`. Keep startup jobs outside that module because generation evaluates it.
+
+`--client <file>` generates the contract before starting the backend. `--frontend <command>` starts the frontend once, after the first successful contract write. Entry and contract paths are relative to the CLI working directory. The frontend command requires `--client`, and both options require an entry.
+
+The development worker tracks imported local files, including dependencies outside the entry directory. It coalesces edits and restarts with a fresh module graph. Each restart regenerates types and HTTP route metadata before starting the backend. Contract writes are atomic, unchanged content preserves the file timestamp, and generated files cannot trigger regeneration loops.
+
+If generation fails, the error appears in the terminal and the previous contract remains intact. The backend worker exits; the supervisor waits for edits and retries. The frontend command waits for the first successful generation and remains running through later backend restarts. Stopping `brick dev` stops its backend and frontend children.
+
+Omit `--frontend` if another process starts the frontend. For an embedded Vite app such as Pages, use the [Vite contract plugin](/docs/typed-client#generate-the-contract-automatically), which generates during development and production builds.
+
 ### Startup Route Banner
 
 Upon startup, `brick dev` logs registered services and their public HTTP endpoints:

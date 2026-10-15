@@ -21,6 +21,7 @@
     "primary-keys",
     "relations",
     "typed-client",
+    "tanstack-query",
     "tools-and-mcp",
     "openapi",
     "type-inference",

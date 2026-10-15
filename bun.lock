@@ -132,12 +132,19 @@
         "postgres": "^3.4.9",
       },
       "devDependencies": {
+        "@tanstack/query-core": "^5.104.2",
         "@types/bun": "^1.4.3",
         "oxfmt": "^0.73.0",
         "oxlint": "^1.88.0",
         "tsdown": "^0.23.1",
         "typescript": "^5.7.0",
       },
+      "peerDependencies": {
+        "@tanstack/query-core": "^5.0.0",
+      },
+      "optionalPeers": [
+        "@tanstack/query-core",
+      ],
     },
     "packages/crud": {
       "name": "@brickkit/crud",

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import {
+  brick,
   defineService,
   defineDatabase,
   defineAction,
@@ -255,4 +256,44 @@ it("hoists TypeBox $id/$ref anchors into components.schemas", () => {
       "application/json"
     ].schema.properties.filter,
   ).toEqual({ $ref: "#/components/schemas/CrudWhere_lead" });
+});
+
+it("keeps runtime schemas intact when hoisting OpenAPI anchors", async () => {
+  const tree = t.Recursive(
+    (self) => t.Object({ label: t.String(), children: t.Array(self) }),
+    { $id: "RuntimeTree" },
+  );
+  const schema = t.Object({ tree });
+  const original = JSON.stringify(schema);
+  const service = defineService("schemaIsolation");
+  service.action({
+    name: "echo",
+    input: schema,
+    output: schema,
+    execute: ({ input }) => input,
+  });
+  const first = generateOpenApiSpec({ services: [service] });
+  expect(JSON.stringify(schema)).toBe(original);
+  expect(generateOpenApiSpec({ services: [service] })).toEqual(first);
+  const app = brick({ services: [service], requestLogging: false });
+  const body = {
+    tree: { label: "root", children: [{ label: "leaf", children: [] }] },
+  };
+  const response = await app.fetch(
+    new Request("http://localhost/api/schemaIsolation/echo", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual(body);
+  const invalid = await app.fetch(
+    new Request("http://localhost/api/schemaIsolation/echo", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ tree: { label: 123, children: [] } }),
+    }),
+  );
+  expect(invalid.status).toBe(400);
 });

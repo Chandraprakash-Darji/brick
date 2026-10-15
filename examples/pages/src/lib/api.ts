@@ -1,4 +1,4 @@
-import { createBrickClient } from "@brickkit/core/client";
+import { createBrickQueryClient } from "@brickkit/core/tanstack-query";
 import { contract } from "../../_brick/contract";
 
 function resolveBaseUrl(): string {
@@ -9,7 +9,7 @@ function resolveBaseUrl(): string {
 }
 
 // Generated metadata contains no backend implementations.
-export const api = createBrickClient({
+export const api = createBrickQueryClient({
   contract,
   baseUrl: resolveBaseUrl(),
   fetch: (input, init) => fetch(input, { ...init, credentials: "include" }),

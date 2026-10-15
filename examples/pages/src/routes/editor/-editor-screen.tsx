@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Columns2, Expand, PanelLeft, PanelRight, X } from "lucide-react";
 import { marked } from "marked";
@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
-import { createPageAction, updatePageAction } from "@/actions/pages";
+import { pageCollection } from "@/collections/pages";
 import { pageApi, type PageCreateInput } from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -43,11 +43,6 @@ interface EditorScreenProps {
   pageId?: string;
 }
 
-/**
- * Shared new/edit form behind editor/index.tsx (new) and editor/$id.tsx
- * (edit). Port of app/src/routes/editor/[[id]].vue: typed pageApi.get for
- * loading, createPageAction/updatePageAction for saves.
- */
 export function EditorScreen({ pageId }: EditorScreenProps) {
   const router = useRouter();
   useRequireAuth();
@@ -66,10 +61,23 @@ export function EditorScreen({ pageId }: EditorScreenProps) {
 
   const pageQuery = useQuery({
     enabled: isEditing,
-    queryFn: () => pageApi.get({ id: pageId as string }),
-    queryKey: ["page", pageId],
+    ...pageApi.get.queryOptions({ input: { id: pageId ?? "" } }),
   });
   const page = pageQuery.data;
+  const queryClient = useQueryClient();
+  const onSuccess = async () => {
+    await queryClient.invalidateQueries({ queryKey: pageApi.list.queryKey() });
+    await queryClient.invalidateQueries({ queryKey: pageApi.get.queryKey() });
+    await pageCollection.utils.refetch();
+  };
+  const create = useMutation({
+    ...pageApi.create.mutationOptions(),
+    onSuccess,
+  });
+  const update = useMutation({
+    ...pageApi.update.mutationOptions(),
+    onSuccess,
+  });
 
   // Populate the form once the page loads (mirrors watch(pageId, immediate)).
   useEffect(() => {
@@ -158,10 +166,10 @@ export function EditorScreen({ pageId }: EditorScreenProps) {
         title,
       };
       if (isEditing && pageId) {
-        await updatePageAction({ id: pageId, ...body }).isPersisted.promise;
+        await update.mutateAsync({ id: pageId, data: body });
         toast.success("Page updated");
       } else {
-        await createPageAction(body).isPersisted.promise;
+        await create.mutateAsync(body);
         toast.success("Page created");
       }
       router.history.push("/dashboard");

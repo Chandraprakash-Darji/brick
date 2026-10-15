@@ -470,7 +470,11 @@ async function dispatch(
   const timeoutMs = callOptions?.timeoutMs ?? resolved.timeoutMs;
   let timeoutSignal: AbortSignal | undefined;
   if (timeoutMs !== undefined) timeoutSignal = AbortSignal.timeout(timeoutMs);
-  const signal = callOptions?.signal ?? timeoutSignal ?? resolved.signal;
+  const signals = [
+    callOptions?.signal ?? resolved.signal,
+    timeoutSignal,
+  ].filter((value): value is AbortSignal => value !== undefined);
+  const signal = signals.length > 1 ? AbortSignal.any(signals) : signals[0];
 
   let response: Response;
   try {

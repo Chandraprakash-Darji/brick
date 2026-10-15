@@ -205,3 +205,64 @@ CRUD, and dynamic MCP failure types remain broad because plugins and providers
 can reject arbitrary values. Dynamic registration does not prove at compile time
 that an application's Layer supplies every registered callback's dependencies.
 The framework uses Effect 4.
+
+## TanStack Query options
+
+Install `@tanstack/query-core` v5 alongside your framework's TanStack Query package.
+Import the browser entry and the generated contract:
+
+```tsx
+import { createBrickQueryClient } from "@brickkit/core/tanstack-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { contract } from "./_brick/contract";
+
+const api = createBrickQueryClient({
+  baseUrl: "https://api.example.com",
+  contract,
+});
+
+function Pages() {
+  const queryClient = useQueryClient();
+  const pages = useQuery({
+    ...api.page.list.queryOptions({ input: { limit: 20 } }),
+    staleTime: 30_000,
+    select: (result) => result.items,
+  });
+  const create = useMutation({
+    ...api.page.create.mutationOptions(),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: api.page.list.queryKey() }),
+  });
+  // Render pages.data and call create.mutate with the action's input.
+}
+```
+
+Direct calls such as `api.page.list(input)` still work. Both helpers are available
+on every action. Choose them by how you use the action, independently of its HTTP
+method. A POST query still sends POST; custom routes, plugin actions, and encoded
+path parameters use the generated metadata.
+
+`queryOptions({ input, request })` returns a typed `queryKey` and `queryFn`.
+Spread native options such as `placeholderData`, `select`, and `staleTime` beside
+those properties. `request` accepts the ordinary client's headers, signal, and
+timeout. Query cancellation reaches fetch, and request cancellation also remains
+active. `mutationOptions({ request })` returns `mutationKey` and `mutationFn`;
+mutation variables are the action input.
+
+`queryKey({ input })` addresses one input; `queryKey()` matches all inputs for the
+action when passed to `invalidateQueries`. Keys include the server URL, prefix,
+namespace path, contract method and route identity, and input. Headers are not part of the key. Clear or partition
+your QueryClient cache when the authenticated user changes.
+
+The same options work with `queryClient.fetchQuery`, `prefetchQuery`, and
+`ensureQueryData`. For example, a TanStack Router loader can return
+`context.queryClient.ensureQueryData(api.page.get.queryOptions({ input: { id: params.id } }))`.
+Keys returned by `queryOptions` and input-specific `queryKey` calls also infer the
+cached output type in `getQueryData`.
+
+For TanStack DB, pass the options into `queryCollectionOptions` and supply your
+own `queryClient`, `getKey`, and any `select` needed to turn a paginated response
+into rows. Collection identity, pagination, optimistic writes, and synchronization
+after mutations remain application responsibilities. The Pages editor demonstrates
+standard Query mutations plus an explicit collection refetch for other collection
+consumers.

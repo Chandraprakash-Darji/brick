@@ -131,3 +131,9 @@ reload. `_brick/` is ignored by Git. The `typecheck` script initializes Vite to
 produce the contract before running TypeScript, so it also works on a clean
 checkout. App initialization configuration (including required secrets) must
 be available when generation runs.
+
+The editor uses `@brickkit/core/tanstack-query` with the generated browser contract.
+Its load query and create/update mutations infer their inputs and outputs from the
+API. Successful saves invalidate typed list/detail keys and explicitly refetch the
+TanStack DB collection used by the dashboard and command bar. Collection identity
+and optimistic synchronization remain separate from the Query helpers.

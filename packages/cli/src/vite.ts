@@ -1,5 +1,5 @@
-import { resolve, dirname } from "node:path";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { writeContractSource } from "./client-contract-file";
 import {
   createServer,
   isRunnableDevEnvironment,
@@ -9,7 +9,7 @@ import {
   type EnvironmentModuleNode,
 } from "vite";
 import { generateClientContract } from "./client-contract";
-import type { BrickApp } from "@brickkit/core";
+import { requireBrickApp } from "./app-entry";
 import { ModuleRunner } from "vite/module-runner";
 
 export interface BrickClientPluginOptions {
@@ -30,25 +30,12 @@ export function brickClient(options: BrickClientPluginOptions): Plugin {
   let runner: ModuleRunner | undefined;
   let reload = Promise.resolve();
   const dependencies = new Set<string>();
+  let revision = 0;
+  const changedFiles = new Set<string>();
 
   async function writeContract(value: unknown) {
-    if (
-      !value ||
-      typeof (value as BrickApp).endpoint !== "function" ||
-      !(value as BrickApp).definition
-    ) {
-      throw new Error(
-        "Brick: the entry module must default-export a BrickApp created by brick().",
-      );
-    }
-    const source = generateClientContract(value as BrickApp);
-    const previous = await readFile(output, "utf8").catch((error) => {
-      if (error.code !== "ENOENT") throw error;
-      return undefined;
-    });
-    if (previous === source) return;
-    await mkdir(dirname(output), { recursive: true });
-    await writeFile(output, source);
+    const source = generateClientContract(requireBrickApp(value));
+    await writeContractSource(output, source);
   }
 
   function collectDependencies(
@@ -104,13 +91,41 @@ export function brickClient(options: BrickClientPluginOptions): Plugin {
         return;
       if (!runner) return;
       const currentRunner = runner;
+      const currentRevision = ++revision;
+      changedFiles.add(context.file);
       reload = reload
         .catch(() => {})
         .then(async () => {
+          await new Promise((done) => setTimeout(done, 30));
+          if (currentRevision !== revision) return;
           for (const module of context.modules)
             this.environment.moduleGraph.invalidateModule(module);
-          currentRunner.clearCache();
-          await writeContract((await currentRunner.import(entry)).default);
+          const graph = currentRunner.evaluatedModules;
+          const seen = new Set<string>();
+          const invalidate = (id: string) => {
+            if (seen.has(id)) return;
+            seen.add(id);
+            const node = graph.getModuleById(id);
+            if (!node) return;
+            for (const importer of node.importers) invalidate(importer);
+            // Registration modules mutate imported services. Reevaluate their
+            // dependencies too so removed actions cannot survive in a singleton.
+            for (const imported of node.imports) invalidate(imported);
+            graph.invalidateModule(node);
+          };
+          for (const file of changedFiles) {
+            for (const node of graph.getModulesByFile(file) ?? [])
+              invalidate(node.id);
+          }
+          changedFiles.clear();
+          invalidate(entry);
+          try {
+            await writeContract((await currentRunner.import(entry)).default);
+          } finally {
+            collectDependencies(
+              this.environment.moduleGraph.getModuleById(entry),
+            );
+          }
           dependencies.clear();
           collectDependencies(
             this.environment.moduleGraph.getModuleById(entry),

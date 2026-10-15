@@ -15,6 +15,12 @@ export async function writeClientContract(
     throw new Error("Brick: contract output must not overwrite the app entry.");
   const app = await loadBrickApp(entry);
   const source = generateClientContract(app);
+  await writeContractSource(output, source);
+  return output;
+}
+
+/** Atomically replace changed contracts, preserving timestamps when unchanged. */
+export async function writeContractSource(output: string, source: string) {
   const previous = await readFile(output, "utf8").catch((error) => {
     if (error.code !== "ENOENT") throw error;
     return undefined;
@@ -32,5 +38,4 @@ export async function writeClientContract(
       await rm(temporary, { force: true });
     }
   }
-  return output;
 }
