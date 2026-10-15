@@ -1,10 +1,10 @@
 // Brick API mount for TanStack Start.
 //
-// The pages backend (Elysia app in src/api) runs in-process inside
+// The pages backend (Effect HTTP app in src/api) runs in-process inside
 // the Start server via the custom entry in `src/server.ts`. The Vite plugin
 // loads its default export and tracks backend dependencies for hot reload.
 //
-// Owned paths are forwarded verbatim (full URL preserved, so Elysia routes
+// Owned paths are forwarded verbatim (full URL preserved, so the HTTP router routes
 // on the original pathname). Everything else falls through to Start.
 // NOTE: brick's `/docs` is deliberately NOT mounted — `/docs/*` is the
 // web docs UI. API docs stay on `/reference` (+ `/swagger`).
@@ -22,6 +22,7 @@ export function handleBrickRequest(
 }
 
 const EXACT = new Set([
+  "/jwks",
   "/api",
   "/p",
   "/mcp",
@@ -29,6 +30,7 @@ const EXACT = new Set([
   "/reference",
   "/swagger",
   "/_health",
+  "/_brick/services",
 ]);
 
 const PREFIXES = [

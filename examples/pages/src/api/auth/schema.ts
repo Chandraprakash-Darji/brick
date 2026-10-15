@@ -6,7 +6,7 @@ import {
   integer,
   jsonb,
   pgTable,
-  relations,
+  defineRelations,
   text,
   timestamp,
 } from "@brickkit/core/pg";
@@ -275,108 +275,91 @@ export const oauthClientAssertion = pgTable("oauth_client_assertion", {
   expiresAt: timestamp("expires_at").notNull(),
 });
 
-export const userRelations = relations(user, ({ many }) => ({
-  sessions: many(session),
-  accounts: many(account),
-  oauthClients: many(oauthClient),
-  oauthRefreshTokens: many(oauthRefreshToken),
-  oauthAccessTokens: many(oauthAccessToken),
-  oauthConsents: many(oauthConsent),
-}));
-
-export const sessionRelations = relations(session, ({ one, many }) => ({
-  user: one(user, {
-    fields: [session.userId],
-    references: [user.id],
-  }),
-  oauthRefreshTokens: many(oauthRefreshToken),
-  oauthAccessTokens: many(oauthAccessToken),
-}));
-
-export const accountRelations = relations(account, ({ one }) => ({
-  user: one(user, {
-    fields: [account.userId],
-    references: [user.id],
-  }),
-}));
-
-export const oauthClientRelations = relations(oauthClient, ({ one, many }) => ({
-  user: one(user, {
-    fields: [oauthClient.userId],
-    references: [user.id],
-  }),
-  oauthClientResources: many(oauthClientResource),
-  oauthRefreshTokens: many(oauthRefreshToken),
-  oauthAccessTokens: many(oauthAccessToken),
-  oauthConsents: many(oauthConsent),
-}));
-
-export const oauthResourceRelations = relations(oauthResource, ({ many }) => ({
-  oauthClientResources: many(oauthClientResource),
-}));
-
-export const oauthClientResourceRelations = relations(
-  oauthClientResource,
-  ({ one }) => ({
-    oauthClient: one(oauthClient, {
-      fields: [oauthClientResource.clientId],
-      references: [oauthClient.clientId],
-    }),
-    oauthResource: one(oauthResource, {
-      fields: [oauthClientResource.resourceId],
-      references: [oauthResource.identifier],
-    }),
-  }),
-);
-
-export const oauthRefreshTokenRelations = relations(
-  oauthRefreshToken,
-  ({ one, many }) => ({
-    oauthClient: one(oauthClient, {
-      fields: [oauthRefreshToken.clientId],
-      references: [oauthClient.clientId],
-    }),
-    session: one(session, {
-      fields: [oauthRefreshToken.sessionId],
-      references: [session.id],
-    }),
-    user: one(user, {
-      fields: [oauthRefreshToken.userId],
-      references: [user.id],
-    }),
-    oauthAccessTokens: many(oauthAccessToken),
-  }),
-);
-
-export const oauthAccessTokenRelations = relations(
-  oauthAccessToken,
-  ({ one }) => ({
-    oauthClient: one(oauthClient, {
-      fields: [oauthAccessToken.clientId],
-      references: [oauthClient.clientId],
-    }),
-    session: one(session, {
-      fields: [oauthAccessToken.sessionId],
-      references: [session.id],
-    }),
-    user: one(user, {
-      fields: [oauthAccessToken.userId],
-      references: [user.id],
-    }),
-    oauthRefreshToken: one(oauthRefreshToken, {
-      fields: [oauthAccessToken.refreshId],
-      references: [oauthRefreshToken.id],
-    }),
+export const authRelations = defineRelations(
+  {
+    user,
+    session,
+    account,
+    verification,
+    jwks,
+    oauthClient,
+    oauthResource,
+    oauthClientResource,
+    oauthRefreshToken,
+    oauthAccessToken,
+    oauthConsent,
+    oauthClientAssertion,
+  },
+  (r) => ({
+    user: {
+      sessions: r.many.session(),
+      accounts: r.many.account(),
+      oauthClients: r.many.oauthClient(),
+      oauthRefreshTokens: r.many.oauthRefreshToken(),
+      oauthAccessTokens: r.many.oauthAccessToken(),
+      oauthConsents: r.many.oauthConsent(),
+    },
+    session: {
+      user: r.one.user({ from: r.session.userId, to: r.user.id }),
+      oauthRefreshTokens: r.many.oauthRefreshToken(),
+      oauthAccessTokens: r.many.oauthAccessToken(),
+    },
+    account: {
+      user: r.one.user({ from: r.account.userId, to: r.user.id }),
+    },
+    oauthClient: {
+      user: r.one.user({ from: r.oauthClient.userId, to: r.user.id }),
+      oauthClientResources: r.many.oauthClientResource(),
+      oauthRefreshTokens: r.many.oauthRefreshToken(),
+      oauthAccessTokens: r.many.oauthAccessToken(),
+      oauthConsents: r.many.oauthConsent(),
+    },
+    oauthResource: {
+      oauthClientResources: r.many.oauthClientResource(),
+    },
+    oauthClientResource: {
+      oauthClient: r.one.oauthClient({
+        from: r.oauthClientResource.clientId,
+        to: r.oauthClient.clientId,
+      }),
+      oauthResource: r.one.oauthResource({
+        from: r.oauthClientResource.resourceId,
+        to: r.oauthResource.identifier,
+      }),
+    },
+    oauthRefreshToken: {
+      oauthClient: r.one.oauthClient({
+        from: r.oauthRefreshToken.clientId,
+        to: r.oauthClient.clientId,
+      }),
+      session: r.one.session({
+        from: r.oauthRefreshToken.sessionId,
+        to: r.session.id,
+      }),
+      user: r.one.user({ from: r.oauthRefreshToken.userId, to: r.user.id }),
+      oauthAccessTokens: r.many.oauthAccessToken(),
+    },
+    oauthAccessToken: {
+      oauthClient: r.one.oauthClient({
+        from: r.oauthAccessToken.clientId,
+        to: r.oauthClient.clientId,
+      }),
+      session: r.one.session({
+        from: r.oauthAccessToken.sessionId,
+        to: r.session.id,
+      }),
+      user: r.one.user({ from: r.oauthAccessToken.userId, to: r.user.id }),
+      oauthRefreshToken: r.one.oauthRefreshToken({
+        from: r.oauthAccessToken.refreshId,
+        to: r.oauthRefreshToken.id,
+      }),
+    },
+    oauthConsent: {
+      oauthClient: r.one.oauthClient({
+        from: r.oauthConsent.clientId,
+        to: r.oauthClient.clientId,
+      }),
+      user: r.one.user({ from: r.oauthConsent.userId, to: r.user.id }),
+    },
   }),
 );
-
-export const oauthConsentRelations = relations(oauthConsent, ({ one }) => ({
-  oauthClient: one(oauthClient, {
-    fields: [oauthConsent.clientId],
-    references: [oauthClient.clientId],
-  }),
-  user: one(user, {
-    fields: [oauthConsent.userId],
-    references: [user.id],
-  }),
-}));

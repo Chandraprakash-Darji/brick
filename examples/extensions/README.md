@@ -1,14 +1,18 @@
-# Resource plugin example
+# Comments extension
 
-The comments factory uses `defineResourcePlugin` and attaches a `comments`
-namespace to a parent resource. It explicitly receives the comment table and
-installs CRUD with its own field policies. Parent identity comes from setup's
-resource; comments validate that their target exists. The application owns
-schema creation. This example uses one comment table per parent resource.
+The comments factory composes an Effect-native CRUD contract and handlers with
+an explicit SQLite database dependency. Its write hooks trim bodies, reject
+blank input and check that the parent page exists. The application supplies a
+scoped database Layer that creates and seeds the example schema.
 
-Run `bun run --cwd examples/extensions demo` to exercise compiled HTTP routes,
-write hooks, list/count filters, local calls, and deletion.
+Run `bun run --cwd examples/extensions demo` to exercise the actual HTTP routes,
+write hooks, parent checks, list/count filters, updates and deletion. Run
+`bun run --cwd examples/extensions test` for validation checks.
 
-The example implements an application plugin, not a published comments package.
-A reusable package should accept typed column mappings, trusted access policies,
-and route controls instead of assuming the example's table keys.
+Start a server with `bun run --cwd examples/extensions serve`. All operations use
+POST `/api/pageComment/<operation>` with JSON payloads. For example, create accepts
+`{"targetId":"page-1","body":"Hello"}` and get accepts `{"id":"<comment-id>"}`.
+
+A reusable extension is a contract plus a factory of Effect handlers. Dependencies
+belong in Layers. This example uses one comments table and explicitly public
+access; an application with private content must supply its authorization policy.

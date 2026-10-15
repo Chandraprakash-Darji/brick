@@ -3,11 +3,11 @@
   "description": "The smallest Brick service: one typed action served over HTTP and callable in process. The source behind the home page.",
   "tags": ["Starter", "Typed actions"],
   "features": [
-    "defineService and typed actions",
+    "Effect Schema contracts and typed handlers",
     "In-process calls and HTTP routes from one definition",
     "Seeded in-memory data, no database needed"
   ],
-  "entry": "src/services/users.ts",
+  "entry": "src/app.ts",
   "run": [
     "bun run --cwd examples/showcase call",
     "bun run --cwd examples/showcase serve"
