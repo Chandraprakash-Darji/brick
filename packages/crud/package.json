@@ -1,6 +1,6 @@
 {
   "name": "@brickkit/crud",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Opt-in resource CRUD plugin for Brick",
   "keywords": [
     "typescript",
@@ -53,7 +53,7 @@
     "@effect/sql-sqlite-bun": "4.0.4"
   },
   "peerDependencies": {
-    "@brickkit/core": "^0.5.0",
+    "@brickkit/core": "^0.6.0",
     "effect": "4.0.4"
   },
   "devDependencies": {

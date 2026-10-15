@@ -1,6 +1,6 @@
 {
   "name": "@brickkit/client",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Schema-backed Promise and Effect clients for Brick",
   "type": "module",
   "license": "MIT",
