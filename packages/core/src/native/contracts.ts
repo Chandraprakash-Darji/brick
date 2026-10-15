@@ -18,6 +18,48 @@ const errorWrapper = <E extends Schema.Top>(error: E) =>
     httpApiStatus:
       SchemaAST.resolveAt<number>("httpApiStatus")(error.ast) ?? 500,
   });
+
+/**
+ * Codec resolution (e.g. non-string-encodable path params) fails deep inside
+ * Effect with no mention of the route. Attribute it before rethrowing.
+ */
+const attributed = <T>(label: string, build: () => T): T => {
+  try {
+    return build();
+  } catch (error) {
+    throw new Error(
+      `${label}: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
+};
+
+/**
+ * Probe one string-tree part (params/query/headers) in isolation so a
+ * non-encodable schema fails naming the action, route and part. `make()`
+ * never validates path/params consistency, so the fixed probe path only
+ * exercises codec resolution and cannot false-positive.
+ */
+const checkStringPart = (
+  label: string,
+  part: "params" | "query" | "headers",
+  schema: Schema.Top,
+) => {
+  try {
+    (HttpApiEndpoint.get as any)("__brick_probe__", "/__brick_probe__", {
+      [part]: schema,
+    });
+  } catch (error) {
+    throw new Error(
+      `${label}: "${part}" cannot be encoded into a URL. ` +
+        `params, query and headers only support structural schemas ` +
+        `(String, Number, Boolean, UUID, Literal, enums, Dates and arrays of those); ` +
+        `move rich objects into payload. ` +
+        `Cause: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
+};
 type ActionSchemas<
   I extends Schema.Top,
   O extends Schema.Top,
@@ -37,37 +79,34 @@ type ActionSchemas<
   };
 };
 
-export const action = <
+const defineAction = <
   const N extends string,
   I extends Schema.Top,
   O extends Schema.Top,
   const Errors extends readonly Schema.Top[],
 >(
   name: N,
-  path: `/${string}` | ActionSchemas<I, O, Errors>,
-  schemas?: ActionSchemas<I, O, Errors>,
+  route: `/${string}`,
+  options: ActionSchemas<I, O, Errors>,
 ) => {
-  const options = (typeof path === "string" ? schemas : path) as
-    | ActionSchemas<I, O, Errors>
-    | undefined;
-  if (!options)
-    throw new Error(
-      `Brick.action("${name}") requires input, output and error schemas`,
-    );
-  const route = (typeof path === "string" ? path : `/${name}`) as `/${string}`;
+  const label = `Brick.action("${name}", "${route}")`;
   const errors = options.errors.map((error) => errorWrapper(error));
-  const typedEndpoint = HttpApiEndpoint.post(name, route, {
-    payload: options.input,
-    success: options.output,
-    error: Schema.Union([Schema.Union(options.errors)]),
-  });
+  const typedEndpoint = attributed(label, () =>
+    HttpApiEndpoint.post(name, route, {
+      payload: options.input,
+      success: options.output,
+      error: Schema.Union([Schema.Union(options.errors)]),
+    }),
+  );
   // Native private ErrorNoStream cannot reduce arrays with open schema members.
   // Mapping the identical error schemas preserves all Type/EncodingServices slots.
-  let endpoint = HttpApiEndpoint.post(name, route, {
-    payload: options.input,
-    success: options.output,
-    error: errors,
-  }) as unknown as typeof typedEndpoint;
+  let endpoint = attributed(label, () =>
+    HttpApiEndpoint.post(name, route, {
+      payload: options.input,
+      success: options.output,
+      error: errors,
+    }),
+  ) as unknown as typeof typedEndpoint;
   if (options.description)
     endpoint = endpoint.annotate(OpenApi.Description, options.description);
   if (options.title)
@@ -119,6 +158,38 @@ export const action = <
     configurable: true,
   });
   return Object.freeze(Object.assign(implement, contract));
+};
+
+export const action = <
+  const N extends string,
+  I extends Schema.Top,
+  O extends Schema.Top,
+  const Errors extends readonly Schema.Top[],
+>(
+  name: N,
+  /**
+   * HTTP route, or the schemas when omitted. `path` defaults to `/${name}`;
+   * omit it for `expose: "mcp"` tool-only actions.
+   */
+  path: `/${string}` | ActionSchemas<I, O, Errors>,
+  schemas?: ActionSchemas<I, O, Errors>,
+) => {
+  const options = (typeof path === "string" ? schemas : path) as
+    | ActionSchemas<I, O, Errors>
+    | undefined;
+  if (!options)
+    throw new Error(
+      `Brick.action("${name}") requires input, output and error schemas`,
+    );
+  const route = (typeof path === "string" ? path : `/${name}`) as `/${string}`;
+  if (route.includes("/:")) {
+    throw new Error(
+      `Brick.action("${name}") path "${route}" has :param segments, but ` +
+        `Brick.action only sends the input as a JSON payload and never fills params. ` +
+        `Use Brick.endpoint with a params schema instead.`,
+    );
+  }
+  return defineAction(name, route, options);
 };
 
 type HttpInputKey = "params" | "query" | "payload" | "headers";
@@ -183,9 +254,14 @@ export const endpoint = <
       `Brick.endpoint("${name}") requires input, output and error schemas`,
     );
   const route = (typeof path === "string" ? path : `/${name}`) as `/${string}`;
+  const label = `Brick.endpoint("${name}", "${method}", "${route}")`;
   const requestSchema = Schema.Struct(options.input);
-  const base = action(name, route, { ...options, input: requestSchema });
+  const base = defineAction(name, route, { ...options, input: requestSchema });
   const parts = options.input;
+  for (const part of ["params", "query", "headers"] as const) {
+    const schema = parts[part] as Schema.Top | undefined;
+    if (schema !== undefined) checkStringPart(label, part, schema);
+  }
   const endpointOptions = {
     ...(parts.params !== undefined
       ? { params: parts.params as Part<I, "params"> }
@@ -205,10 +281,8 @@ export const endpoint = <
     success: options.output,
     error: Schema.Union([Schema.Union(options.errors)]),
   };
-  const typed = (HttpApiEndpoint.make(method) as any)(
-    name,
-    route,
-    endpointOptions,
+  const typed = attributed(label, () =>
+    (HttpApiEndpoint.make(method) as any)(name, route, endpointOptions),
   ) as HttpApiEndpoint.HttpApiEndpoint<
     N,
     M,
@@ -221,14 +295,16 @@ export const endpoint = <
     ErrorCodec<Errors>
   >;
 
-  const http = (HttpApiEndpoint.make(method) as any)(name, route, {
-    ...(parts.params !== undefined ? { params: parts.params } : {}),
-    ...(parts.query !== undefined ? { query: parts.query } : {}),
-    ...(parts.payload !== undefined ? { payload: parts.payload } : {}),
-    ...(parts.headers !== undefined ? { headers: parts.headers } : {}),
-    success: options.output,
-    error: options.errors.map(errorWrapper),
-  }) as unknown as typeof typed;
+  const http = attributed(label, () =>
+    (HttpApiEndpoint.make(method) as any)(name, route, {
+      ...(parts.params !== undefined ? { params: parts.params } : {}),
+      ...(parts.query !== undefined ? { query: parts.query } : {}),
+      ...(parts.payload !== undefined ? { payload: parts.payload } : {}),
+      ...(parts.headers !== undefined ? { headers: parts.headers } : {}),
+      success: options.output,
+      error: options.errors.map(errorWrapper),
+    }),
+  ) as unknown as typeof typed;
   const metadata = {
     ...base,
     name,
