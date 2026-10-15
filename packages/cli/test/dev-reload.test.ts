@@ -20,31 +20,22 @@ async function waitForValue(url: string, value: string) {
   throw new Error(`Expected ${value}; last response: ${last}`);
 }
 
-test.each([
-  [false, "src"],
-  [true, "src"],
-  [false, "dist"],
-  [true, "dist"],
-])(
-  "brick dev reloads dependency services (default app: %s, CLI: %s)",
-  async (exportApp, cliDirectory) => {
+test.each([["src"], ["dist"]])(
+  "brick dev reloads native dependency services (CLI: %s)",
+  async (cliDirectory) => {
     const directory = await mkdtemp(
-      join(resolve(import.meta.dir, "../../.."), ".dev-reload-"),
+      join(resolve(import.meta.dir, ".."), ".dev-reload-"),
     );
     const listener = Bun.serve({ port: 0, fetch: () => new Response() });
     const port = listener.port;
     listener.stop(true);
-    const service = (
-      value: string,
-    ) => `import { defineService } from "@brickkit/core";
-const svc = defineService("rt", {});
-svc.action({ name: "hi", execute: async () => ({ v: "${value}" }) });`;
+    const service = (value: string) => `import { Brick } from "@brickkit/core";
+import { Effect, Schema } from "effect";
+export default Brick.service("rt", { actions: { hi: Brick.action("hi","/custom/rt/hi",{ input:Schema.Struct({}),output:Schema.Struct({v:Schema.String}),errors:[] })(()=>Effect.succeed({v:${JSON.stringify(value)}})) } });`;
     await writeFile(join(directory, "svc.ts"), service("ONE"));
     await writeFile(
       join(directory, "main.ts"),
-      exportApp
-        ? 'import "./svc"; import { brick } from "@brickkit/core"; export default brick({ prefix: "/custom" });'
-        : 'import "./svc";',
+      'import { Brick } from "@brickkit/core"; import { Layer } from "effect"; import service from "./svc"; export default Brick.app({services:[service],layer:Layer.empty});',
     );
     const child = Bun.spawn(
       [
@@ -61,7 +52,7 @@ svc.action({ name: "hi", execute: async () => ({ v: "${value}" }) });`;
       { cwd: directory, stdout: "ignore", stderr: "inherit" },
     );
     try {
-      const url = `http://localhost:${port}/${exportApp ? "custom" : "api"}/rt/hi`;
+      const url = `http://localhost:${port}/custom/rt/hi`;
       await waitForValue(url, "ONE");
       await writeFile(join(directory, "svc.ts"), service("TWO"));
       await waitForValue(url, "TWO");

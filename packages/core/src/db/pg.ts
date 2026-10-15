@@ -39,13 +39,14 @@ export {
   check,
 } from "drizzle-orm/pg-core";
 
-export { relations, sql } from "drizzle-orm";
+export { defineRelations, sql } from "drizzle-orm";
 
 export type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
+import type { defineRelations } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 /** Typed Postgres Drizzle instance, as held by `defineDatabase({engine})`. */
 export type PgDatabase<
   TSchema extends Record<string, unknown> = Record<string, unknown>,
-> = PostgresJsDatabase<TSchema>;
+> = PostgresJsDatabase<ReturnType<typeof defineRelations<TSchema>>>;

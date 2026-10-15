@@ -1,0 +1,32 @@
+{
+  "name": "@brickkit/client",
+  "version": "0.4.2",
+  "description": "Schema-backed Promise and Effect clients for Brick",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "effect": "4.0.4"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.3",
+    "tsdown": "^0.23.1",
+    "typescript": "^5.7.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

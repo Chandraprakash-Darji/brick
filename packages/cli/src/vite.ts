@@ -8,8 +8,9 @@ import {
   type ResolvedConfig,
   type EnvironmentModuleNode,
 } from "vite";
-import { generateClientContract } from "./client-contract";
-import type { BrickApp } from "@brickkit/core";
+import type { NativeBrickApp } from "@brickkit/core";
+import { isNativeBrickApp } from "@brickkit/core";
+import { generateNativeClientContract } from "./native-client-contract";
 import { ModuleRunner } from "vite/module-runner";
 
 export interface BrickClientPluginOptions {
@@ -28,20 +29,23 @@ export function brickClient(options: BrickClientPluginOptions): Plugin {
   let config: ResolvedConfig;
   let buildGeneration: Promise<void> | undefined;
   let runner: ModuleRunner | undefined;
+  let ownedApp: NativeBrickApp | undefined;
   let reload = Promise.resolve();
   const dependencies = new Set<string>();
 
-  async function writeContract(value: unknown) {
-    if (
-      !value ||
-      typeof (value as BrickApp).endpoint !== "function" ||
-      !(value as BrickApp).definition
-    ) {
+  async function writeContract(
+    value: unknown,
+    load?: (path: string) => Promise<Record<string, unknown>>,
+  ) {
+    if (!isNativeBrickApp(value))
       throw new Error(
-        "Brick: the entry module must default-export a BrickApp created by brick().",
+        "Brick: the entry module must default-export a BrickApp created by Brick.app().",
       );
-    }
-    const source = generateClientContract(value as BrickApp);
+    const source = await generateNativeClientContract(value, {
+      entry,
+      output,
+      load,
+    });
     const previous = await readFile(output, "utf8").catch((error) => {
       if (error.code !== "ENOENT") throw error;
       return undefined;
@@ -49,6 +53,22 @@ export function brickClient(options: BrickClientPluginOptions): Plugin {
     if (previous === source) return;
     await mkdir(dirname(output), { recursive: true });
     await writeFile(output, source);
+  }
+
+  async function replaceContract(
+    value: unknown,
+    load: (path: string) => Promise<Record<string, unknown>>,
+  ) {
+    const candidate = isNativeBrickApp(value) ? value : undefined;
+    try {
+      await writeContract(value, load);
+    } catch (error) {
+      if (candidate !== ownedApp) await candidate?.dispose();
+      throw error;
+    }
+    const previous = ownedApp;
+    ownedApp = candidate;
+    if (previous !== candidate) await previous?.dispose();
   }
 
   function collectDependencies(
@@ -90,7 +110,14 @@ export function brickClient(options: BrickClientPluginOptions): Plugin {
           invoke: (payload) => environment.hot.handleInvoke(payload),
         },
       });
-      await writeContract((await runner.import(entry)).default);
+      try {
+        await replaceContract((await runner.import(entry)).default, (path) =>
+          runner!.import(path),
+        );
+      } catch (error) {
+        await runner.close();
+        throw error;
+      }
       dependencies.clear();
       collectDependencies(environment.moduleGraph.getModuleById(entry));
       dependencies.add(entry);
@@ -110,7 +137,10 @@ export function brickClient(options: BrickClientPluginOptions): Plugin {
           for (const module of context.modules)
             this.environment.moduleGraph.invalidateModule(module);
           currentRunner.clearCache();
-          await writeContract((await currentRunner.import(entry)).default);
+          await replaceContract(
+            (await currentRunner.import(entry)).default,
+            (path) => currentRunner.import(path),
+          );
           dependencies.clear();
           collectDependencies(
             this.environment.moduleGraph.getModuleById(entry),
@@ -120,7 +150,13 @@ export function brickClient(options: BrickClientPluginOptions): Plugin {
       await reload;
     },
     async closeBundle() {
-      await runner?.close();
+      await reload.catch(() => {});
+      try {
+        await ownedApp?.dispose();
+      } finally {
+        ownedApp = undefined;
+        await runner?.close();
+      }
     },
     async buildStart() {
       if (config.command !== "build") return;
@@ -139,13 +175,21 @@ export function brickClient(options: BrickClientPluginOptions): Plugin {
           ssr: config.ssr,
           server: { middlewareMode: true, watch: null },
         });
+        let buildApp: NativeBrickApp | undefined;
         try {
           const environment = loader.environments.ssr;
           if (!environment || !isRunnableDevEnvironment(environment))
             throw new Error("Brick: missing build-time SSR loader.");
-          await writeContract((await environment.runner.import(entry)).default);
+          const value: unknown = (await environment.runner.import(entry))
+            .default;
+          if (isNativeBrickApp(value)) buildApp = value;
+          await writeContract(value, (path) => environment.runner.import(path));
         } finally {
-          await loader.close();
+          try {
+            await buildApp?.dispose();
+          } finally {
+            await loader.close();
+          }
         }
       })();
       await buildGeneration;
@@ -162,8 +206,8 @@ export function brickClient(options: BrickClientPluginOptions): Plugin {
     load(id) {
       if (id !== resolvedId) return;
       return `import app from ${JSON.stringify(entry)};
-if (!app || typeof app.fetch !== "function" || typeof app.endpoint !== "function") {
-  throw new Error("Brick: the entry module must default-export a BrickApp created by brick().");
+if (!app || typeof app.fetch !== "function" || app.kind !== "brick-native-app") {
+  throw new Error("Brick: the entry module must default-export a BrickApp created by Brick.app().");
 }
 export default app;
 `;
