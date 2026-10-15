@@ -80,7 +80,6 @@ for (const aot of [true, false]) {
     await mkdir(join(root, ".brick"), { recursive: true });
     const dir = await mkdtemp(join(root, ".brick/compiler-test-"));
     const deploy = await mkdtemp(join(tmpdir(), "brick-deploy-"));
-    const testPort = aot ? "45731" : "45732";
     let server: ReturnType<typeof Bun.spawn> | undefined;
     try {
       const build = Bun.spawn(
@@ -91,8 +90,6 @@ for (const aot of [true, false]) {
           join(import.meta.dir, "fixtures/compiler-app.ts"),
           "--outdir",
           dir,
-          "--port",
-          testPort,
           ...(aot ? [] : ["--no-aot"]),
         ],
         { cwd: root, stdout: "pipe", stderr: "pipe" },
@@ -122,6 +119,9 @@ for (const aot of [true, false]) {
       await Bun.write(
         join(deploy, "no-codegen.js"),
         `
+// Let the OS allocate the test server's port when it binds.
+const serve = Bun.serve.bind(Bun);
+Bun.serve = options => serve({ ...options, port: 0 });
 globalThis.Function = new Proxy(Function, {
   construct(target, args) {
     if (args.some(arg => typeof arg === "string" && arg.startsWith("return (function bindAction")))
@@ -140,7 +140,7 @@ globalThis.Function = new Proxy(Function, {
         ],
         {
           cwd: deploy,
-          env: { ...process.env, PORT: testPort },
+          env: { ...process.env, PORT: "4000" },
           stdout: "pipe",
           stderr: "pipe",
         },
