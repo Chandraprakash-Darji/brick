@@ -1,92 +1,65 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-
-import { defineDatabase, getTableName } from "@brickkit/core";
 import postgres from "postgres";
-
-import { initAuth } from "../src/api/auth";
-import { appDb } from "../src/api/db";
-import { pagesService } from "../src/api/services/pages/service";
-
-// Postgres-backed test databases. Tests run under Bun; the Start server
-// runs the same code on Node (no bun:sqlite anywhere in this chain).
-// Override with TEST_DATABASE_URL; the database is created on demand.
-export const TEST_DATABASE_URL =
-  process.env.TEST_DATABASE_URL ?? "postgresql://localhost:5432/drafton_test";
-
-function dbName(url: string): string {
-  return new URL(url).pathname.replace(/^\//, "");
+import { buildApp } from "../src/api/app";
+const configured = process.env.TEST_DATABASE_URL;
+// Test-only fixture credential (overridable for CI); never shipped.
+export const testPassword = process.env.TEST_PASSWORD ?? "correct-horse-8"; // NOSONAR
+export const databaseTests = configured ? describeDatabase : null;
+async function describeDatabase() {
+  if (!configured) throw new Error("TEST_DATABASE_URL is required");
+  const name = `brick_pages_${crypto.randomUUID().replaceAll("-", "")}`;
+  const admin = postgres(configured, { max: 1 });
+  await admin.unsafe(`CREATE DATABASE "${name}"`);
+  const url = new URL(configured);
+  url.pathname = `/${name}`;
+  const sql = postgres(url.toString(), { max: 1 });
+  for (const file of readdirSync(join(import.meta.dir, "../drizzle"))
+    .filter((file) => file.endsWith(".sql"))
+    .sort())
+    for (const statement of readFileSync(
+      join(import.meta.dir, "../drizzle", file),
+      "utf8",
+    ).split("--> statement-breakpoint"))
+      if (statement.trim()) await sql.unsafe(statement);
+  const app = buildApp({ databaseUrl: url.toString() });
+  const request = (
+    path: string,
+    body?: unknown,
+    cookie?: string,
+    method?: string,
+  ) =>
+    app.fetch(
+      new Request(`http://localhost:5174${path}`, {
+        method: method ?? (body === undefined ? "GET" : "POST"),
+        headers: {
+          ...(body === undefined ? {} : { "content-type": "application/json" }),
+          ...(cookie ? { cookie } : {}),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
+    );
+  const signup = async (email: string) => {
+    const response = await request("/api/auth/sign-up/email", {
+      email,
+      password: testPassword,
+      name: "Native owner",
+    });
+    if (!response.ok) throw new Error(await response.text());
+    const body = await response.json();
+    return { cookie: response.headers.get("set-cookie") ?? "", body };
+  };
+  return {
+    app,
+    sql,
+    request,
+    signup,
+    async close() {
+      await app.dispose();
+      await sql.end();
+      await admin.unsafe(`DROP DATABASE "${name}" WITH (FORCE)`);
+      await admin.end();
+    },
+  };
 }
-
-// Committed migrations (`bun run db:generate`) are the single schema source:
-// applying them here also proves they actually run on Postgres.
-async function migrateOnce(url: string): Promise<void> {
-  const name = dbName(url);
-  const adminUrl = new URL(url);
-  adminUrl.pathname = "/postgres";
-  const admin = postgres(adminUrl.toString(), { max: 1 });
-  try {
-    const found =
-      await admin`SELECT 1 FROM pg_database WHERE datname = ${name}`;
-    if (found.length === 0) {
-      await admin.unsafe(`CREATE DATABASE "${name.replaceAll('"', '""')}"`);
-    }
-  } finally {
-    await admin.end();
-  }
-  const sql = postgres(url, { max: 1 });
-  try {
-    const present = await sql`
-      SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'pages'`;
-    if (present.length > 0) return; // already migrated; shared across runs
-    const dir = join(import.meta.dir, "../drizzle");
-    const files = readdirSync(dir)
-      .filter((file) => file.endsWith(".sql"))
-      .sort();
-    for (const file of files) {
-      const statements = readFileSync(join(dir, file), "utf8").split(
-        "--> statement-breakpoint",
-      );
-      for (const raw of statements) {
-        const stmt = raw.trim();
-        if (stmt) await sql.unsafe(stmt);
-      }
-    }
-  } finally {
-    await sql.end();
-  }
-}
-
-let migratedUrl: string | null = null;
-
-async function truncateAll(url: string): Promise<void> {
-  const sql = postgres(url, { max: 1 });
-  try {
-    const names = Object.values(appDb.schema)
-      .map((table) => `"${getTableName(table as never)}"`)
-      .join(", ");
-    await sql.unsafe(`TRUNCATE TABLE ${names} CASCADE`);
-  } finally {
-    await sql.end();
-  }
-}
-
-/**
- * Fresh isolated database: migrate once per process, empty every call
- * (TRUNCATE … CASCADE), then point the service + auth singletons at it.
- */
-export async function prepareTestDatabase() {
-  if (migratedUrl !== TEST_DATABASE_URL) {
-    await migrateOnce(TEST_DATABASE_URL);
-    migratedUrl = TEST_DATABASE_URL;
-  }
-  await truncateAll(TEST_DATABASE_URL);
-  const database = defineDatabase({
-    engine: "postgres",
-    tables: appDb.schema,
-    client: postgres(TEST_DATABASE_URL, { max: 1 }),
-  });
-  pagesService.setDb(database);
-  await initAuth(database).$context;
-  return database;
-}
+export const prepareTestDatabase = describeDatabase;

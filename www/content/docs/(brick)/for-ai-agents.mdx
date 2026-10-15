@@ -22,18 +22,18 @@ Start an agent task with this instruction:
 ```text
 Read https://brick.rega.run/llms.txt. Fetch the relevant markdown pages before
 changing this Brick project. Check package.json for the installed Brick version
-and follow the existing service definitions and verification scripts.
+and follow the existing Effect-native service definitions, contracts, and verification scripts.
 ```
 
 In Cursor, add the index URL as documentation context or include it in your chat prompt. In Claude Code, put the instruction in your project's `CLAUDE.md`. In Copilot, put it in `.github/copilot-instructions.md`. If your agent cannot fetch URLs, download the required `.md` files and add them to its context.
 
 ## Choose docs for the task
 
-Start with [Quickstart](/docs/quickstart) for a runnable CRUD service or the [REST API tutorial](/docs/tutorial) for a complete application. Fetch the focused guide when changing an existing project:
+Start with [Quickstart](/docs/quickstart) for a runnable action service or the [REST API tutorial](/docs/tutorial) for a complete application. Fetch the focused guide when changing an existing project:
 
-- [Services and actions](/docs/services-and-actions), [Context](/docs/context), and [Validation and errors](/docs/validation-and-errors) for business logic.
-- [Resources](/docs/resources), [Access control](/docs/access-control), and [Relations](/docs/relations) for CRUD and database changes.
-- [Typed client](/docs/typed-client) for browser calls and [Tools and MCP](/docs/tools-and-mcp) for agent tools.
+- [Services and actions](/docs/services-and-actions), [Context & Layers](/docs/context), and [Validation and errors](/docs/validation-and-errors) for business logic and typed errors.
+- [Resources & CRUD](/docs/resources), [Access control](/docs/access-control), and [Relations](/docs/relations) for database tables, stores, and scoping.
+- [Typed client](/docs/typed-client) for browser clients and [Tools and MCP](/docs/tools-and-mcp) for agent tools.
 - [API cheatsheet](/docs/reference/cheatsheet) for symbol lookup and [CLI reference](/docs/brick-cli) for commands.
 
 ## Install the Brick skill
@@ -44,7 +44,7 @@ The repository includes a [Brick skill](https://github.com/Chandraprakash-Darji/
 npx skills add Chandraprakash-Darji/brick --skill brick
 ```
 
-Choose your agent and project scope in the installer. The skill covers documentation lookup, service registration, schemas, authorization, typed clients, and MCP tools.
+Choose your agent and project scope in the installer. The skill covers documentation lookup, Effect-native service registration, schemas, authorization, typed clients, and MCP tools.
 
 ## Add project instructions
 
@@ -55,32 +55,81 @@ Copy this into your project's `AGENTS.md`, or adapt it for your agent's instruct
 
 - Read https://brick.rega.run/llms.txt and fetch relevant markdown pages.
 - Check the installed @brickkit package versions before using an API.
-- Follow existing defineService, action, resource, and tool definitions.
-- Define input and output schemas with t from @brickkit/core.
-- Keep authorization in action and tool definitions and resource access rules.
-- Import definition modules before compiling or exporting the registry.
-- Use generated client contracts for browser calls.
-- Run this project's type checks and relevant tests after changes.
+- Use the Effect-native APIs: `Brick.action`, `Brick.service`, `Brick.app`, and `Brick.route` from `@brickkit/core`.
+- Define input and output schemas with `Schema` from `effect`.
+- Declare domain failures as `Schema.TaggedError` classes with `{ httpApiStatus }` annotations.
+- Use `@brickkit/crud` with `crudContract` and `sqliteStore` or `postgresStore` for declarative CRUD.
+- CRUD requires an explicit access policy: preserve field permissions, `authorize`, and SQL `scope`.
+- Handlers return Effects and access dependencies with `yield* Service` inside `Effect.gen`.
+- Supply dependencies at the application boundary with `Layer` in `Brick.app({ services, layer })`.
+- Keep browser contract modules (`contract.ts`) free of database drivers and server implementations.
+- Use `createClient` from `@brickkit/client` for frontend browser calls.
+- Run `bun run typecheck`, `bun test`, and lint checks after making changes.
 ```
 
 Add your own commands, service entry path, and migration rules to make these instructions useful for your project.
 
 ## Connect to your application's MCP tools
 
-Brick provides `createMcpRegistry` and `createMcpHandler` for exposing your app's tools. Register tools with `service.tool()`, import their modules, then mount the handler in your authenticated HTTP layer. See [Tools and MCP](/docs/tools-and-mcp) for the implementation and the Pages example for an authenticated transport.
+Brick provides first-class support for Model Context Protocol (MCP) through Effect's native `effect/ai` integration. Register tools directly on actions using `mcp: true` and tool annotations:
 
-Point your agent's MCP client at the endpoint your app mounts, using that app's authentication. This is an application endpoint you provide; Brick's documentation site does not run a hosted MCP server. Tool annotations describe behavior, while `authorize` enforces access.
+```ts title="src/services/tools.ts"
+import { Brick } from "@brickkit/core";
+import { Schema, Effect } from "effect";
+
+export const searchAction = Brick.action("search", "/api/search", {
+  input: Schema.Struct({ query: Schema.String }),
+  output: Schema.Array(Schema.String),
+  errors: [],
+  mcp: true,
+  title: "Search Knowledge Base",
+  description: "Search documents matching query keywords",
+  tool: { readOnly: true },
+})((input) => Effect.succeed([`Result for ${input.query}`]));
+
+export const searchService = Brick.service("search", {
+  actions: { search: searchAction },
+});
+```
+
+Mount the MCP transport in your application using `Brick.app`:
+
+```ts title="src/app.ts"
+import { Brick } from "@brickkit/core";
+import { McpProtocol } from "effect/ai";
+import { Layer } from "effect";
+import { searchService } from "./services/tools";
+
+export default Brick.app({
+  services: [searchService],
+  layer: Layer.empty,
+  transports: {
+    mcp: {
+      name: "my-app-agent",
+      version: "1.0.0",
+      path: "/mcp",
+      protocols: [McpProtocol.v2025_11_25],
+    },
+  },
+});
+```
+
+Point your agent's MCP client at `http://localhost:4000/mcp`. Tool annotations describe behavior. Authorization depends on each action's Effect requirements: require an authenticated context in protected actions and configure authentication middleware for `/mcp`.
 
 ## Generate context from your app
 
-Export the service graph from your application's entry file:
+Export the service graph and route metadata from your application:
+
+```bash
+bunx brick build src/app.ts
+```
+
+The build bundles the application into `dist/brick/server.js` and outputs `dist/brick/brick-ir.json`. The intermediate representation describes all services, actions, HTTP methods, and routes in structured JSON.
+
+Alternatively, introspect your application using:
 
 ```bash
 bunx brick info src/app.ts > brick-architecture.json
 ```
 
-Replace `src/app.ts` with your app's entry. The CLI loads its definitions before exporting the architecture. Or fetch `/_brick/services` from your running app.
-
-The export describes services, mounted action routes, resource access policies, and database metadata. See [Architecture Introspection](/docs/brick-cli/info) for its fields. The database handle is excluded, but other service options are included. Review the output for configuration values before sharing it with an agent.
-
-There is no dedicated agent-context generation command yet. Combine this architecture JSON with the relevant markdown docs and your project instructions.
+Or access the OpenAPI 3.1 specification at runtime by calling `app.openApi()` or visiting the `/reference` documentation endpoint.

@@ -1,47 +1,40 @@
 ---
-title: Build & Compilation
-description: Compile default-exported Brick applications into standalone Bun server bundles.
+title: Build & Bundling
+description: Bundle default-exported Brick applications into standalone Bun server bundles.
 ---
 
-The `brick build` command compiles a default-exported `BrickApp` into a standalone Bun server bundle with ahead-of-time route handlers.
+The `brick build` command bundles a default-exported `Brick.app` into a standalone Bun production server bundle and emits the native application route manifest.
 
 ## Minimal Example
 
-Create an application entry that default-exports a `brick()` server instance without calling `.listen()`:
+Create an application entry that default-exports a `Brick.app` instance:
 
-```ts title="src/server.ts"
-import { brick, defineService, t } from "@brickkit/core";
+```ts title="src/app.ts"
+import { Brick } from "@brickkit/core";
+import { Layer } from "effect";
+import { usersService } from "./services/users";
 
-export const healthService = defineService("health");
-
-healthService.action({
-  name: "ping",
-  method: "GET",
-  output: t.Object({ ok: t.Boolean() }),
-  execute: () => ({ ok: true }),
+export const app = Brick.app({
+  services: [usersService],
+  layer: Layer.empty,
+  docs: { path: "/reference" },
 });
 
-export const app = brick({
-  services: [healthService],
-  title: "Health API",
-});
-
-// Default export is required for brick build:
 export default app;
 ```
 
-Compile the application bundle:
+Bundle the application:
 
 ```bash
-brick build src/server.ts --outdir dist/brick
+brick build src/app.ts --outdir dist/brick
 ```
 
-Output (paths printed are absolute, resolved from `--outdir`):
+Output:
 
 ```text
-Compiled 1 services / 1 routes
-IR: /Users/project/dist/brick/brick-ir.json
-Run: bun /Users/project/dist/brick/server.js
+Bundled 1 services / 1 routes
+Manifest: dist/brick/brick-ir.json
+Server:   dist/brick/server.js
 ```
 
 Run the compiled server with Bun:
@@ -54,31 +47,60 @@ PORT=8080 bun dist/brick/server.js
 
 | Flag       | Argument       | Default        | Description                                                                     |
 | :--------- | :------------- | :------------- | :------------------------------------------------------------------------------ |
-| `<entry>`  | File path      | _(Required)_   | Application entry file. Must default-export a `BrickApp` instance.              |
+| `<entry>`  | File path      | _(Required)_   | Application entry file. Must default-export a `Brick.app` instance.             |
 | `--outdir` | Directory path | `"dist/brick"` | Target output directory for compiled bundles and IR artifacts.                  |
 | `--port`   | Number         | `4000`         | Default listening port baked into the server launcher (overridable via `PORT`). |
-| `--no-aot` | Flag           | `false`        | Disables ahead-of-time compilation of Elysia route handlers.                    |
-
-<Callout type="warn">
-  **Application Configuration vs Build Flags**: The flags `--prefix` and `--no-request-logging` are rejected. Passing either makes `brick build` throw; configure `prefix` and `requestLogging` directly in your `brick({ prefix, requestLogging })` definition instead of CLI flags.
-</Callout>
 
 ## Output Bundle Structure
 
-The compilation produces four artifacts in the output directory:
+The compilation produces three artifacts in the output directory:
 
 ```text
 dist/brick/
 ├── server.js          # Standalone Bun server entry with graceful shutdown
-├── routes.js          # Precompiled route dispatcher and IR bindings
-├── server.js.map      # Source map for debugging
-└── brick-ir.json      # Serialized intermediate representation of all routes
+├── server.js.map      # External source map for debugging
+└── brick-ir.json      # Serialized intermediate representation of all services and routes
 ```
 
-### Production Readiness
+### Production Features of the Bundle
 
-The generated `server.js` includes:
+The generated `server.js`:
 
-- Production `PORT` environment variable resolution with numeric validation (1-65535).
-- Graceful shutdown listeners for `SIGINT` and `SIGTERM` signals.
-- Ahead-of-time compiled Elysia route plans (when `--no-aot` is not passed), reducing startup compilation work on cold boots.
+- Uses Bun's native bundler (`target: "bun"`, `format: "esm"`).
+- Automatically initializes the application with `await app.ready()`.
+- Serves HTTP requests via `Bun.serve`.
+- Handles `SIGINT` and `SIGTERM` signals, stopping the server and executing `await app.dispose()` for graceful cleanup.
+
+### The Intermediate Representation (`brick-ir.json`)
+
+`brick-ir.json` contains a structured manifest of the application architecture:
+
+```json
+{
+  "version": 2,
+  "target": "effect-http-api",
+  "services": [
+    {
+      "name": "users",
+      "actions": [
+        {
+          "name": "getUser",
+          "method": "POST",
+          "path": "/api/users/getUser"
+        }
+      ]
+    }
+  ],
+  "routes": [
+    {
+      "service": "users",
+      "name": "getUser",
+      "method": "POST",
+      "path": "/api/users/getUser"
+    }
+  ],
+  "diagnostics": []
+}
+```
+
+This JSON file is designed for CI validation, deployment checks, and AI agent architecture introspection.

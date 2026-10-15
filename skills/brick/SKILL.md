@@ -22,17 +22,18 @@ If the hosted docs differ from the installed version, inspect the package types 
 
 ## Follow Brick's definitions
 
-- Use `defineService` and its `.action()`, `.resource()`, and `.tool()` methods. Define input and output schemas with `t` from `@brickkit/core`.
-- Keep database tables in the service's database definition. Use `@brickkit/crud` for generated resource operations where the project already uses it. CRUD requires an explicit access policy; preserve its field and operation permissions.
-- Put authorization in the action or tool definition and resource access rules. Use the project's context resolver for identity.
-- Import definition modules before compiling the app, generating contracts, or exporting the global registry. Registration occurs when modules load.
-- Tools register separately from HTTP actions. Set `http: true` or attach a tool with `.action(tool)` only when HTTP access is required.
-- Use the generated typed-client contract for browser calls. Keep server modules out of browser imports.
+- Define actions with `Brick.action(name, path, { input, output, errors })` using Effect Schema (not TypeBox). The call returns a handler factory: handlers receive decoded input and return an `Effect`.
+- Model domain errors as `Schema.TaggedError` classes annotated with `{ httpApiStatus }` (e.g. 400, 401, 403, 404, 409). Status codes map to HTTP responses automatically; undeclared defects are redacted to `"Internal server error"`.
+- Group actions with `Brick.service(name, { actions })` and compose with `Brick.app({ services, layer, routes?, docs?, client?, transports? })`. Supply dependencies as Effect `Layer`s and require them in handlers with `yield*`. Lifecycle is `await app.ready()`, `app.fetch(request)`, `await app.dispose()`.
+- For generated CRUD use `crudContract({ name, path, table, id, fields, errors })` plus `.implement({ store: sqliteStore(table, Db) | postgresStore(table, Db), access, hooks?, scrub? })`. Generated REST routes are `POST base/query` (list), `POST base/find-one`, `GET base/:id` (get), `POST base` (create), `PATCH base/:id` (update), `DELETE base/:id` (delete), `POST base/count`, `POST base/exists`. Access is deny-by-default: use `"public"` or `{ authorize, scope }`; never row-scope `create` (enforce ownership in `beforeCreate` instead).
+- For custom HTTP methods or URL params use `Brick.endpoint(name, method, path, { input: { params?, query?, payload?, headers? }, output, errors })`.
+- Expose MCP with `Brick.app({ transports: { mcp: { name, version, path } } })`. Mark agent-callable actions with `mcp: true` and tool behavior flags (`readOnly`, `destructive`, `idempotent`, `openWorld`).
+- Call the API from browsers only through the generated contract module: `const { client, ready, dispose } = createClient(Api, { baseUrl })` (synchronous), then `client.service["actionName"]({ payload })` for bodies or `{ params: { id } }` for `:id` routes. Never import server-only modules (database, layers, handlers) in browser code.
 
 ## Inspect the application
 
 A running Brick app exposes its registered architecture at `GET /_brick/services`. For an offline export, run `bunx brick info <entry>` with the project's app entry file. The CLI loads definitions before exporting mounted routes and resource access policies. Service options are included, so review configuration values before sharing the JSON.
 
-An app can expose MCP through `createMcpRegistry` and `createMcpHandler`. Read its tool definitions and auth layer before calling tools. The documentation site does not provide a hosted MCP server.
+An app can expose MCP at its configured transports path (commonly `/mcp`). Read its tool definitions and auth layer before calling tools. The documentation site does not provide a hosted MCP server.
 
 Run the project's type checks and relevant tests after edits. Follow its scripts for schema migrations and contract generation.

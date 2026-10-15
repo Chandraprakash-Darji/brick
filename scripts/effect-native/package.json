@@ -1,0 +1,27 @@
+{
+  "name": "brick-effect-native-spikes",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit && bun http.ts && bun test",
+    "test": "bun test"
+  },
+  "overrides": {
+    "@effect/platform-node-shared": "4.0.4"
+  },
+  "dependencies": {
+    "@better-auth/drizzle-adapter": "1.7.7",
+    "@effect/platform-bun": "4.0.4",
+    "@effect/sql-pg": "4.0.4",
+    "@effect/sql-sqlite-bun": "4.0.4",
+    "better-auth": "1.7.7",
+    "drizzle-orm": "1.0.0-rc.5-5935859",
+    "effect": "4.0.4",
+    "pg": "8.16.3"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.3",
+    "@types/pg": "8.15.6",
+    "typescript": "5.9.3"
+  }
+}

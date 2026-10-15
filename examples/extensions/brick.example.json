@@ -1,9 +1,9 @@
 {
-  "title": "Resource plugin",
-  "description": "A comments plugin built with defineResourcePlugin that attaches a typed comments namespace and CRUD routes to a parent resource.",
+  "title": "Comments extension",
+  "description": "A comments factory that composes an Effect-native CRUD contract, write hooks and a scoped SQLite Layer.",
   "tags": ["Plugins", "CRUD", "SQLite"],
   "features": [
-    "defineResourcePlugin and resource extensions",
+    "Immutable contracts and Effect handler composition",
     "Write hooks that trim and validate input",
     "Compiled HTTP routes for list, count, update and delete"
   ],

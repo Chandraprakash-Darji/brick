@@ -18,7 +18,6 @@
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.7.7",
     "@better-auth/mcp": "^1.7.7",
-    "@better-auth/oauth-provider": "^1.7.7",
     "@brickkit/cli": "workspace:*",
     "@brickkit/core": "workspace:*",
     "@brickkit/crud": "workspace:*",
@@ -40,15 +39,17 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
-    "drizzle-orm": "0.45.2",
-    "effect": "^4",
+    "drizzle-orm": "1.0.0-rc.5-5935859",
+    "effect": "4.0.4",
     "lucide-react": "^1.56.0",
     "marked": "^18.1.1",
     "postgres": "^3.4.9",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "sonner": "^2.0.8",
-    "tailwind-merge": "^3.7.0"
+    "tailwind-merge": "^3.7.0",
+    "@brickkit/client": "workspace:*",
+    "@effect/sql-pg": "4.0.4"
   },
   "devDependencies": {
     "auth": "^1.7.7",

@@ -1,18 +1,32 @@
 ---
-title: Comments Plugin Pattern
-description: Attach discussion threads to any parent resource using a canonical comments schema.
+title: Comments Extension
+description: A complete, tested Effect-native CRUD extension example.
 ---
 
-This guide demonstrates the canonical Brick-TS comments plugin pattern, attaching threaded discussions to any parent resource with target foreign-key validation.
+The `examples/extensions` package in the Brick repository contains a complete, production-ready extension implementing a page comments system.
 
-## Canonical Schema
+## Extension Architecture
 
-The comments pattern uses a single, unified database schema across all services:
+The comments extension is organized into three files:
 
-```ts title="src/extensions/comments/schema.ts"
-import { sqliteTable, text } from "@brickkit/core";
+```text
+src/extensions/comments/
+├── schema.ts       # Drizzle table definition
+├── contract.ts     # Schema contracts and tagged errors
+└── index.ts        # Action implementation factory
+```
 
-export const commentsTable = sqliteTable("comments", {
+### 1. Database Schema (`schema.ts`)
+
+```ts title="examples/extensions/src/extensions/comments/schema.ts"
+import { sqliteTable, text } from "drizzle-orm/sqlite-core";
+
+export const pages = sqliteTable("pages", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+});
+
+export const commentsTable = sqliteTable("page_comments", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => crypto.randomUUID()),
@@ -21,183 +35,116 @@ export const commentsTable = sqliteTable("comments", {
 });
 ```
 
-### Schema
+### 2. Browser-Safe Contract (`contract.ts`)
 
-These columns match the Drizzle tables in the example. Defaults marked as application defaults run in Drizzle, rather than in SQL.
+Declares tagged error schemas and the CRUD contract. This module is browser-safe and can be imported by frontend clients:
 
-export const commentsSchemaFields = [
-  {
-    name: "id",
-    type: "text",
-    description: "Row identifier.",
-    isPrimaryKey: true,
-    defaultValue: "crypto.randomUUID() (application)",
-  },
-  {
-    name: "target_id",
-    type: "text",
-    description: "Parent record identifier, validated by the application.",
-  },
-  {
-    name: "body",
-    type: "text",
-    description: "Text content.",
-  },
-];
-
-<DatabaseTable name="comments" fields={commentsSchemaFields} />
-
-export const pagesSchemaFields = [
-  {
-    name: "id",
-    type: "text",
-    description: "Row identifier.",
-    isPrimaryKey: true,
-    defaultValue: "crypto.randomUUID() (application)",
-  },
-  {
-    name: "title",
-    type: "text",
-    description: "Display title.",
-  },
-];
-
-<DatabaseTable name="pages" fields={pagesSchemaFields} />
-
-## Plugin Implementation
-
-Implement the comments factory using `defineResourcePlugin` and `@brickkit/crud`:
-
-```ts title="src/extensions/comments/index.ts"
-import { ActionExecutionError, defineResourcePlugin, eq } from "@brickkit/core";
-import { crud } from "@brickkit/crud";
+```ts title="examples/extensions/src/extensions/comments/contract.ts"
+import { crudContract } from "@brickkit/crud";
+import { Schema } from "effect";
 import { commentsTable } from "./schema";
 
-export { commentsTable } from "./schema";
+export class InvalidComment extends Schema.TaggedError<InvalidComment>()(
+  "InvalidComment",
+  { message: Schema.String },
+  { httpApiStatus: 400 },
+) {}
 
-/** Resource plugin that attaches comments to any host resource. */
-export function comments(options: { table: typeof commentsTable }) {
-  return defineResourcePlugin({
-    name: "example/comments",
-    setup({ resource, service }) {
-      const comment = service
-        .resource({
-          name: `${resource.name}Comment`,
-          table: options.table,
-          id: options.table.id,
-        })
-        .use(
-          crud({
-            // Anyone may read and post comments; editing and deleting
-            // existing comments requires an authenticated user.
-            access: {
-              authorize: ({ operation, ctx }) => {
-                if (operation === "update" || operation === "delete") {
-                  return !!ctx.user;
-                }
+export class MissingTarget extends Schema.TaggedError<MissingTarget>()(
+  "MissingTarget",
+  { message: Schema.String },
+  { httpApiStatus: 404 },
+) {}
 
-                return true;
-              },
-            },
-            fields: {
-              id: { read: true, filter: ["eq"] },
-              targetId: { read: true, create: true, filter: ["eq"] },
-              body: {
-                read: true,
-                create: true,
-                update: true,
-                filter: ["contains"],
-              },
-            },
-            hooks: {
-              beforeCreate: async ({ data, ctx }) => {
-                data.body = String(data.body).trim();
-                if (!data.body) {
-                  throw new ActionExecutionError(
-                    "BAD_REQUEST",
-                    "Comment body cannot be blank",
-                    400,
-                  );
-                }
+export const Comments = crudContract({
+  name: "pageComment",
+  path: "/api/pageComment",
+  table: commentsTable,
+  id: "id",
+  errors: [InvalidComment, MissingTarget],
+  fields: {
+    id: { read: true, filter: ["eq"] },
+    targetId: { read: true, create: true, filter: ["eq"] },
+    body: { read: true, create: true, update: true, filter: ["contains"] },
+  },
+});
+```
 
-                // Verify parent resource exists in the database
-                const parents = await ctx.db
-                  .select({ id: resource.id })
-                  .from(resource.table)
-                  .where(eq(resource.id, data.targetId))
-                  .limit(1);
+### 3. Implementation Factory (`index.ts`)
 
-                if (!parents.length) {
-                  throw new ActionExecutionError(
-                    "NOT_FOUND",
-                    "Comment target not found",
-                    404,
-                  );
-                }
-              },
-              beforeUpdate: ({ data }) => {
-                if (data.body !== undefined) {
-                  data.body = String(data.body).trim();
-                  if (!data.body) {
-                    throw new ActionExecutionError(
-                      "BAD_REQUEST",
-                      "Comment body cannot be blank",
-                      400,
-                    );
-                  }
-                }
-              },
-            },
-          }),
-        );
+The factory function `comments()` binds the contract to the database store, verifies that the parent page exists, and sanitizes comment text:
 
-      return { comments: comment };
+```ts title="examples/extensions/src/extensions/comments/index.ts"
+import { sqliteStore } from "@brickkit/crud";
+import { Effect } from "effect";
+import { eq } from "drizzle-orm";
+import { Database } from "../../database";
+import { commentsTable, pages } from "./schema";
+import { Comments, InvalidComment, MissingTarget } from "./contract";
+
+export function comments() {
+  return Comments.implement({
+    store: sqliteStore(commentsTable, Database.Service),
+    access: "public",
+    hooks: {
+      beforeCreate: ({ data }) =>
+        Effect.gen(function* () {
+          const body = data.body.trim();
+          if (!body) {
+            return yield* Effect.fail(
+              new InvalidComment({ message: "Comment body cannot be blank" }),
+            );
+          }
+
+          const db = yield* Database.Service;
+          const [parent] = yield* db
+            .select({ id: pages.id })
+            .from(pages)
+            .where(eq(pages.id, data.targetId))
+            .limit(1)
+            .pipe(Effect.orDie);
+
+          if (!parent) {
+            return yield* Effect.fail(
+              new MissingTarget({ message: "Comment target not found" }),
+            );
+          }
+
+          return { ...data, body };
+        }),
+
+      beforeUpdate: ({ data }) => {
+        if (data.body === undefined) return Effect.succeed(data);
+        const body = data.body.trim();
+        return body
+          ? Effect.succeed({ ...data, body })
+          : Effect.fail(
+              new InvalidComment({ message: "Comment body cannot be blank" }),
+            );
+      },
     },
   });
 }
 ```
 
-## Attaching to Resources
+## Running the Example
 
-Attach the comments plugin to any host resource with `.use()`:
+Run the extension example from the repository root:
 
-```ts title="src/services/pages.ts"
-import {
-  defineDatabase,
-  defineService,
-  sqliteTable,
-  text,
-} from "@brickkit/core";
-import { crud } from "@brickkit/crud";
-import { comments, commentsTable } from "../extensions/comments";
-
-export const pagesTable = sqliteTable("pages", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  title: text("title").notNull(),
-});
-
-const database = defineDatabase({ tables: { pagesTable, commentsTable } });
-export const pagesService = defineService("pages", { database });
-
-// Attach comments plugin to the page resource:
-export const page = pagesService
-  .resource({ name: "page", table: pagesTable, id: pagesTable.id })
-  .use(
-    crud({
-      access: "public",
-      fields: { id: { read: true }, title: { read: true, create: true } },
-    }),
-  )
-  .use(comments({ table: commentsTable }));
+```bash
+bun run --cwd examples/extensions demo
 ```
 
-This automatically mounts the standard CRUD REST endpoints for the comment resource (under the service prefix, e.g. `/api`):
+To start the HTTP server on port 3001:
 
-- `POST /api/pageComment` (create)
-- `POST /api/pageComment/query` (list)
-- `POST /api/pageComment/count` and `POST /api/pageComment/exists`
-- `GET /api/pageComment/:id` (public), `PATCH /api/pageComment/:id` and `DELETE /api/pageComment/:id` (authenticated)
+```bash
+bun run --cwd examples/extensions serve
+```
 
-The recipe has no per-comment ownership, so any authenticated user can edit or delete any comment. If comments should be editable only by their author, add an owner column to the table and return an ownership `scope` from the access policy, alongside `authorize`.
+Test creating a comment via curl:
+
+```bash
+curl -X POST http://localhost:3001/api/pageComment \
+  -H "Content-Type: application/json" \
+  -d '{"targetId": "page-1", "body": "Great article!"}'
+```

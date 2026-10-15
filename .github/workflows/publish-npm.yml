@@ -68,6 +68,8 @@ jobs:
         working-directory: packages/cli
       - run: npm pack --dry-run
         working-directory: packages/crud
+      - run: npm pack --dry-run
+        working-directory: packages/client
 
   prepare:
     if: github.event_name != 'pull_request'
@@ -139,7 +141,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pkg: [core, crud, cli]
+        pkg: [core, crud, client, cli]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -165,7 +167,7 @@ jobs:
         working-directory: .
 
       - name: Test packages
-        run: bun test packages/core packages/crud packages/cli
+        run: bun test ./packages/core ./packages/crud ./packages/client ./packages/cli
 
       - name: Resolve name and version
         id: meta

@@ -1,5 +1,6 @@
-import { sqliteTable, text } from "@brickkit/core";
+import { sqliteTable, text } from "drizzle-orm/sqlite-core";
 
+export const pages = sqliteTable("pages", { id: text("id").primaryKey() });
 export const commentsTable = sqliteTable("comments", {
   id: text("id")
     .primaryKey()

@@ -1,32 +1,28 @@
-import { describe, expect, it } from "bun:test";
-
-import { createPageTool } from "../src/api/services/pages/page/tools/create";
-
-describe("create_page input", () => {
-  const required = { slug: "single-name", title: "Single name" };
-
-  it("accepts only the canonical camelCase fields", () => {
+import { describe, expect, test } from "bun:test";
+import { Schema } from "effect";
+import { tools } from "../src/api/contract";
+const decode = Schema.decodeUnknownExit(
+  tools.create_page.tool.parametersSchema,
+  { onExcessProperty: "error" },
+);
+describe("native create_page schema", () => {
+  test("accepts canonical fields and rejects aliases, malformed slugs, and empty titles", () => {
     expect(
-      createPageTool.validateInput({
-        ...required,
+      decode({
+        slug: "single-name",
+        title: "Page",
         contentType: "html",
-        isPublic: true,
-        theme: "nord",
-      }).success,
-    ).toBe(true);
-    expect(createPageTool.validateInput(required).success).toBe(true);
-  });
-
-  it("rejects snake_case aliases, including conflicting aliases", () => {
+        isPublic: false,
+      })._tag,
+    ).toBe("Success");
     for (const fields of [
       { content_type: "html" },
       { is_public: true },
-      { contentType: "markdown", content_type: "html" },
-      { isPublic: false, is_public: true },
-    ]) {
+      { title: "" },
+      { slug: "bad slug" },
+    ])
       expect(
-        createPageTool.validateInput({ ...required, ...fields }).success,
-      ).toBe(false);
-    }
+        decode({ slug: "single-name", title: "Page", ...fields })._tag,
+      ).toBe("Failure");
   });
 });

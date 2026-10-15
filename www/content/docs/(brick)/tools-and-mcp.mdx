@@ -3,128 +3,132 @@ title: AI Tools and Model Context Protocol (MCP)
 description: Expose backend actions to AI agents via Model Context Protocol (MCP) and JSON-RPC.
 ---
 
-Brick-TS provides first-class support for AI agents through Model Context Protocol (MCP) tool declarations and JSON-RPC transports.
+Brick-TS provides first-class support for AI agents through Effect's native `effect/ai` Model Context Protocol (MCP) integration.
 
 ## Minimal Example
 
-Define an AI tool on a service, assemble an MCP registry, and serve it over JSON-RPC 2.0:
+Declare an action with `mcp: true` and tool behavior annotations, then mount the MCP transport in your application:
 
 ```ts title="src/services/documents.ts"
-import {
-  brick,
-  createMcpHandler,
-  createMcpRegistry,
-  defineService,
-  t,
-} from "@brickkit/core";
+import { Brick } from "@brickkit/core";
+import { NotFound } from "@brickkit/core/contracts";
+import { Effect, Schema } from "effect";
 
-export const docsService = defineService("docs");
-
-// 1. Declare an AI tool with an object input schema and description
-export const searchDocs = docsService.tool({
-  name: "search_docs",
-  description: "Search knowledge base documents by query string",
-  input: t.Object({
-    query: t.String({ description: "Search terms or keywords" }),
-    limit: t.Optional(t.Number({ default: 5 })),
+// 1. Declare an action with MCP tool metadata
+const SearchDocs = Brick.action("search_docs", "/api/docs/search", {
+  input: Schema.Struct({
+    query: Schema.String.annotate(
+      Schema.Description,
+      "Search terms or keywords",
+    ),
+    limit: Schema.optionalKey(Schema.Number),
   }),
-  output: t.Array(
-    t.Object({
-      id: t.String(),
-      title: t.String(),
-      snippet: t.String(),
+  output: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      title: Schema.String,
+      snippet: Schema.String,
     }),
   ),
-  execute: async ({ input, ctx }) => {
-    return [
-      {
-        id: "doc_1",
-        title: "Architecture",
-        snippet: "Brick-TS is built on Bun...",
-      },
-    ];
+  errors: [NotFound],
+  mcp: true,
+  title: "Search Knowledge Base",
+  description: "Search documents matching query keywords",
+  tool: {
+    readOnly: true,
+    idempotent: true,
   },
 });
 
-// 2. Build MCP registry from registered tools
-const mcpRegistry = createMcpRegistry({
-  services: [docsService],
-});
+// 2. Implement the Effect handler
+export const searchDocs = SearchDocs(({ query, limit }) =>
+  Effect.succeed([
+    {
+      id: "doc_1",
+      title: "Architecture",
+      snippet: "Brick-TS is built on Bun and Effect...",
+    },
+  ]),
+);
 
-// 3. Create JSON-RPC 2.0 handler
-const mcpHandler = createMcpHandler({
-  registry: mcpRegistry,
-  serverInfo: { name: "docs-agent-server", version: "1.0.0" },
-});
-
-// 4. Mount on the Brick (Elysia) app; the handler only accepts POST
-const app = brick({ services: [docsService] });
-app.post("/mcp", ({ request }) => mcpHandler(request));
-app.listen(4000);
-```
-
-## Tools (`defineTool` / `service.tool`)
-
-Tools are specialized actions designed for invocation by Large Language Models:
-
-- **Object Schema Requirement**: The `input` schema, if present, must be a TypeBox object (`t.Object(...)`). Any other schema makes `defineTool()` / `service.tool()` throw `Tool '<name>' input must be an object schema` when the tool is defined.
-- **MCP-only by default**: Tools are not mounted as HTTP routes. Set `http: true` on the tool (or register it with `service.action(tool)`) to also expose it as an HTTP action and in OpenAPI.
-- **Agent Descriptions**: Provide clear `description` strings on the tool and each schema property; LLM agents use these descriptions to determine tool calling logic.
-- **Annotations**: Tools accept MCP annotations: `title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint`. You can also set a top-level `title`:
-
-```ts title="src/services/admin.ts"
-export const deleteUserTool = adminService.tool({
-  name: "delete_user",
-  description: "Permanently delete a user account and associated data",
-  annotations: {
-    destructiveHint: true,
-    readOnlyHint: false,
-  },
-  input: t.Object({
-    userId: t.String({
-      description: "The unique identifier of the user to remove",
-    }),
-  }),
-  output: t.Object({ success: t.Boolean() }),
-  execute: async ({ input, error }) => {
-    return { success: true };
-  },
+export const docsService = Brick.service("docs", {
+  actions: { searchDocs },
 });
 ```
 
-## MCP Registry (`createMcpRegistry`)
+Mount the MCP server in `src/app.ts`:
 
-`createMcpRegistry` gathers only explicitly defined tools:
-
-- Standard service actions and internal functions are **never exposed** to AI agents unless declared as tools via `service.tool` or `defineTool`.
-- You can pass `services` (their `service.tool()` tools are collected), standalone `tools` from `defineTool()`, or both.
-- Two different tools with the same name are rejected with `Duplicate MCP tool: <name>` when the registry is created.
-
-```ts title="src/mcp-setup.ts"
-import { createMcpRegistry } from "@brickkit/core";
+```ts title="src/app.ts"
+import { Brick } from "@brickkit/core";
+import { McpProtocol } from "effect/ai";
+import { Layer } from "effect";
 import { docsService } from "./services/documents";
-import { adminService } from "./services/admin";
 
-export const registry = createMcpRegistry({
-  services: [docsService, adminService],
+export default Brick.app({
+  services: [docsService],
+  layer: Layer.empty,
+  transports: {
+    mcp: {
+      name: "docs-agent-server",
+      version: "1.0.0",
+      path: "/mcp",
+      protocols: [McpProtocol.v2025_11_25],
+    },
+  },
+  docs: { path: "/reference" },
 });
-
-// Inspect available tools:
-const toolList = registry.listTools();
-console.log(toolList.map((t) => t.name)); // ["search_docs", "delete_user"]
 ```
 
-## JSON-RPC 2.0 Handler (`createMcpHandler`)
+When started, your application serves standard HTTP REST endpoints on `/api/...` and mounts an MCP server on `/mcp`.
 
-`createMcpHandler({ registry, serverInfo, protocolVersions? })` returns a stateless `(request, ctx?) => Promise<Response>` handler for MCP JSON-RPC 2.0 over HTTP POST. Non-POST requests get `405`, and notifications (requests without an `id`) get `202` with no body. It handles:
+## Tool Behavior Annotations (`tool`)
 
-- `initialize`: Returns `{ capabilities: { tools: {} }, protocolVersion, serverInfo }`. The client's requested version is echoed if it is in `protocolVersions` (default `["2025-06-18"]`); otherwise the first listed version is returned.
-- `ping`: Returns `{}`.
-- `tools/list`: Returns each tool's `name`, `title` (if set), `description`, `inputSchema`, and `annotations`.
-- `tools/call`: Validates and executes the tool, returning `{ content: [{ type: "text", text }] }`. Strings are returned as-is; other values are JSON-stringified. A thrown error becomes a result with `isError: true` and the error message as text. An unknown tool name returns JSON-RPC error `-32602`.
+AI agents like Claude Code, Cursor, and Copilot use tool behavior annotations to determine when to call tools automatically and whether to prompt the user for confirmation:
 
-The handler performs no authentication. Wrap it with your own auth, and pass an optional `ctx` (for example `{ user }`) as the second argument; it is forwarded to the tool's execution context along with the `request`.
+| Property      | Type      | Default | Description                                                                    |
+| :------------ | :-------- | :------ | :----------------------------------------------------------------------------- |
+| `readOnly`    | `boolean` | `false` | When `true`, indicates the tool only queries data and does not modify state.   |
+| `destructive` | `boolean` | `false` | When `true`, indicates the tool performs irreversible actions (e.g. deletion). |
+| `idempotent`  | `boolean` | `false` | When `true`, calling the tool multiple times produces the identical outcome.   |
+| `openWorld`   | `boolean` | `false` | When `true`, indicates the tool interacts with external systems or web APIs.   |
 
-### Connecting a Client
+## MCP Protocol Support
 
-Point an MCP client that supports HTTP transport at your endpoint, for example `http://localhost:4000/mcp`. The configuration format depends on the client.
+Brick's native MCP integration uses `effect/ai` and supports modern protocol specifications:
+
+- `McpProtocol.v2025_11_25`: Modern MCP specification with session negotiation, capability exchange, and structured tool parameter validation.
+
+Tools validate input parameters using the exact same Effect Schema that governs HTTP requests. If an AI agent sends invalid arguments, the MCP server returns a standard protocol error before the handler executes.
+
+## Securing MCP Endpoints
+
+To authenticate agents accessing `/mcp`, add bearer token verification or OAuth protected resource metadata using `Brick.route`:
+
+```ts title="src/routes/oauth.ts"
+import { Brick } from "@brickkit/core";
+import { HttpServerResponse } from "effect/http";
+import { Effect } from "effect";
+
+export const oauthMetadata = Brick.route(
+  "GET",
+  "/.well-known/oauth-protected-resource",
+  Effect.sync(() =>
+    HttpServerResponse.jsonUnsafe({
+      authorization_servers: ["https://auth.example.com"],
+      resource: "https://api.example.com/mcp",
+    }),
+  ),
+);
+```
+
+You can guard the `/mcp` route with authentication middleware using Effect's `HttpRouter` or `@better-auth/mcp`.
+
+## Monomorphic Execution
+
+Because actions in Brick-TS are monomorphic:
+
+- The tool can be called by an AI agent over MCP.
+- The same tool can be invoked over HTTP POST at `/api/docs/search`.
+- The same tool can be called in-process by other services as an `Effect`.
+
+All three call sites share identical schema validation and declared errors. Each transport renders failures in its own format: HTTP denies with a status code (for example 403), RPC surfaces a typed failure, and MCP returns a tool result with `isError: true`. Authorization depends on the action's Effect requirements and the authentication layer configured for each transport.

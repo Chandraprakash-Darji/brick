@@ -1,17 +1,20 @@
 ---
 title: Database Management & Migrations
-description: Configure SQLite and PostgreSQL databases, development sync, and production migrations.
+description: Configure SQLite and PostgreSQL databases, scoped layers, and production migrations with Drizzle ORM.
 ---
 
-Brick-TS provides database configuration handles for SQLite and PostgreSQL, with development table synchronization and caller-owned production migrations via Drizzle ORM.
+Brick-TS pairs Drizzle ORM with Effect's scoped resource management, providing type-safe database access for SQLite and PostgreSQL with guaranteed lifecycle disposal and clean migration paths.
 
 ## Minimal Example
 
-Configure an in-memory SQLite database for local development and test:
+Configure an in-memory SQLite database service and provide it to your application via an Effect Layer:
 
 ```ts title="src/database.ts"
-import { defineDatabase, sqliteTable, syncSchema, text } from "@brickkit/core";
+import { sqliteStore } from "@brickkit/crud";
+import { sqliteDatabase } from "@brickkit/crud/sqlite";
+import { sqliteTable, text } from "drizzle-orm/sqlite-core";
 
+// 1. Declare schema with Drizzle
 export const users = sqliteTable("users", {
   id: text("id")
     .primaryKey()
@@ -19,13 +22,10 @@ export const users = sqliteTable("users", {
   email: text("email").notNull().unique(),
 });
 
-// Configure SQLite database handle
-export const database = defineDatabase({
-  tables: { users },
-});
-
-// Dev/test only: explicitly sync SQLite schema
-syncSchema({ users }, database.getDb());
+// 2. Define scoped database service and Layer
+export interface AppDatabase {}
+export const { Service: Database, layer: DatabaseLive } =
+  sqliteDatabase<AppDatabase>()("Database", { filename: ":memory:" });
 ```
 
 ### Schema
@@ -50,86 +50,68 @@ export const usersSchemaFields = [
 
 <DatabaseTable name="users" fields={usersSchemaFields} />
 
-## Configuring Databases (`defineDatabase`)
+## Configuring Databases with Effect
 
-`defineDatabase` creates a lazy, typed database handle. Connections are opened only when requested by services or runtime actions.
+In Brick-TS, database handles are managed through the `sqliteDatabase` and `postgresDatabase` factories from `@brickkit/crud/sqlite` and `@brickkit/crud/postgres`. Each defines a typed `Context.Service` and a corresponding `Layer` over the Effect SQL drivers, which is exactly what `sqliteStore` and `postgresStore` require.
 
 ### 1. SQLite Configuration
 
-The default database engine in Brick-TS is `sqlite`, running on Bun's high-performance native SQLite client (`bun:sqlite`):
+For local development, integration tests, or edge deployments with LibSQL or Bun SQLite:
 
 ```ts title="src/db/sqlite.ts"
-import { defineDatabase } from "@brickkit/core";
-import { users, posts } from "./schema";
+import { sqliteDatabase } from "@brickkit/crud/sqlite";
 
-export const sqliteDb = defineDatabase({
-  engine: "sqlite", // default
-  filename: "./data/app.db", // Omit for in-memory :memory:
-  wal: true, // Enable Write-Ahead Logging (default true)
-  foreignKeys: true, // Enforce foreign key constraints (default true)
-  tables: { users, posts },
-});
+export interface SqliteDb {}
+export const { Service: SqliteDb, layer: SqliteLive } =
+  sqliteDatabase<SqliteDb>()("SqliteDb", {
+    filename: process.env.DATABASE_URL ?? "local.db",
+  });
 ```
+
+Use `sqliteStore(table, SqliteDb)` when implementing CRUD contracts.
 
 ### 2. PostgreSQL Configuration
 
-Connect to PostgreSQL using the PostgresJS driver:
+For production PostgreSQL workloads using connection pooling:
 
 ```ts title="src/db/postgres.ts"
-import { defineDatabase, secret } from "@brickkit/core";
-import { users, posts } from "./schema";
+import { postgresDatabase } from "@brickkit/crud/postgres";
+import { Redacted } from "effect";
 
-export const postgresDb = defineDatabase({
-  engine: "postgres",
-  url: secret("DATABASE_URL"), // Resolves from environment variable
-  ssl: process.env.NODE_ENV === "production",
-  tables: { users, posts },
-});
+export interface PostgresDb {}
+export const { Service: PostgresDb, layer: PostgresLive } =
+  postgresDatabase<PostgresDb>()("PostgresDb", {
+    url: Redacted.make(
+      process.env.DATABASE_URL ?? "postgres://localhost/brick",
+    ),
+  });
 ```
 
-### Database Configuration Options Table
+Use `postgresStore(table, PostgresDb)` when implementing CRUD contracts.
 
-| Option        | Engine   | Default      | Description                                                                                                    |
-| :------------ | :------- | :----------- | :------------------------------------------------------------------------------------------------------------- |
-| `engine`      | All      | `"sqlite"`   | `"sqlite"` or `"postgres"`.                                                                                    |
-| `tables`      | All      | `undefined`  | Record or array of Drizzle tables registered with the handle.                                                  |
-| `filename`    | SQLite   | `":memory:"` | Path to SQLite file on disk. Parent directories are created automatically.                                     |
-| `wal`         | SQLite   | `true`       | Enables Write-Ahead Logging for high-concurrency performance.                                                  |
-| `foreignKeys` | SQLite   | `true`       | Enforces SQLite foreign key constraints.                                                                       |
-| `url`         | Postgres | `undefined`  | PostgreSQL connection string URL (`postgres://...`) or `SecretRef`. Falls back to `DATABASE_URL` when omitted. |
-| `ssl`         | Postgres | `undefined`  | SSL mode or certificate configuration.                                                                         |
+## Scoped Resource Lifetime
 
-## SQLite Schema Synchronization (`syncSchema`)
+When your application starts, `Brick.app` builds the database layer inside a dedicated `Scope`. When `await app.dispose()` runs:
 
-For local development and unit tests, Brick provides an explicit schema preparation utility:
+1. Pending requests are aborted.
+2. In-flight database transactions are finished or canceled.
+3. The database release finalizer executes, closing connection pools and freeing file handles.
 
-```ts title="src/setup.ts"
-import { syncSchema } from "@brickkit/core";
-import { usersService } from "./services/users";
+This eliminates connection leaks during test runs and ensures zero-downtime rolling deploys.
 
-// Automatically generates SQLite DDL and creates tables if they don't exist:
-syncSchema(usersService);
-```
+## Migrations with Drizzle Kit
 
-<Callout type="warn">
-  **Explicit Development Helper**: `syncSchema` is an explicit development and
-  test utility. Brick-TS **never** alters database schema automatically at
-  server boot. Do not call `syncSchema` in production environments.
-</Callout>
+Brick uses standard Drizzle migrations. Manage migrations with `drizzle-kit`:
 
-## Production Schema Migrations (PostgreSQL)
+### 1. Drizzle Config
 
-In production, database migrations are **caller-owned**. Manage migrations with Drizzle Kit:
-
-### 1. Configure Drizzle Kit
-
-Create `drizzle.config.ts` in your project root:
+Create `drizzle.config.ts`:
 
 ```ts title="drizzle.config.ts"
 import { defineConfig } from "drizzle-kit";
 
 export default defineConfig({
-  schema: "./src/schema/**/*.ts",
+  schema: "./src/**/schema.ts",
   out: "./drizzle",
   dialect: "postgresql",
   dbCredentials: {
@@ -140,22 +122,16 @@ export default defineConfig({
 
 ### 2. Generate and Apply Migrations
 
-Use standard Drizzle Kit commands in your deployment pipeline:
-
 ```bash
-# 1. Generate migration SQL files from schema diffs
+# Generate SQL migration files from Drizzle schema definitions
 bunx drizzle-kit generate
 
-# 2. Apply pending migrations to the target database
+# Apply migrations to the database
 bunx drizzle-kit migrate
 ```
 
-This workflow gives you full version control, rollback inspection, and zero runtime lock-in.
+You can also run migrations via the Brick CLI:
 
-## Secondary Indexes and Search Optimizations
-
-Brick-TS provides explicit opt-in helpers for secondary indexes and search
-(no indexes are created automatically — call these yourself):
-
-- **Secondary B-Tree Indexes**: `ensureResourceIndexes(db, table, { sortFields, ownerField })` creates indexes on hot lookup and sorting paths. Pass `searchFields` on PostgreSQL to also add `pg_trgm` GIN indexes for fast substring matching.
-- **SQLite FTS5 Full-Text Search**: `ensureSQLiteFts(db, table, searchCols)` builds an FTS5 sidecar virtual table with sync triggers for rapid text search queries.
+```bash
+bunx brick migrate
+```

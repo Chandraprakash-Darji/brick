@@ -1,10 +1,12 @@
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { isBrickApp, requireBrickApp, type BrickApp } from "@brickkit/core";
+import { isNativeBrickApp, type NativeBrickApp } from "@brickkit/core";
 
-export { isBrickApp, requireBrickApp, type BrickApp };
-
-export async function loadBrickApp(entry: string): Promise<BrickApp> {
+export async function loadApplication(entry: string): Promise<NativeBrickApp> {
   const module = await import(pathToFileURL(resolve(entry)).href);
-  return requireBrickApp(module.default);
+  if (!isNativeBrickApp(module.default))
+    throw new Error(
+      "Brick: the entry module must default-export a BrickApp created by Brick.app().",
+    );
+  return module.default;
 }

@@ -1,14 +1,17 @@
-import { defineService, t } from "@brickkit/core";
+import { Brick } from "@brickkit/core";
+import { NotFound } from "@brickkit/core/contracts";
+import { Effect, Schema } from "effect";
 
 const users = new Map([["usr_42", { id: "usr_42", name: "Ada" }]]);
-export const usersService = defineService("users");
-
-export const getUser = usersService.action({
-  name: "getUser",
-  input: t.Object({ id: t.String() }),
-  execute: ({ input, error }) => {
-    const user = users.get(input.id);
-    if (!user) error.NOT_FOUND("User not found");
-    return user;
-  },
+const GetUser = Brick.action("getUser", "/api/users/getUser", {
+  input: Schema.Struct({ id: Schema.String }),
+  output: Schema.Struct({ id: Schema.String, name: Schema.String }),
+  errors: [NotFound],
 });
+export const getUser = GetUser(({ id }) => {
+  const user = users.get(id);
+  return user
+    ? Effect.succeed(user)
+    : Effect.fail(new NotFound({ message: "User not found" }));
+});
+export const usersService = Brick.service("users", { actions: { getUser } });

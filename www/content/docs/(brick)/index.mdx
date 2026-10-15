@@ -3,21 +3,17 @@ title: Overview & Architecture
 description: Learn the mental model, core design principles, and architecture of Brick-TS.
 ---
 
-Brick-TS is a TypeScript backend framework built on Bun, Elysia, TypeBox, and Drizzle that delivers monomorphic in-process execution with automatic HTTP and OpenAPI exposure.
+Brick-TS is an Effect-native TypeScript backend platform built on Bun, Effect, Effect Schema, and Drizzle ORM that delivers monomorphic in-process execution with automatic HTTP, RPC, MCP, and OpenAPI exposure.
 
 ## Minimal Example
 
-Define a database, register a service, attach a declarative CRUD resource with explicit field policies, and start the HTTP server in a single file:
+Define a Drizzle database table, configure a declarative CRUD contract with field policies, register an immutable service, and compose the scoped application in a single file:
 
 ```ts title="src/server.ts"
-import {
-  brick,
-  defineDatabase,
-  defineService,
-  sqliteTable,
-  text,
-} from "@brickkit/core";
-import { crud } from "@brickkit/crud";
+import { Brick } from "@brickkit/core";
+import { crudContract, sqliteStore } from "@brickkit/crud";
+import { sqliteDatabase } from "@brickkit/crud/sqlite";
+import { sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 // 1. Declare schema with Drizzle
 export const pages = sqliteTable("pages", {
@@ -28,32 +24,49 @@ export const pages = sqliteTable("pages", {
   content: text("content"),
 });
 
-// 2. Configure database and service
-const database = defineDatabase({ tables: { pages } });
-export const pagesService = defineService("pages", { database });
+// 2. Define the scoped database service and layer
+export interface DatabaseService {}
+export const { Service: PagesDb, layer: DatabaseLive } =
+  sqliteDatabase<DatabaseService>()("PagesDb", { filename: ":memory:" });
 
-// 3. Attach CRUD with explicit access policy and field permissions
-pagesService.resource({ name: "page", table: pages, id: pages.id }).use(
-  crud({
-    access: "public",
-    fields: {
-      id: { read: true, filter: ["eq"] },
-      title: {
-        read: true,
-        create: true,
-        update: true,
-        filter: ["eq", "contains"],
-        sort: true,
-      },
-      content: { read: true, create: true, update: true },
+// 3. Define the CRUD contract with explicit access and field policies
+export const pageContract = crudContract({
+  name: "page",
+  path: "/api/page",
+  table: pages,
+  id: "id",
+  errors: [],
+  fields: {
+    id: { read: true, filter: ["eq"] },
+    title: {
+      read: true,
+      create: true,
+      update: true,
+      filter: ["eq", "contains"],
+      sort: true,
     },
-  }),
-);
+    content: { read: true, create: true, update: true },
+  },
+});
 
-// 4. Mount the service mesh onto an Elysia HTTP server
-const app = brick({ services: [pagesService] });
-app.listen(4000);
-console.log("Server listening on http://localhost:4000");
+const pageActions = pageContract.implement({
+  store: sqliteStore(pages, PagesDb),
+  access: "public",
+});
+
+// 4. Register the immutable service
+export const pagesService = Brick.service("pages", {
+  actions: pageActions,
+});
+
+// 5. Compose the closed, scoped application
+export const app = Brick.app({
+  services: [pagesService],
+  layer: DatabaseLive,
+  docs: { path: "/reference" },
+});
+
+export default app;
 ```
 
 ### Schema
@@ -89,28 +102,29 @@ Brick-TS unifies monolithic developer ergonomics with distributed system boundar
 
 ```mermaid
 flowchart TD
-    Client["HTTP Client / Browser SDK"] --> Gateway["brick() HTTP Server (Elysia)"]
-    Gateway --> Docs["/_health, /openapi.json, /docs, /swagger"]
-    Gateway --> Dispatch["AOT Router & Compiler"]
-    Dispatch --> ServiceA["Service: Pages"]
-    Dispatch --> ServiceB["Service: Users"]
-    ServiceA --> Actions["Custom Actions (TypeBox)"]
-    ServiceA --> CRUD["CRUD Engine (@brickkit/crud)"]
-    CRUD --> DB[(Database: SQLite / PostgreSQL)]
-    ServiceA -. "createServiceProxy()" .- ServiceB
+    Client["Browser App / API Consumer / AI Agent"] --> Gateway["Brick.app() Gateway (Bun.serve)"]
+    Gateway --> Docs["Interactive Docs (/reference, Scalar)"]
+    Gateway --> Router["Effect HttpRouter & Transports"]
+    Router --> ServiceA["Service: Pages"]
+    Router --> ServiceB["Service: Users"]
+    ServiceA --> Actions["Custom Actions (Brick.action)"]
+    ServiceA --> CRUD["CRUD Actions (crudContract)"]
+    CRUD --> Store["Store Engine (sqliteStore / postgresStore)"]
+    Store --> DB[(Database: Drizzle + Effect)]
+    ServiceA -. "In-Process Call (Effect.gen)" .- ServiceB
 ```
 
 ### 1. Logical Monolith, Physical Microservices
 
-Build your application in a single repository with shared TypeScript types and instant jump-to-definition. Services can execute actions in-process without network overhead or data serialization. If an application grows into separate microservices, actions retain identical input/output schemas and authorization rules.
+Build your application in a single codebase with shared TypeScript types, instant jump-to-definition, and zero network latency. Services execute actions in-process without network overhead or data serialization. If an application grows into separate microservices, actions retain identical input/output schemas and authorization rules.
 
-### 2. Monomorphic In-Process Dispatch
+### 2. Monomorphic In-Process & HTTP Dispatch
 
-In Brick-TS, an action is a callable TypeScript function and an HTTP endpoint simultaneously. Calling `pagesService.getAction("page.get")({ input: { id: "1" } })` executes in-process through the exact same validation, authorization, and error handling pipeline that HTTP requests navigate, without HTTP loopback latency.
+In Brick-TS, an action is a callable TypeScript function returning an `Effect` and an HTTP endpoint simultaneously. Calling an action directly executes in-process through the exact same schema validation, authorization, and error handling pipeline that HTTP requests navigate, with zero network loopback latency.
 
-### 3. Pure TypeScript Type Inference
+### 3. Effect Schema & Type Inference
 
-Brick-TS eliminates code generation build steps. Type definitions flow directly from runtime TypeBox schemas (`Static<typeof Schema>`) and Drizzle database models (`$inferSelect`, `$inferInsert`). Frontend clients infer the backend contract through type imports.
+Brick-TS eliminates fragile code generation steps. Type definitions flow directly from runtime Effect Schemas (`Schema.Top["Type"]`) and Drizzle database models (`InferSelectModel<T>`, `InferInsertModel<T>`). Frontend clients infer the backend contract through lightweight, browser-safe schema modules without importing backend drivers.
 
 ### 4. Deny-by-Default Security
 
@@ -118,14 +132,35 @@ Security policies are mandatory and explicit:
 
 - **CRUD Operations**: Reject all access unless explicitly configured with `access: "public"` or an `access: { authorize, scope }` policy.
 - **Field Exposure**: Columns remain hidden from reads, filters, sorting, and writes until explicitly enabled in the field policy.
-- **Context Isolation**: In-process service proxies execute inside the recipient service's isolated context and database connection, preventing callers from overriding security resolvers.
+- **Dependency Isolation**: In-process calls run through Effect's typed requirement channel (`R`), ensuring all required database handles and authentication dependencies are supplied via Layers at application compile time.
 
 ## Framework Packages
 
-The framework is published as three modular packages at `v0.3.0`:
+The framework is published as four modular packages:
 
-| Package          | Purpose                                                                                 | Imports                                                                         |
-| :--------------- | :-------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------ |
-| `@brickkit/core` | Core runtime, services, actions, database handles, HTTP server, and client SDK          | `defineService`, `defineAction`, `defineDatabase`, `brick`, `createBrickClient` |
-| `@brickkit/crud` | Deny-by-default declarative CRUD engine with field policies, filtering, and hooks       | `crud`                                                                          |
-| `@brickkit/cli`  | Development server with live reload, production build compiler, and artifact generators | `brick` CLI binary (`dev`, `start`, `build`, `gen`, `info`)                     |
+| Package                    | Purpose                                                                                 | Key Imports                                                                |
+| :------------------------- | :-------------------------------------------------------------------------------------- | :------------------------------------------------------------------------- |
+| `@brickkit/core`           | Core runtime, services, actions, endpoints, routes, scoped app, and typed errors        | `Brick`, `secret`, `isNativeBrickApp`                                      |
+| `@brickkit/core/contracts` | Browser-safe contracts, schema-only actions, and standard TaggedError classes           | `action`, `endpoint`, `BadRequest`, `Unauthorized`, `NotFound`, `Conflict` |
+| `@brickkit/crud`           | Deny-by-default declarative CRUD engine with field policies, stores, and hooks          | `crudContract`, `crud`, `sqliteStore`, `postgresStore`, `database`         |
+| `@brickkit/client`         | Browser and Node HTTP client generating typed Promise and Effect clients from schemas   | `createClient`, `createEffectClient`                                       |
+| `@brickkit/cli`            | Development server with live reload, production bundling, and client contract generator | `brick` CLI binary (`dev`, `start`, `build`, `gen`, `info`)                |
+
+## Documentation Guides
+
+<Cards>
+  <Card title="Quickstart" href="/docs/quickstart">
+    Build and run an action in under 5 minutes.
+  </Card>
+  <Card title="Tutorial" href="/docs/tutorial">
+    Build an end-to-end REST API with database models, relations, and
+    authorization.
+  </Card>
+  <Card title="Services and Actions" href="/docs/services-and-actions">
+    Explore typed actions, in-process execution, and route mapping.
+  </Card>
+  <Card title="For AI Agents" href="/docs/for-ai-agents">
+    Equip AI coding agents with documentation, project instructions, and MCP
+    tools.
+  </Card>
+</Cards>

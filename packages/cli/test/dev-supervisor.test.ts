@@ -14,7 +14,7 @@ async function waitFor(check: () => boolean | Promise<boolean>) {
 
 async function fixture() {
   const directory = await mkdtemp(
-    join(resolve(import.meta.dir, "../../.."), ".dev-supervisor-"),
+    join(resolve(import.meta.dir, ".."), ".dev-supervisor-"),
   );
   const listener = Bun.serve({ port: 0, fetch: () => new Response() });
   const port = listener.port;
@@ -36,37 +36,6 @@ test("empty PORT falls back to the default", () => {
   expect(parsePort(undefined, "")).toBe(4000);
   expect(parsePort("5000", "")).toBe(5000);
 });
-
-test("exported app prefix takes precedence with a warning", async () => {
-  const { directory, port } = await fixture();
-  const entry = join(directory, "main.ts");
-  await writeFile(
-    entry,
-    'import { brick } from "@brickkit/core"; export default brick({ prefix: "/custom" });',
-  );
-  const child = Bun.spawn(
-    [
-      process.execPath,
-      resolve(import.meta.dir, "../src/dev-worker.ts"),
-      entry,
-      String(port),
-      "/override",
-    ],
-    { cwd: directory, stdout: "pipe", stderr: "pipe" },
-  );
-  const logs = capture(child);
-  try {
-    await waitFor(() =>
-      logs.read().includes("exported BrickApp prefix /custom takes precedence"),
-    );
-    expect(logs.read()).toContain("Ignoring prefix /override");
-  } finally {
-    child.kill();
-    await child.exited;
-    await logs.finished;
-    await rm(directory, { recursive: true, force: true });
-  }
-}, 10000);
 
 test("worker exits are reported and edits recover without intentional-exit warnings", async () => {
   const { directory, port } = await fixture();
@@ -91,11 +60,11 @@ test("worker exits are reported and edits recover without intentional-exit warni
     expect(child.exitCode).toBeNull();
     await writeFile(
       entry,
-      'import { brick } from "@brickkit/core"; export default brick();',
+      'import { Brick } from "@brickkit/core"; import { Effect, Layer } from "effect"; import { HttpServerResponse } from "effect/http"; export default Brick.app({services:[],layer:Layer.empty,routes:Brick.route("GET","/ready",Effect.succeed(HttpServerResponse.text("ready")))});',
     );
     await waitFor(async () => {
       try {
-        return (await fetch(`http://localhost:${port}/_health`)).status === 200;
+        return (await fetch(`http://localhost:${port}/ready`)).status === 200;
       } catch {
         return false;
       }

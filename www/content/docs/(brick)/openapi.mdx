@@ -1,110 +1,87 @@
 ---
 title: OpenAPI 3.1 & Interactive Documentation
-description: Generate OpenAPI 3.1 specifications and serve interactive Scalar and Swagger docs automatically.
+description: Generate OpenAPI 3.1 specifications and serve interactive Scalar API docs automatically.
 ---
 
-Brick-TS automatically generates compliant OpenAPI 3.1 JSON specifications from TypeBox schemas and serves interactive documentation via Scalar and Swagger UI.
+Brick-TS automatically generates compliant OpenAPI 3.1 JSON specifications from Effect Schema contracts and serves interactive documentation via Scalar.
 
 ## Minimal Example
 
-Enable automatic documentation generation by passing services into `brick()`. Export the app as the **default export** so the CLI generators can import the definition without starting a server:
+Enable automatic interactive documentation by passing `docs: { path: "/reference" }` into `Brick.app`:
 
 ```ts title="src/server.ts"
-import { brick, defineService, t } from "@brickkit/core";
+import { Brick } from "@brickkit/core";
+import { NotFound } from "@brickkit/core/contracts";
+import { Effect, Layer, Schema } from "effect";
 
-const usersService = defineService("users");
-
-usersService.action({
-  name: "getUser",
-  description: "Fetch user profile by ID",
-  method: "GET",
-  path: "/api/users/:id",
-  input: t.Object({ id: t.String() }),
-  output: t.Object({ id: t.String(), name: t.String() }),
-  execute: ({ input }) => ({ id: input.id, name: "Ada Lovelace" }),
+const GetUser = Brick.action("getUser", "/api/users/getUser", {
+  input: Schema.Struct({ id: Schema.String }),
+  output: Schema.Struct({ id: Schema.String, name: Schema.String }),
+  errors: [NotFound],
+  title: "Get User Profile",
+  description: "Retrieve a user by unique identifier",
 });
 
-export default brick({
+const getUser = GetUser(({ id }) =>
+  Effect.succeed({ id, name: "Ada Lovelace" }),
+);
+
+const usersService = Brick.service("users", {
+  actions: { getUser },
+});
+
+export const app = Brick.app({
   services: [usersService],
-  title: "Users API",
-  version: "1.0.0",
-  description: "User management and profile service mesh",
-  prefix: "/api",
+  layer: Layer.empty,
+  docs: { path: "/reference" },
 });
+
+export default app;
 ```
 
-Start the server from a separate entry file, so importing the app has no side effects:
+When started with `bunx brick dev src/server.ts`, visit:
 
-```ts title="src/index.ts"
+- **Scalar Interactive UI**: `http://localhost:4000/reference`
+
+## Schema and Operation Annotations
+
+You can enrich the generated OpenAPI documentation with titles, descriptions, and tags using Schema annotations:
+
+```ts title="src/schemas/user.ts"
+import { Schema } from "effect";
+import { OpenApi } from "effect/http-api";
+
+export const UserSchema = Schema.Struct({
+  id: Schema.String.annotate(OpenApi.Description, "Unique user identifier"),
+  name: Schema.String.annotate(OpenApi.Description, "Display name"),
+  email: Schema.String.annotate(OpenApi.Description, "Verified email address"),
+}).annotate(OpenApi.Title, "User Profile");
+```
+
+## Status Codes from Tagged Errors
+
+Brick maps declared `Schema.TaggedError` classes to their respective HTTP status codes in the generated OpenAPI schema. Because each error specifies its status via `{ httpApiStatus: ... }`, OpenAPI clients know exactly what error envelope to expect for each HTTP response code:
+
+- `NotFound` (`{ httpApiStatus: 404 }`) -> Documented under HTTP 404
+- `Unauthorized` (`{ httpApiStatus: 401 }`) -> Documented under HTTP 401
+- `Forbidden` (`{ httpApiStatus: 403 }`) -> Documented under HTTP 403
+- `BadRequest` (`{ httpApiStatus: 400 }`) -> Documented under HTTP 400
+
+## Programmatic OpenAPI Generation
+
+In code or build scripts, you can generate the raw OpenAPI 3.1 JSON document directly from your application:
+
+```ts title="src/generate-spec.ts"
 import app from "./server";
 
-app.listen(4000);
+const openApiDocument = app.openApi();
+console.log(JSON.stringify(openApiDocument, null, 2));
 ```
 
-Once started, the following endpoints are available (mounted at the app root, not under `prefix`):
+## Generating Specs via the CLI
 
-- **OpenAPI 3.1 Spec**: `http://localhost:4000/openapi.json`
-- **Scalar Modern UI**: `http://localhost:4000/docs`
-- **Swagger UI**: `http://localhost:4000/swagger`
-
-## Server Documentation Options
-
-Configure OpenAPI and documentation routes in `CreateServerOptions`:
-
-| Option        | Type                          | Default               | Description                                                                    |
-| :------------ | :---------------------------- | :-------------------- | :----------------------------------------------------------------------------- |
-| `docs`        | `boolean`                     | `true`                | Enables or disables OpenAPI spec and HTML documentation endpoints.             |
-| `title`       | `string`                      | `"Brick-TS API Mesh"` | API title in OpenAPI `info.title`.                                             |
-| `version`     | `string`                      | `"1.0.0"`             | API version in OpenAPI `info.version`.                                         |
-| `description` | `string`                      | `undefined`           | Overview description rendered in OpenAPI `info.description`.                   |
-| `openApiPath` | `string`                      | `"/openapi.json"`     | Path where raw OpenAPI 3.1 JSON is served.                                     |
-| `docsPath`    | `string`                      | `"/docs"`             | Path where Scalar interactive documentation is mounted.                        |
-| `swaggerPath` | `string`                      | `"/swagger"`          | Path where Swagger UI is mounted.                                              |
-| `reference`   | `boolean \| ReferenceOptions` | `false`               | Mounts an optional dedicated Scalar reference page (defaults to `/reference`). |
-
-### Mounting a Dedicated `/reference` Route
-
-For web apps that use `/docs` for product documentation (such as a documentation website), mount the API reference on `/reference`:
-
-```ts title="src/server.ts"
-export default brick({
-  services: [usersService],
-  docs: true,
-  reference: {
-    path: "/reference",
-    title: "Platform API Reference",
-  },
-});
-```
-
-## Programmatic Spec Generation (`generateOpenApiSpec`)
-
-Generate specifications programmatically (e.g. for CI pipelines or static documentation sites) without starting an HTTP server:
-
-```ts title="scripts/generate-spec.ts"
-import { generateOpenApiSpec } from "@brickkit/core";
-import { usersService } from "../src/services/users";
-
-const spec = generateOpenApiSpec({
-  title: "Production Platform API",
-  version: "2.0.0",
-  prefix: "/api",
-  services: [usersService],
-});
-
-await Bun.write("dist/openapi.json", JSON.stringify(spec, null, 2));
-console.log("OpenAPI 3.1 spec written to dist/openapi.json");
-```
-
-You can also use the CLI generator, which imports the entry's **default export** (so it reads the app definition without calling `listen()`):
+Extract the OpenAPI 3.1 specification to a file using the `brick` CLI:
 
 ```bash
 bunx brick gen openapi src/server.ts --output openapi.json
 ```
-
-## Security Requirements in OpenAPI
-
-Brick automatically flags protected operations in the OpenAPI specification:
-
-- Actions with `authorize` guards advertise authentication requirements in their operation definition.
-- CRUD resources with `access !== "public"` automatically advertise security requirements while public CRUD resources omit them.

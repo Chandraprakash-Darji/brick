@@ -1,154 +1,177 @@
 ---
 title: Execution Context & Services
-description: Resolve request context, inject databases and users, and isolate in-process service calls.
+description: Resolve request context, inject databases and user authentication, and manage dependencies with Effect Layers.
 ---
 
-Execution context provides request metadata, database handles, logging, and user authentication state to actions and lifecycle hooks.
+In Brick-TS, execution context and dependencies are managed through Effect's native **`Context.Service`** and **`Layer`** system. Instead of untyped ambient state, every dependency an action requires is tracked at compile time in the Effect's requirement channel (`R`).
 
 ## Minimal Example
 
-Configure a service context resolver to parse authentication headers and inject user identity into actions:
+Define a typed `CurrentUser` service, require it inside an action handler, and supply the dependency with a `Layer`:
 
 ```ts title="src/services/billing.ts"
-import { defineService, t } from "@brickkit/core";
+import { Brick } from "@brickkit/core";
+import { Unauthorized } from "@brickkit/core/contracts";
+import { Context, Effect, Layer, Schema } from "effect";
 
-// Define custom session shape
-interface BillingUser {
+// 1. Declare the service tag and type
+export interface User {
   id: string;
   plan: "free" | "pro";
 }
 
-export const billingService = defineService("billing", {
-  context: async (baseCtx): Promise<{ user: BillingUser | null }> => {
-    const auth = baseCtx.request.headers.get("authorization");
-    if (!auth) return { user: null };
+export class CurrentUser extends Context.Service<CurrentUser, User>()(
+  "CurrentUser",
+) {}
 
-    // Example token validation
-    const user =
-      auth === "Bearer pro-token"
-        ? { id: "usr_42", plan: "pro" as const }
-        : { id: "usr_10", plan: "free" as const };
-
-    return { user };
+// 2. Action requiring CurrentUser in its Effect environment
+export const GetSubscription = Brick.action(
+  "getSubscription",
+  "/api/billing/subscription",
+  {
+    input: Schema.Struct({}),
+    output: Schema.Struct({ plan: Schema.String }),
+    errors: [Unauthorized],
   },
-});
+);
 
-export const getSubscription = billingService.action({
-  name: "getSubscription",
-  output: t.Object({ plan: t.String() }),
-  execute: ({ ctx, error }) => {
-    // Error helpers throw; `return` lets TypeScript narrow `ctx.user`
-    if (!ctx.user) return error.UNAUTHORIZED("Sign in required");
-    return { plan: ctx.user.plan };
-  },
-});
-```
+export const getSubscription = GetSubscription(() =>
+  Effect.gen(function* () {
+    const user = yield* CurrentUser;
+    return { plan: user.plan };
+  }),
+);
 
-## `BaseContext` Properties
-
-Every action invocation and service resolver receives a `BaseContext` containing HTTP and runtime telemetry primitives:
-
-| Field       | Type                      | Description                                                                                              |
-| :---------- | :------------------------ | :------------------------------------------------------------------------------------------------------- |
-| `request`   | `Request`                 | Web-standard `Request` for the active HTTP call, or a placeholder `http://localhost` request in-process. |
-| `db`        | `TDb`                     | Database instance from the owning service's handle.                                                      |
-| `logger`    | `Logger`                  | Logger with `.info()`, `.warn()`, `.error()`, and `.debug()`.                                            |
-| `traceId`   | `string`                  | Trace ID. Over HTTP, taken from the `x-trace-id` header when present (e.g., `tr_k2l9p0`).                |
-| `requestId` | `string`                  | Request ID. Over HTTP, taken from the `x-request-id` header when present (e.g., `req_k2l9p0`).           |
-| `services`  | `Record<string, any>`     | Reserved. Brick passes an empty object; use `createServiceProxy` to call other services.                 |
-| `metadata`  | `Record<string, unknown>` | Over HTTP, `{ headers }` with the request headers; an empty object in-process.                           |
-
-Over HTTP, Brick echoes `traceId` and `requestId` back as `x-trace-id` and `x-request-id` response headers.
-
-## Service Context Resolvers
-
-Brick passes `BaseContext` to the service's `context` resolver on every HTTP request and every in-process call:
-
-```ts title="src/services/projects.ts"
-export const projectsService = defineService("projects", {
-  context: async (baseCtx) => {
-    const tenantId = baseCtx.request.headers.get("x-tenant-id") ?? "default";
-    baseCtx.logger.info(`Resolving context for tenant: ${tenantId}`);
-
-    return {
-      tenantId,
-      resolvedAt: Date.now(),
-    };
-  },
+export const billingService = Brick.service("billing", {
+  actions: { getSubscription },
 });
 ```
 
-The returned object is merged with `BaseContext` to form `ActionContext`. Inside `execute({ ctx })`, TypeScript infers both `BaseContext` properties (like `ctx.db` and `ctx.logger`) and the resolved properties (like `ctx.tenantId`).
+When composing the application, supply the requirement using a `Layer`:
 
-## Context Isolation Across In-Process Service Calls
+```ts title="src/app.ts"
+import { Brick } from "@brickkit/core";
+import { Layer } from "effect";
+import { billingService, CurrentUser } from "./services/billing";
 
-When calling another service in-process using `createServiceProxy`, Brick enforces strict context isolation:
+// Provide a mock user layer for tests or local execution
+const UserLive = Layer.succeed(CurrentUser, { id: "usr_42", plan: "pro" });
 
-```ts title="src/services/notifications.ts"
-import { createServiceProxy, defineService } from "@brickkit/core";
+export default Brick.app({
+  services: [billingService],
+  layer: UserLive,
+  docs: { path: "/reference" },
+});
+```
 
-export const notificationsService = defineService("notifications");
+If an action requires `CurrentUser` but `layer` in `Brick.app` does not supply it, **TypeScript will fail to compile**. Missing dependencies are caught before your server ever starts.
 
-// The type parameter is the shape you call; Brick doesn't infer it
-type UsersApi = {
-  getUser: (input: {
-    id: string;
-  }) => Promise<{ id: string; name: string; email: string }>;
+## Startup Dependencies vs Request Dependencies
+
+A robust backend distinguishes between two kinds of dependencies:
+
+1. **Startup Dependencies**: Services acquired once at server launch and shared across requests, such as database connection pools, Redis clients, configuration, and secrets.
+2. **Request Dependencies**: Context resolved per incoming HTTP request, such as authentication tokens, request tracing headers, and the authenticated user identity.
+
+### 1. Startup Dependencies (Database Pools)
+
+Use `postgresDatabase` from `@brickkit/crud/postgres` to create a scoped database service backed by the Effect SQL driver:
+
+```ts title="src/db.ts"
+import { postgresDatabase } from "@brickkit/crud/postgres";
+import { Redacted } from "effect";
+
+export interface DatabaseService {}
+export const { Service: Database, layer: DatabaseLive } =
+  postgresDatabase<DatabaseService>()("Database", {
+    url: Redacted.make(
+      process.env.DATABASE_URL ?? "postgres://localhost/brick",
+    ),
+  });
+```
+
+### 2. Request Dependencies (Authentication & Headers)
+
+To extract authentication state from an incoming HTTP request, use `HttpServerRequest.HttpServerRequest` from `effect/http`:
+
+```ts title="src/auth.ts"
+import { HttpServerRequest } from "effect/http";
+import { Context, Effect, Layer } from "effect";
+import { Unauthorized } from "@brickkit/core/contracts";
+
+export interface Session {
+  userId: string;
+}
+
+export class SessionService extends Context.Service<SessionService, Session>()(
+  "SessionService",
+) {}
+
+export const SessionLive = Layer.effect(
+  SessionService,
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const authHeader = request.headers["authorization"];
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return yield* Effect.fail(
+        new Unauthorized({ message: "Missing or invalid bearer token" }),
+      );
+    }
+    const token = authHeader.slice(7);
+    // Replace with real verification (JWT, session lookup, etc.)
+    if (token !== "secret") {
+      return yield* Effect.fail(
+        new Unauthorized({ message: "Invalid bearer token" }),
+      );
+    }
+    return { userId: "usr_admin" };
+  }),
+);
+```
+
+## Composing Application Layers
+
+Use `Layer.merge` and `Layer.mergeAll` to combine multiple services into a single unified application layer:
+
+```ts title="src/app.ts"
+import { Brick } from "@brickkit/core";
+import { Layer } from "effect";
+import { DatabaseLive } from "./db";
+import { usersService } from "./services/users";
+import { billingService } from "./services/billing";
+
+// Combine all application dependencies
+const AppDependencies = Layer.mergeAll(
+  DatabaseLive,
+  // Other service layers...
+);
+
+export default Brick.app({
+  services: [usersService, billingService],
+  layer: AppDependencies,
+  docs: { path: "/reference" },
+});
+```
+
+## Scoped Resource Lifetime & Graceful Shutdown
+
+When an application is mounted with `Brick.app()`, it manages a private `Scope`:
+
+- `await app.ready()`: Initializes the dependency graph, opens database pools, and starts HTTP listeners.
+- `await app.dispose()`: Closes the application scope. In-flight requests are cleanly aborted, and resource finalizers (such as closing database connection pools) run in reverse acquisition order.
+
+```ts title="src/server.ts"
+import app from "./app";
+
+await app.ready();
+console.log("Application ready.");
+
+const shutdown = async () => {
+  console.log("Shutting down gracefully...");
+  await app.dispose();
+  process.exit(0);
 };
 
-// Proxy to the "users" service, looked up by name in the global registry.
-// `from` identifies the calling service, so `users` actions see `ctx.caller === "notifications"`.
-const users = createServiceProxy<UsersApi>("users", { from: "notifications" });
-
-export const sendWelcome = notificationsService.action({
-  name: "sendWelcome",
-  execute: async ({ ctx }) => {
-    // Proxy methods take (input, callCtx?) and run the action in-process
-    const user = await users.getUser({ id: "usr_1" });
-    ctx.logger.info(`Sending welcome email to ${user.email}`);
-    return { sent: true };
-  },
-});
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
 ```
-
-Each proxy method takes the action's input as its first argument and an optional call context as its second. Only in-process (monolith) dispatch is implemented; `createServiceProxy(name, { isMonolith: false })` throws when called.
-
-### Security Boundaries
-
-What the receiving service sees:
-
-1. **Own context and database**: The receiving service runs its own `context` resolver and uses its own database.
-2. **Framework fields are dropped**: `db`, `request`, `logger`, `services`, and `metadata` in the call context are discarded before reaching the receiving service.
-3. **Envelope fields pass through**: Only `caller`, `user`, `traceId`, `requestId`, and `tenantId` are forwarded. The resolver receives these fields and its returned values always take precedence. Caller custom fields such as `session` and `isOwner` are discarded for direct action calls and proxy calls. Treat `tenantId` as a claim to validate, not proof of access.
-4. **`ctx.caller`**: The proxy sets `ctx.caller` to `from` — the name you passed when creating the proxy, `createServiceProxy<UsersApi>("users", { from: "notifications" })` — never the target service's name. When `from` is provided, any `caller` in the proxy's `options.context` or the per-call context is ignored, so it cannot be spoofed. Without `from`, an explicitly supplied `caller` still passes through; otherwise `caller` is left unset.
-
-### Internal calls without cookies
-
-A proxy call receives a placeholder request without browser cookies. A resolver that supports internal callers should validate `envelope.user` and derive its own session and helpers. For example, accept a user ID only after checking it with your identity store and caller trust policy:
-
-```ts
-const accounts = defineService("accounts", {
-  context: async (envelope) => {
-    const claim = envelope.user;
-    const userId =
-      typeof claim === "object" &&
-      claim !== null &&
-      "id" in claim &&
-      typeof claim.id === "string"
-        ? claim.id
-        : undefined;
-    // Application functions validate the caller and load an allowed identity.
-    const user =
-      userId && isTrustedCaller(envelope.caller)
-        ? await loadAllowedUser(userId, envelope.tenantId)
-        : null;
-    return {
-      user,
-      session: null,
-      isOwner: (ownerId: string) => user?.id === ownerId,
-    };
-  },
-});
-```
-
-For HTTP calls, continue resolving identity from the actual request's authentication headers or cookies. Passing `{ user }` directly cannot replace a resolver's returned `user`, even when the resolver returns `null`. Tests should provide a request or configure a resolver that explicitly validates the internal envelope.

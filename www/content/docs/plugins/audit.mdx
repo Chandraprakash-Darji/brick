@@ -1,146 +1,66 @@
 ---
-title: Audit Trail Plugin Recipe
-description: Record immutable audit trails for resource mutations using CRUD lifecycle hooks.
+title: Audit Hooks
+description: Write audit logs and history rows within database transactions.
 ---
 
-This recipe demonstrates how to create a reusable audit trail plugin that logs resource mutations to an application-owned database table using CRUD `after*` hooks.
+An audit extension intercepts CRUD write operations using `afterCreate`, `afterUpdate`, and `afterDelete` hooks, saving audit records in the same database transaction.
 
 ## Minimal Example
 
-Create an audit logging resource plugin and attach it to sensitive entity resources:
+Create an audit logging hook that records actor ID, action name, and modified rows:
 
-```ts title="src/plugins/audit.ts"
-import {
-  defineResourcePlugin,
-  integer,
-  sqliteTable,
-  text,
-} from "@brickkit/core";
+```ts title="src/extensions/audit.ts"
+import { sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { Effect } from "effect";
+import { BlogDb } from "../db";
 
-// 1. Declare the audit log storage table
 export const auditLogs = sqliteTable("audit_logs", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  resourceName: text("resource_name").notNull(),
-  recordId: text("record_id").notNull(),
-  operation: text("operation").notNull(), // "create" | "update" | "delete"
-  userId: text("user_id"),
-  timestamp: integer("timestamp").notNull(),
+  id: text("id").primaryKey(),
+  entity: text("entity").notNull(),
+  entityId: text("entity_id").notNull(),
+  action: text("action").notNull(),
+  timestamp: text("timestamp").notNull(),
 });
 
-// 2. Define the resource plugin
-export function auditTrail() {
-  return defineResourcePlugin({
-    name: "auditTrail",
-    setup({ resource, service }) {
-      const recordMutation = async (
-        operation: string,
-        recordId: string,
-        ctx: any,
-      ) => {
-        if (!ctx.db) return;
-        await ctx.db.insert(auditLogs).values({
-          resourceName: resource.name,
-          recordId: String(recordId),
-          operation,
-          userId: ctx.user?.id ?? null,
-          timestamp: Date.now(),
-        });
-      };
+export const auditHooks = {
+  afterCreate: ({ row }: { row: { id: string } }) =>
+    Effect.gen(function* () {
+      const db = yield* BlogDb;
+      yield* db.insert(auditLogs).values({
+        id: crypto.randomUUID(),
+        entity: "article",
+        entityId: row.id,
+        action: "create",
+        timestamp: new Date().toISOString(),
+      });
+    }),
 
-      return {
-        recordMutation,
-      };
-    },
-  });
-}
+  afterDelete: ({ id }: { id: string }) =>
+    Effect.gen(function* () {
+      const db = yield* BlogDb;
+      yield* db.insert(auditLogs).values({
+        id: crypto.randomUUID(),
+        entity: "article",
+        entityId: id,
+        action: "delete",
+        timestamp: new Date().toISOString(),
+      });
+    }),
+};
 ```
 
-### Schema
+## Attaching to a CRUD Contract
 
-These columns match the Drizzle tables in the example. Defaults marked as application defaults run in Drizzle, rather than in SQL.
+Attach the audit hooks when implementing your contract:
 
-export const audit_logsSchemaFields = [
-  {
-    name: "id",
-    type: "text",
-    description: "Row identifier.",
-    isPrimaryKey: true,
-    defaultValue: "crypto.randomUUID() (application)",
-  },
-  {
-    name: "resource_name",
-    type: "text",
-    description: "Name of the mutated resource.",
-  },
-  {
-    name: "record_id",
-    type: "text",
-    description: "Identifier of the mutated row.",
-  },
-  {
-    name: "operation",
-    type: "text",
-    description: "Mutation action: create, update, or delete.",
-  },
-  {
-    name: "user_id",
-    type: "text",
-    description: "Authenticated user identifier, or null for anonymous writes.",
-    isOptional: true,
-  },
-  {
-    name: "timestamp",
-    type: "integer",
-    description:
-      "Unix epoch timestamp in milliseconds, set by the audit logger.",
-  },
-];
-
-<DatabaseTable name="audit_logs" fields={audit_logsSchemaFields} />
-
-## Wiring into CRUD Lifecycle Hooks
-
-Attach the audit logger to your resource's `crud()` lifecycle hooks:
-
-```ts title="src/services/accounts.ts"
-import { crud } from "@brickkit/crud";
-import { accountsTable, accountsService } from "./schema";
-import { auditTrail } from "../plugins/audit";
-
-// 1. Install audit plugin onto resource
-const accountResource = accountsService
-  .resource({ name: "account", table: accountsTable, id: accountsTable.id })
-  .use(auditTrail());
-
-// 2. Wire mutation records in crud() hooks
-accountResource.use(
-  crud({
-    access: {
-      authorize: ({ ctx }) => !!ctx.user,
-    },
-    fields: {
-      id: { read: true },
-      name: { read: true, create: true, update: true },
-    },
-    hooks: {
-      afterCreate: async ({ row, ctx }) => {
-        await accountResource.recordMutation("create", String(row.id), ctx);
-      },
-      afterUpdate: async ({ id, ctx }) => {
-        await accountResource.recordMutation("update", String(id), ctx);
-      },
-      afterDelete: async ({ id, ctx }) => {
-        await accountResource.recordMutation("delete", String(id), ctx);
-      },
-    },
-  }),
-);
+```ts title="src/services/articles.ts"
+export const articleActions = articleContract.implement({
+  store: sqliteStore(articlesTable, BlogDb),
+  access: "public",
+  hooks: auditHooks,
+});
 ```
 
-## Architectural Considerations
+## Transaction Guarantees
 
-- **Asynchronous Execution**: `after*` hooks run after the write commits to the primary table. If audit row insertions must commit atomically with the mutation, run both queries inside an application transaction via `ctx.db.transaction()`.
-- **Masking & Security**: Never log unredacted passwords, payment details, or personal data to audit tables.
-- **Dedicated Read Policy**: Expose audit logs through a separate administrative resource with restricted access controls.
+Because `@brickkit/crud` store operations execute within database transactions, if an audit hook fails, the mutation transaction rolls back, preventing unlogged writes from persisting.

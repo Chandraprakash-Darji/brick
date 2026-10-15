@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 const cli = resolve(import.meta.dir, "../src/bin.ts");
-const entry = join(import.meta.dir, "fixtures/client-app.ts");
+const entry = join(import.meta.dir, "fixtures/native-app.ts");
 const pkg = await Bun.file(resolve(import.meta.dir, "../package.json")).json();
 
 async function run(
@@ -71,7 +71,7 @@ describe("brick CLI (commander)", () => {
       }
       const buildHelp = await run(root, ["build", "--help"]);
       expect(buildHelp.stdout).toContain("--outdir");
-      expect(buildHelp.stdout).toContain("--no-aot");
+      expect(buildHelp.stdout).not.toContain("--no-aot");
       expect(buildHelp.stdout).toContain("--port");
       const devHelp = await run(root, ["dev", "--help"]);
       expect(devHelp.stdout).toContain("--port");
@@ -105,10 +105,10 @@ describe("brick CLI (commander)", () => {
     try {
       // Use info command? No, info doesn't use port. Use dev with invalid env;
       // dev fails fast before listening when PORT is invalid.
-      const zero = await run(root, ["dev"], { PORT: "0" });
+      const zero = await run(root, ["dev", entry], { PORT: "0" });
       expect(zero.code).toBe(1);
       expect(zero.stderr + zero.stdout).toMatch(/invalid|port/i);
-      const bad = await run(root, ["dev"], { PORT: "not-a-port" });
+      const bad = await run(root, ["dev", entry], { PORT: "not-a-port" });
       expect(bad.code).toBe(1);
       expect(bad.stderr + bad.stdout).toMatch(/invalid|port/i);
     } finally {
@@ -189,15 +189,15 @@ describe("brick CLI (commander)", () => {
     }
   });
 
-  it("rejects deprecated build flags with guidance", async () => {
+  it("rejects removed Elysia build flags", async () => {
     const root = await mkdtemp(resolve(import.meta.dir, "../.brick-cli-test-"));
     try {
       const prefix = await run(root, ["build", entry, "--prefix", "/api"]);
       expect(prefix.code).toBe(1);
-      expect(prefix.stderr).toContain("configure prefix");
+      expect(prefix.stderr).toContain("unknown option");
       const logging = await run(root, ["build", entry, "--no-request-logging"]);
       expect(logging.code).toBe(1);
-      expect(logging.stderr).toContain("configure prefix");
+      expect(logging.stderr).toContain("unknown option");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -209,7 +209,7 @@ describe("brick CLI (commander)", () => {
       const result = await run(root, ["services", entry]);
       expect(result.code).toBe(0);
       const arch = JSON.parse(result.stdout);
-      expect(arch.version).toBe("1.0.0");
+      expect(arch.version).toBe(2);
       expect(arch.services.length).toBeGreaterThan(0);
     } finally {
       await rm(root, { recursive: true, force: true });

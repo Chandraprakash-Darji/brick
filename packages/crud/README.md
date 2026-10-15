@@ -1,150 +1,84 @@
 # @brickkit/crud
 
-Opt-in auto-CRUD resource plugin for Brick-TS. Core resources declare identity
-and a table but register no actions; `crud()` adds typed list/get/create/
-update/delete/findOne/count/exists operations with HTTP routes.
+Typed CRUD contracts and handlers for Drizzle tables, built on Effect. One
+declaration produces `list`, `findOne`, `get`, `create`, `update`, `delete`,
+`count`, and `exists` actions with field-level policies.
 
-You need Bun 1.2 or later and `@brickkit/core` as a peer dependency.
+## Contract
 
-```sh
-bun add @brickkit/crud @brickkit/core
-```
+The contract is browser-safe: it contains schemas and metadata, no handlers.
 
 ```ts
-import { defineService } from "@brickkit/core";
-import { crud } from "@brickkit/crud";
+import { crudContract } from "@brickkit/crud";
+import { Unauthorized } from "@brickkit/core/contracts";
 
-const service = defineService("pages");
-const page = service.resource({ name: "page", table: pages, id: pages.id }).use(
-  crud({
-    access: "public",
-    fields: {
-      id: { read: true, filter: ["eq", "in"] },
-      title: {
-        read: true,
-        create: true,
-        update: true,
-        filter: ["eq", "contains"],
-        sort: true,
-      },
+export const pageContract = crudContract({
+  name: "page",
+  path: "/api/pages/page",
+  table: pagesTable,
+  id: "id",
+  errors: [Unauthorized],
+  limits: { default: 20, max: 100 },
+  fields: {
+    id: { read: true, filter: ["eq", "in"] },
+    slug: {
+      read: true,
+      create: true,
+      update: true,
+      filter: ["eq", "contains"],
+      sort: true,
     },
-  }),
-);
-
-await page.list.run({ where: { field: "title", op: "contains", value: "Hi" } });
-```
-
-`access` is required: use `"public"` or an `authorize`/`scope` policy.
-
-`authorize` receives validated input as an operation-discriminated union.
-Checking `operation` narrows `input` to that operation's shape:
-
-```ts
-crud({
-  fields: { teamId: { read: true, filter: ["eq"] } },
-  access: {
-    authorize: ({ operation, input, ctx }) => {
-      if (operation === "list" && input.where && "field" in input.where) {
-        const filter = input.where;
-        return filter.field === "teamId" && filter.value === ctx.teamId;
-      }
-      return false;
-    },
+    title: { read: true, create: true, update: true, sort: true },
+    userId: { read: true },
   },
 });
 ```
 
-`CrudAuthorizeArgs<F>` and `CrudInputs<F>` are exported for reusable policies
-and per-operation inputs, with `F` supplied as `typeof fields`. Field policies
-constrain selections, writes, sorting, and filter operators. Explicit field
-schemas provide value types. Column-derived values and IDs remain `unknown`
-because `crud()` receives the table only when the plugin attaches to a resource.
-Create properties remain optional because column defaults and nullability are
-also unavailable at configuration time. `scope` still receives only
-`{ operation, ctx }`.
-Unlisted fields and omitted permissions stay disabled.
+Only fields marked `read` appear in responses, `create`/`update` control the
+write schemas, and `filter`/`sort` control what may be queried. Read rows are
+exactly typed: every readable field is required and keeps its column type.
 
-## Field policies
-
-`read`, `create`, `update`, `filter`, and `sort` are independent. Unlisted
-fields and omitted permissions are disabled. `schema` overrides validation
-for a field; `scrub` transforms returned values (reads and write results)
-without changing stored values.
-
-Filter operators must be enabled per field and compatible with the column
-type: text operators (`contains`, `startsWith`, `endsWith`) require string
-columns; ordered operators (`gt`, `gte`, `lt`, `lte`, `between`) require
-string/number/date/bigint columns. Sorting is supported for
-string/number/boolean/date/bigint columns.
-
-## Operations and routes
-
-| Method | Path                 | Action  |
-| ------ | -------------------- | ------- |
-| POST   | `/api/page/query`    | list    |
-| GET    | `/api/page/:id`      | get     |
-| POST   | `/api/page`          | create  |
-| PATCH  | `/api/page/:id`      | update  |
-| DELETE | `/api/page/:id`      | delete  |
-| POST   | `/api/page/find-one` | findOne |
-| POST   | `/api/page/count`    | count   |
-| POST   | `/api/page/exists`   | exists  |
-
-`operations: { delete: false }` (or `operations: false`) removes local
-capabilities. `routes: { list: false }` (or `routes: false`) keeps local
-actions callable without HTTP, OpenAPI, or browser exposure. `defaultLimit`
-(default 20) and `maxLimit` (default 100) bound pagination.
-
-## Local vs HTTP row precision
-
-Local `list`/`get` actions are typed `Selected<T, F, S>` — the `select`
-projection narrows the return type. Over HTTP every readable key is optional
-in the row schema because `select` projections omit keys, so validate
-presence client-side when using `select`.
-
-## Security properties
-
-- Only allowlisted fields, operators, and sort columns reach SQL; unknown
-  projections, writes, filters, and ordering fail validation with a 400.
-- `where` supports nested `and`/`or` arrays up to 20 levels; deeper nesting
-  is rejected with a 400 before validation recurses.
-- `contains`/`startsWith`/`endsWith` escape `LIKE` wildcards (`%`, `_`, `\`).
-- `access.scope` constrains every read and mutation (including local action
-  calls); scoped creation is rejected without an explicit create policy.
-- Unique violations return 409 without leaking driver errors.
-- Read queries reuse bounded prepared statements (128-entry cache) where the
-  driver supports them.
-
-See `www/content/docs/(brick)/resources.mdx` for the full guide.
-
-## Effect callbacks
-
-Import `crud` from `@brickkit/crud/effect` to author authorization, SQL scopes,
-field scrubbers, and all create, update, and delete hooks as Effects. Register
-resources on a service from `@brickkit/core/effect` and supply dependencies in
-the Effect app's Layer.
+## Implementation
 
 ```ts
-import { Effect } from "effect";
-import { crud } from "@brickkit/crud/effect";
+import { postgresStore } from "@brickkit/crud";
 
-const records = service.resource({ name: "record", table }).use(
-  crud({
-    fields: {
-      id: { read: true },
-      name: {
-        read: true,
-        create: true,
-        scrub: ({ value }) => Effect.succeed(String(value).trim()),
-      },
-    },
-    access: { authorize: () => Effect.succeed(true) },
-    hooks: { afterCreate: () => Effect.void },
-  }),
-);
+export const actions = pageContract.implement({
+  store: postgresStore(pagesTable, Database.Service),
+  access: {
+    authorize: () =>
+      Effect.gen(function* () {
+        const user = yield* CurrentUser;
+        return user !== null;
+      }),
+    // Optional: restrict rows per operation with a Drizzle SQL condition.
+    scope: ({ operation }) =>
+      Effect.succeed(
+        operation === "create" ? undefined : eq(pagesTable.userId, "u1"),
+      ),
+  },
+  hooks: {
+    beforeCreate: ({ data }) => Effect.succeed({ ...data }),
+  },
+});
 ```
 
-Resource actions retain their Promise API and add `executeEffect` for native
-composition. The database query pipeline remains Promise-based; the runtime
-bridge preserves the surrounding Effect dependencies for its policy and hook
-callbacks. CRUD callback failures and requirements have broad types.
+Hooks, scrubbers, and policies are Effects: they may require services and may
+fail with the errors declared on the contract. Their requirements flow into
+the resulting actions, so `Brick.app({ layer })` must provide them.
+
+## Errors
+
+`InvalidInput`, `Forbidden`, `NotFound`, `Conflict`, and `DatabaseFailure` are
+built in and added to every action alongside your declared `errors`.
+
+## Entry points
+
+| Import                    | Contents                                                                            |
+| ------------------------- | ----------------------------------------------------------------------------------- |
+| `@brickkit/crud`          | `crudContract`, `crud`, built-in errors, `sqliteStore`, `postgresStore`, `database` |
+| `@brickkit/crud/sqlite`   | `sqliteDatabase` (Drizzle + `@effect/sql-sqlite-bun`)                               |
+| `@brickkit/crud/postgres` | `postgresDatabase` (Drizzle + `@effect/sql-pg`)                                     |
+
+`select` projection is not part of the contract: rows are always returned in
+full so response types are exact.

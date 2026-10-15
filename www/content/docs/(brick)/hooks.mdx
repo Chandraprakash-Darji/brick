@@ -7,137 +7,136 @@ Lifecycle hooks allow you to intercept CRUD operations before and after database
 
 ## Minimal Example
 
-Configure hooks on a CRUD resource to normalize input before saving and log after saving. `slug` has no `create` permission, so clients can't send it; the hook always derives it:
+Configure hooks on a CRUD resource to normalize inputs before saving and perform side effects after saving:
 
 ```ts title="src/services/articles.ts"
-import {
-  defineDatabase,
-  defineService,
-  sqliteTable,
-  text,
-} from "@brickkit/core";
-import { crud } from "@brickkit/crud";
+import { crudContract, sqliteStore, InvalidInput } from "@brickkit/crud";
+import { sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { Effect } from "effect";
+import { BlogDb } from "./db";
 
 export const articles = sqliteTable("articles", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
+  id: text("id").primaryKey(),
   title: text("title").notNull(),
   slug: text("slug").notNull(),
+  updatedAt: text("updated_at").notNull(),
 });
 
-const database = defineDatabase({ tables: { articles } });
-export const articlesService = defineService("articles", { database });
+export const articleContract = crudContract({
+  name: "article",
+  path: "/api/article",
+  table: articles,
+  id: "id",
+  errors: [],
+  fields: {
+    id: { read: true },
+    title: { read: true, create: true, update: true },
+    slug: { read: true },
+    updatedAt: { read: true },
+  },
+});
 
-export const article = articlesService
-  .resource({ name: "article", table: articles, id: articles.id })
-  .use(
-    crud({
-      access: "public",
-      fields: {
-        id: { read: true },
-        title: { read: true, create: true, update: true },
-        slug: { read: true },
-      },
-      hooks: {
-        beforeCreate: async ({ data, error }) => {
-          // Normalize input data in place
-          const title = String(data.title ?? "").trim();
-          if (!title) {
-            return error.BAD_REQUEST("Article title cannot be blank");
-          }
-          data.title = title;
+export const articleActions = articleContract.implement({
+  store: sqliteStore(articles, BlogDb),
+  access: "public",
+  hooks: {
+    beforeCreate: ({ data }) =>
+      Effect.gen(function* () {
+        const title = String(data.title ?? "").trim();
+        if (!title) {
+          return yield* Effect.fail(
+            new InvalidInput({ message: "Article title cannot be blank" }),
+          );
+        }
 
-          // Hooks may set columns clients can't write
-          data.slug = title.toLowerCase().replace(/\s+/g, "-");
-        },
-        afterCreate: async ({ row, ctx }) => {
-          ctx.logger.info(`Article created: ${row.id} (${row.title})`);
-        },
-      },
-    }),
-  );
+        const now = new Date().toISOString();
+        return {
+          ...data,
+          id: crypto.randomUUID(),
+          title,
+          slug: title.toLowerCase().replace(/\s+/g, "-"),
+          updatedAt: now,
+        };
+      }),
+
+    afterCreate: ({ row }) =>
+      Effect.sync(() => {
+        console.log(`Article created: ${row.id} (${row.title})`);
+      }),
+
+    beforeUpdate: ({ data }) =>
+      Effect.succeed({
+        ...data,
+        updatedAt: new Date().toISOString(),
+      }),
+  },
+});
 ```
 
-### Schema
+## Available Lifecycle Hooks
 
-These columns match the Drizzle tables in the example. Defaults marked as application defaults run in Drizzle, rather than in SQL.
+Hooks are configured inside `contract.implement({ hooks })`:
 
-export const articlesSchemaFields = [
-  {
-    name: "id",
-    type: "text",
-    description: "Row identifier.",
-    isPrimaryKey: true,
-    defaultValue: "crypto.randomUUID() (application)",
-  },
-  {
-    name: "title",
-    type: "text",
-    description: "Display title.",
-  },
-  {
-    name: "slug",
-    type: "text",
-    description: "URL slug.",
-  },
-];
+| Hook           | Parameter      | Return Type                          | Description                                                               |
+| :------------- | :------------- | :----------------------------------- | :------------------------------------------------------------------------ |
+| `beforeCreate` | `{ data }`     | `Effect<Partial<InsertModel>, E, R>` | Normalizes or enriches creation payload before inserting to the database. |
+| `afterCreate`  | `{ row }`      | `Effect<void, E, R>`                 | Runs side effects after a row is successfully inserted.                   |
+| `beforeUpdate` | `{ data, id }` | `Effect<Partial<InsertModel>, E, R>` | Normalizes update data before modifying the existing row.                 |
+| `afterUpdate`  | `{ row }`      | `Effect<void, E, R>`                 | Runs side effects after a row has been updated.                           |
+| `beforeDelete` | `{ id }`       | `Effect<void, E, R>`                 | Guard or clean up references before row deletion.                         |
+| `afterDelete`  | `{ id }`       | `Effect<void, E, R>`                 | Runs side effects after row deletion completes.                           |
 
-<DatabaseTable name="articles" fields={articlesSchemaFields} />
+## Immutable Data Transformation
 
-## Available CRUD Hooks
+In Brick-TS, `beforeCreate` and `beforeUpdate` hooks return transformed data objects immutably. Unlike legacy frameworks that mutate objects in place, you return a new object:
 
-All hooks are declared inside the `hooks` configuration of `crud()`:
-
-Hooks run after input validation, `authorize`, and `scope`.
-
-| Hook           | Arguments                  | Timing                   | Common Use Cases                                               |
-| :------------- | :------------------------- | :----------------------- | :------------------------------------------------------------- |
-| `beforeCreate` | `{ data, ctx, error }`     | Before `INSERT` query    | Data trimming, hashing, slug generation, permission validation |
-| `afterCreate`  | `{ row, ctx, error }`      | After `INSERT` completes | Audit logging, notification dispatch, webhooks                 |
-| `beforeUpdate` | `{ id, data, ctx, error }` | Before `UPDATE` query    | Field mutation validation, updated timestamp stamping          |
-| `afterUpdate`  | `{ id, row, ctx, error }`  | After `UPDATE` completes | Cache invalidation, audit logging                              |
-| `beforeDelete` | `{ id, ctx, error }`       | Before `DELETE` query    | Cascade checks, preventing deletion of active resources        |
-| `afterDelete`  | `{ id, ctx, error }`       | After `DELETE` completes | Cleanup associated files/assets, search index purging          |
-
-`row` in `afterCreate` and `afterUpdate` is the full database row, including columns without `read` permission. The response is still limited to readable fields.
-
-## Mutating Input in `before*` Hooks
-
-Before hooks receive `data`, a copy of the validated write payload (the `create` input, or `update`'s `data` object). You can mutate fields or add values for columns clients can't write. Every key must be a column of the table, or the call fails with a 500. An update whose `data` is empty after `beforeUpdate` is rejected with `BAD_REQUEST`.
-
-```ts title="src/services/profiles.ts"
-hooks: {
-  beforeCreate: async ({ data, ctx }) => {
-    // Inject tenant and author from authenticated context
-    data.tenantId = ctx.tenantId;
-    data.createdBy = ctx.user?.id;
-  },
-  beforeUpdate: async ({ data }) => {
-    if (typeof data.displayName === "string") {
-      data.displayName = data.displayName.trim();
-    }
-  },
-}
+```ts
+beforeCreate: ({ data }) =>
+  Effect.succeed({
+    ...data,
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+  }),
 ```
 
-## Aborting Writes with Error Helpers
+This ensures hooks can set fields that clients are not permitted to provide via the API (such as `id`, `authorId`, or generated timestamps).
 
-Hooks receive the standard `error` builder (`BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `INTERNAL_SERVER_ERROR`). Calling a helper throws an `ActionExecutionError` with that code and status.
+## Validating in Hooks
 
-CRUD doesn't wrap hooks in a transaction. Throwing in a `before*` hook stops the write before it runs. Throwing in an `after*` hook returns an error to the client, but the row has already been written and isn't rolled back.
+Hooks execute within the Effect pipeline. To reject an operation, fail with an error:
 
-```ts title="src/services/comments.ts"
-hooks: {
-  beforeCreate: async ({ data, ctx, error }) => {
-    if (!ctx.user) {
-      return error.UNAUTHORIZED("Sign in to comment");
+```ts
+beforeCreate: ({ data }) =>
+  Effect.gen(function* () {
+    if (data.title && data.title.length < 3) {
+      return yield* Effect.fail(
+        new InvalidInput({ message: "Title must be at least 3 characters" }),
+      );
     }
-
-    const trimmed = String(data.body ?? "").trim();
-    if (trimmed.length < 3) {
-      error.BAD_REQUEST("Comment must be at least 3 characters long");
-    }
-  },
-}
+    return data;
+  }),
 ```
+
+When a hook fails, database operations are aborted, no records are written, and the error response is returned to the client.
+
+## Scrubbers (`scrub`)
+
+For sensitive fields (such as password hashes, email addresses, or internal metadata), use scrubbers to sanitize data before sending to clients:
+
+```ts
+export const userActions = userContract.implement({
+  store: sqliteStore(usersTable, UserDb),
+  access: "public",
+  scrub: {
+    read: (row) =>
+      Effect.succeed({
+        ...row,
+        email: maskEmail(row.email),
+      }),
+  },
+});
+```
+
+## Transaction Safety
+
+In `@brickkit/crud`, store operations run inside database transactions where supported. If a `beforeCreate` hook or database constraint fails, the entire transaction rolls back automatically.

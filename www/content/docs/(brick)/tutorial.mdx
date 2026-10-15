@@ -3,18 +3,18 @@ title: "Tutorial: Building a REST API"
 description: Build a complete, production-ready REST API end to end with database models, CRUD, access control, and custom actions.
 ---
 
-This tutorial walks through building a complete blog API featuring database models, CRUD resources, context resolvers, authorization policies, and custom business actions.
+This tutorial walks through building a complete blog API featuring database models, CRUD resources, context layers, authorization policies, and custom business actions using Effect-native Brick-TS.
 
 <Steps>
 
 ### Step 1: Project Setup and Dependencies
 
-Initialize a Bun project and install the Brick-TS packages:
+Initialize a Bun project and install the Brick-TS packages and Effect:
 
 ```bash
 mkdir blog-api && cd blog-api
 bun init -y
-bun add @brickkit/core @brickkit/crud @brickkit/cli
+bun add @brickkit/core @brickkit/crud @brickkit/cli effect drizzle-orm
 ```
 
 ### Step 2: Define Database Models
@@ -22,7 +22,7 @@ bun add @brickkit/core @brickkit/crud @brickkit/cli
 Declare tables for articles and comments using Drizzle schema builders in `src/schema.ts`:
 
 ```ts title="src/schema.ts"
-import { integer, sqliteTable, text } from "@brickkit/core";
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const articles = sqliteTable("articles", {
   id: text("id")
@@ -116,231 +116,245 @@ export const commentsSchemaFields = [
 
 <DatabaseTable name="comments" fields={commentsSchemaFields} />
 
-### Step 3: Configure Database and Service Context
+### Step 3: Configure Database Layer
 
-Create `src/service.ts` to configure the database handle and a context resolver that extracts the authenticated user from the HTTP `Authorization` header:
+Create `src/db.ts` to manage the database connection using the `sqliteDatabase` factory:
 
-```ts title="src/service.ts"
-import { defineDatabase, defineService } from "@brickkit/core";
-import { articles, comments } from "./schema";
+```ts title="src/db.ts"
+import { sqliteDatabase } from "@brickkit/crud/sqlite";
 
-export interface User {
-  id: string;
-  role: "admin" | "author" | "reader";
-}
+export interface BlogDatabase {}
+export const { Service: BlogDb, layer: DatabaseLive } =
+  sqliteDatabase<BlogDatabase>()("BlogDb", { filename: ":memory:" });
+```
 
-// 1. Create a database handle
-export const database = defineDatabase({
-  tables: { articles, comments },
+### Step 4: Define CRUD Resources & Field Policies
+
+In Brick-TS, database tables are exposed through declarative CRUD contracts with deny-by-default field policies. Create `src/articles.ts`:
+
+```ts title="src/articles.ts"
+import { Brick } from "@brickkit/core";
+import { crudContract, sqliteStore } from "@brickkit/crud";
+import { NotFound, Unauthorized } from "@brickkit/core/contracts";
+import { Effect, Schema } from "effect";
+import { eq, sql } from "drizzle-orm";
+import { articles } from "./schema";
+import { BlogDb } from "./db";
+
+export const articleContract = crudContract({
+  name: "article",
+  path: "/api/article",
+  table: articles,
+  id: "id",
+  errors: [NotFound, Unauthorized],
+  fields: {
+    id: { read: true, filter: ["eq", "in"] },
+    title: {
+      read: true,
+      create: true,
+      update: true,
+      filter: ["eq", "contains"],
+      sort: true,
+    },
+    slug: {
+      read: true,
+      create: true,
+      filter: ["eq"],
+      sort: true,
+    },
+    body: { read: true, create: true, update: true },
+    authorId: { read: true, filter: ["eq"] },
+    views: { read: true, sort: true },
+  },
 });
 
-// 2. Define the service with a typed context resolver
-export const blogService = defineService("blog", {
-  database,
-  context: async (baseCtx) => {
-    const authHeader = baseCtx.request.headers.get("authorization");
-    if (!authHeader) return { user: null };
-
-    // In a real application, verify JWT or session token here
-    const token = authHeader.replace("Bearer ", "").trim();
-    if (token === "admin-token") {
-      return { user: { id: "usr_admin", role: "admin" as const } };
-    }
-    if (token === "author-token") {
-      return { user: { id: "usr_author", role: "author" as const } };
-    }
-    return { user: null };
+export const articleCrudActions = articleContract.implement({
+  store: sqliteStore(articles, BlogDb),
+  access: "public",
+  hooks: {
+    beforeCreate: ({ data }) =>
+      Effect.succeed({
+        ...data,
+        id: crypto.randomUUID(),
+        authorId: "usr_author",
+        views: 0,
+      }),
   },
 });
 ```
 
-### Step 4: Add CRUD Resources with Access Policies
+### Step 5: Add Custom Business Actions
 
-Attach CRUD operations to `articles` with field policies, a before-create hook, and operation authorization in `src/resources.ts`. `authorId` has no `create` permission, so clients can't send it; the hook fills it in from the session:
-
-```ts title="src/resources.ts"
-import { ActionExecutionError, eq } from "@brickkit/core";
-import { crud } from "@brickkit/crud";
-import { articles } from "./schema";
-import { blogService } from "./service";
-
-export const articleResource = blogService
-  .resource({
-    name: "article",
-    table: articles,
-    id: articles.id,
-  })
-  .use(
-    crud({
-      // CRUD is deny-by-default; an explicit access policy is required
-      access: {
-        authorize: ({ operation, ctx }) => {
-          // Public reads
-          if (
-            operation === "list" ||
-            operation === "get" ||
-            operation === "findOne"
-          ) {
-            return true;
-          }
-          // Only authenticated authors or admins can write
-          return !!ctx.user;
-        },
-        // Row-level writes: CRUD ANDs this into the WHERE clause of update
-        // and delete, so authors can only touch their own articles.
-        // `authorize` above already rejected anonymous callers.
-        scope: ({ operation, ctx }) => {
-          if (operation !== "update" && operation !== "delete")
-            return undefined;
-          if (ctx.user?.role === "admin") return undefined;
-          return eq(articles.authorId, ctx.user!.id);
-        },
-      },
-      fields: {
-        id: { read: true, filter: ["eq", "in"] },
-        title: {
-          read: true,
-          create: true,
-          update: true,
-          filter: ["contains"],
-          sort: true,
-        },
-        slug: { read: true, create: true, filter: ["eq"] },
-        body: { read: true, create: true, update: true },
-        authorId: { read: true, filter: ["eq"] },
-        views: { read: true, sort: true },
-      },
-      hooks: {
-        beforeCreate: async ({ data, ctx, error }) => {
-          if (!ctx.user)
-            return error.UNAUTHORIZED(
-              "Authentication required to create articles",
-            );
-          // authorId isn't writable by clients; set it from the session
-          data.authorId = ctx.user.id;
-        },
-      },
-    }),
-  );
-```
-
-### Step 5: Add a Custom Business Action
-
-Add a custom action for incrementing article views. Actions provide full TypeBox schema validation and custom error helpers:
+Add custom business logic that goes beyond standard CRUD operations. For example, incrementing the view count of an article:
 
 ```ts title="src/actions.ts"
-import { eq, sql, t } from "@brickkit/core";
+import { Brick } from "@brickkit/core";
+import { NotFound } from "@brickkit/core/contracts";
+import { Effect, Schema } from "effect";
+import { eq, sql } from "drizzle-orm";
 import { articles } from "./schema";
-import { blogService } from "./service";
+import { BlogDb } from "./db";
 
-export const incrementView = blogService.action({
-  name: "incrementView",
-  description: "Atomically increment the view counter for an article",
-  method: "POST",
-  path: "/api/blog/articles/:id/view",
-  input: t.Object({
-    id: t.String(),
-  }),
-  output: t.Object({
-    id: t.String(),
-    views: t.Number(),
-  }),
-  execute: async ({ input, ctx, error }) => {
-    const updated = await ctx.db
+const IncrementViews = Brick.action(
+  "incrementViews",
+  "/api/articles/incrementViews",
+  {
+    input: Schema.Struct({ id: Schema.String }),
+    output: Schema.Struct({ id: Schema.String, views: Schema.Number }),
+    errors: [NotFound],
+  },
+);
+
+export const incrementViews = IncrementViews(({ id }) =>
+  Effect.gen(function* () {
+    const db = yield* BlogDb;
+    const [updated] = yield* db
       .update(articles)
       .set({ views: sql`${articles.views} + 1` })
-      .where(eq(articles.id, input.id))
-      .returning({ id: articles.id, views: articles.views });
-
-    if (!updated.length) {
-      error.NOT_FOUND(`Article with ID '${input.id}' not found`);
+      .where(eq(articles.id, id))
+      .returning();
+    if (!updated) {
+      return yield* Effect.fail(new NotFound({ message: "Article not found" }));
     }
+    return { id: updated.id, views: updated.views };
+  }),
+);
+```
 
-    return updated[0];
+### Step 6: Assemble the Service and Application
+
+Combine CRUD actions and custom actions into an immutable service in `src/app.ts`:
+
+```ts title="src/app.ts"
+import { Brick } from "@brickkit/core";
+import { articleCrudActions } from "./articles";
+import { incrementViews } from "./actions";
+import { DatabaseLive } from "./db";
+
+export const blogService = Brick.service("blog", {
+  actions: {
+    ...articleCrudActions,
+    incrementViews,
   },
 });
-```
 
-### Step 6: Start the Server
-
-Create the server entry in `src/server.ts`, sync the SQLite schema, and start the application:
-
-```ts title="src/server.ts"
-import { brick, syncSchema } from "@brickkit/core";
-import { blogService } from "./service";
-import "./resources";
-import "./actions";
-
-// Prepare SQLite database tables in development
-syncSchema(blogService);
-
-export const app = brick({
+export default Brick.app({
   services: [blogService],
-  title: "Blog API Mesh",
-  version: "1.0.0",
+  layer: DatabaseLive,
+  docs: { path: "/reference" },
 });
-
-export default app;
-```
-
-Run the server with the `brick` CLI:
-
-```bash
-bunx brick dev src/server.ts --port 4000
-```
-
-`syncSchema()` creates the tables of resources registered on the service (here, `articles`) with `CREATE TABLE IF NOT EXISTS`. It's a development helper, not a migration runner.
-
-### Step 7: Verify with Requests
-
-CRUD routes are mounted under the resource name (`/api/article`), while the custom action uses the `path` you declared.
-
-#### 1. Create an Article (Authorized)
-
-```bash
-curl -X POST http://localhost:4000/api/article \
-  -H "Authorization: Bearer author-token" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Getting Started with Brick-TS",
-    "slug": "getting-started-with-brick-ts",
-    "body": "Brick-TS makes building backend services fast and safe."
-  }'
-```
-
-Without the `Authorization` header, `authorize` returns `false` and the request fails with `403` and code `FORBIDDEN`.
-
-#### 2. Increment Article View (Custom Action)
-
-```bash
-curl -X POST http://localhost:4000/api/blog/articles/YOUR_ARTICLE_ID/view
-```
-
-The `:id` path parameter becomes `input.id`, so no body is needed.
-
-#### 3. List Articles (Public Read)
-
-```bash
-curl -X POST http://localhost:4000/api/article/query \
-  -H "Content-Type: application/json" \
-  -d '{"limit": 5, "orderBy": [{"field": "views", "direction": "desc"}]}'
 ```
 
 </Steps>
 
-## Related Topics
+## Run a service
 
-<Cards>
-  <Card title="Services & Actions" href="/docs/services-and-actions">
-    Explore the full action definition API and error helpers.
-  </Card>
-  <Card title="Access Control" href="/docs/access-control">
-    Configure role-based access and row scoping for multi-tenant applications.
-  </Card>
-  <Card title="Relational Data Modeling" href="/docs/relations">
-    Learn patterns for child tables, joins, and parent-child cascades.
-  </Card>
-  <Card title="Typed Client" href="/docs/typed-client">
-    Consume this API with end-to-end type safety from React or Next.js.
-  </Card>
-</Cards>
+Start your application server using the `brick` CLI:
+
+```bash
+bunx brick dev src/app.ts --port 4000
+```
+
+The CLI inspects your service definition and mounts both CRUD endpoints and custom actions:
+
+```text
+🧱 Brick-TS Development Server
+   Registered Services: 1
+   • blog (9 actions)
+     -> POST   /api/article/query
+     -> POST   /api/article/find-one
+     -> GET    /api/article/:id
+     -> POST   /api/article
+     -> PATCH  /api/article/:id
+     -> DELETE /api/article/:id
+     -> POST   /api/article/count
+     -> POST   /api/article/exists
+     -> POST   /api/articles/incrementViews
+
+⚡ API Gateway running on: http://localhost:4000
+📖 Interactive Docs:     http://localhost:4000/reference
+```
+
+### Create an Article
+
+```bash
+curl -X POST http://localhost:4000/api/article \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Getting Started with Brick-TS",
+    "slug": "getting-started-with-brick",
+    "body": "Brick-TS provides an Effect-native foundation for modern backends."
+  }'
+```
+
+Response:
+
+```json
+{
+  "id": "e379b38c-8f19-485a-a71c-3b91ef5246a4",
+  "title": "Getting Started with Brick-TS",
+  "slug": "getting-started-with-brick",
+  "body": "Brick-TS provides an Effect-native foundation for modern backends.",
+  "authorId": "usr_author",
+  "views": 0
+}
+```
+
+### Get an Article by ID
+
+```bash
+curl http://localhost:4000/api/article/e379b38c-8f19-485a-a71c-3b91ef5246a4
+```
+
+### Update an Article
+
+```bash
+curl -X PATCH http://localhost:4000/api/article/e379b38c-8f19-485a-a71c-3b91ef5246a4 \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Getting Started with Brick-TS (Updated)"}'
+```
+
+### Delete an Article
+
+```bash
+curl -X DELETE http://localhost:4000/api/article/e379b38c-8f19-485a-a71c-3b91ef5246a4
+```
+
+### List Articles with Filtering
+
+Query articles using the type-safe filter schema:
+
+```bash
+curl -X POST http://localhost:4000/api/article/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "where": {
+      "field": "title",
+      "op": "contains",
+      "value": "Brick"
+    },
+    "orderBy": [{ "field": "title", "direction": "asc" }],
+    "limit": 10
+  }'
+```
+
+### Call the Custom Action
+
+Invoke custom business logic directly:
+
+```bash
+curl -X POST http://localhost:4000/api/articles/incrementViews \
+  -H "Content-Type: application/json" \
+  -d '{"id": "e379b38c-8f19-485a-a71c-3b91ef5246a4"}'
+```
+
+Response:
+
+```json
+{
+  "id": "e379b38c-8f19-485a-a71c-3b91ef5246a4",
+  "views": 1
+}
+```
+
+See [services and actions](/docs/services-and-actions) for custom route patterns and [relational data](/docs/relations) for modeling joins and associations.

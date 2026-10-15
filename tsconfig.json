@@ -11,11 +11,13 @@
     "sourceMap": true,
     "types": ["bun"],
     "paths": {
+      "@brickkit/client": ["./packages/client/src"],
       "@brickkit/crud": ["./packages/crud/src"],
       "@brickkit/core": ["./packages/core/src"],
       "@brickkit/core/*": ["./packages/core/src/*"],
       "@brickkit/cli": ["./packages/cli/src"],
-      "@brickkit/cli/compiler": ["./packages/cli/src/compiler.ts"]
+      "@brickkit/cli/compiler": ["./packages/cli/src/compiler.ts"],
+      "@brickkit/crud/*": ["./packages/crud/src/*"]
     }
   }
 }

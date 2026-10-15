@@ -51,6 +51,7 @@ const GH = resolveBin("gh");
 const CORE_PKG = join(ROOT, "packages/core/package.json");
 const CLI_PKG = join(ROOT, "packages/cli/package.json");
 const CRUD_PKG = join(ROOT, "packages/crud/package.json");
+const CLIENT_PKG = join(ROOT, "packages/client/package.json");
 
 function sh(cmd: string[], cwd = ROOT): string {
   if (DRY) {
@@ -150,17 +151,20 @@ try {
 const coreJson = readJson(CORE_PKG);
 const cliJson = readJson(CLI_PKG);
 const crudJson = readJson(CRUD_PKG);
+const clientJson = readJson(CLIENT_PKG);
 if (
   coreJson.version !== cliJson.version ||
-  coreJson.version !== crudJson.version
+  coreJson.version !== crudJson.version ||
+  coreJson.version !== clientJson.version
 )
-  fail("core, cli and crud versions must match");
+  fail("core, cli, crud and client versions must match");
 const version = bumpVersion(coreJson.version, bump);
 const tag = `v${version}`;
 const releases = [
   { file: CORE_PKG, data: coreJson },
   { file: CLI_PKG, data: cliJson },
   { file: CRUD_PKG, data: crudJson },
+  { file: CLIENT_PKG, data: clientJson },
 ];
 cliJson.dependencies["@brickkit/core"] = `^${version}`;
 crudJson.peerDependencies["@brickkit/core"] = `^${version}`;
@@ -187,7 +191,14 @@ for (const r of releases) {
 }
 sh(["bun", "install"]);
 sh(["bun", "run", "build"]);
-sh(["bun", "test", "packages/core", "packages/crud", "packages/cli"]);
+sh([
+  "bun",
+  "test",
+  "./packages/core",
+  "./packages/crud",
+  "./packages/client",
+  "./packages/cli",
+]);
 
 const msg = `chore(release): ${tag}`;
 sh([
@@ -196,6 +207,7 @@ sh([
   "packages/core/package.json",
   "packages/cli/package.json",
   "packages/crud/package.json",
+  "packages/client/package.json",
   "bun.lock",
 ]);
 sh(["git", "commit", "-m", msg]);
