@@ -12,6 +12,7 @@
     "test/effect-app.test.ts",
     "test/effect-database.test.ts",
     "test/effect-rpc.test.ts",
-    "test/tanstack-query.test.ts"
+    "test/tanstack-query.test.ts",
+    "test/tanstack-query-vue.types.ts"
   ]
 }

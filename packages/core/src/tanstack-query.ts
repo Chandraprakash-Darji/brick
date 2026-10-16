@@ -43,7 +43,7 @@ export type BrickQueryAction<A> = BrickActionCaller<A> & {
   queryOptions: (...args: InputArgs<A>) => {
     queryKey: DataTag<ActionKey, InferActionOutput<A>>;
     queryFn: (
-      context: QueryFunctionContext<ActionKey>,
+      context: Pick<QueryFunctionContext, "signal">,
     ) => Promise<InferActionOutput<A>>;
   };
   mutationOptions: (options?: { request?: BrickCallOptions }) => {
@@ -104,7 +104,7 @@ export function createBrickQueryClient<T extends Record<string, unknown>>(
         if (prop === "queryOptions")
           return (args?: { input?: unknown; request?: BrickCallOptions }) => ({
             queryKey: key({ input: args?.input }),
-            queryFn: ({ signal }: QueryFunctionContext<ActionKey>) => {
+            queryFn: ({ signal }: Pick<QueryFunctionContext, "signal">) => {
               const signals = [
                 signal,
                 args?.request?.signal ?? options.signal,
