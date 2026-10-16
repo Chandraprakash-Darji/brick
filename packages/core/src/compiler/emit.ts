@@ -18,6 +18,10 @@ export function emitHandlerFactory(route: RouteIR): string {
           input.push(
             `if (v${index} !== undefined) { const n${index} = Number(v${index}); if (!Number.isNaN(n${index})) coercedQuery[${key}] = n${index}; }`,
           );
+        else if (coercion.type === "array")
+          input.push(
+            `if (v${index} !== undefined) { const values${index} = request ? new URL(request.url).searchParams.getAll(${key}) : []; coercedQuery[${key}] = values${index}.length ? values${index} : Array.isArray(v${index}) ? v${index} : [v${index}]; }`,
+          );
         else
           input.push(
             `if (v${index} === "true" || v${index} === "1") coercedQuery[${key}] = true; else if (v${index} === "false" || v${index} === "0") coercedQuery[${key}] = false;`,

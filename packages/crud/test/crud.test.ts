@@ -1,9 +1,13 @@
-import { test, expect } from "bun:test";
 import type { Database } from "bun:sqlite";
-import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
+import { test, expect } from "bun:test";
+
+import { defineService, defineDatabase, brick, t } from "@brickkit/core";
 import { eq } from "drizzle-orm";
-import { defineService, defineDatabase } from "@brickkit/core";
+import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
+
 import { crud } from "../src";
+import { createBrickClient } from "@brickkit/core/client";
+import { generateClientContract } from "../../cli/src/client-contract";
 
 const records = sqliteTable("records", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -453,3 +457,213 @@ test("CRUD authorization distinguishes missing users and signed-in users", async
     sqlite.close();
   }
 });
+
+for (const compiler of [false, true]) {
+  test(`derived read fields batch scoped parents over HTTP, compiler=${compiler}`, async () => {
+    let allowed = true;
+    const batches: unknown[][] = [];
+    const { service, resource, sqlite } = fixture({
+      access: {
+        authorize: () => allowed,
+        scope: () => eq(records.active, true),
+      },
+      operations: { create: false, update: false, delete: false },
+      fields: {
+        id: { read: true },
+        name: { read: true },
+        children: {
+          read: true,
+          schema: t.Array(t.String()),
+          resolve: ({ rows }) => {
+            batches.push(rows.map((row) => row.id));
+            return rows.map((row) => [`child-${row.id}`]);
+          },
+          scrub: ({ value }) => value,
+        },
+      },
+    });
+    sqlite.exec(
+      "INSERT INTO records (name, private, active) VALUES ('A', 'secret', 1), ('hidden', 'secret', 0), ('B', 'secret', 1)",
+    );
+    const app = brick({
+      services: [service],
+      compiler,
+      docs: false,
+      requestLogging: false,
+    });
+    const request = (path: string, body: unknown) =>
+      app.handle(
+        new Request(`http://localhost/api/record${path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      );
+    try {
+      const defaultResponse = await request("/query", {});
+      expect(await defaultResponse.json()).toEqual({
+        items: [
+          { id: 1, name: "A" },
+          { id: 3, name: "B" },
+        ],
+        limit: 20,
+        offset: 0,
+      });
+      expect(batches).toEqual([]);
+      const defaultOne = await request("/find-one", {});
+      expect(await defaultOne.json()).toEqual({ id: 1, name: "A" });
+      expect(await resource.get.run({ id: 3 })).toEqual({ id: 3, name: "B" });
+      expect(batches).toEqual([]);
+      const response = await request("/query", {
+        select: ["id"],
+        include: ["children"],
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        items: [
+          { id: 1, children: ["child-1"] },
+          { id: 3, children: ["child-3"] },
+        ],
+        limit: 20,
+        offset: 0,
+      });
+      expect(batches).toEqual([[1, 3]]);
+      const found = await request("/find-one", {
+        select: ["name"],
+        include: ["children"],
+      });
+      expect(found.status).toBe(200);
+      expect(await found.json()).toEqual({ name: "A", children: ["child-1"] });
+      expect(await resource.get.run({ id: 3, include: ["children"] })).toEqual({
+        id: 3,
+        name: "B",
+        children: ["child-3"],
+      });
+      await expect(resource.get.run({ id: 2 })).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+      const countBefore = batches.length;
+      allowed = false;
+      expect((await request("/query", { include: ["children"] })).status).toBe(
+        401,
+      );
+      expect(batches.length).toBe(countBefore);
+      allowed = true;
+      expect((await request("/query", { include: ["missing"] })).status).toBe(
+        400,
+      );
+      expect(
+        (
+          await request("/query", {
+            where: { field: "children", op: "eq", value: [] },
+          })
+        ).status,
+      ).toBe(400);
+      expect(
+        (
+          await request("/query", {
+            orderBy: [{ field: "children", direction: "asc" }],
+          })
+        ).status,
+      ).toBe(400);
+      expect(batches.length).toBe(countBefore);
+    } finally {
+      sqlite.close();
+    }
+  });
+}
+
+for (const compiler of [false, true]) {
+  test(`HTTP SDK serializes explicit includes and typed scrub schemas, compiler=${compiler}`, async () => {
+    const { service, sqlite } = fixture({
+      access: "public",
+      fields: {},
+      operations: false,
+    });
+    let resolved = 0;
+    const resource = service
+      .resource({ name: "named", table: records, id: records.name })
+      .use(
+        crud({
+          access: "public",
+          operations: { create: false, update: false, delete: false },
+          fields: {
+            name: { read: true },
+            email: {
+              read: true,
+              schema: t.Union([t.String(), t.Null()]),
+              scrub: ({ value }) => (value === null ? null : "masked"),
+            },
+            labels: {
+              read: true,
+              schema: t.Array(t.String()),
+              resolve: ({ rows }) => rows.map(() => ["extra"]),
+            },
+            children: {
+              read: true,
+              schema: t.Array(t.String()),
+              resolve: ({ rows }) => {
+                resolved++;
+                return rows.map((row) => [`child-${row.id}`]);
+              },
+            },
+          },
+        }),
+      );
+    sqlite.exec(
+      "INSERT INTO records (name, email) VALUES ('A / B', 'secret@example.com')",
+    );
+    const app = brick({
+      services: [service],
+      compiler,
+      docs: false,
+      requestLogging: false,
+    });
+    const source = generateClientContract(app);
+    const serialized = source.match(
+      /export const contract: AppContract = JSON.parse\((.+)\);/,
+    )?.[1];
+    if (!serialized) throw new Error("Generated contract is missing");
+    const contract = JSON.parse(JSON.parse(serialized));
+    const client = createBrickClient<{ named: typeof resource }>({
+      baseUrl: "http://localhost",
+      contract,
+      fetch: async (url, init) => app.handle(new Request(String(url), init)),
+    });
+    try {
+      expect(resource.get.config.output).toMatchObject({
+        properties: {
+          email: { anyOf: [{ type: "string" }, { type: "null" }] },
+        },
+      });
+      expect(await client.named.get({ id: "A / B" })).toEqual({
+        name: "A / B",
+        email: "masked",
+      });
+      expect(resolved).toBe(0);
+      expect(
+        await client.named.get({ id: "A / B", include: ["children"] }),
+      ).toEqual({ name: "A / B", email: "masked", children: ["child-1"] });
+      expect(resolved).toBe(1);
+      expect(
+        await client.named.get({
+          id: "A / B",
+          include: ["children", "labels"],
+        }),
+      ).toEqual({
+        name: "A / B",
+        email: "masked",
+        children: ["child-1"],
+        labels: ["extra"],
+      });
+      expect(resolved).toBe(2);
+      expect(await client.named.get({ id: "A / B" })).toEqual({
+        name: "A / B",
+        email: "masked",
+      });
+      expect(resolved).toBe(2);
+    } finally {
+      sqlite.close();
+    }
+  });
+}

@@ -32,6 +32,12 @@ test("native CRUD composition provides dependencies to policies and scrubbers wi
   const resource = service.resource({ name: "record", table: records }).use(
     crud({
       fields: {
+        children: {
+          read: true,
+          schema: t.Array(t.String()),
+          resolve: ({ rows }) => rows.map((row) => [String(row.name)]),
+          scrub: ({ value }) => Effect.as(Policy, value),
+        },
         id: { read: true },
         name: {
           read: true,
@@ -58,6 +64,13 @@ test("native CRUD composition provides dependencies to policies and scrubbers wi
           .pipe(Effect.provide(Layer.succeed(Policy, { allow: true }))),
       ),
     ).toEqual({ id: 1, name: "COMPOSED" });
+    expect(
+      await Effect.runPromise(
+        resource.get
+          .executeEffect({ input: { id: 1, include: ["children"] } })
+          .pipe(Effect.provide(Layer.succeed(Policy, { allow: true }))),
+      ),
+    ).toEqual({ id: 1, name: "COMPOSED", children: ["composed"] });
   } finally {
     sqlite.close();
   }

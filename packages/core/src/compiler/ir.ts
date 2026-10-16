@@ -15,7 +15,7 @@ export interface RouteIR {
   readonly inputPrecedence: readonly ("query" | "params" | "body")[];
   readonly coercions: readonly {
     readonly key: string;
-    readonly type: "number" | "boolean";
+    readonly type: "number" | "boolean" | "array";
   }[];
   /** JSON projection for inspection and stale-artifact detection, not runtime validation. */
   readonly inputSchema?: unknown;
@@ -111,7 +111,8 @@ export function analyzeDeclaredApplication(
       action.name.endsWith(".list") ||
       action.name.startsWith("find") ||
       action.name.startsWith("read");
-    const coercions: { key: string; type: "number" | "boolean" }[] = [];
+    const coercions: { key: string; type: "number" | "boolean" | "array" }[] =
+      [];
     for (const [key, prop] of Object.entries(
       action.config.input?.properties ?? {},
     ) as [string, any][]) {
@@ -119,6 +120,7 @@ export function analyzeDeclaredApplication(
         coercions.push({ key, type: "number" });
       else if (prop.type === "boolean")
         coercions.push({ key, type: "boolean" });
+      else if (prop.type === "array") coercions.push({ key, type: "array" });
     }
     routes.push({
       method,

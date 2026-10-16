@@ -62,11 +62,20 @@ export function compileRoutePlan(
     : undefined;
 
   let coercions:
-    | Array<{ key: string; isNumber: boolean; isBoolean: boolean }>
+    | Array<{
+        key: string;
+        isNumber: boolean;
+        isBoolean: boolean;
+        isArray?: boolean;
+      }>
     | undefined;
   if (inputSchema && typeof (inputSchema as any).properties === "object") {
-    const list: Array<{ key: string; isNumber: boolean; isBoolean: boolean }> =
-      [];
+    const list: Array<{
+      key: string;
+      isNumber: boolean;
+      isBoolean: boolean;
+      isArray?: boolean;
+    }> = [];
     for (const [key, prop] of Object.entries(
       (inputSchema as any).properties,
     ) as [string, any][]) {
@@ -75,6 +84,8 @@ export function compileRoutePlan(
         list.push({ key, isNumber: true, isBoolean: false });
       } else if (type === "boolean") {
         list.push({ key, isNumber: false, isBoolean: true });
+      } else if (type === "array") {
+        list.push({ key, isNumber: false, isBoolean: false, isArray: true });
       }
     }
     if (list.length > 0) coercions = list;
@@ -167,6 +178,15 @@ export async function executeCompiledRoute(
           if (c.isNumber) {
             const num = Number(val);
             if (!isNaN(num)) coercedQuery[c.key] = num;
+          } else if (c.isArray) {
+            const values = request
+              ? new URL(request.url).searchParams.getAll(c.key)
+              : [];
+            coercedQuery[c.key] = values.length
+              ? values
+              : Array.isArray(val)
+                ? val
+                : [val];
           } else if (c.isBoolean) {
             if (val === "true" || val === "1") coercedQuery[c.key] = true;
             else if (val === "false" || val === "0")

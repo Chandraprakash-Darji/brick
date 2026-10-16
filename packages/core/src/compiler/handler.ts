@@ -5,10 +5,16 @@ import type { ActionContext } from "../types";
 function coerceQueryValue(
   value: unknown,
   type: RouteIR["coercions"][number]["type"],
+  request: Request | undefined,
+  key: string,
 ) {
   if (type === "number" && value !== undefined) {
     const number = Number(value);
     return Number.isNaN(number) ? value : number;
+  }
+  if (type === "array") {
+    const values = request ? new URL(request.url).searchParams.getAll(key) : [];
+    return values.length ? values : Array.isArray(value) ? value : [value];
   }
   if (type === "boolean") {
     if (value === "true" || value === "1") return true;
@@ -34,13 +40,18 @@ export function createHandlerFactory(route: RouteIR): HandlerFactory {
     const readLike = route.inputPrecedence[0] === "query";
     const objectInput = binding.action.config.input?.type === "object";
     const readInput = route.input
-      ? ({ params, body, query }: any) => {
+      ? ({ params, body, query, request }: any) => {
           let coercedQuery = query;
           if (query && route.coercions.length) {
             coercedQuery = { ...query };
             for (const { key, type } of route.coercions) {
               if (query[key] !== undefined)
-                coercedQuery[key] = coerceQueryValue(query[key], type);
+                coercedQuery[key] = coerceQueryValue(
+                  query[key],
+                  type,
+                  request,
+                  key,
+                );
             }
           }
           let input = readLike

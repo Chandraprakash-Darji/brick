@@ -1,5 +1,3 @@
-import type { Table, SQL, Column, GetColumnData } from "drizzle-orm";
-import type { TSchema, TUnsafe, Static } from "@sinclair/typebox";
 import type {
   Action,
   ErrorBuilder,
@@ -7,6 +5,8 @@ import type {
   ResourcePlugin,
   PluginRoutes,
 } from "@brickkit/core";
+import type { TSchema, TUnsafe, Static } from "@sinclair/typebox";
+import type { Table, SQL, Column, GetColumnData } from "drizzle-orm";
 
 export type FilterOperator =
   | "eq"
@@ -23,18 +23,34 @@ export type FilterOperator =
   | "endsWith"
   | "isNull"
   | "isNotNull";
-export interface FieldPolicy {
+export interface ColumnFieldPolicy {
   read?: boolean;
   create?: boolean;
   update?: boolean;
   filter?: readonly FilterOperator[];
   sort?: boolean;
   schema?: TSchema;
+  resolve?: never;
   scrub?: (args: {
     value: any;
     ctx: ActionContext;
   }) => unknown | Promise<unknown>;
 }
+export interface DerivedFieldPolicy {
+  read: true;
+  schema: TSchema;
+  /** One value per authorized parent row, in the same order. */
+  resolve: (args: {
+    rows: readonly Readonly<Record<string, unknown>>[];
+    ctx: ActionContext;
+  }) => readonly unknown[] | Promise<readonly unknown[]>;
+  create?: false;
+  update?: false;
+  filter?: readonly [];
+  sort?: false;
+  scrub?: ColumnFieldPolicy["scrub"];
+}
+export type FieldPolicy = ColumnFieldPolicy | DerivedFieldPolicy;
 export type Fields = Readonly<Record<string, FieldPolicy>>;
 export type Operation =
   | "list"
@@ -104,13 +120,29 @@ type Keys<F, P extends string> = {
   [K in keyof F]: F[K] extends Record<P, true> ? K : never;
 }[keyof F];
 type ReadKeys<T extends Table, F> = Extract<Keys<F, "read">, keyof Row<T>>;
-export type ReadRow<T extends Table, F> = {
-  [K in ReadKeys<T, F>]: F[K] extends { scrub: (...args: any[]) => infer V }
+type IncludeKeys<F> = {
+  [K in keyof F]: F[K] extends {
+    resolve: (...args: any[]) => any;
+    schema: TSchema;
+  }
+    ? K
+    : never;
+}[keyof F];
+type FieldValue<T extends Table, F, K extends keyof F> = F[K] extends {
+  schema: infer S extends TSchema;
+}
+  ? Static<S>
+  : F[K] extends { scrub: (...args: any[]) => infer V }
     ? Awaited<V>
-    : F[K] extends { schema: infer S extends TSchema }
-      ? Static<S>
-      : Row<T>[K];
+    : K extends keyof Row<T>
+      ? Row<T>[K]
+      : never;
+export type ReadRow<T extends Table, F> = {
+  [K in ReadKeys<T, F>]: FieldValue<T, F, K>;
 };
+type IncludedRow<T extends Table, F, I> = I extends readonly (infer K)[]
+  ? { [P in Extract<K, IncludeKeys<F> & keyof F>]: FieldValue<T, F, P> }
+  : {};
 type WriteKeys<T extends Table, F, P extends string> = Extract<
   Keys<F, P>,
   keyof T["$inferInsert"]
@@ -148,8 +180,10 @@ export interface Query<
   T extends Table,
   F,
   S extends readonly ReadKeys<T, F>[] | undefined = undefined,
+  I extends readonly IncludeKeys<F>[] | undefined = undefined,
 > {
   select?: S;
+  include?: I;
   where?: Where<T, F>;
   orderBy?: readonly {
     field: Extract<Keys<F, "sort">, keyof Row<T>>;
@@ -173,7 +207,8 @@ type AuthorizeWrite<F, P extends string> = {
   [K in Extract<AuthorizeKeys<F, P>, keyof F>]?: AuthorizeValues<F>[K];
 };
 type AuthorizeQuery<F> = {
-  select?: readonly AuthorizeKeys<F, "read">[];
+  select?: readonly Exclude<AuthorizeKeys<F, "read">, IncludeKeys<F>>[];
+  include?: readonly IncludeKeys<F>[];
   where?: string extends keyof F
     ? FilterWhere<
         Record<string, { filter: readonly FilterOperator[] }>,
@@ -192,7 +227,11 @@ type AuthorizeQuery<F> = {
 export type CrudInputs<F extends Fields = Fields> = {
   list: { [K in keyof AuthorizeQuery<F>]: AuthorizeQuery<F>[K] };
   findOne: { [K in keyof AuthorizeQuery<F>]: AuthorizeQuery<F>[K] };
-  get: { id: unknown; select?: readonly AuthorizeKeys<F, "read">[] };
+  get: {
+    id: unknown;
+    select?: readonly Exclude<AuthorizeKeys<F, "read">, IncludeKeys<F>>[];
+    include?: readonly IncludeKeys<F>[];
+  };
   create: AuthorizeWrite<F, "create">;
   update: { id: unknown; data: AuthorizeWrite<F, "update"> };
   delete: { id: unknown };
@@ -207,9 +246,15 @@ export type CrudAuthorizeArgs<F extends Fields = Fields> = {
     ctx: ActionContext;
   };
 }[Operation];
-type Selected<T extends Table, F, S> = S extends readonly (infer K)[]
+type Selected<
+  T extends Table,
+  F,
+  S,
+  I = undefined,
+> = (S extends readonly (infer K)[]
   ? Pick<ReadRow<T, F>, Extract<K, keyof ReadRow<T, F>>>
-  : ReadRow<T, F>;
+  : ReadRow<T, F>) &
+  IncludedRow<T, F, I>;
 type Callable<I, R, C> = Action<
   TUnsafe<I>,
   TUnsafe<R>,
@@ -223,7 +268,12 @@ interface QueryAction<
   Kind extends "list" | "findOne",
 > extends Omit<
   Callable<
-    Query<T, F, readonly ReadKeys<T, F>[] | undefined>,
+    Query<
+      T,
+      F,
+      readonly ReadKeys<T, F>[] | undefined,
+      readonly IncludeKeys<F>[] | undefined
+    >,
     Kind extends "list"
       ? {
           items: ReadRow<T, F>[];
@@ -234,53 +284,90 @@ interface QueryAction<
       : ReadRow<T, F> | null,
     C
   >,
-  "run"
+  "run" | "execute"
 > {
-  <const S extends readonly ReadKeys<T, F>[] | undefined = undefined>(params: {
-    input: Query<T, F, S>;
+  <
+    const S extends readonly ReadKeys<T, F>[] | undefined = undefined,
+    const I extends readonly IncludeKeys<F>[] | undefined = undefined,
+  >(params: {
+    input: Query<T, F, S, I>;
     ctx?: Partial<C>;
   }): Promise<
     Kind extends "list"
       ? {
-          items: Selected<T, F, S>[];
+          items: Selected<T, F, S, I>[];
           total?: number;
           limit: number;
           offset: number;
         }
-      : Selected<T, F, S> | null
+      : Selected<T, F, S, I> | null
   >;
-  run<const S extends readonly ReadKeys<T, F>[] | undefined = undefined>(
-    input: Query<T, F, S>,
+  run<
+    const S extends readonly ReadKeys<T, F>[] | undefined = undefined,
+    const I extends readonly IncludeKeys<F>[] | undefined = undefined,
+  >(
+    input: Query<T, F, S, I>,
     ctx?: Partial<C>,
   ): Promise<
     Kind extends "list"
       ? {
-          items: Selected<T, F, S>[];
+          items: Selected<T, F, S, I>[];
           total?: number;
           limit: number;
           offset: number;
         }
-      : Selected<T, F, S> | null
+      : Selected<T, F, S, I> | null
+  >;
+  execute<
+    const S extends readonly ReadKeys<T, F>[] | undefined = undefined,
+    const I extends readonly IncludeKeys<F>[] | undefined = undefined,
+  >(params: {
+    input: Query<T, F, S, I>;
+    ctx?: Partial<C>;
+  }): Promise<
+    Kind extends "list"
+      ? {
+          items: Selected<T, F, S, I>[];
+          total?: number;
+          limit: number;
+          offset: number;
+        }
+      : Selected<T, F, S, I> | null
   >;
 }
 interface GetAction<T extends Table, F, C, ID> extends Omit<
-  Callable<{ id: ID; select?: readonly ReadKeys<T, F>[] }, ReadRow<T, F>, C>,
+  Callable<
+    {
+      id: ID;
+      select?: readonly ReadKeys<T, F>[];
+      include?: readonly IncludeKeys<F>[];
+    },
+    ReadRow<T, F>,
+    C
+  >,
   "run" | "execute"
 > {
-  <const S extends readonly ReadKeys<T, F>[] | undefined = undefined>(params: {
-    input: { id: ID; select?: S };
+  <
+    const S extends readonly ReadKeys<T, F>[] | undefined = undefined,
+    const I extends readonly IncludeKeys<F>[] | undefined = undefined,
+  >(params: {
+    input: { id: ID; select?: S; include?: I };
     ctx?: Partial<C>;
-  }): Promise<Selected<T, F, S>>;
-  run<const S extends readonly ReadKeys<T, F>[] | undefined = undefined>(
-    input: { id: ID; select?: S },
+  }): Promise<Selected<T, F, S, I>>;
+  run<
+    const S extends readonly ReadKeys<T, F>[] | undefined = undefined,
+    const I extends readonly IncludeKeys<F>[] | undefined = undefined,
+  >(
+    input: { id: ID; select?: S; include?: I },
     ctx?: Partial<C>,
-  ): Promise<Selected<T, F, S>>;
+  ): Promise<Selected<T, F, S, I>>;
   execute<
     const S extends readonly ReadKeys<T, F>[] | undefined = undefined,
+    const I extends readonly IncludeKeys<F>[] | undefined = undefined,
   >(params: {
-    input: { id: ID; select?: S };
+    input: { id: ID; select?: S; include?: I };
     ctx?: Partial<C>;
-  }): Promise<Selected<T, F, S>>;
+  }): Promise<Selected<T, F, S, I>>;
 }
 type AllAPI<T extends Table, C, F, ID> = {
   list: QueryAction<T, F, C, "list">;

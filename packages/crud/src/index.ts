@@ -26,6 +26,7 @@ import {
   desc,
   sql,
 } from "drizzle-orm";
+
 import type {
   CrudAuthorizeArgs,
   CrudOptions,
@@ -197,7 +198,9 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
     fields: Object.fromEntries(
       Object.entries(options.fields).map(([key, value]) => [
         key,
-        { ...value, filter: value.filter ? [...value.filter] : undefined },
+        value.resolve
+          ? { ...value }
+          : { ...value, filter: value.filter ? [...value.filter] : undefined },
       ]),
     ) as F,
     access:
@@ -219,13 +222,43 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
       const fields: Fields = Object.fromEntries(
         Object.entries(options.fields).map(([key, value]) => [
           key,
-          { ...value, filter: value.filter ? [...value.filter] : undefined },
+          value.resolve
+            ? { ...value }
+            : {
+                ...value,
+                filter: value.filter ? [...value.filter] : undefined,
+              },
         ]),
       );
       const schemas: Record<string, TSchema> = {};
-      const readable = Object.keys(fields).filter((key) => fields[key].read);
+      const readable = Object.keys(fields).filter(
+        (key) => fields[key].read && !fields[key].resolve,
+      );
+      const includable = Object.keys(fields).filter(
+        (key) => fields[key].resolve,
+      );
       const projection: Record<string, Column> = {};
       for (const [key, policy] of Object.entries(fields)) {
+        if (policy.resolve) {
+          if (
+            !policy.read ||
+            !policy.schema ||
+            policy.create ||
+            policy.update ||
+            policy.sort ||
+            policy.filter?.length
+          )
+            throw new Error(
+              `Derived CRUD field '${key}' requires read/schema and cannot enable writes, filters or sorting`,
+            );
+          if (own(columns, key))
+            throw new Error(
+              `Derived CRUD field '${key}' cannot replace a table column`,
+            );
+          schemas[key] = policy.schema;
+          checkJsonSchema(schemas[key]);
+          continue;
+        }
         if (!own(columns, key))
           throw new Error(`Unknown CRUD field '${key}' on '${resource.name}'`);
         schemas[key] = policy.schema ?? columnSchema(columns[key]);
@@ -379,8 +412,12 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
       const selection = t.Optional(
         t.Array(fieldLiteral(readable), { minItems: 1, uniqueItems: true }),
       );
+      const includes = t.Optional(
+        t.Array(fieldLiteral(includable), { uniqueItems: true }),
+      );
       const queryProperties = {
         select: selection,
+        include: includes,
         where: t.Optional(whereSchema),
         orderBy: t.Optional(
           t.Array(
@@ -399,12 +436,14 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
       };
       const querySchema = object(queryProperties);
       const rowFields = Object.fromEntries(
-        readable.map((key) => [
-          key,
-          fields[key].scrub ? t.Unknown() : schemas[key],
-        ]),
+        [...readable, ...includable].map((key) => {
+          const schema =
+            fields[key].schema ??
+            (fields[key].scrub ? t.Unknown() : schemas[key]);
+          return [key, fields[key].resolve ? t.Optional(schema) : schema];
+        }),
       );
-      // Strict contract row: every readable field is required. Nullable
+      // Contract rows require parent fields; explicitly included derived fields are optional. Nullable
       // columns already carry `| null` via columnSchema, so they stay
       // `T | null` — never `| undefined`. This is what ships in
       // `config.output` for the browser contract and OpenAPI.
@@ -441,7 +480,7 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
       const inputs: Record<Operation, TSchema> = {
         list: querySchema,
         findOne: querySchema,
-        get: object({ id: idSchema, select: selection }),
+        get: object({ id: idSchema, select: selection, include: includes }),
         create: createSchema,
         update: object({ id: idSchema, data: updateSchema }),
         delete: object({ id: idSchema }),
@@ -650,14 +689,36 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
                 ? eq(idColumn, bind(databaseValue(idColumn, input.id)))
                 : undefined,
             );
-            const selected: string[] = input.select ?? readable;
+            const derived: string[] = input.include ?? [];
+            const selected: string[] = [
+              ...(input.select ?? readable),
+              ...derived,
+            ];
             const selectedProjection = Object.fromEntries(
-              selected.map((key) => [key, columns[key]]),
+              selected
+                .filter((key) => !fields[key].resolve)
+                .map((key) => [key, columns[key]]),
             );
             // A sentinel permits resources with no readable fields without exposing the ID.
-            const dbProjection = selected.length
-              ? selectedProjection
-              : { __brickSentinel: idColumn };
+            const dbProjection = derived.length
+              ? columns
+              : Object.keys(selectedProjection).length
+                ? selectedProjection
+                : { __brickSentinel: idColumn };
+            const resolveRows = async (rows: Record<string, unknown>[]) => {
+              if (!rows.length) return rows;
+              const resolved = rows.map((row) => ({ ...row }));
+              for (const key of derived) {
+                const values = await fields[key].resolve!({ rows, ctx });
+                if (values.length !== rows.length)
+                  throw new Error(
+                    `Derived CRUD field '${key}' returned an incorrect number of values`,
+                  );
+                for (let index = 0; index < rows.length; index++)
+                  resolved[index][key] = values[index];
+              }
+              return resolved;
+            };
             const scrub = async (row: Record<string, unknown>) => {
               const result: Record<string, unknown> = {};
               for (const key of selected)
@@ -688,19 +749,21 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
               );
               const boundLimit = bind(limit),
                 boundOffset = bind(offset);
-              const rows = await executeQuery(
-                db,
-                key("rows"),
-                () =>
-                  db
-                    .select(dbProjection)
-                    .from(resource.table)
-                    .where(where)
-                    .orderBy(...ordering)
-                    .limit(boundLimit)
-                    .offset(boundOffset),
-                params,
-                cacheable,
+              const rows = await resolveRows(
+                await executeQuery(
+                  db,
+                  key("rows"),
+                  () =>
+                    db
+                      .select(dbProjection)
+                      .from(resource.table)
+                      .where(where)
+                      .orderBy(...ordering)
+                      .limit(boundLimit)
+                      .offset(boundOffset),
+                  params,
+                  cacheable,
+                ),
               );
               if (operation === "get") {
                 if (!rows[0])
@@ -868,7 +931,7 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
                 ctx,
                 error,
               });
-            return scrub(rows[0]);
+            return scrub((await resolveRows(rows))[0]);
           },
         });
         // Pre-validation depth guard: action input validation runs before

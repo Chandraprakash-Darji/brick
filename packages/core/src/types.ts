@@ -531,7 +531,12 @@ export interface CompiledRoutePlan {
     Check: (val: any) => boolean;
     Errors: (val: any) => Iterable<any>;
   };
-  coercions?: Array<{ key: string; isNumber: boolean; isBoolean: boolean }>;
+  coercions?: Array<{
+    key: string;
+    isNumber: boolean;
+    isBoolean: boolean;
+    isArray?: boolean;
+  }>;
   logger: Logger;
   errorBuilder: any;
   cachedDb: any;

@@ -111,17 +111,23 @@ type EffectHooksFor<C extends ActionContext> = {
     >[0]["error"];
   }) => Effect.Effect<void, unknown, any>;
 };
-export type EffectFieldPolicy = Omit<FieldPolicy, "scrub"> & {
-  scrub?: EffectCallback<NonNullable<FieldPolicy["scrub"]>>;
-};
-export type EffectFields = Readonly<Record<string, EffectFieldPolicy>>;
-type PromiseFields<F extends EffectFields> = {
-  [K in keyof F]: Omit<F[K], "scrub"> &
-    (F[K] extends {
-      scrub: (...args: infer P) => Effect.Effect<infer A, any, any>;
+type EffectPolicy<P extends FieldPolicy> = P extends unknown
+  ? Omit<P, "scrub"> & {
+      scrub?: EffectCallback<NonNullable<P["scrub"]>>;
     }
-      ? { scrub: (...args: P) => Promise<A> }
-      : {});
+  : never;
+export type EffectFieldPolicy = EffectPolicy<FieldPolicy>;
+export type EffectFields = Readonly<Record<string, EffectFieldPolicy>>;
+type PromisePolicy<P extends EffectFieldPolicy> = P extends unknown
+  ? Omit<P, "scrub"> &
+      (P extends {
+        scrub: (...args: infer P) => Effect.Effect<infer A, any, any>;
+      }
+        ? { scrub: (...args: P) => Promise<A> }
+        : {})
+  : never;
+type PromiseFields<F extends EffectFields> = {
+  [K in keyof F]: PromisePolicy<F[K]>;
 };
 export type EffectCrudOptions<
   F extends EffectFields = EffectFields,

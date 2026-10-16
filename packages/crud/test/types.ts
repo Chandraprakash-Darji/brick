@@ -1,7 +1,8 @@
-import { Type } from "@sinclair/typebox";
-import type { CrudAuthorizeArgs, CrudInputs } from "../src";
 import { defineService } from "@brickkit/core";
+import { Type } from "@sinclair/typebox";
 import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
+
+import type { CrudAuthorizeArgs, CrudInputs } from "../src";
 import { crud } from "../src";
 const table = sqliteTable("typed", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -179,3 +180,42 @@ const broadAuthorize = ({ operation, input }: CrudAuthorizeArgs) => {
   return true;
 };
 crud({ fields: policyFields, access: { authorize: broadAuthorize } });
+
+const derived = service.resource({ name: "derived", table, id: table.id }).use(
+  crud({
+    access: "public",
+    fields: {
+      id: { read: true },
+      children: {
+        read: true,
+        schema: Type.Array(Type.Object({ label: Type.String() })),
+        resolve: ({ rows }) => rows.map(() => [{ label: "child" }]),
+      },
+    },
+  }),
+);
+async function derivedTypes() {
+  const row = await derived.get.run({ id: 1, include: ["children"] });
+  const label: string = row.children[0].label;
+  const defaultRow = await derived.get.run({ id: 1 });
+  // @ts-expect-error default output has no children
+  void defaultRow.children;
+  // @ts-expect-error children require include, not select
+  await derived.get.run({ id: 1, select: ["children"] });
+  const list = await derived.list.run({ include: ["children"] });
+  const childLabel: string = list.items[0].children[0].label;
+  const found = await derived.findOne.run({ include: ["children"] });
+  if (found) {
+    const foundLabel: string = found.children[0].label;
+    void foundLabel;
+  }
+  void childLabel;
+  // @ts-expect-error derived fields cannot be filtered
+  await derived.list.run({ where: { field: "children", op: "eq", value: [] } });
+  await derived.list.run({
+    // @ts-expect-error derived fields cannot be sorted
+    orderBy: [{ field: "children", direction: "asc" }],
+  });
+  return label;
+}
+void derivedTypes;
