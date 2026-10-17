@@ -327,7 +327,13 @@ export class ServiceImpl<
           tables: Object.keys(this.database.tables),
         }
       : undefined;
-    const { database: _database, ...options } = this.options;
+    // The schema is data. A function among the options (context, an auth policy,
+    // lifecycle hooks) cannot cross to the dev dashboard: structured clone
+    // refuses the whole architecture. JSON keeps the data and drops the rest.
+    const { database: _database, ...config } = this.options;
+    const options: ServiceSchema["options"] = JSON.parse(
+      JSON.stringify(config),
+    );
     return {
       name: this.name,
       options,

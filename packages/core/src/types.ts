@@ -500,7 +500,8 @@ export interface ActionSchema {
 
 export interface ServiceSchema {
   name: string;
-  options: Omit<ServiceOptions, "database">;
+  /** The service options as JSON: functions, such as `context` and hooks, are left out. */
+  options: Record<string, unknown>;
   hasDatabase: boolean;
   databaseConfig?: {
     name?: string;
