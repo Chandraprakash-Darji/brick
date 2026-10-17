@@ -84,7 +84,14 @@ function TocFooter({
 }) {
   return (
     <div className="mt-4 shrink-0 border-t border-border pt-4 text-xs text-muted-foreground">
-      <EditOnGitHub path={`www/content/docs/${path}`} />
+      {path.startsWith("api-reference/") ? (
+        // Built from the JSDoc in the source; there is no file here to edit.
+        <p>
+          Generated from the JSDoc above each export. Edit the comment there.
+        </p>
+      ) : (
+        <EditOnGitHub path={`www/content/docs/${path}`} />
+      )}
       {lastModified ? (
         <p className="mt-2">
           Last updated{" "}

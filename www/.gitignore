@@ -20,3 +20,4 @@ node_modules
 src/generated
 
 /public/og/
+content/docs/api-reference

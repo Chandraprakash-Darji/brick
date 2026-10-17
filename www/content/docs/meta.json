@@ -1,3 +1,10 @@
 {
-  "pages": ["(brick)", "brick-cli", "plugins", "reference", "contributing"]
+  "pages": [
+    "(brick)",
+    "brick-cli",
+    "plugins",
+    "reference",
+    "api-reference",
+    "contributing"
+  ]
 }

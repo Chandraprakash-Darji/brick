@@ -18,6 +18,18 @@ bun run start
 
 Content lives in `content/docs` (fumadocs-mdx).
 
+## API reference
+
+`content/docs/api-reference/` is generated, not committed. `bun run api:generate`
+reads every export of each package entry point in `scripts/api-reference/entries.ts`
+with ts-morph and writes one page per entry point, using the JSDoc above each
+export: the first paragraph is the summary, `@param name - text`, `@returns`,
+`@throws`, `@example`, `@deprecated`, and `{@link Name}` are rendered, and
+`@internal` leaves an export out. Names re-exported from another package are
+listed in a table. `dev`, `docs:check`, and `types:check` run it first, so edit the
+comment in the source, not the page. `bun run api:generate -- --coverage` lists the
+functions that still have no description.
+
 ## Markdown for agents
 
 `/llms.txt` links to every page. `/llms-full.txt` concatenates pages in sidebar

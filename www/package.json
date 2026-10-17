@@ -5,17 +5,18 @@
   "sideEffects": false,
   "scripts": {
     "examples:generate": "bun scripts/generate-examples.ts",
-    "dev": "bun run examples:generate && bun run og:generate && vite dev",
+    "api:generate": "bun scripts/generate-api-reference.ts",
+    "dev": "bun run api:generate && bun run examples:generate && bun run og:generate && vite dev",
     "build": "bun run docs:check && bun run examples:generate && bun run og:generate && vite build",
     "start": "vite preview",
     "preview": "vite preview",
-    "types:check": "fumadocs-mdx && bun run examples:generate && tsc --noEmit",
+    "types:check": "bun run api:generate && fumadocs-mdx && bun run examples:generate && tsc --noEmit",
     "postinstall": "fumadocs-mdx",
     "lint": "oxlint .",
     "lint:fix": "oxlint --fix .",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
-    "docs:check": "bun scripts/check-docs-markdown.ts && bun test test",
+    "docs:check": "bun run api:generate && bun scripts/check-docs-markdown.ts && bun test test",
     "docs:http-check": "bun scripts/check-docs-http.ts",
     "og:generate": "bun scripts/generate-og.tsx"
   },
@@ -74,6 +75,7 @@
     "remark-mdx": "^3.1.1",
     "satori": "^0.56.2",
     "tailwindcss": "^4.3.3",
+    "ts-morph": "^28.0.0",
     "typescript": "^7.0.2"
   }
 }
