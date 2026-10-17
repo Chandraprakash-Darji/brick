@@ -119,6 +119,27 @@ describe("@brickkit/cli request logging & reference docs", () => {
     expect(html).toContain('data-url="/spec.json"');
   });
 
+  it("serves a reference page only for true or options with a path", async () => {
+    const status = async (
+      reference: Parameters<typeof brick>[0]["reference"],
+    ) =>
+      (
+        await brick({ services: [], requestLogging: false, reference }).handle(
+          new Request("http://localhost/reference"),
+        )
+      ).status;
+    expect(await status(true)).toBe(200);
+    expect(await status({ path: "/reference" })).toBe(200);
+    // Options without a path (a title, or extra documents for the dashboard)
+    // do not add a page.
+    expect(await status({ title: "Test API" })).toBe(404);
+    expect(
+      await status({
+        documents: [{ title: "Auth", document: { openapi: "3.1.0" } }],
+      }),
+    ).toBe(404);
+  });
+
   it("returns 404 for /reference when disabled (default)", async () => {
     const app = brick({
       services: [],

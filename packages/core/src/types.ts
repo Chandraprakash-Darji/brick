@@ -3,6 +3,13 @@ import type { TSchema, Static } from "@sinclair/typebox";
 import type { BunSQLiteDatabase } from "./db/sqlite";
 import type { DatabaseHandle } from "./db/define";
 
+/**
+ * The logger on action, tool, and endpoint contexts. While a dashboard is on
+ * (`brick dev`, or `brick start` with the `dashboard` option) a line logged
+ * during a traced request appears in the dashboard with that request, instead
+ * of on the console (as does a plain `console.log`); anywhere else it prints
+ * to the console.
+ */
 export interface Logger {
   info: (...args: any[]) => void;
   warn: (...args: any[]) => void;
@@ -501,6 +508,8 @@ export interface ServiceSchema {
     tables: string[];
   };
   actions: ActionSchema[];
+  /** MCP tools. A tool with an HTTP route is also listed under `actions`. */
+  tools?: { name: string }[];
   resources?: { name: string }[];
 }
 

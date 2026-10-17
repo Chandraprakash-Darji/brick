@@ -1,3 +1,6 @@
+import { randomBytes } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { secret, envSource } from "@brickkit/core";
 
 // Single declaration site for every pages env var. Values load from
@@ -31,16 +34,49 @@ export const mcpResourceSecret = secret("MCP_RESOURCE")
 
 const isProd = envSource.get("NODE_ENV") === "production";
 
-// Required in prod (boot throws when missing); insecure dev default locally.
-export const authSecret = secret(
-  "AUTH_SECRET",
-  isProd ? {} : { default: "pages-dev-secret" },
-);
-
-export function warnOnAuthDefault(): void {
-  if (!isProd && envSource.get("AUTH_SECRET") === undefined) {
-    console.warn(
-      "[pages auth] AUTH_SECRET not set — using insecure dev default",
-    );
+/**
+ * A random signing secret for local development, made once and kept in
+ * `.brick/auth-secret` (which git ignores), so sessions survive restarts and
+ * nothing weak is ever used. Better Auth warns about short or guessable
+ * secrets, as a fixed string in the source would be.
+ */
+function developmentAuthSecret(): string {
+  const folder = join(process.cwd(), ".brick");
+  const file = join(folder, "auth-secret");
+  const stored = () => {
+    try {
+      const value = readFileSync(file, "utf8").trim();
+      return value.length >= 32 ? value : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const existing = stored();
+  if (existing) return existing;
+  const generated = randomBytes(32).toString("hex");
+  try {
+    mkdirSync(folder, { recursive: true });
+    // `.brick/` is where dashboard history lives; it keeps itself out of git.
+    writeFileSync(join(folder, ".gitignore"), "*\n", { flag: "wx" });
+  } catch {
+    // Already there, or the folder cannot be written; the next step decides.
+  }
+  try {
+    // Exclusive, so two processes starting together end up with the same one.
+    writeFileSync(file, generated, { flag: "wx", mode: 0o600 });
+    return generated;
+  } catch {
+    // Another process made it first, or nothing can be saved: then this
+    // process keeps its own, and its sessions last until it restarts.
+    return stored() ?? generated;
   }
 }
+
+// Required in prod (boot throws when missing). Locally, one is generated, unless
+// AUTH_SECRET is set.
+export const authSecret = secret(
+  "AUTH_SECRET",
+  isProd || envSource.get("AUTH_SECRET") !== undefined
+    ? {}
+    : { default: developmentAuthSecret() },
+);

@@ -24,6 +24,21 @@ it("exports default routes and a single database config before an app is created
   expect(schema.databaseConfig).toMatchObject({ engine: "sqlite" });
 });
 
+it("lists a service's tools next to its actions", () => {
+  const service = defineService("records");
+  service.action({ name: "save", execute: () => true });
+  service.tool({ name: "lookup", execute: () => true });
+  service.tool({ name: "publish", http: true, execute: () => true });
+
+  const schema = getGlobalRegistry().exportArchitecture().services[0]!;
+  expect(schema.tools).toEqual([{ name: "lookup" }, { name: "publish" }]);
+  // A tool with an HTTP route is also an action.
+  expect(schema.actions.map((action) => action.name)).toEqual([
+    "save",
+    "publish",
+  ]);
+});
+
 it("exports only registered HTTP routes and keeps each app's route table", async () => {
   const service = defineService("records");
   service.action({

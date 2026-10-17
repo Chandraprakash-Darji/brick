@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { and, eq } from "@brickkit/core";
+import { and, eq, traceRoute } from "@brickkit/core";
 import { brick } from "@brickkit/core/effect";
 
 import { getAuth } from "./auth";
@@ -20,8 +20,9 @@ const NOT_FOUND_HTML =
   '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><h1>404</h1><p>Page not found</p></body></html>';
 
 // buildApp wires the Brick-TS pages service mesh plus the raw HTML route
-// GET /p/:slug (public page viewer); GET /reference (Scalar API docs) and
-// request logging come from the SDK (brick options below).
+// GET /p/:slug (public page viewer); request logging comes from the SDK (brick
+// options below). Better Auth's OpenAPI document joins the API reference in the
+// `brick dev` dashboard (its APIs tab) through `reference.documents`.
 // CORS headers mirror the Go middleware in server/main.go (owned by A1).
 //
 // Side-effect free: constructs (but never starts) the app, so embedders
@@ -33,8 +34,22 @@ export function buildApp() {
     description:
       "Publishing workspace engine: pages, themes, and public reading surface",
     port: port,
-    reference: { path: "/reference", title: "Pages API" },
+    reference: {
+      documents: [
+        {
+          title: "Auth",
+          document: () => getAuth().api.generateOpenAPISchema(),
+        },
+      ],
+    },
+    // Developer docs for the `brick dev` dashboard (its Docs tab). Paths start
+    // at this file: ../../docs is the docs/ folder of this example.
+    documentation: {
+      dir: "../../docs",
+      components: "../../docs/components.tsx",
+    },
     requestLogging: true,
+    telemetry: true,
     title: "Pages API",
     version: "1.0.0",
   });
@@ -76,8 +91,9 @@ export function buildApp() {
 
   // better-auth handler (email/password, session, OAuth/MCP plugins).
   // Mounted before the raw routes so /api/auth/* never hits the action mesh.
-  app.all("/api/auth/*", ({ request }: { request: Request }) =>
-    getAuth().handler(request),
+  app.all(
+    "/api/auth/*",
+    traceRoute("/api/auth/*", ({ request }) => getAuth().handler(request)),
   );
 
   // Public page viewer: raw HTML endpoint (not part of the JSON action mesh).

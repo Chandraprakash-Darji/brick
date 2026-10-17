@@ -16,6 +16,7 @@ import { getCompiledCheck } from "./typebox";
 import { buildErrorHelpers } from "./action";
 import { toErrorResponse } from "./error-response";
 import { inputTooDeep } from "./compiler/runtime";
+import { createLogger } from "./logger";
 
 let _srvSeq = 0;
 const EMPTY_SERVICES = Object.freeze({});
@@ -118,12 +119,7 @@ export function compileRoutePlan(
     : action.config?.execute;
 
   const tag = `[${serviceName}:${actionName}]`;
-  const logger: Logger = {
-    info: (...args) => console.log(tag, ...args),
-    warn: (...args) => console.warn(tag, ...args),
-    error: (...args) => console.error(tag, ...args),
-    debug: (...args) => console.debug(tag, ...args),
-  };
+  const logger: Logger = createLogger(tag);
 
   const errorBuilder =
     (action as any).errorHelpers ?? buildErrorHelpers(action.config?.errors);

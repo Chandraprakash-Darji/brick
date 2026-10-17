@@ -22,13 +22,9 @@ import {
 import { normalizeActionError } from "./error-response";
 import { validateWithSchema } from "./typebox";
 import { getGlobalRegistry } from "./registry";
+import { createLogger, DEFAULT_LOG_PREFIXES } from "./logger";
 
-const defaultLogger: Logger = {
-  info: (...args) => console.log("[INFO]", ...args),
-  warn: (...args) => console.warn("[WARN]", ...args),
-  error: (...args) => console.error("[ERROR]", ...args),
-  debug: (...args) => console.debug("[DEBUG]", ...args),
-};
+const defaultLogger: Logger = createLogger(DEFAULT_LOG_PREFIXES);
 
 const DEFAULT_REQUEST = new Request("http://localhost");
 let _defaultCtxSeq = 0;

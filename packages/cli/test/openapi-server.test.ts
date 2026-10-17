@@ -92,4 +92,100 @@ describe("@brickkit/cli OpenAPI & Interactive Documentation Server", () => {
     const docsResponse = await app.handle(new Request("http://localhost/docs"));
     expect(docsResponse.status).toBe(404);
   });
+
+  it("lists the app's OpenAPI document, then the ones given to reference", async () => {
+    const s = defineService("empty");
+    const app = brick({
+      services: [s],
+      title: "Orders API",
+      reference: {
+        documents: [
+          { title: "Auth", document: { openapi: "3.1.0", paths: {} } },
+          {
+            title: "Billing",
+            document: async () => ({ openapi: "3.1.0", paths: { "/pay": {} } }),
+          },
+        ],
+      },
+    });
+
+    const documents = await app.referenceDocuments();
+    expect(documents.map((item) => item.title)).toEqual([
+      "Orders API",
+      "Auth",
+      "Billing",
+    ]);
+    expect(documents[0]!.document).toMatchObject({
+      openapi: "3.1.0",
+      info: { title: "Orders API" },
+    });
+    expect(documents[2]!.document.paths).toEqual({ "/pay": {} });
+    // Documents for the dashboard are not served as pages.
+    expect(
+      (await app.handle(new Request("http://localhost/reference"))).status,
+    ).toBe(404);
+  });
+
+  it("leaves out the app's own document when docs is false, and skips ones that fail", async () => {
+    const warnings: string[] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => void warnings.push(args.join(" "));
+    try {
+      const app = brick({
+        services: [defineService("empty")],
+        docs: false,
+        reference: {
+          documents: [
+            { title: "Auth", document: { openapi: "3.1.0" } },
+            {
+              title: "Broken",
+              document: () => {
+                throw new Error("no schema");
+              },
+            },
+          ],
+        },
+      });
+      expect(
+        (await app.referenceDocuments()).map((item) => item.title),
+      ).toEqual(["Auth"]);
+      expect(warnings.join("\n")).toContain(
+        'Skipping the "Broken" API document: no schema',
+      );
+      expect(
+        await brick({
+          services: [defineService("empty")],
+          docs: false,
+        }).referenceDocuments(),
+      ).toEqual([]);
+    } finally {
+      console.warn = warn;
+    }
+  });
+
+  it("records where the developer documentation is on the app definition", () => {
+    const services = [defineService("empty")];
+    expect(brick({ services }).definition.documentation).toBeUndefined();
+    expect(
+      brick({ services, documentation: "./docs" }).definition.documentation,
+    ).toEqual({ dir: "./docs" });
+    expect(
+      brick({
+        services,
+        documentation: { dir: "./guide", components: "./guide/parts.tsx" },
+      }).definition.documentation,
+    ).toEqual({ dir: "./guide", components: "./guide/parts.tsx" });
+    // It is a plain setting, so it never changes what the app serves.
+    expect(
+      Object.isFrozen(
+        brick({ services, documentation: "./docs" }).definition.documentation,
+      ),
+    ).toBe(true);
+    expect(() => brick({ services, documentation: "" })).toThrow(
+      "documentation needs a folder",
+    );
+    expect(() => brick({ services, documentation: { dir: "" } })).toThrow(
+      "documentation needs a folder",
+    );
+  });
 });

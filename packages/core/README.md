@@ -117,6 +117,49 @@ The registry accepts `services` and/or an explicit `tools` array, rejects duplic
 
 Source: <https://github.com/Chandraprakash-Darji/brick>.
 
+## Tracing
+
+Brick records HTTP, action, and RPC spans through `@opentelemetry/api`. Tracing
+is off by default. Turn it on per app with the `telemetry` option, and register
+an OpenTelemetry tracer provider so the spans have somewhere to go:
+
+```ts
+import { brick } from "@brickkit/core";
+
+const app = brick({ services: [pagesService], telemetry: true });
+```
+
+Each request becomes a server span. Each action, remote call, and SQL statement
+made during it becomes a child span. SQLite statements are timed at the
+`bun:sqlite` driver, and postgres.js statements at the query itself. Failures
+are recorded on the span that produced them: server faults (5xx) mark the span
+as errored with an exception event, while client errors (4xx) only add
+`brick.error.code`. Without a registered provider the spans are no-ops.
+
+With a W3C trace context propagator registered, requests continue a caller's
+trace from its `traceparent` header, and the response carries `traceparent`
+back. Without an `x-trace-id` header, Brick returns the request's trace id as
+`x-trace-id`. Statement text is recorded as `db.statement`; bound parameter
+values are not.
+
+Routes registered directly on the app, such as an auth handler mounted with
+`app.all()`, sit outside actions and endpoints. Wrap their handlers with
+`traceRoute(route, handler)` to give them a server span. The handler receives
+`request`, `headers`, `set`, `params`, and `query`; read the body from
+`request`. `traceRoute` records whenever a tracer provider is registered.
+
+```ts
+import { traceRoute } from "@brickkit/core";
+
+app.all(
+  "/api/auth/*",
+  traceRoute("/api/auth/*", ({ request }) => auth.handler(request)),
+);
+```
+
+`brick dev` registers a provider and sends the spans to its dashboard, so apps
+there need `telemetry: true` too.
+
 ## Effect APIs
 
 `@brickkit/core` keeps the existing synchronous declarations and Promise APIs.

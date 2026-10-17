@@ -1,0 +1,43 @@
+---
+title: Add a tool
+description: Expose a service function to agents over MCP.
+---
+
+<Steps>
+<Step>
+
+### Declare it
+
+Register the tool on the service with `pagesService.tool()`.
+
+</Step>
+<Step>
+
+### Describe the input
+
+Give it a schema, so agents know what to send.
+
+```ts
+pagesService.tool({
+  name: "echo",
+  description: "Echo a message back",
+});
+```
+
+</Step>
+<Step>
+
+### Try it
+
+Open the **APIs** tab, or call it over `/mcp`.
+
+</Step>
+</Steps>
+
+Install the client in another project:
+
+```npm
+npm install @brickkit/core
+```
+
+Back to the [architecture](../architecture.mdx#routes).

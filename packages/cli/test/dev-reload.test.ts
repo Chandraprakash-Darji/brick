@@ -55,6 +55,7 @@ svc.action({ name: "hi", execute: async () => ({ v: "${value}" }) });`;
         ),
         "dev",
         "main.ts",
+        "--no-dashboard",
         "--port",
         String(port),
       ],

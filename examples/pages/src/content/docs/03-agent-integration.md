@@ -324,7 +324,7 @@ Claude: I'll update the content.
 
 ## API Reference
 
-For complete API documentation, visit `/reference` on your pages server (e.g., `https://pages.rega.run/reference`). The interactive Scalar docs include request/response examples and live testing.
+For complete API documentation, visit `/swagger` on your pages server (e.g., `https://pages.rega.run/swagger`). The interactive Swagger UI includes request/response examples and live testing, and `/openapi.json` serves the raw OpenAPI document.
 
 ## What's Next?
 

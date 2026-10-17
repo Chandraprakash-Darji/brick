@@ -50,14 +50,14 @@ Run commands with `bunx brick` or add them to your `package.json` scripts:
 
 ## Command Summary
 
-| Command                         | Arguments & Flags                                                    | Description                                                                  |
-| :------------------------------ | :------------------------------------------------------------------- | :--------------------------------------------------------------------------- |
-| `brick dev`                     | `[entry] [--port <number>] [--client <file>] [--frontend <command>]` | Start local development server with file watching and live reload.           |
-| `brick start`                   | `[entry] [--port <number>]`                                          | Start production server without file watchers.                               |
-| `brick build`                   | `<entry> [--outdir <dir>] [--port <number>] [--no-aot]`              | Compile a default-exported `BrickApp` into a standalone Bun server bundle.   |
-| `brick gen openapi`             | `<entry> [--output <file>]`                                          | Generate OpenAPI 3.1 JSON specification from services.                       |
-| `brick gen client`              | `<entry> [--output <file>]`                                          | Generate typed browser client contract file (`_brick/contract.ts`).          |
-| `brick info` / `brick services` | `<entry>`                                                            | Export the complete runtime architecture JSON schema (`ArchitectureSchema`). |
+| Command                         | Arguments & Flags                                                                                                                           | Description                                                                            |
+| :------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------- |
+| `brick dev`                     | `[entry] [--port <number>] [--dashboard-port <number>] [--history-days <number>] [--no-dashboard] [--client <file>] [--frontend <command>]` | Start local development server with file watching, live reload, and a local dashboard. |
+| `brick start`                   | `[entry] [--port <number>]`                                                                                                                 | Start production server without file watchers.                                         |
+| `brick build`                   | `<entry> [--outdir <dir>] [--port <number>] [--no-aot]`                                                                                     | Compile a default-exported `BrickApp` into a standalone Bun server bundle.             |
+| `brick gen openapi`             | `<entry> [--output <file>]`                                                                                                                 | Generate OpenAPI 3.1 JSON specification from services.                                 |
+| `brick gen client`              | `<entry> [--output <file>]`                                                                                                                 | Generate typed browser client contract file (`_brick/contract.ts`).                    |
+| `brick info` / `brick services` | `<entry>`                                                                                                                                   | Export the complete runtime architecture JSON schema (`ArchitectureSchema`).           |
 
 ## Port Resolution Rules
 

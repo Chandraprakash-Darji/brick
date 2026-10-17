@@ -20,6 +20,22 @@ After changing framework code, rerun these commands to rebuild the workspace
 packages. The backend lives in `src/api` and is mounted by `src/server.ts`; there is one
 package and one server for the UI, API, auth, and MCP routes.
 
+`pages:dev` also serves the Brick dashboard at `http://127.0.0.1:9400`. It shows
+each API request with its action, auth, and SQL spans, plus failures and the
+service's routes and tables. The app opts in with `telemetry: true` in
+`src/api/app.ts`, and its auth and MCP routes are wrapped with `traceRoute`.
+The APIs tab renders the app's routes and Better Auth's (the `openAPI()` plugin,
+passed through `reference.documents`) with Fumadocs OpenAPI and sends test calls to
+the app, with the app's trace of each call under its response.
+The Docs tab shows the developer documentation in `docs/` (set by `documentation`
+in `src/api/app.ts`, as `../../docs`, a path from that file): Fumadocs-style pages
+with `meta.json` ordering, and
+`docs/components.tsx` adds an `Endpoint` component of the project's own. It needs
+`fumadocs-core` and `@mdx-js/mdx`, listed in this package's dev dependencies.
+The Requests tab can look back over 90 days of finished requests kept in
+`.brick/`, which ignores itself. Change that with `dashboard: { historyDays }`, or turn the dashboard off
+with `dashboard: false`, on `brickClient` in `vite.config.ts`.
+
 ## Database and environment
 
 Provide a local Postgres database. The development connection defaults to
@@ -38,7 +54,7 @@ DATABASE_URL=postgresql://localhost:5432/drafton \
 For a disposable development database, `db:push` is also available. To
 regenerate schema migrations after changing tables, run `db:generate`.
 
-Set `AUTH_SECRET` for production. `BASE_URL` and `BACKEND_ORIGIN` should be the
+Set `AUTH_SECRET` for production (`openssl rand -hex 32` makes one). Locally it is optional: a random secret is made on first start and kept in `.brick/auth-secret`, which git ignores, so sessions survive restarts. A development database that already has a signing key from an older secret answers signed-in requests with a 500 ("Failed to decrypt private key") until that key is cleared once: `delete from jwks;`. Better Auth makes a new one on demand. `BASE_URL` and `BACKEND_ORIGIN` should be the
 public origin; for the combined local web/API server use
 `http://localhost:5174`. `MCP_RESOURCE` defaults to `<BASE_URL>/mcp`.
 `VITE_API_BASE` optionally points the browser at a separate API origin.
@@ -106,7 +122,8 @@ imported only as types in the browser client.
 - `/api/auth/*`: Better Auth.
 - `/api/public/pages/:slug`: public metadata.
 - `/p/:slug`: rendered public page.
-- `/openapi.json`, `/reference`, `/swagger`: API documentation.
+- `/openapi.json`, `/swagger`: API documentation. The API reference (this app's
+  routes and Better Auth's) is the APIs tab of the `brick dev` dashboard.
 - `/mcp` and `/.well-known/*`: authenticated MCP transport and OAuth discovery.
 
 The web server mounts the API in-process, so development requires one server.

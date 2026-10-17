@@ -12,6 +12,7 @@
     "**/routeTree.gen.ts",
     "**/.output/**",
     "**/.tanstack/**",
-    "bun.lock"
+    "bun.lock",
+    "**/dashboard-dist/**"
   ]
 }

@@ -48,6 +48,8 @@ export interface Logger {
 }
 ```
 
+Arguments are formatted as `console.log` would format them. While a dashboard is on (`brick dev`, or `brick start` with the [`dashboard` option](/docs/brick-cli/dev-and-start#monitoring-dashboard)), a line logged while a traced request is running goes to the dashboard (the Logs tab, and the request's own details) instead of the terminal, and so does a plain `console.log`, `info`, `warn`, `error`, or `debug`; see [Logs in the dashboard](/docs/brick-cli/dev-and-start#logs). With no dashboard, nothing is captured: both print to the console as before, as do lines logged outside a request.
+
 ## `ActionContext`
 
 `ActionContext` is the intersection of `BaseContext` and your service's custom context resolver return type:

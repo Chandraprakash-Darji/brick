@@ -33,13 +33,9 @@ import { getTableName, isDatabaseHandle, type DatabaseHandle } from "./db";
 import { defineResource } from "./resource";
 import { getActionAccess } from "./access";
 import { pickContextEnvelope } from "./context";
+import { createLogger, DEFAULT_LOG_PREFIXES } from "./logger";
 
-const defaultLogger: Logger = {
-  info: (...args) => console.log("[INFO]", ...args),
-  warn: (...args) => console.warn("[WARN]", ...args),
-  error: (...args) => console.error("[ERROR]", ...args),
-  debug: (...args) => console.debug("[DEBUG]", ...args),
-};
+const defaultLogger: Logger = createLogger(DEFAULT_LOG_PREFIXES);
 
 const DEFAULT_REQUEST = new Request("http://localhost");
 const EMPTY_SERVICES = Object.freeze({});
@@ -371,6 +367,7 @@ export class ServiceImpl<
           tags: act.config.tags,
         };
       }),
+      tools: this.listTools().map((tool) => ({ name: tool.name })),
       resources: this.listResources().map((res) => ({
         name: res.name,
       })),

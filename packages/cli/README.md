@@ -23,7 +23,7 @@ Every command except `dev` and `start` takes a required `<entry>`: a module
 whose default export is a `BrickApp` that does not call `.listen()`.
 
 ```sh
-brick dev [entry] [--port 4000]
+brick dev [entry] [--port 4000] [--dashboard-port 9400] [--history-days 90] [--no-dashboard]
 brick start [entry] [--port 4000]
 brick build <entry> [--outdir dist/brick] [--port <number>] [--no-aot]
 brick gen openapi <entry> [--output openapi.json]
@@ -56,6 +56,167 @@ brick info src/app.ts
 ```
 
 Source: <https://github.com/Chandraprakash-Darji/brick>.
+
+## Local dashboard
+
+`brick dev` with an entry also serves a dashboard at
+`http://127.0.0.1:9400`. It lists requests as they run, shows a waterfall of
+each request's action and remote-call spans, and collects failures and reloads,
+including startup crashes. The live views survive restarts within the same session.
+
+Requests appear only from apps that opt in with `telemetry: true`. `brick dev`
+warns when the dashboard is on but the entry doesn't set it:
+
+```ts
+const app = brick({ services: [pagesService], telemetry: true });
+```
+
+```sh
+brick dev src/app.ts                          # dashboard on 9400
+brick dev src/app.ts --dashboard-port 9500    # another port
+brick dev src/app.ts --history-days 30        # keep a month of requests
+brick dev src/app.ts --history-days 0         # live requests only, nothing on disk
+brick dev src/app.ts --no-dashboard           # API only
+```
+
+The dashboard is a React app in `packages/cli/dashboard`, styled with Tailwind
+and shadcn components. `bun run --filter @brickkit/cli build` bundles it into
+`dashboard-dist`, which the package ships (about 2 MB, most of it the API
+reference, which loads only when the APIs tab opens). See
+`packages/cli/dashboard/README.md`.
+
+The Overview tab draws the app as a graph of clients, services, and databases,
+with each service's actions and tools and each database's name, engine, and
+tables. Calls, durations, and health fill in from recent requests. Below it are
+each HTTP route with its action and recent request and failure counts, and the
+services with their databases and resources. SQL statements appear as child
+spans under the action that ran them, with the statement text on hover. Spans
+are colored by type: request, action, service call, and SQL.
+
+The APIs tab renders the app's OpenAPI documents with Fumadocs OpenAPI, in the
+dashboard's colors, so the app serves no reference page of its own. A sidebar
+lists each document's operations by tag, with a filter; the open one shows its
+parameters, responses, and example requests, which default to JavaScript
+`fetch`. Try in Playground sends the call to the app through the dashboard (the
+app is another origin), so the call also appears in the Requests tab, and the
+response comes with the app's trace of it (when `telemetry` is on): the error, its stack trace when the
+app threw one, and the spans. The dashboard forwards only to the app it shows.
+The first document is the app's own, left out when
+`docs` is `false`; `reference.documents` adds more, each a title and an OpenAPI
+document or a function returning one (for example Better Auth's
+`auth.api.generateOpenAPISchema()`). A document that throws is skipped with a
+warning. `reference` serves a Scalar page only for `true` or with a `path`.
+
+The Docs tab shows the app's developer documentation: a folder of `.md`/`.mdx`
+pages in Fumadocs' layout (frontmatter, `meta.json`, folder groups), set with
+`documentation` on `brick()`. It appears only for apps that set it.
+
+```ts
+// src/app.ts, with the docs in docs/ at the project root
+const app = brick({
+  services: [pagesService],
+  documentation: "../docs", // or { dir: "../docs", components: "../docs/components.tsx" }
+});
+```
+
+Relative paths start at the folder of the app entry, as they read in the file that
+sets them. `fumadocs-core` builds the page tree and search, and `@mdx-js/mdx` compiles the
+pages. Both are optional peers, loaded only when `documentation` is set; without
+them the tab says what to install (`bun add -d fumadocs-core @mdx-js/mdx`).
+Saving a file updates the tab. Pages can use Fumadocs' components without
+importing them (Callout, Cards, Tabs, Steps, Accordions, Files, TypeTable,
+InlineTOC, Banner), and `components` names a module of your own React components
+to add, which the dashboard bundles. Links between pages and local images work as
+they do on a docs site. See `packages/cli/dashboard/README.md`.
+
+The Logs tab lists what actions, tools, and endpoints log with `ctx.logger`, and
+what they print with `console.log`, `info`, `warn`, `error`, and `debug`, newest
+first. Under `brick dev` a line written while a traced request runs is a span
+event on that request, so it shows here and in the request's details, and is not
+printed. `brick start` does the same only when the app sets the `dashboard`
+option (see below); otherwise nothing is captured or changed and both print as
+usual. Lines outside a request still print. It needs `telemetry` on. A line is
+cut at 4,000 characters and a span keeps its first 100.
+
+To find a line: words that must all appear, `"an exact phrase"`, `-word` to
+leave lines out, and `level:`, `route:`, `action:`, `method:`, and `trace:` for
+one part of a line (any can be negated with `-`). Matches are marked, the level
+buttons count what matches, 5m / 15m / 1h limit how far back to look, and Pause
+holds the list still. Point at a line to copy it, show only its request, or
+open it.
+
+The Requests tab is one log of every request the app has served. Choose Live
+for this run, or a range from 1 hour to 90 days to look back, or Custom to name
+a start and an end to the second (or Today, Yesterday, the last 15 minutes). Four
+cards show
+the request count, error rate, median duration, and slowest 5% of what the list
+shows, so they follow the range and filters. A timeline below them shows volume
+(drag across it to zoom), filters on the left show a count
+beside each value (outcome, service, method, route, and speed, with several
+values per filter allowed), and the search box matches routes, paths, actions,
+and failure messages. Each row shows the time, method and status, route, how long
+it took, and the action that handled it or why it failed. Open a row to see the
+request beside the list: when it started, what it ran, how it ended, the error
+and stack trace if it failed, and the waterfall of its spans. Export saves the
+filtered requests as CSV.
+
+Finished requests are kept on disk between runs for 90 days by default, in
+`.brick/telemetry.sqlite` in the project folder. `.brick/` ignores itself, so it
+is never committed. History uses `bun:sqlite` under Bun and `node:sqlite` under
+Node (22.5 or later); without either, the dashboard runs with live data only and
+says so. Requests cut off by a restart are not kept. It keeps at most 100,000
+requests, dropping the oldest first. Stored requests include their spans, which
+carry SQL statement text, error messages, and stack traces, so treat `.brick/` as
+you would your logs. Use `--history-days 0` to keep nothing, or
+delete `.brick/` to start over.
+
+Requests that send a W3C `traceparent` header join the caller's trace, and the
+dashboard shows them under that trace id.
+
+### Monitoring dashboard for production
+
+`brick start` serves a read-only dashboard of the running app when the app,
+default-exported from the entry, sets the `dashboard` option:
+
+```ts
+export default brick({
+  services,
+  dashboard: {
+    port: 9400, // its own port, apart from the app's
+    host: "0.0.0.0", // 127.0.0.1 unless set
+    auth: { token: process.env.DASHBOARD_TOKEN, authorize },
+    historyDays: 0, // finished requests kept on disk, in .brick/
+  },
+});
+```
+
+It listens on a port of its own, so it can be kept private or mounted at another
+address, and it answers while the app's routes do not. It shows Requests, Logs,
+Errors, Overview, and Reloads; there is no restart, API proxy, APIs, or Docs, and
+OpenAPI documents are not served. Setting it turns `telemetry` on, and from then
+`ctx.logger` and `console` lines written during a request go to the dashboard
+and not to the container's console.
+
+Beyond loopback, access control is required, and `brick start` will not run the
+dashboard without it. `auth.token` is a secret (or several, to rotate), at least
+16 characters: a browser asks for it in its sign-in prompt (any user name, the
+secret as the password), and monitors send `Authorization: Bearer <secret>`.
+`auth.authorize(request)` is your own check, for the auth the app already has
+(Better Auth, Clerk, a header from a proxy): it gets a standard `Request` without
+a body and returns `true`, `false`, or a `Response` such as a redirect to a login
+page; a throw or five seconds without an answer refuses the request with 503. A
+request passes with a valid token or when `authorize` allows it.
+
+`GET /_health` on the dashboard's port needs no sign-in: 200 while the app answers
+its own `/_health`, 503 when it does not, for uptime monitors. Responses are
+`no-store`, with a strict Content-Security-Policy and `X-Frame-Options: DENY`;
+serve it over HTTPS. Failed sign-ins are not rate limited, so use long random
+tokens. The dashboard runs in the app's process: it survives errors in handlers,
+not the process dying. `brick dev` has its own dashboard and ignores the option.
+
+The dashboard binds to `127.0.0.1` and rejects requests whose `Host` header is
+not local. It does not record request bodies or headers. Error messages, stack
+traces, and SQL statement text are visible to anyone who can open the dashboard.
 
 ## Action routes
 
@@ -147,6 +308,17 @@ Vite tracks the entry and its dependencies for backend hot reload. Browser
 imports of this server module are rejected. Add
 `/// <reference types="@brickkit/cli/vite/client" />` to your Vite environment
 declarations. See `examples/pages` for a complete Start integration.
+
+During `vite dev` the plugin also serves the local dashboard at
+`http://127.0.0.1:9400`. Pass `dashboard: { port }` to move it or
+`dashboard: false` to turn it off. `dashboard: { historyDays }` sets how many days
+of requests are kept in `.brick/` (default 90; 0 for none). The app must still
+pass `telemetry: true` to `brick()`. Dev servers such as TanStack Start with Nitro run the app in a
+worker, so the plugin imports a reporter into `virtual:brick-app` that sends
+the worker's spans to the dashboard over loopback HTTP. History stays in the
+Vite process and survives worker restarts. If the port is taken, Vite starts
+without the dashboard and logs a warning. The dashboard cannot restart the app
+in this mode, so it hides that button.
 
 Generation evaluates the app entry, so the configuration it needs to construct
 the app must be available in development and at build time. Keep startup jobs

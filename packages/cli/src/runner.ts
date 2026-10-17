@@ -6,8 +6,22 @@ import {
   brick,
   getPluginActionRoute,
   isBrickApp,
+  type ApiDocument,
+  type ArchitectureSchema,
   type BrickApp,
+  type DocumentationOptions,
 } from "@brickkit/core";
+import { startDevDashboard, type DevDashboard } from "./dev-dashboard";
+import { DocsHost } from "./dev-docs";
+import { DEFAULT_HISTORY_DAYS, openHistory } from "./dev-history";
+import { DevTelemetryStore } from "./dev-telemetry-store";
+import { parsePort } from "./port-utils";
+import { startProductionDashboard } from "./production-dashboard";
+import type {
+  SerializedError,
+  TelemetryRecord,
+  WorkerErrorPhase,
+} from "./dev-telemetry";
 
 export interface DevServerOptions {
   port?: number;
@@ -17,6 +31,12 @@ export interface DevServerOptions {
   clientOutput?: string;
   /** Frontend command, launched once after the first successful generation. */
   frontend?: string;
+  /**
+   * Local dashboard with live requests, traces, errors, and reloads. Needs an
+   * entry. `historyDays` is how long finished requests are kept on disk
+   * (default 90); zero keeps live data only.
+   */
+  dashboard?: { port: number; historyDays?: number } | false;
 }
 
 async function createServer(
@@ -80,6 +100,7 @@ async function createServer(
 export async function startProdServer(options: DevServerOptions = {}) {
   const entry = options.entry;
 
+  let exported: BrickApp | undefined;
   if (entry) {
     const resolvedEntry = resolve(process.cwd(), entry);
     if (!existsSync(resolvedEntry)) {
@@ -87,7 +108,15 @@ export async function startProdServer(options: DevServerOptions = {}) {
       process.exit(1);
     }
     console.log(`[Brick-TS] Loading application entry: ${resolvedEntry}`);
-    await import(resolvedEntry);
+    const module = await import(resolvedEntry);
+    // An entry that default-exports its app is served as it built it, with its
+    // options (telemetry, dashboard, and the rest), as `brick dev` does.
+    if (isBrickApp(module?.default)) exported = module.default;
+  }
+  if (exported && options.prefix !== undefined) {
+    console.warn(
+      `[Brick-TS] Ignoring prefix ${options.prefix}: exported BrickApp prefix ${exported.definition.prefix} takes precedence.`,
+    );
   }
 
   const port =
@@ -102,10 +131,12 @@ export async function startProdServer(options: DevServerOptions = {}) {
     );
   }
 
-  const app = brick({
-    port,
-    prefix: options.prefix,
-  });
+  const app =
+    exported ??
+    brick({
+      port,
+      prefix: options.prefix,
+    });
 
   const prefix = app.definition.prefix;
   const services = app.definition.services;
@@ -128,10 +159,23 @@ export async function startProdServer(options: DevServerOptions = {}) {
     }
   }
 
+  // Before listening, so the first request is already traced and its logs kept.
+  const dashboard = await startProductionDashboard(app, { appPort: port });
   app.listen(port);
 
   console.log(`\n⚡ API Gateway running on: http://localhost:${port}`);
   console.log(`🩺 Health check:        http://localhost:${port}/_health`);
+  if (dashboard) {
+    const shown =
+      dashboard.host === "0.0.0.0" || dashboard.host === "::"
+        ? "localhost"
+        : dashboard.host.includes(":")
+          ? `[${dashboard.host.replace(/^\[|\]$/g, "")}]`
+          : dashboard.host;
+    console.log(
+      `📊 Dashboard:           http://${shown}:${dashboard.port} (health: /_health)`,
+    );
+  }
   console.log(
     `🗺️ Architecture graph:  http://localhost:${port}/_brick/services\n`,
   );
@@ -191,12 +235,44 @@ export async function startDevServer(options: DevServerOptions = {}) {
   );
   if (options.frontend && !options.clientOutput)
     throw new Error("Brick: --frontend requires --client <file>.");
+  if (
+    options.dashboard &&
+    options.port !== undefined &&
+    options.dashboard.port === options.port
+  )
+    throw new Error(
+      "Brick: dashboard port must differ from the API port. Use --dashboard-port <number>.",
+    );
+  // The worker resolves its port the same way, so this is where the app listens.
+  const appPort = () =>
+    parsePort(
+      options.port === undefined ? undefined : String(options.port),
+      process.env.PORT,
+    );
+  const history = options.dashboard
+    ? await openHistory({
+        directory: process.cwd(),
+        days: options.dashboard.historyDays ?? DEFAULT_HISTORY_DAYS,
+        warn: (message) => console.warn(message),
+      })
+    : undefined;
+  const telemetry = options.dashboard
+    ? new DevTelemetryStore({ history })
+    : undefined;
+  const docs = telemetry
+    ? new DocsHost(telemetry, (message) => console.warn(message))
+    : undefined;
   let frontend: ReturnType<typeof Bun.spawn> | undefined;
   const dependencyFiles = new Set<string>();
   const dependencyWatchers = new Map<string, ReturnType<typeof watch>>();
   let stopped = false;
   const intentionalExits = new WeakSet<ReturnType<typeof Bun.spawn>>();
+  let generationCount = 0;
+  let childGeneration = 0;
   const launch = () => {
+    const generation = ++generationCount;
+    childGeneration = generation;
+    telemetry?.recordReload({ kind: "started", generation });
     const application = Bun.spawn(
       [
         process.execPath,
@@ -205,6 +281,7 @@ export async function startDevServer(options: DevServerOptions = {}) {
         String(options.port ?? ""),
         options.prefix ?? "",
         options.clientOutput ? resolve(options.clientOutput) : "",
+        telemetry ? "1" : "",
       ],
       {
         cwd: process.cwd(),
@@ -213,6 +290,26 @@ export async function startDevServer(options: DevServerOptions = {}) {
         ipc(message) {
           if (!message || typeof message !== "object" || !("type" in message))
             return;
+          if (
+            telemetry &&
+            message.type === "brick:telemetry" &&
+            "records" in message &&
+            Array.isArray(message.records)
+          ) {
+            telemetry.ingest(message.records as TelemetryRecord[], generation);
+          }
+          if (
+            telemetry &&
+            message.type === "brick:error" &&
+            "phase" in message &&
+            "error" in message
+          ) {
+            telemetry.recordWorkerError(
+              message.phase as WorkerErrorPhase,
+              message.error as SerializedError,
+              generation,
+            );
+          }
           if (
             message.type === "brick:contract-ready" &&
             options.frontend &&
@@ -228,6 +325,42 @@ export async function startDevServer(options: DevServerOptions = {}) {
                 stderr: "inherit",
               },
             );
+          }
+          if (
+            telemetry &&
+            message.type === "brick:architecture" &&
+            "architecture" in message
+          ) {
+            telemetry.setArchitecture(
+              message.architecture as ArchitectureSchema,
+              generation,
+            );
+          }
+          if (docs && message.type === "brick:documentation") {
+            void docs.configure(
+              dirname(resolvedEntry),
+              "documentation" in message
+                ? (message.documentation as DocumentationOptions | undefined)
+                : undefined,
+            );
+          }
+          if (
+            telemetry &&
+            message.type === "brick:api-documents" &&
+            "documents" in message &&
+            Array.isArray(message.documents)
+          ) {
+            telemetry.setApiDocuments(
+              message.documents as ApiDocument[],
+              `http://localhost:${appPort()}`,
+            );
+          }
+          if (telemetry && message.type === "brick:contract-ready") {
+            telemetry.recordReload({
+              kind: "contract-ready",
+              generation,
+              detail: "browser contract generated",
+            });
           }
           if (
             message.type === "brick:dependencies" &&
@@ -264,10 +397,36 @@ export async function startDevServer(options: DevServerOptions = {}) {
         console.error(
           `[Brick-TS] Application process exited with code ${code}. Waiting for changes to restart.`,
         );
+        telemetry?.recordReload({
+          kind: "exited",
+          generation,
+          detail: `exit code ${code}`,
+        });
       }
+      telemetry?.interruptGeneration(generation);
     });
     return application;
   };
+  // Bind the dashboard before the first worker starts, so a port conflict
+  // does not leave an application process running.
+  const dashboard: DevDashboard | undefined =
+    telemetry && options.dashboard
+      ? await startDevDashboard({
+          port: options.dashboard.port,
+          store: telemetry,
+          history,
+          docs: () => docs?.current,
+          restart: () => {
+            void restart("dashboard");
+          },
+        }).catch((error: unknown) => {
+          history?.close();
+          throw error;
+        })
+      : undefined;
+  if (dashboard) {
+    console.log(`📊 Dev dashboard:       http://127.0.0.1:${dashboard.port}`);
+  }
   let child = launch();
   const watchDirs = [
     ...new Set([resolve("src"), resolve("app"), resolve(resolvedEntry, "..")]),
@@ -276,14 +435,24 @@ export async function startDevServer(options: DevServerOptions = {}) {
   let restarting = false;
   let dirty = false;
 
-  async function restart() {
+  async function restart(trigger: "changes" | "dashboard" = "changes") {
     dirty = true;
     if (restarting || stopped) return;
     restarting = true;
     try {
       while (dirty && !stopped) {
         dirty = false;
-        console.log("\n📝 Changes detected. Restarting server...");
+        console.log(
+          trigger === "changes"
+            ? "\n📝 Changes detected. Restarting server..."
+            : "\n🔄 Restart requested from the dashboard. Restarting server...",
+        );
+        telemetry?.recordReload({
+          kind: "restarting",
+          generation: childGeneration,
+          detail:
+            trigger === "changes" ? "source changed" : "restart from dashboard",
+        });
         intentionalExits.add(child);
         child.kill();
         await child.exited;
@@ -336,6 +505,9 @@ export async function startDevServer(options: DevServerOptions = {}) {
         }
       }
     }
+    dashboard?.stop();
+    docs?.close();
+    history?.close();
     child.kill();
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);

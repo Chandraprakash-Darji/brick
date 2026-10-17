@@ -1,9 +1,47 @@
 import { Elysia, type Context } from "elysia";
 
+/** An OpenAPI document as plain JSON. */
+export type OpenApiDocument = Record<string, unknown>;
+
+/** An extra OpenAPI document for the API reference, such as Better Auth's. */
+export interface ReferenceDocument {
+  /** Name in the reference's list of documents. */
+  title: string;
+  /** The document, or a function returning it; called each time the app starts. */
+  document:
+    | OpenApiDocument
+    | (() => OpenApiDocument | Promise<OpenApiDocument>);
+}
+
+/** A named OpenAPI document ready to render. */
+export interface ApiDocument {
+  title: string;
+  document: OpenApiDocument;
+}
+
+/** Developer documentation for the `brick dev` dashboard. */
+export interface DocumentationOptions {
+  /**
+   * Folder of `.md`/`.mdx` pages. A relative path starts at the folder of the
+   * app entry, as it reads in the file that sets it.
+   */
+  dir: string;
+  /**
+   * Module whose exports are React components for MDX, added to the built-in
+   * ones; a relative path starts where `dir` does. A default export or a
+   * `components` export holds the name-to-component map. The dashboard bundles
+   * it, so it may import anything the project has.
+   */
+  components?: string;
+}
+
 export interface ReferenceOptions {
+  /** Also serve a standalone Scalar page here. Without a path, no page is served. */
   path?: string;
   title?: string;
   specUrl?: string;
+  /** More OpenAPI documents for the `brick dev` dashboard's APIs view. */
+  documents?: ReferenceDocument[];
 }
 
 /** Renders the Scalar API reference page for the given OpenAPI URL. */

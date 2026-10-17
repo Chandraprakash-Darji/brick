@@ -41,11 +41,17 @@ export {
   requestLoggingPlugin,
   type RequestLoggingOptions,
 } from "./request-logger";
+export { traceRoute } from "./telemetry";
+export type { DashboardAuth, DashboardOptions } from "./dashboard";
 export {
   scalarDocsHTML,
   swaggerDocsHTML,
   referencePlugin,
   registerReferenceRoute,
+  type ApiDocument,
+  type DocumentationOptions,
+  type OpenApiDocument,
+  type ReferenceDocument,
   type ReferenceOptions,
 } from "./docs";
 export {

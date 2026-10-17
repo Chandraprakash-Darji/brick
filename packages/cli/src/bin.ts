@@ -1,6 +1,8 @@
 #!/usr/bin/env bun
 import { Command, InvalidArgumentError } from "commander";
 import { startDevServer, startProdServer } from "./runner";
+import { DEFAULT_DASHBOARD_PORT } from "./dev-dashboard";
+import { DEFAULT_HISTORY_DAYS } from "./dev-history";
 import { buildApplication } from "./build";
 import { writeClientContract } from "./client-contract-file";
 import { generateOpenApiSpec, getGlobalRegistry } from "@brickkit/core";
@@ -36,6 +38,16 @@ function parsePortOption(value: string): number {
   }
 }
 
+function parseHistoryDays(value: string): number {
+  const days = Number(value);
+  if (!/^\d+$/.test(value.trim()) || !Number.isSafeInteger(days)) {
+    throw new InvalidArgumentError(
+      `--history-days must be a whole number of days, or 0 for none (got '${value}')`,
+    );
+  }
+  return days;
+}
+
 function parseFileOption(value: string, usage: string): string {
   if (value.startsWith("-")) {
     throw new InvalidArgumentError(`${usage} (got flag-like value '${value}')`);
@@ -59,7 +71,7 @@ export function createProgram(): Command {
       "after",
       `
 Usage:
-  brick dev [entry] [--port <number>]                    Start development server with live reload
+  brick dev [entry] [--port <number>] [--dashboard-port <number>] [--history-days <number>] [--no-dashboard]  Start development server with live reload and dashboard
   brick start [entry] [--port <number>]                  Start production server
   brick build <app.ts> [--outdir <dir>] [--port <number>] [--no-aot]  Compile a default-exported BrickApp into a Bun server
   brick gen openapi <entry> [--output <file>]            Generate OpenAPI 3.1 JSON specification
@@ -79,20 +91,56 @@ ${PORT_RESOLUTION_HELP}`,
       "--frontend <command>",
       "Start frontend after contract generation; requires --client",
     )
+    .option(
+      "--dashboard-port <number>",
+      `Port for the local dashboard (default ${DEFAULT_DASHBOARD_PORT})`,
+      parsePortOption,
+    )
+    .option(
+      "--history-days <number>",
+      `Days of requests the dashboard keeps on disk, 0 for none (default ${DEFAULT_HISTORY_DAYS})`,
+      parseHistoryDays,
+    )
+    .option("--no-dashboard", "Do not start the local dashboard")
     .argument("[entry]", "Application entry file")
     .option("--port <number>", PORT_HELP, parsePortOption)
     .addHelpText("after", PORT_RESOLUTION_HELP)
     .action(
       async (
         entry: string | undefined,
-        opts: { port?: number; client?: string; frontend?: string },
+        opts: {
+          port?: number;
+          client?: string;
+          frontend?: string;
+          dashboardPort?: number;
+          historyDays?: number;
+          dashboard?: boolean;
+        },
       ) => {
         const port = resolveDevPort(opts.port);
+        if (opts.dashboard === false && opts.dashboardPort !== undefined) {
+          throw new Error(
+            "Brick: --dashboard-port cannot be combined with --no-dashboard.",
+          );
+        }
+        if (opts.dashboard === false && opts.historyDays !== undefined) {
+          throw new Error(
+            "Brick: --history-days cannot be combined with --no-dashboard.",
+          );
+        }
         await startDevServer({
           entry,
           port,
           clientOutput: opts.client,
           frontend: opts.frontend,
+          // The dashboard reads the app's requests, so it needs an entry.
+          dashboard:
+            entry && opts.dashboard !== false
+              ? {
+                  port: opts.dashboardPort ?? DEFAULT_DASHBOARD_PORT,
+                  historyDays: opts.historyDays,
+                }
+              : false,
         });
       },
     );

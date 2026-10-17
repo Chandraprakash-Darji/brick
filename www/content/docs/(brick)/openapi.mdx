@@ -51,16 +51,16 @@ Once started, the following endpoints are available (mounted at the app root, no
 
 Configure OpenAPI and documentation routes in `CreateServerOptions`:
 
-| Option        | Type                          | Default               | Description                                                                    |
-| :------------ | :---------------------------- | :-------------------- | :----------------------------------------------------------------------------- |
-| `docs`        | `boolean`                     | `true`                | Enables or disables OpenAPI spec and HTML documentation endpoints.             |
-| `title`       | `string`                      | `"Brick-TS API Mesh"` | API title in OpenAPI `info.title`.                                             |
-| `version`     | `string`                      | `"1.0.0"`             | API version in OpenAPI `info.version`.                                         |
-| `description` | `string`                      | `undefined`           | Overview description rendered in OpenAPI `info.description`.                   |
-| `openApiPath` | `string`                      | `"/openapi.json"`     | Path where raw OpenAPI 3.1 JSON is served.                                     |
-| `docsPath`    | `string`                      | `"/docs"`             | Path where Scalar interactive documentation is mounted.                        |
-| `swaggerPath` | `string`                      | `"/swagger"`          | Path where Swagger UI is mounted.                                              |
-| `reference`   | `boolean \| ReferenceOptions` | `false`               | Mounts an optional dedicated Scalar reference page (defaults to `/reference`). |
+| Option        | Type                          | Default               | Description                                                                                                                                                   |
+| :------------ | :---------------------------- | :-------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `docs`        | `boolean`                     | `true`                | Enables or disables OpenAPI spec and HTML documentation endpoints.                                                                                            |
+| `title`       | `string`                      | `"Brick-TS API Mesh"` | API title in OpenAPI `info.title`.                                                                                                                            |
+| `version`     | `string`                      | `"1.0.0"`             | API version in OpenAPI `info.version`.                                                                                                                        |
+| `description` | `string`                      | `undefined`           | Overview description rendered in OpenAPI `info.description`.                                                                                                  |
+| `openApiPath` | `string`                      | `"/openapi.json"`     | Path where raw OpenAPI 3.1 JSON is served.                                                                                                                    |
+| `docsPath`    | `string`                      | `"/docs"`             | Path where Scalar interactive documentation is mounted.                                                                                                       |
+| `swaggerPath` | `string`                      | `"/swagger"`          | Path where Swagger UI is mounted.                                                                                                                             |
+| `reference`   | `boolean \| ReferenceOptions` | `false`               | `true` mounts a dedicated Scalar page at `/reference`. Options mount one only with a `path`; `documents` adds OpenAPI documents to the `brick dev` dashboard. |
 
 ### Mounting a Dedicated `/reference` Route
 
@@ -76,6 +76,23 @@ export default brick({
   },
 });
 ```
+
+### Adding Documents to the Dashboard
+
+`brick dev` renders API documentation in its dashboard, in the APIs tab, so a page does not have to be served at all. `reference.documents` adds OpenAPI documents next to the app's own, such as the one Better Auth generates:
+
+```ts title="src/server.ts"
+export default brick({
+  services: [usersService],
+  reference: {
+    documents: [
+      { title: "Auth", document: () => auth.api.generateOpenAPISchema() },
+    ],
+  },
+});
+```
+
+Each entry has a `title` and a `document`: an OpenAPI object, or a function (sync or async) that returns one and runs each time the app starts. A document that throws is skipped with a warning. `app.referenceDocuments()` returns the app's document followed by these, and the app's own is left out when `docs` is `false`. With `reference: { path }` the same options also serve a standalone Scalar page.
 
 ## Programmatic Spec Generation (`generateOpenApiSpec`)
 

@@ -3,7 +3,7 @@ import { mcp } from "@better-auth/mcp";
 import type { DatabaseHandle } from "@brickkit/core";
 import type { PgDatabase } from "@brickkit/core/pg";
 import { betterAuth } from "better-auth/minimal";
-import { jwt } from "better-auth/plugins";
+import { jwt, openAPI } from "better-auth/plugins";
 
 import { appDb } from "../db";
 import { authSecret, baseUrlSecret, mcpResourceSecret } from "../secrets";
@@ -36,6 +36,7 @@ export function createAuthInstance(
     },
     plugins: [
       jwt(),
+      openAPI({ disableDefaultReference: true }),
       mcp({
         allowDynamicClientRegistration: true,
         allowUnauthenticatedClientRegistration: true,

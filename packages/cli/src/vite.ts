@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { writeContractSource } from "./client-contract-file";
 import {
   createServer,
@@ -10,6 +11,7 @@ import {
 } from "vite";
 import { generateClientContract } from "./client-contract";
 import { requireBrickApp } from "./app-entry";
+import { startViteDashboard, type ViteDashboard } from "./dev-vite-dashboard";
 import { ModuleRunner } from "vite/module-runner";
 
 export interface BrickClientPluginOptions {
@@ -17,17 +19,37 @@ export interface BrickClientPluginOptions {
   entry: string;
   /** Generated browser contract, relative to the Vite root (default _brick/contract.ts). */
   output?: string;
+  /**
+   * Local dashboard for the app's requests, traces, errors, and reloads, served
+   * during `vite dev` (default: on at port 9400). Apps must pass
+   * `telemetry: true` to brick() to record requests. `historyDays` is how long
+   * finished requests are kept in `.brick/` (default 90, 0 for none). Set to
+   * false to disable.
+   */
+  dashboard?: { port?: number; historyDays?: number } | false;
 }
 
 /** Load a BrickApp through Vite's server module graph, including dependency HMR. */
 export function brickClient(options: BrickClientPluginOptions): Plugin {
   const virtualId = "virtual:brick-app";
   const resolvedId = "\0" + virtualId;
+  const reporterId = "virtual:brick-dev-reporter";
+  const resolvedReporterId = "\0" + reporterId;
+  // Imported by file path: the package name may not resolve from the app's root.
+  const reporterModule = fileURLToPath(
+    new URL(
+      import.meta.url.endsWith(".ts")
+        ? "./dev-reporter.ts"
+        : "./dev-reporter.js",
+      import.meta.url,
+    ),
+  );
   let entry: string;
   let output: string;
   let config: ResolvedConfig;
   let buildGeneration: Promise<void> | undefined;
   let runner: ModuleRunner | undefined;
+  let dashboard: ViteDashboard | undefined;
   let reload = Promise.resolve();
   const dependencies = new Set<string>();
   let revision = 0;
@@ -77,7 +99,29 @@ export function brickClient(options: BrickClientPluginOptions): Plugin {
           invoke: (payload) => environment.hot.handleInvoke(payload),
         },
       });
-      await writeContract((await runner.import(entry)).default);
+      // The dashboard starts before the app is evaluated, so its tracer is
+      // registered before the app's first request can be made.
+      if (options.dashboard !== false) {
+        const started = await startViteDashboard({
+          port: options.dashboard?.port,
+          historyDays: options.dashboard?.historyDays,
+          directory: server.config.root,
+          entry,
+          logger: server.config.logger,
+        });
+        dashboard = started;
+        server.httpServer?.once("close", () => started?.stop());
+        server.httpServer?.once("listening", () => {
+          const address = server.httpServer?.address();
+          if (address && typeof address === "object") {
+            const scheme = server.config.server.https ? "https" : "http";
+            started?.origin(`${scheme}://localhost:${address.port}`);
+          }
+        });
+      }
+      const app = (await runner.import(entry)).default;
+      await writeContract(app);
+      dashboard?.architecture(requireBrickApp(app));
       dependencies.clear();
       collectDependencies(environment.moduleGraph.getModuleById(entry));
       dependencies.add(entry);
@@ -120,7 +164,9 @@ export function brickClient(options: BrickClientPluginOptions): Plugin {
           changedFiles.clear();
           invalidate(entry);
           try {
-            await writeContract((await currentRunner.import(entry)).default);
+            const app = (await currentRunner.import(entry)).default;
+            await writeContract(app);
+            dashboard?.architecture(requireBrickApp(app));
           } finally {
             collectDependencies(
               this.environment.moduleGraph.getModuleById(entry),
@@ -136,6 +182,7 @@ export function brickClient(options: BrickClientPluginOptions): Plugin {
     },
     async closeBundle() {
       await runner?.close();
+      dashboard?.stop();
     },
     async buildStart() {
       if (config.command !== "build") return;
@@ -166,17 +213,28 @@ export function brickClient(options: BrickClientPluginOptions): Plugin {
       await buildGeneration;
     },
     resolveId(id) {
-      if (id !== virtualId) return;
+      if (id !== virtualId && id !== reporterId) return;
       if (this.environment.config.consumer === "client") {
         throw new Error(
           "Brick: virtual:brick-app is server-only; never import the backend app in the browser.",
         );
       }
-      return resolvedId;
+      return id === virtualId ? resolvedId : resolvedReporterId;
     },
     load(id) {
+      if (id === resolvedReporterId) {
+        // The app imports the reporter only while the dashboard is running.
+        if (!dashboard) return "";
+        return `import { installDevReporter } from ${JSON.stringify(reporterModule)};
+installDevReporter({ url: ${JSON.stringify(dashboard.ingestUrl)} });
+`;
+      }
       if (id !== resolvedId) return;
-      return `import app from ${JSON.stringify(entry)};
+      // The reporter is imported first so tracing is installed before the app is built.
+      const reporter = dashboard
+        ? `import ${JSON.stringify(reporterId)};\n`
+        : "";
+      return `${reporter}import app from ${JSON.stringify(entry)};
 if (!app || typeof app.fetch !== "function" || typeof app.endpoint !== "function") {
   throw new Error("Brick: the entry module must default-export a BrickApp created by brick().");
 }

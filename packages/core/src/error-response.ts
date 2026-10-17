@@ -1,4 +1,5 @@
 import { ActionExecutionError, ValidationError, type Logger } from "./types";
+import { recordFailure } from "./telemetry";
 
 export interface ErrorEnvelope {
   name: string;
@@ -32,6 +33,15 @@ export function normalizeActionError(
 }
 
 export function toErrorResponse(
+  err: unknown,
+  context: ErrorContext,
+): ErrorEnvelope {
+  const envelope = buildErrorEnvelope(err, context);
+  recordFailure(err, envelope);
+  return envelope;
+}
+
+function buildErrorEnvelope(
   err: unknown,
   context: ErrorContext,
 ): ErrorEnvelope {

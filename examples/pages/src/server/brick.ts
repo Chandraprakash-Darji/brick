@@ -7,7 +7,8 @@
 // Owned paths are forwarded verbatim (full URL preserved, so Elysia routes
 // on the original pathname). Everything else falls through to Start.
 // NOTE: brick's `/docs` is deliberately NOT mounted — `/docs/*` is the
-// web docs UI. API docs stay on `/reference` (+ `/swagger`).
+// web docs UI. The API reference lives in the `brick dev` dashboard; the
+// OpenAPI document stays on `/openapi.json` (+ Swagger UI on `/swagger`).
 import app from "virtual:brick-app";
 
 export function getBrickApp() {
@@ -26,19 +27,11 @@ const EXACT = new Set([
   "/p",
   "/mcp",
   "/openapi.json",
-  "/reference",
   "/swagger",
   "/_health",
 ]);
 
-const PREFIXES = [
-  "/api/",
-  "/p/",
-  "/mcp/",
-  "/.well-known/",
-  "/reference/",
-  "/swagger/",
-];
+const PREFIXES = ["/api/", "/p/", "/mcp/", "/.well-known/", "/swagger/"];
 
 /** True when this pathname is served by the brick backend. */
 export function isBrickPath(pathname: string): boolean {

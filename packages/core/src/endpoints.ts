@@ -2,7 +2,10 @@ import type { RouteIR } from "./compiler/ir";
 import type { Elysia } from "elysia";
 import type { Service } from "./types";
 import type { DatabaseHandle } from "./db/define";
+import type { ApiDocument, DocumentationOptions } from "./docs";
+import type { DashboardOptions } from "./dashboard";
 import { toErrorResponse } from "./error-response";
+import { createLogger } from "./logger";
 import { ActionExecutionError, ValidationError } from "./types";
 
 export type EndpointMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -69,6 +72,8 @@ export function createEndpointHandler(
   def: EndpointDefinition,
   services: Service<any, any>[],
 ): (elysiaCtx: any) => Promise<unknown> {
+  const tag = `endpoint:${def.method} ${def.path}`;
+  const logger = createLogger(`[${tag}]`);
   return async ({ params, body, query, headers, request, set }: any) => {
     const traceId = headers?.["x-trace-id"] || `tr_${crypto.randomUUID()}`;
     const requestId = headers?.["x-request-id"] || `req_${crypto.randomUUID()}`;
@@ -78,19 +83,13 @@ export function createEndpointHandler(
       set.headers["x-request-id"] = requestId;
     }
 
-    const tag = `endpoint:${def.method} ${def.path}`;
     const ctx: EndpointContext = {
       body,
       db: def.database
         ? def.database.getDb()
         : resolveEndpointDb(def.service, services),
       headers: headers ?? {},
-      logger: {
-        info: (...args) => console.log(`[${tag}]`, ...args),
-        warn: (...args) => console.warn(`[${tag}]`, ...args),
-        error: (...args) => console.error(`[${tag}]`, ...args),
-        debug: (...args) => console.debug(`[${tag}]`, ...args),
-      },
+      logger,
       params: params ?? {},
       query: query ?? {},
       request:
@@ -174,14 +173,23 @@ export function endpointPaths(defs: EndpointDefinition[]): Record<string, any> {
 
 /** The app object returned by `brick`: Elysia plus `endpoint()`. */
 export type BrickApp = Elysia<any, any, any, any, any, any, any> & {
-  /** Service definitions and prefix selected when this app was constructed. */
+  /** Service definitions, prefix, and telemetry setting chosen at construction. */
   readonly definition: {
     readonly routes: readonly RouteIR[];
     readonly services: readonly Service<any, any>[];
     readonly prefix: string;
+    readonly telemetry: boolean;
+    readonly documentation?: DocumentationOptions;
+    /** What `brick start` serves for monitoring; its `auth` is not enumerable. */
+    readonly dashboard?: DashboardOptions;
   };
   /** Register a raw endpoint (outside the JSON action mesh). */
   endpoint(def: EndpointDefinition): void;
+  /**
+   * The OpenAPI documents behind the dashboard's APIs view: this app's own
+   * unless `docs` is false, then those from `reference.documents`.
+   */
+  referenceDocuments(): Promise<ApiDocument[]>;
   /** All endpoints registered via `endpoint()` (declaration order). */
   listEndpoints(): EndpointDefinition[];
 };

@@ -1,4 +1,7 @@
-import { createMcpHandler as createBrickMcpHandler } from "@brickkit/core";
+import {
+  createMcpHandler as createBrickMcpHandler,
+  traceRoute,
+} from "@brickkit/core";
 import { requireMcpAuth } from "@better-auth/mcp";
 
 import { getAuth, type PagesAuth } from "./auth";
@@ -76,10 +79,13 @@ export function registerMcpRoutes(app: {
   // Initialize auth on the first request so loading app definitions for client
   // generation does not open a database connection.
   let mcpHandler: ReturnType<typeof createMcpHandler> | undefined;
-  app.post("/mcp", ({ request }: any) => {
-    mcpHandler ??= createMcpHandler();
-    return mcpHandler(request);
-  });
+  app.post(
+    "/mcp",
+    traceRoute("/mcp", ({ request }: any) => {
+      mcpHandler ??= createMcpHandler();
+      return mcpHandler(request);
+    }),
+  );
 
   const metadata = () => Response.json(protectedResourceMetadata());
   app.get("/.well-known/oauth-protected-resource", metadata);

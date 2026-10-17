@@ -1,6 +1,7 @@
 import type { ActionContext, ProxyOptions } from "./types";
 import { getGlobalRegistry } from "./registry";
 import { pickContextEnvelope } from "./context";
+import { withCallSpan } from "./telemetry";
 
 export function createServiceProxy<T extends Record<string, any>>(
   serviceName: string,
@@ -33,10 +34,19 @@ export function createServiceProxy<T extends Record<string, any>>(
             callCtx,
           );
 
-          return action.execute({
-            input: payload,
-            ctx: envelopeCtx,
-          });
+          const execute = () =>
+            action.execute({
+              input: payload,
+              ctx: envelopeCtx,
+            });
+          return withCallSpan(
+            `rpc ${serviceName}.${actionName}`,
+            {
+              "brick.service": serviceName,
+              "brick.action": actionName,
+            },
+            execute,
+          );
         } else {
           throw new Error(
             `[Brick-TS RPC] Remote microservice dispatch for '${serviceName}.${actionName}' is not configured. Use createClient({ baseUrl, contract }) for HTTP calls to remote services.`,

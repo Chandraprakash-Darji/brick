@@ -17,14 +17,19 @@ import {
   scalarDocsHTML,
   swaggerDocsHTML,
   registerReferenceRoute,
+  type ApiDocument,
+  type DocumentationOptions,
+  type OpenApiDocument,
   type ReferenceOptions,
 } from "./docs";
+import { normalizeDashboard, type DashboardOptions } from "./dashboard";
 import {
   createEndpointHandler,
   endpointPaths,
   type BrickApp,
   type EndpointDefinition,
 } from "./endpoints";
+import { instrumentDatabase, traceHttpRequest, withSpan } from "./telemetry";
 
 export interface CreateServerOptions {
   port?: number;
@@ -42,10 +47,34 @@ export interface CreateServerOptions {
   docsPath?: string;
   swaggerPath?: string;
   requestLogging?: boolean | RequestLoggingOptions; // default true
-  reference?: boolean | ReferenceOptions; // default false, path "/reference"
+  /**
+   * `true` serves a Scalar page at /reference. Options serve one only with a
+   * `path`; `documents` adds OpenAPI documents to the dashboard's APIs view.
+   */
+  reference?: boolean | ReferenceOptions; // default false
   secrets?: { source?: SecretSource; validate?: boolean };
   /** Raw endpoints (outside the JSON action mesh), mounted at startup. */
   endpoints?: EndpointDefinition[];
+  /**
+   * Record request, action, and RPC spans with OpenTelemetry (default false).
+   * Spans go to the globally registered tracer provider; without one they are
+   * no-ops. `brick dev` shows them in its dashboard.
+   */
+  telemetry?: boolean;
+  /**
+   * Developer documentation for the `brick dev` dashboard (its Docs tab): a
+   * folder of `.md`/`.mdx` pages in Fumadocs' layout, with frontmatter and
+   * `meta.json` for ordering. A string is the folder. Relative paths start at
+   * the folder of the app entry, as they read in the file that sets them (from
+   * `src/app.ts`, `"../docs"` is `docs/` at the project root). Needs
+   * `fumadocs-core` and `@mdx-js/mdx` installed.
+   */
+  documentation?: string | DocumentationOptions;
+  /**
+   * Monitoring dashboard for `brick start`, on a port of its own and behind
+   * `auth`. Setting it turns on `telemetry`. See `DashboardOptions`.
+   */
+  dashboard?: DashboardOptions;
 }
 
 export {
@@ -63,6 +92,9 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
   const openApiPath = options.openApiPath ?? "/openapi.json";
   const docsPath = options.docsPath ?? "/docs";
   const swaggerPath = options.swaggerPath ?? "/swagger";
+  const dashboard = normalizeDashboard(options.dashboard);
+  // The dashboard shows what is traced, so having one means tracing.
+  const telemetry = options.telemetry === true || dashboard !== undefined;
 
   const app = new Elysia();
 
@@ -88,14 +120,17 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
     }
   }
 
-  // Scalar API reference (opt-in). Defaults to openApiPath for the spec URL.
+  // Scalar API reference page (opt-in): `reference: true`, or options with a path.
   const reference = options.reference ?? false;
-  if (reference !== false) {
-    const refOpts = reference === true ? {} : reference;
+  const referenceOptions: ReferenceOptions =
+    typeof reference === "object" ? reference : {};
+  const referencePath =
+    reference === true ? "/reference" : referenceOptions.path;
+  if (referencePath !== undefined) {
     const settings = {
-      path: refOpts.path ?? "/reference",
-      title: refOpts.title ?? title,
-      specUrl: refOpts.specUrl ?? openApiPath,
+      path: referencePath,
+      title: referenceOptions.title ?? title,
+      specUrl: referenceOptions.specUrl ?? openApiPath,
     };
     if (compiled)
       app.get(
@@ -106,6 +141,9 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
   }
 
   const services = options.services ?? getGlobalRegistry().list();
+  if (telemetry) {
+    for (const service of services) instrumentDatabase(service.getDb());
+  }
 
   // Precompute plans and freeze immutable plans across all services
   for (const service of services) {
@@ -118,23 +156,24 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
   const endpointDefs: EndpointDefinition[] = [];
   let endpointRevision = 0;
 
+  const buildSpec = () => {
+    const spec = generateOpenApiSpec({
+      title,
+      version,
+      description: options.description,
+      prefix,
+      services,
+    });
+    const paths = { ...spec.paths };
+    for (const [path, operations] of Object.entries(
+      endpointPaths(endpointDefs),
+    ))
+      paths[path] = { ...paths[path], ...operations };
+    return { ...spec, paths };
+  };
+
   // OpenAPI 3.1 & Interactive Documentation Endpoints
   if (enableDocs) {
-    const buildSpec = () => {
-      const spec = generateOpenApiSpec({
-        title,
-        version,
-        description: options.description,
-        prefix,
-        services,
-      });
-      const paths = { ...spec.paths };
-      for (const [path, operations] of Object.entries(
-        endpointPaths(endpointDefs),
-      ))
-        paths[path] = { ...paths[path], ...operations };
-      return { ...spec, paths };
-    };
     app.get(
       openApiPath,
       compiled
@@ -175,14 +214,8 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
     for (const path of [openApiPath, docsPath, swaggerPath])
       registeredRoutes.set(routeKey("GET", path), false);
   }
-  if (reference !== false)
-    registeredRoutes.set(
-      routeKey(
-        "GET",
-        reference === true ? "/reference" : (reference.path ?? "/reference"),
-      ),
-      false,
-    );
+  if (referencePath !== undefined)
+    registeredRoutes.set(routeKey("GET", referencePath), false);
 
   const mountRoute = (
     method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
@@ -219,10 +252,16 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
 
   // Raw endpoints (outside the JSON action mesh).
   const mountEndpoint = (def: EndpointDefinition, plugin = false) => {
+    const handler = createEndpointHandler(def, services);
     mountRoute(
       def.method,
       def.path,
-      createEndpointHandler(def, services),
+      telemetry
+        ? (context: any) =>
+            traceHttpRequest(context, def.method, def.path, () =>
+              handler(context),
+            )
+        : handler,
       plugin,
     );
     endpointDefs.push(def);
@@ -243,6 +282,25 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
     mountEndpoint(def);
   };
   brickApp.listEndpoints = () => [...endpointDefs];
+  brickApp.referenceDocuments = async () => {
+    const documents: ApiDocument[] = enableDocs
+      ? [{ title, document: buildSpec() as unknown as OpenApiDocument }]
+      : [];
+    for (const extra of referenceOptions.documents ?? []) {
+      try {
+        const document =
+          typeof extra.document === "function"
+            ? await extra.document()
+            : extra.document;
+        documents.push({ title: extra.title, document });
+      } catch (error) {
+        console.warn(
+          `[Brick-TS] Skipping the "${extra.title}" API document: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+    return documents;
+  };
 
   const compilation =
     options.compilation ??
@@ -268,16 +326,31 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
     const action = service
       .listActions()
       .find((candidate) => candidate.name === route.ir.action)!;
+    const invoke = (context: any) => {
+      const result = telemetry
+        ? withSpan(
+            `action ${route.ir.service}.${route.ir.action}`,
+            {
+              "brick.service": route.ir.service,
+              "brick.action": route.ir.action,
+            },
+            () => route.handler(context),
+          )
+        : route.handler(context);
+      return result &&
+        typeof (result as PromiseLike<unknown>).then === "function"
+        ? Promise.resolve(result).then(jsonActionResult)
+        : jsonActionResult(result);
+    };
     const mounted = mountRoute(
       route.ir.method,
       route.ir.path,
-      (context: any) => {
-        const result = route.handler(context);
-        return result &&
-          typeof (result as PromiseLike<unknown>).then === "function"
-          ? Promise.resolve(result).then(jsonActionResult)
-          : jsonActionResult(result);
-      },
+      telemetry
+        ? (context: any) =>
+            traceHttpRequest(context, route.ir.method, route.ir.path, () =>
+              invoke(context),
+            )
+        : invoke,
       getPluginActionRoute(action, prefix) !== undefined,
     );
     if (mounted) mountedRoutes.push(route.ir);
@@ -287,6 +360,9 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
     services: Object.freeze([...services]),
     prefix,
     routes: Object.freeze(mountedRoutes),
+    telemetry,
+    documentation: normalizeDocumentation(options.documentation),
+    dashboard,
   });
   Object.defineProperty(brickApp, "definition", { value: definition });
   getGlobalRegistry().setApplicationRoutes(definition);
@@ -306,6 +382,20 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
   );
 
   return brickApp;
+}
+
+function normalizeDocumentation(
+  documentation: string | DocumentationOptions | undefined,
+): DocumentationOptions | undefined {
+  if (documentation === undefined) return undefined;
+  const options =
+    typeof documentation === "string" ? { dir: documentation } : documentation;
+  if (typeof options.dir !== "string" || options.dir === "")
+    throw new Error("Brick: documentation needs a folder, such as './docs'.");
+  return Object.freeze({
+    dir: options.dir,
+    ...(options.components ? { components: options.components } : {}),
+  });
 }
 
 function jsonActionResult(value: unknown): unknown {

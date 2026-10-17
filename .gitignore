@@ -57,5 +57,10 @@ docs/
 !/www/src/routes/docs/
 !/examples/pages/src/routes/docs/
 !/examples/pages/src/content/docs/
+!/examples/pages/docs/
+!/packages/cli/dashboard/components/docs/
 
 .openqodex/
+
+# Built dev dashboard (packages/cli)
+dashboard-dist/

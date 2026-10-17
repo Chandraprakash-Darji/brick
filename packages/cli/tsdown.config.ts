@@ -13,6 +13,7 @@ export default defineConfig({
     "src/compiler.ts",
     "src/vite.ts",
     "src/dev-worker.ts",
+    "src/dev-reporter.ts",
   ],
   format: ["esm"],
   outDir: "dist",
