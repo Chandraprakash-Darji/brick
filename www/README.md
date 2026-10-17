@@ -34,8 +34,22 @@ functions that still have no description.
 
 `/llms.txt` links to every page. `/llms-full.txt` concatenates pages in sidebar
 order. `/docs/<slug>.md` and `Accept: text/markdown` on `/docs/<slug>` return the
-same content. Docs HTML is served at runtime so Vercel's static file serving does
-not bypass content negotiation. Both negotiated representations vary on `Accept`.
+same content. Both negotiated representations vary on `Accept`.
+
+## Prerendering
+
+The build prerenders every docs page, `/docs` and `/docs/**`, including the
+generated API reference, to static HTML (`scripts/docs-pages.ts` lists them from
+`content/docs`, since a crawl never reaches pages in a root folder like the API
+reference). A page that fails to render fails the build. The `/docs/<slug>.md`
+routes stay with the server.
+
+Vercel serves static files before any middleware runs, so `Accept: text/markdown`
+would get the HTML. `vite.config.ts` adds two routes ahead of the static files:
+one sets `Vary: Accept` on `/docs/**`, the other sends requests whose `Accept`
+names `text/markdown` to the server function. `vite preview` and `vite dev` do not
+apply Vercel routes, so check negotiation against a deployment with
+`bun run docs:http-check https://<deployment>`.
 
 `bun run docs:check` renders every docs page and runs markdown renderer tests.
 The production build runs this check too. Dynamic MDX expressions and components

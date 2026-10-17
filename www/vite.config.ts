@@ -4,6 +4,26 @@ import { defineConfig } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import mdx from "fumadocs-mdx/vite";
 import { nitro } from "nitro/vite";
+import { fileURLToPath } from "node:url";
+import { docsPagePaths } from "./scripts/docs-pages.ts";
+
+// Every docs page is prerendered.
+const docsPages = docsPagePaths(
+  fileURLToPath(new URL("./content/docs", import.meta.url)),
+);
+
+// Vercel routes run before its static files. Static HTML and negotiated markdown
+// share a URL, so caches must key on Accept, and a request for markdown goes to
+// the server function.
+const docsPath = "^/docs(?:/.*)?$";
+const docsRoutes = [
+  { src: docsPath, headers: { Vary: "Accept" }, continue: true },
+  {
+    src: docsPath,
+    has: [{ type: "header", key: "accept", value: ".*text/markdown.*" }],
+    dest: "/__server",
+  },
+];
 
 export default defineConfig({
   server: {
@@ -25,11 +45,12 @@ export default defineConfig({
     mdx(),
     tailwindcss(),
     tanstackStart({
+      pages: docsPages.map((path) => ({ path })),
       prerender: {
         enabled: true,
-        // Docs need the request's Accept header; static HTML bypasses middleware.
-        filter: (page) =>
-          page.path !== "/docs" && !page.path.startsWith("/docs/"),
+        failOnError: true,
+        // The markdown pages stay with the server, which sets their headers.
+        filter: (page) => !page.path.endsWith(".md"),
       },
     }),
     react(),
@@ -39,6 +60,7 @@ export default defineConfig({
       externals: {
         inline: ["tslib"],
       },
+      vercel: { config: { version: 3, routes: docsRoutes } },
     }),
   ],
   resolve: {
