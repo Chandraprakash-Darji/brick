@@ -403,4 +403,42 @@ describe("single worker", () => {
       env.expectCleanWorkerLogs();
     },
   );
+
+  test(
+    "9b. the same runKey started twice is one run: one id, one run_created, steps run once",
+    { timeout: 120_000 },
+    async () => {
+      const env = await Env.create({ workers: 1 });
+      const counterKey = env.counterKey("same-key");
+      const options = {
+        runKey: "evt_01:welcome-email",
+        runKeyTime: Date.UTC(2026, 9, 17, 12, 30, 0),
+      };
+      const first = await env.invoke(
+        W.fanOut,
+        [5, counterKey],
+        undefined,
+        options,
+      );
+      const second = await env.invoke(
+        W.fanOut,
+        [5, counterKey],
+        undefined,
+        options,
+      );
+      expect(second).toBe(first);
+      expect(first).toMatch(/^wrun_[0-9A-HJKMNP-TV-Z]{26}$/);
+      await env.waitForRuns([first]);
+      expect(await env.output(first)).toBe(20);
+
+      const counts = await env.counts(counterKey);
+      expect(Object.keys(counts)).toHaveLength(5);
+      expect(Object.values(counts).filter((count) => count !== 1)).toEqual([]);
+
+      const byType = Env.countByType(await env.expectDenseLog(first));
+      expect(byType.run_created).toBe(1);
+      expect(byType.run_completed).toBe(1);
+      env.expectCleanWorkerLogs();
+    },
+  );
 });

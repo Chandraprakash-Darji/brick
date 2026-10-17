@@ -21,6 +21,7 @@ import {
 import type { Redis } from "ioredis";
 import { monotonicFactory } from "ulid";
 import type { RedisWorldConfig } from "./config.js";
+import { initialMessageKey } from "./run-id.js";
 import { debug, hasBinary, uint8ArrayReplacer } from "./util.js";
 
 /**
@@ -186,6 +187,7 @@ export function createQueue(
     const route = routes.get(queuePrefix);
 
     const messageId = MessageId.parse(`msg_${generateMessageId()}`);
+    const idempotencyKey = opts?.idempotencyKey ?? initialMessageKey(message);
     const delayMs = opts?.delaySeconds
       ? Math.max(0, opts.delaySeconds * 1000)
       : undefined;
@@ -214,9 +216,9 @@ export function createQueue(
         // finalization), the release-on-completion semantics core relies on
         // when it re-enqueues pending steps with the same idempotencyKey on
         // every replay. A ttl is only applied when explicitly configured.
-        ...(opts?.idempotencyKey && {
+        ...(idempotencyKey && {
           deduplication: {
-            id: opts.idempotencyKey,
+            id: idempotencyKey,
             ...(idempotencyTtlMs !== undefined && { ttl: idempotencyTtlMs }),
           },
         }),

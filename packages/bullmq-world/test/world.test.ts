@@ -194,6 +194,56 @@ describe("world queue and recovery (Redis integration)", () => {
     expect(deliveries).toHaveLength(1);
   });
 
+  test("queues the first message of a run once, however often the run is started", async () => {
+    const world = newWorld();
+    const deliveries = recordDeliveries(world, async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      return Response.json({ ok: true });
+    });
+    const message = {
+      runId: "wrun_start_twice",
+      runInput: {
+        input: "x",
+        deploymentId: "test",
+        workflowName: "workflow//test.ts//start",
+        specVersion: 5,
+      },
+    };
+    const first = await world.queue(queueName, message);
+    const second = await world.queue(queueName, message);
+    await world.start();
+
+    expect(second.messageId).toBe(first.messageId);
+    await vi.waitFor(() => expect(deliveries).toHaveLength(1), {
+      timeout: 10_000,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(deliveries).toHaveLength(1);
+  });
+
+  test("does not collapse later messages of a run, which carry no run input", async () => {
+    const world = newWorld();
+    const deliveries = recordDeliveries(world, () =>
+      Response.json({ ok: true }),
+    );
+    await world.start();
+    await world.queue(queueName, { runId: "wrun_later" });
+    await world.queue(queueName, { runId: "wrun_later" });
+
+    await vi.waitFor(() => expect(deliveries).toHaveLength(2), {
+      timeout: 10_000,
+    });
+  });
+
+  test("hands out a deterministic run id for a runKey", () => {
+    const world = newWorld();
+    const options = { runKey: "evt_1:welcome", runKeyTime: 1_760_000_000_000 };
+    expect(world.createRunId?.(options)).toBe(
+      world.createRunId?.({ ...options }),
+    );
+    expect(world.createRunId?.()).toHaveLength(26);
+  });
+
   test("delays a message by delaySeconds", async () => {
     const world = newWorld();
     const deliveries = recordDeliveries(world, () =>

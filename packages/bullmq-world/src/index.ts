@@ -14,6 +14,7 @@ import {
   createStepsStorage,
 } from "./storage.js";
 import { createReaper, hasRetention, validateRetention } from "./reaper.js";
+import { createRunId } from "./run-id.js";
 import { createStreamer } from "./streamer.js";
 
 function createStorage(
@@ -80,6 +81,7 @@ export function createWorld(
     // Uint8Array values through BullMQ job data. A function, not a constant:
     // the version this world stamps follows `WORKFLOW_SEALED_LOG`.
     specVersion: mintedSpecVersion(),
+    createRunId,
     async start() {
       await queue.start();
       reaper?.start();

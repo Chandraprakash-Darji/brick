@@ -138,6 +138,7 @@ const app = new Hono()
         file: string;
         workflow: string;
         args?: unknown[];
+        options?: Record<string, unknown>;
       };
       const entry = manifest.workflows[body.file]?.[body.workflow];
       if (!entry)
@@ -152,6 +153,7 @@ const app = new Hono()
       const run = await start(
         { workflowId: entry.workflowId } as never,
         body.args ?? [],
+        body.options as never,
       );
       return ctx.json({ runId: run.runId });
     } catch (error) {

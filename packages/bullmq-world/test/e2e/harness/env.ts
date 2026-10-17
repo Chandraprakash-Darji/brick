@@ -140,13 +140,14 @@ export class Env {
     wf: WorkflowRef,
     args: unknown[] = [],
     via?: WorkerProc,
+    options?: Record<string, unknown>,
   ): Promise<string> {
     const { runId } = await (via ?? this.pick()).fetchJson<{ runId: string }>(
       "/invoke",
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...wf, args }),
+        body: JSON.stringify({ ...wf, args, options }),
       },
     );
     expect(runId).toMatch(/^wrun_/);
