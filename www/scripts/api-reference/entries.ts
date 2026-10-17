@@ -46,14 +46,6 @@ export const ENTRY_POINTS: EntryPoint[] = [
       "Postgres databases for Brick services, with Drizzle's table builders.",
   },
   {
-    slug: "core-effect",
-    specifier: "@brickkit/core/effect",
-    file: "packages/core/src/effect.ts",
-    tsconfig: "packages/core/tsconfig.build.json",
-    description:
-      "Effect-native actions, tools, services, and the runtime that runs them.",
-  },
-  {
     slug: "cli",
     specifier: "@brickkit/cli",
     file: "packages/cli/src/index.ts",
@@ -91,12 +83,5 @@ export const ENTRY_POINTS: EntryPoint[] = [
     tsconfig: "packages/crud/tsconfig.json",
     description:
       "CRUD actions for a resource, with access rules, filters, and hooks.",
-  },
-  {
-    slug: "crud-effect",
-    specifier: "@brickkit/crud/effect",
-    file: "packages/crud/src/effect.ts",
-    tsconfig: "packages/crud/tsconfig.json",
-    description: "Effect-native hooks and access rules for CRUD resources.",
   },
 ];

@@ -12,7 +12,6 @@ export default defineConfig({
     "src/client.ts",
     "src/tanstack-query.ts",
     "src/pg.ts",
-    "src/effect.ts",
   ],
   format: ["esm"],
   outDir: "dist",

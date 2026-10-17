@@ -1,6 +1,4 @@
-import { Effect } from "effect";
-import { and, eq, traceRoute } from "@brickkit/core";
-import { brick } from "@brickkit/core/effect";
+import { and, brick, eq, traceRoute } from "@brickkit/core";
 
 import { getAuth } from "./auth";
 import { registerMcpRoutes } from "./mcp";
@@ -101,34 +99,30 @@ export function buildApp() {
   app.endpoint({
     description:
       "Raw HTML rendering of a published page (outside the JSON action mesh).",
-    handler: ({ params, set, db }) =>
-      Effect.tryPromise({
-        try: async () => {
-          set.headers["content-type"] = "text/html; charset=utf-8";
-          const rows = db
-            ? await db
-                .select()
-                .from(pagesTable)
-                .where(
-                  and(
-                    eq(pagesTable.slug, params.slug),
-                    eq(pagesTable.isPublic, true),
-                  ),
-                )
-            : [];
-          const page = rows[0];
-          if (!page) {
-            set.status = 404;
-            set.headers["cache-control"] = "public, max-age=30, s-maxage=30";
-            return NOT_FOUND_HTML;
-          }
-          set.status = 200;
-          set.headers["cache-control"] =
-            "public, max-age=60, s-maxage=300, stale-while-revalidate=600";
-          return renderPageDocument(page);
-        },
-        catch: (failure) => failure,
-      }),
+    handler: async ({ params, set, db }) => {
+      set.headers["content-type"] = "text/html; charset=utf-8";
+      const rows = db
+        ? await db
+            .select()
+            .from(pagesTable)
+            .where(
+              and(
+                eq(pagesTable.slug, params.slug),
+                eq(pagesTable.isPublic, true),
+              ),
+            )
+        : [];
+      const page = rows[0];
+      if (!page) {
+        set.status = 404;
+        set.headers["cache-control"] = "public, max-age=30, s-maxage=30";
+        return NOT_FOUND_HTML;
+      }
+      set.status = 200;
+      set.headers["cache-control"] =
+        "public, max-age=60, s-maxage=300, stale-while-revalidate=600";
+      return renderPageDocument(page);
+    },
     method: "GET",
     path: "/p/:slug",
     service: pagesService,

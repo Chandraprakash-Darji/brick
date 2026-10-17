@@ -74,20 +74,6 @@ export { defineService, ServiceImpl } from "./service";
 export { getActionAccess, setActionAccess, ACTION_ACCESS_KEY } from "./access";
 export type { ActionAccessInfo } from "./access";
 export { defineAction, buildErrorHelpers } from "./action";
-export {
-  defineEffectAction,
-  defineEffectTool,
-  defineEffectService,
-  defineEffectServicePlugin,
-  defineEffectResourcePlugin,
-  effectBrick,
-  type EffectAction,
-  type EffectTool,
-  type EffectService,
-  type EffectServiceOptions,
-  type EffectBrickApp,
-  type EffectServerOptions,
-} from "./effect";
 export { defineResource } from "./resource";
 export { createServiceProxy } from "./rpc";
 

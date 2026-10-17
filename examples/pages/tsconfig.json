@@ -16,7 +16,6 @@
     "paths": {
       "@/*": ["./src/*"],
       "@brickkit/crud": ["../../packages/crud/src/index.ts"],
-      "@brickkit/crud/effect": ["../../packages/crud/src/effect.ts"],
       "@brickkit/core": ["../../packages/core/src/index.ts"],
       "@brickkit/core/*": ["../../packages/core/src/*"],
       "@brickkit/cli": ["../../packages/cli/src/index.ts"],

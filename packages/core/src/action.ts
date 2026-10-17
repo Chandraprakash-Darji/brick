@@ -1,11 +1,3 @@
-import { Effect } from "effect";
-import {
-  runEffectPromise,
-  effectExecutionKey,
-  effectAuthorizationKey,
-  normalizeEffectError,
-  withEffectRuntime,
-} from "./effect-runtime";
 import type { TSchema } from "@sinclair/typebox";
 import {
   type Action,
@@ -184,36 +176,6 @@ export function defineAction<
 ): Action<TInputSchema, TOutputSchema, TErrors, TContext>;
 
 export function defineAction(config: any): any {
-  return createAction(
-    config,
-    config[effectExecutionKey] ??
-      ((params: any) =>
-        // Native implementations throw plain values; redact unexpected
-        // failures into typed 500s like the Promise-based runtime does.
-        withEffectRuntime(() => config.execute(params)).pipe(
-          Effect.catch((error) =>
-            error instanceof ActionExecutionError ||
-            error instanceof ValidationError
-              ? Effect.fail(error)
-              : Effect.fail(normalizeActionError(error, params.ctx)),
-          ),
-          Effect.catchDefect((defect) =>
-            Effect.fail(normalizeActionError(defect, params.ctx)),
-          ),
-        )),
-  );
-}
-
-export async function runActionEffect<A, E>(
-  effect: Effect.Effect<A, E>,
-): Promise<A> {
-  return runEffectPromise(effect);
-}
-
-export function createAction(
-  config: any,
-  execute: (params: any) => Effect.Effect<unknown, unknown, any>,
-): any {
   const errorHelpers = buildErrorHelpers(config.errors);
 
   const actionFn = (async (params: { input?: any; ctx?: any }) => {
@@ -243,132 +205,79 @@ export function createAction(
     return actionFn.execute({ input, ctx });
   };
 
-  actionFn.execute = (params: { input?: any; ctx?: any }) =>
-    runEffectPromise(
-      actionFn.executeEffect(params),
-      actionFn.service,
-      params?.ctx?.request?.signal,
-    );
+  actionFn.execute = async (params: { input?: any; ctx?: any }) => {
+    const boundService = actionFn.service;
+    // The bound service resolves the context once per request, and recognizes
+    // one it already resolved.
+    const fullCtx: any = boundService?.resolveContext
+      ? await boundService.resolveContext(params?.ctx)
+      : createDefaultContext(params?.ctx);
 
-  actionFn.executeEffect = (params: { input?: any; ctx?: any }) =>
-    Effect.gen(function* () {
-      const boundService = actionFn.service;
-      const fullCtx = yield* boundService?.resolveContextEffect
-        ? Effect.mapError(
-            boundService.resolveContextEffect(params?.ctx),
-            normalizeEffectError,
-          )
-        : Effect.tryPromise({
-            try: async () =>
-              boundService?.resolveContext
-                ? boundService.resolveContext(params?.ctx)
-                : createDefaultContext(params?.ctx),
-            catch: normalizeEffectError,
-          });
-      yield* Effect.try({
-        try: () => {
-          if (!fullCtx.db) {
-            const service =
-              boundService ??
-              (actionFn.serviceName
-                ? getGlobalRegistry().get(actionFn.serviceName)
-                : undefined);
-            if (service?.getDb()) fullCtx.db = service.getDb();
-          }
-        },
-        catch: normalizeEffectError,
-      });
+    try {
+      // Fill ctx.db from the bound service or the registry when the call has none.
+      if (!fullCtx.db) {
+        const service =
+          boundService ??
+          (actionFn.serviceName
+            ? getGlobalRegistry().get(actionFn.serviceName)
+            : undefined);
+        if (service?.getDb()) fullCtx.db = service.getDb();
+      }
 
-      yield* Effect.try({
-        try: () => {
-          // 1. Validate Input
-          if (config.input) {
-            const inputValidation = actionFn.validateInput(params?.input);
-            if (!inputValidation.success) {
-              throw new ValidationError(
-                `Validation failed for action '${config.name}' input` as string,
-                inputValidation.errors,
-              );
-            }
-          }
-        },
-        catch: (error) => error,
-      });
+      // 1. Validate Input
+      if (config.input) {
+        const inputValidation = actionFn.validateInput(params?.input);
+        if (!inputValidation.success) {
+          throw new ValidationError(
+            `Validation failed for action '${config.name}' input` as string,
+            inputValidation.errors,
+          );
+        }
+      }
 
       // 2. Authorize
       if (config.authorize) {
-        const allowed = yield* (
-          config[effectAuthorizationKey]
-            ? Effect.suspend(() =>
-                config[effectAuthorizationKey]({
-                  user: fullCtx.user,
-                  input: params?.input,
-                  ctx: fullCtx,
-                }),
-              )
-            : Effect.tryPromise({
-                try: async () =>
-                  config.authorize({
-                    user: fullCtx.user,
-                    input: params?.input,
-                    ctx: fullCtx,
-                  }),
-                catch: (error) =>
-                  error instanceof ActionExecutionError ||
-                  error instanceof ValidationError
-                    ? error
-                    : normalizeActionError(error, fullCtx),
-              })
-        ).pipe(
-          Effect.catchDefect((defect) =>
-            Effect.fail(normalizeActionError(defect, fullCtx)),
-          ),
-        );
+        const allowed = await config.authorize({
+          user: fullCtx.user,
+          input: params?.input,
+          ctx: fullCtx,
+        });
         if (!allowed) {
-          return yield* Effect.fail(
-            new ActionExecutionError(
-              fullCtx.user == null ? "UNAUTHORIZED" : "FORBIDDEN",
-              `Access denied for action '${config.name}'`,
-              fullCtx.user == null ? 401 : 403,
-            ),
+          throw new ActionExecutionError(
+            fullCtx.user == null ? "UNAUTHORIZED" : "FORBIDDEN",
+            `Access denied for action '${config.name}'`,
+            fullCtx.user == null ? 401 : 403,
           );
         }
       }
 
       // 3. Execute implementation
-      const result = yield* Effect.suspend(() =>
-        execute({
-          input: params?.input,
-          ctx: fullCtx,
-          error: errorHelpers,
-        }),
-      ).pipe(
-        Effect.catchDefect((defect) =>
-          Effect.fail(normalizeActionError(defect, fullCtx)),
-        ),
-      );
-
-      yield* Effect.try({
-        try: () => {
-          // 4. Validate Output
-          const runtimeOutputSchema =
-            (actionFn as { outputValidationSchema?: TSchema })
-              .outputValidationSchema ?? config.output;
-          if (runtimeOutputSchema) {
-            const outputValidation = actionFn.validateOutput(result);
-            if (!outputValidation.success) {
-              throw new ValidationError(
-                `Validation failed for action '${config.name}' output` as string,
-                outputValidation.errors,
-                500,
-              );
-            }
-          }
-        },
-        catch: (error) => error,
+      const result = await config.execute({
+        input: params?.input,
+        ctx: fullCtx,
+        error: errorHelpers,
       });
+
+      // 4. Validate Output
+      const runtimeOutputSchema =
+        (actionFn as { outputValidationSchema?: TSchema })
+          .outputValidationSchema ?? config.output;
+      if (runtimeOutputSchema) {
+        const outputValidation = actionFn.validateOutput(result);
+        if (!outputValidation.success) {
+          throw new ValidationError(
+            `Validation failed for action '${config.name}' output` as string,
+            outputValidation.errors,
+            500,
+          );
+        }
+      }
+
       return result;
-    });
+    } catch (err) {
+      throw normalizeActionError(err, fullCtx);
+    }
+  };
 
   return actionFn;
 }

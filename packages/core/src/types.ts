@@ -685,8 +685,6 @@ export interface Service<
   listResources(): Resource<any, BaseContext<TDb> & TServiceContext>[];
   getDb(): TDb | undefined;
   setDb(database: DatabaseHandle<TDb>): void;
-  /** The live handle, reflecting setDb swaps (options.database stays declared). */
-  getDatabaseHandle(): DatabaseHandle<TDb> | undefined;
   resolveContext(
     callCtx?: Partial<BaseContext<TDb> & TServiceContext>,
   ): Promise<BaseContext<TDb> & TServiceContext>;
