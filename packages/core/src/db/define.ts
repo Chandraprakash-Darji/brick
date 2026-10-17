@@ -64,6 +64,12 @@ export interface DatabaseHandle<
   close?(): void | Promise<void>;
 }
 
+/**
+ * Whether a value is a database handle made by `defineDatabase`.
+ *
+ * @param value - Anything.
+ * @returns `true` for a handle, narrowing its type.
+ */
 export function isDatabaseHandle(
   value: unknown,
 ): value is DatabaseHandle<unknown> {
@@ -75,6 +81,31 @@ export function isDatabaseHandle(
   );
 }
 
+/**
+ * Declare a service's database: its engine, its Drizzle tables, and how to
+ * reach it. Nothing connects until the handle is used (`getDb()`), so defining
+ * one has no side effects.
+ *
+ * SQLite is the default and needs no options. Pass `engine: "postgres"` with a
+ * `url` for Postgres. Options that belong to the other engine (such as `url` for
+ * SQLite, or `path` for Postgres) are refused.
+ *
+ * @param options - `engine` (`"sqlite"` or `"postgres"`), `tables`, an optional
+ * `name`, and the engine's connection settings.
+ * @returns A handle to give to `defineService({ database })`. `getDb()` returns
+ * the Drizzle database.
+ * @throws When the engine is unsupported, or an option does not suit the engine.
+ * @example
+ * import { defineDatabase } from "@brickkit/core";
+ * import { sqliteTable, text } from "drizzle-orm/sqlite-core";
+ *
+ * const pages = sqliteTable("pages", {
+ *   id: text("id").primaryKey(),
+ *   title: text("title").notNull(),
+ * });
+ *
+ * export const database = defineDatabase({ tables: { pages } });
+ */
 export function defineDatabase<
   TSchema extends Record<string, unknown> = Record<string, unknown>,
 >(

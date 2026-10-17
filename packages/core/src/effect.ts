@@ -118,6 +118,25 @@ export function adaptEffectActionConfig(config: any, owner?: object): any {
   };
 }
 
+/**
+ * `defineAction` for Effect: `execute` (and `authorize`) return an `Effect`
+ * instead of a promise, run on the owning service's Effect runtime, with the
+ * request's abort signal. Failures in the Effect's error channel become the
+ * same typed responses as a thrown error would. Imported as `defineAction` from
+ * `@brickkit/core/effect`.
+ *
+ * @param config - The action configuration, with Effect-returning `execute`.
+ * @returns The action, to register with `service.action(action)`.
+ * @example
+ * import { Effect } from "effect";
+ * import { defineAction, t } from "@brickkit/core/effect";
+ *
+ * export const ping = defineAction({
+ *   name: "ping",
+ *   output: t.String(),
+ *   execute: () => Effect.succeed("pong"),
+ * });
+ */
 export function defineEffectAction<
   I extends TSchema | undefined = undefined,
   O extends TSchema | undefined = undefined,
@@ -151,6 +170,15 @@ export function defineEffectAction(config: any): any {
   return createAction(adapted, adapted[effectExecutionKey]);
 }
 
+/**
+ * `defineTool` for Effect: an MCP tool whose `execute` returns an `Effect`.
+ * It takes the options of `defineEffectAction` plus `title`, `annotations`, and
+ * `http`. Imported as `defineTool` from `@brickkit/core/effect`.
+ *
+ * @param config - The tool configuration; `input` must be an object schema.
+ * @returns The tool, to register with `service.tool(tool)`.
+ * @throws When `input` is not an object schema.
+ */
 export function defineEffectTool<
   I extends TSchema | undefined = undefined,
   O extends TSchema | undefined = undefined,

@@ -162,12 +162,28 @@ export class BrickServerError extends Error {
   }
 }
 
+/**
+ * Whether an error from the typed client is a `BrickTransportError`: the request
+ * got no meaningful answer from the server (a network failure, a body that was
+ * not JSON, or a 4xx outside the declared contract).
+ *
+ * @param err - What a client call threw.
+ * @returns `true` for a transport error, narrowing its type.
+ */
 export function isBrickTransportError(
   err: unknown,
 ): err is BrickTransportError {
   return err instanceof BrickTransportError;
 }
 
+/**
+ * Whether an error from the typed client is a `BrickServerError`: the server
+ * answered with a 5xx that is not one of the contract's declared errors, and the
+ * error carries its `status`, `url`, and `body`.
+ *
+ * @param err - What a client call threw.
+ * @returns `true` for a server error, narrowing its type.
+ */
 export function isBrickServerError(err: unknown): err is BrickServerError {
   return err instanceof BrickServerError;
 }

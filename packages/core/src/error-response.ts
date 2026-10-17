@@ -32,6 +32,17 @@ export function normalizeActionError(
   return failure;
 }
 
+/**
+ * Turn what an action threw into the JSON body of its HTTP response, and record
+ * the failure on the active trace. Declared failures and validation errors keep
+ * their code, status, and details; anything else is logged and answered as a
+ * generic `INTERNAL_SERVER_ERROR` (500) so internals are never exposed.
+ *
+ * @param err - Whatever was thrown.
+ * @param context - A `logger` with `error()`, and the `requestId` to put in the body.
+ * @returns The envelope: `name`, `code`, `message`, `status`, `requestId`, and
+ * `details` or `errors` when there are any.
+ */
 export function toErrorResponse(
   err: unknown,
   context: ErrorContext,

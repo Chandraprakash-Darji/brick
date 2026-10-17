@@ -218,6 +218,21 @@ export async function startDevApplication(options: DevServerOptions) {
   );
 }
 
+/**
+ * What `brick dev` runs: start the application, restart it when its files
+ * change, and serve the dashboard beside it. With an `entry`, the app runs in
+ * a worker process that restarts on every change to the entry or the files it
+ * imports, and reports its requests to the dashboard; without one, a server
+ * with the registered services starts in this process.
+ *
+ * @param options - `entry`, `port` (else `PORT`, else 4000), `prefix`,
+ * `clientOutput` to regenerate the typed client's contract on each start,
+ * `frontend` to launch a frontend command once, and `dashboard` (`port` and
+ * `historyDays`, or `false`).
+ * @returns The application, when started in this process.
+ * @throws When `frontend` is given without `clientOutput`, or the dashboard
+ * would use the app's port.
+ */
 export async function startDevServer(options: DevServerOptions = {}) {
   const entry = options.entry;
   if (!entry && (options.clientOutput || options.frontend))

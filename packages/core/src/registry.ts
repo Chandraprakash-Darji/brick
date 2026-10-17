@@ -89,10 +89,20 @@ export class ServiceRegistry {
 // Global registry instance
 let globalRegistry = new ServiceRegistry();
 
+/**
+ * The registry every `defineService` adds to: it is how `brick()`, the OpenAPI
+ * generator, `createServiceProxy`, and the dashboard find services by name.
+ *
+ * @returns The current global registry.
+ */
 export function getGlobalRegistry(): ServiceRegistry {
   return globalRegistry;
 }
 
+/**
+ * Start over with an empty global registry. For tests, which define the same
+ * services again in each case; an application never needs it.
+ */
 export function resetGlobalRegistry(): void {
   globalRegistry = new ServiceRegistry();
 }

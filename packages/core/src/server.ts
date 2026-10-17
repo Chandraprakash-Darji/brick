@@ -83,6 +83,35 @@ export {
   createActionHandler,
 } from "./action-handler";
 
+/**
+ * Create the HTTP application: an Elysia app that serves every service's
+ * actions (and the tools that opt in with `http: true`) as routes, with
+ * `/_health`, an OpenAPI document at `/openapi.json`, Scalar at `/docs`,
+ * Swagger UI at `/swagger`, and the shape of the services at `/_brick/services`.
+ *
+ * Services come from the global registry unless `services` is given. The app
+ * does not listen by itself: export it from your entry file, where `brick dev`,
+ * `brick start`, and the Vite plugin load it, or call `app.listen(port)` in your
+ * own server bootstrap.
+ *
+ * @param options - `prefix` for action routes (default `/api`), `services`,
+ * `title`, `version`, and `description` for the OpenAPI document, `docs` and the
+ * paths of its pages, `requestLogging`, `reference`, `endpoints`, `secrets`,
+ * `telemetry`, `documentation`, and `dashboard`. See `CreateServerOptions`.
+ * @returns The app, with `definition` (its services, prefix, and routes),
+ * `endpoint()` to add raw routes, and `listEndpoints()` to list them.
+ * @throws When a required secret is missing, or `documentation` or `dashboard`
+ * is invalid.
+ * @example
+ * import { brick } from "@brickkit/core";
+ * import { pagesService } from "./services/pages";
+ *
+ * export default brick({
+ *   services: [pagesService],
+ *   title: "Pages API",
+ *   telemetry: true,
+ * });
+ */
 export function brick(options: CreateServerOptions = {}): BrickApp {
   const prefix = options.prefix ?? options.compilation?.ir.prefix ?? "/api";
   const title = options.title ?? "Brick-TS API Mesh";

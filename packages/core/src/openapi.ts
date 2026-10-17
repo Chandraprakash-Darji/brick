@@ -97,6 +97,20 @@ export function hoistAnchoredSchemas(spec: Record<string, any>): string[] {
   return [...anchored.keys()];
 }
 
+/**
+ * Build the OpenAPI 3.1 document for the services: one path per action route,
+ * with request and response schemas from the actions' TypeBox schemas, their
+ * declared errors, tags by service, and a bearer security scheme where any
+ * action needs authorization.
+ *
+ * `brick()` calls this for `/openapi.json`; call it yourself to write the
+ * document to a file or feed another tool.
+ *
+ * @param options - `title`, `version`, and `description` for the `info` block,
+ * `prefix` (default `/api`), and the `services` or `registry` to describe
+ * (the global registry by default).
+ * @returns The document as a plain object.
+ */
 export function generateOpenApiSpec(
   options: OpenApiGeneratorOptions = {},
 ): Record<string, any> {

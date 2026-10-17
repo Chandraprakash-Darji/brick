@@ -3,6 +3,31 @@ import { getGlobalRegistry } from "./registry";
 import { pickContextEnvelope } from "./context";
 import { withCallSpan } from "./telemetry";
 
+/**
+ * A typed way to call another service's actions in-process. Each property of
+ * the proxy is an action of that service: call it with the action's input, and
+ * optionally a call context.
+ *
+ * The call runs through the target's own validation and authorization, with the
+ * target's database and context (never the caller's), and shows as an `rpc`
+ * span in the trace. Only in-process dispatch exists: with `isMonolith: false`
+ * a call throws. Use the typed client to call a service over HTTP.
+ *
+ * @param serviceName - The registered name of the service to call.
+ * @param options - `from` (the calling service's name, which becomes `ctx.caller`
+ * in the target and cannot be spoofed), `context` (defaults for every call), and
+ * `isMonolith`.
+ * @returns A proxy typed as `T`, usually the target's actions.
+ * @throws On a call, when the service or the action is not registered.
+ * @example
+ * import { createServiceProxy } from "@brickkit/core";
+ *
+ * const pages = createServiceProxy<{ get(input: { id: string }): Promise<Page> }>(
+ *   "pages",
+ *   { from: "billing" },
+ * );
+ * const page = await pages.get({ id: "p_1" });
+ */
 export function createServiceProxy<T extends Record<string, any>>(
   serviceName: string,
   options: ProxyOptions = {},

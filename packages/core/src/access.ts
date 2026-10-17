@@ -17,6 +17,16 @@ export interface ActionAccessInfo {
  */
 export const ACTION_ACCESS_KEY = Symbol.for("brickkit.action.access");
 
+/**
+ * Record how an action is protected, for tools that cannot read it from the
+ * configuration: plugins such as `crud` enforce access inside `execute`, so the
+ * action has no `authorize` to find. Introspection, OpenAPI, and the dashboard
+ * read what is recorded here.
+ *
+ * @param action - The action to describe.
+ * @param info - Whether it checks authorization and whether it scopes queries,
+ * and the resulting policy.
+ */
 export function setActionAccess(action: object, info: ActionAccessInfo): void {
   (action as Record<symbol, ActionAccessInfo>)[ACTION_ACCESS_KEY] = {
     hasAuthorize: info.hasAuthorize,
@@ -25,6 +35,16 @@ export function setActionAccess(action: object, info: ActionAccessInfo): void {
   };
 }
 
+/**
+ * How an action is protected: `"public"` when nothing checks the caller,
+ * `"authorized"` when an `authorize` does, and `"scoped"` when the action also
+ * limits what rows the caller can reach. It reads what a plugin recorded with
+ * `setActionAccess`, else the action's own `authorize`, and keeps the policy
+ * consistent with the flags.
+ *
+ * @param action - An action, or any object a plugin described.
+ * @returns `hasAuthorize`, `hasScope`, and `policy`.
+ */
 export function getActionAccess(action: Action | object): ActionAccessInfo {
   const meta = (action as Record<symbol, unknown>)[ACTION_ACCESS_KEY] as
     | Partial<ActionAccessInfo>

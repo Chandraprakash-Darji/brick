@@ -29,6 +29,18 @@ function isNonEmpty(obj: any): boolean {
   return false;
 }
 
+/**
+ * Work out, once at startup, everything an action's route needs to answer a
+ * request: where its input comes from (body, query, or path), the validators,
+ * the authorization and execute functions, and its logger. Low level: `brick()`
+ * does this for every route.
+ *
+ * @param service - The service the action belongs to.
+ * @param action - The action.
+ * @param routePath - The route's path.
+ * @param method - The HTTP method (POST by default).
+ * @returns The plan `executeCompiledRoute` runs.
+ */
 export function compileRoutePlan(
   service: Service,
   action: Action,
@@ -148,6 +160,16 @@ export function compileRoutePlan(
   };
 }
 
+/**
+ * Answer one request for a compiled route: read the input, run the action, and
+ * return its output or the error response, with the `x-trace-id` and
+ * `x-request-id` headers set. Low level: `brick()` mounts this for every route.
+ *
+ * @param plan - From `compileRoutePlan`.
+ * @param elysiaCtx - The Elysia request context: `params`, `body`, `query`,
+ * `headers`, `request`, and `set`.
+ * @returns The action's output, or an error envelope with the status set on `set`.
+ */
 export async function executeCompiledRoute(
   plan: CompiledRoutePlan,
   elysiaCtx: any,
@@ -312,6 +334,17 @@ export async function executeCompiledRoute(
   }
 }
 
+/**
+ * An Elysia handler for one action: `compileRoutePlan` and
+ * `executeCompiledRoute` together. Use it to mount an action on your own
+ * Elysia app; `brick()` does it for you.
+ *
+ * @param service - The service the action belongs to.
+ * @param action - The action.
+ * @param routePath - The route's path.
+ * @param method - The HTTP method (POST by default).
+ * @returns A function from the Elysia context to the response.
+ */
 export function createActionHandler(
   service: Service,
   action: Action,

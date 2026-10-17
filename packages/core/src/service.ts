@@ -437,6 +437,40 @@ function resolveServiceContextEffect<
   });
 }
 
+/**
+ * Declare a service: a named group of actions, tools, and resources with its own
+ * database and request context. It is registered globally, so `brick()`, the
+ * OpenAPI generator, and `createServiceProxy` find it by name.
+ *
+ * Add actions with `service.action(...)`, tools with `service.tool(...)`,
+ * resources with `service.resource(...)`, and plugins with `service.use(...)`.
+ *
+ * @param name - Unique name. It is the service's segment of every action route
+ * (`/api/<name>/<action>`) and appears in OpenAPI and the dashboard. Defining a
+ * second service with the same name replaces the first and logs a warning.
+ * @param options - `database` (a handle from `defineDatabase`), `context` (adds
+ * fields such as the signed-in user to every action's `ctx`), and `auth`,
+ * `rateLimit`, `cache`, `resilience`, `telemetry`, and `lifecycle`.
+ * @returns The service.
+ * @example
+ * import { defineDatabase, defineService, t } from "@brickkit/core";
+ *
+ * const database = defineDatabase({ tables: { pages } });
+ *
+ * export const pagesService = defineService("pages", {
+ *   database,
+ *   // Added to `ctx` in every action of this service.
+ *   context: async ({ request }) => ({ user: await readUser(request) }),
+ * });
+ *
+ * pagesService.action({
+ *   name: "list",
+ *   input: t.Object({ limit: t.Optional(t.Number()) }),
+ *   output: t.Array(t.Object({ id: t.String(), title: t.String() })),
+ *   execute: ({ input, ctx }) =>
+ *     ctx.db.select().from(pages).limit(input.limit ?? 20),
+ * });
+ */
 export function defineService<
   TDb = BunSQLiteDatabase<Record<string, unknown>>,
   TServiceContext extends Record<string, any> = Record<string, any>,

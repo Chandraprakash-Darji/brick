@@ -130,6 +130,36 @@ export interface ResourcePlugin<
   readonly setup: (context: ResourcePluginContext<S, R>) => A;
 }
 
+/**
+ * Define a plugin that installs onto a service with `service.use(plugin)`. Its
+ * `setup` receives the service and a `routes` registrar for adding actions and
+ * raw HTTP endpoints, and returns the typed API that `service.use` hands back.
+ *
+ * @param definition - A unique `name`, optional `routes` controls that let the
+ * user move or switch off the plugin's routes, and `setup`, which must be
+ * synchronous.
+ * @returns The plugin descriptor, frozen.
+ * @throws When the name is empty or has surrounding whitespace.
+ * @example
+ * import { defineServicePlugin, t } from "@brickkit/core";
+ *
+ * export const greeting = (salutation = "Hello") =>
+ *   defineServicePlugin({
+ *     name: "example/greeting",
+ *     setup({ routes }) {
+ *       const hello = routes.action({
+ *         name: "hello",
+ *         input: t.Object({ name: t.String() }),
+ *         output: t.String(),
+ *         execute: ({ input }) => `${salutation}, ${input.name}!`,
+ *       });
+ *       return { hello };
+ *     },
+ *   });
+ *
+ * const api = greeterService.use(greeting("Welcome"));
+ * await api.hello({ input: { name: "Ada" } });
+ */
 export function defineServicePlugin<
   S extends Service<any, any> = Service<any, any>,
   A = unknown,
@@ -147,6 +177,17 @@ export function defineServicePlugin<
     [pluginKind]: "service" as const,
   });
 }
+/**
+ * Define a plugin that installs onto a resource (a table and its entity) with
+ * `resource.use(plugin)`. Its `setup` receives the service, the resource, and a
+ * `routes` registrar, whose routes are scoped under the resource's name, and
+ * returns the typed API that `resource.use` hands back. `crud` is built this way.
+ *
+ * @param definition - A unique `name`, optional `routes` controls, and `setup`,
+ * which must be synchronous.
+ * @returns The plugin descriptor, frozen.
+ * @throws When the name is empty or has surrounding whitespace.
+ */
 export function defineResourcePlugin<
   S extends Service<any, any> = Service<any, any>,
   R extends Resource<any, any, any> = Resource<any, ContextOf<S>, any>,
@@ -268,6 +309,17 @@ function pathOf(binding: Binding, prefix: string) {
     "/"
   );
 }
+/**
+ * Where a plugin mounted an action over HTTP, for the OpenAPI generator, the
+ * compiler, and the typed client.
+ *
+ * @param action - An action.
+ * @param prefix - The application's route prefix (default `/api`).
+ * @returns `undefined` when no plugin bound the action (it uses its own route),
+ * `false` when the plugin's route was switched off, otherwise the route's
+ * `path` and `method`, the `clientPath` the typed client uses, and the owning
+ * `plugin` and `resource`.
+ */
 export function getPluginActionRoute(
   action: Action<any, any, any, any>,
   prefix = "/api",
@@ -286,6 +338,15 @@ export function getPluginActionRoute(
     resource: binding.resource?.name,
   };
 }
+/**
+ * The raw HTTP endpoints plugins registered on a service, ready to mount on the
+ * application. Each handler resolves the service's context before it runs.
+ *
+ * @param service - The service plugins were installed on.
+ * @param prefix - The application's route prefix (default `/api`).
+ * @returns The enabled endpoints: `path`, `method`, `handler`, and the
+ * `summary`, `description`, and `tags` for OpenAPI.
+ */
 export function getPluginEndpoints(
   service: Service<any, any>,
   prefix = "/api",

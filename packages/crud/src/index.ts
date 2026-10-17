@@ -190,6 +190,38 @@ function uniqueViolation(error: unknown): boolean {
   return false;
 }
 
+/**
+ * A plugin that gives a resource its CRUD actions: `list`, `get`, `create`,
+ * `update`, `delete`, `findOne`, `count`, and `exists`, with validated input
+ * and output, filters and sorting, and access rules. Install it with
+ * `resource.use(crud({ ... }))`. The actions are named `<resource>.<operation>`
+ * and routed under `/api/<resource>`.
+ *
+ * It denies by default: `access` is required. A column is hidden from reads,
+ * writes, and filters until its `fields` entry allows it.
+ *
+ * @param options - `fields` (per column: `read`, `create`, `update`, `filter`
+ * operators, and `sort`), `access` (`"public"`, or `{ authorize, scope }`),
+ * `operations` to switch some off, `routes` to move or disable routes,
+ * `hooks` around create, update, and delete, and `defaultLimit` and `maxLimit`
+ * for lists.
+ * @returns The plugin, for `resource.use`, which returns the resource with its
+ * actions attached so they can be called in-process.
+ * @example
+ * import { crud } from "@brickkit/crud";
+ *
+ * export const page = pagesService
+ *   .resource({ name: "page", table: pages, id: pages.id })
+ *   .use(
+ *     crud({
+ *       access: "public",
+ *       fields: {
+ *         id: { read: true, filter: ["eq", "in"] },
+ *         title: { read: true, create: true, update: true, sort: true },
+ *       },
+ *     }),
+ *   );
+ */
 export function crud<const F extends Fields, const O extends Operations = {}>(
   options: CrudOptions<F, O>,
 ): CrudPlugin<F, O> {

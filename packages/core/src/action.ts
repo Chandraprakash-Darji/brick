@@ -63,6 +63,18 @@ function createDefaultContext(partial?: any): BaseContext & any {
   };
 }
 
+/**
+ * The `error` helpers an action receives: one function per error code that
+ * throws an `ActionExecutionError` with that code and status. The standard HTTP
+ * codes (`BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`,
+ * `INTERNAL_SERVER_ERROR`) are always there; the action's own `errors` add to
+ * them or replace one.
+ *
+ * @param errorsDef - The action's `errors`: for each code, its `message` and
+ * `status` (default 400).
+ * @returns Helpers that take an optional message, `details`, and `ErrorOptions`,
+ * and always throw.
+ */
 export function buildErrorHelpers<
   TErrors extends Record<string, ActionErrorDefinition>,
 >(errorsDef?: TErrors): ErrorBuilder<TErrors> {
@@ -99,6 +111,44 @@ export function buildErrorHelpers<
   return helpers as ErrorBuilder<TErrors>;
 }
 
+/**
+ * Define an action: a typed, validated function that Brick serves over HTTP,
+ * runs in-process, and exposes to the typed client and OpenAPI.
+ *
+ * A call runs in order: the input is validated against `input` (an invalid one
+ * is a `VALIDATION_FAILED` error, HTTP 400); `authorize` runs, if there is one;
+ * `execute` runs; and its result is validated against `output` (a mismatch is a
+ * server error, HTTP 500). Throw `error.CODE(...)` from `execute` for a declared
+ * failure or a standard one such as `error.NOT_FOUND()`. Any other thrown value
+ * becomes `INTERNAL_SERVER_ERROR` (500), with the cause kept out of the response
+ * and in the log.
+ *
+ * `authorize` returns `false` to refuse: the call fails with `UNAUTHORIZED`
+ * (401) when there is no `ctx.user`, and `FORBIDDEN` (403) when there is one.
+ * Where it is given, `execute` can rely on what it checked.
+ *
+ * @param config - `name`, `execute`, and optionally `description`, `input` and
+ * `output` (TypeBox schemas), `errors`, `authorize`, `method` and `path` to
+ * change the route (POST by default), `tags`, and `emits`.
+ * @returns The action. Register it with `service.action(action)`; call it
+ * directly with `action.run(input, ctx)`.
+ * @example
+ * import { defineAction, t } from "@brickkit/core";
+ *
+ * export const getPage = defineAction({
+ *   name: "get",
+ *   method: "GET",
+ *   input: t.Object({ id: t.String() }),
+ *   output: t.Object({ id: t.String(), title: t.String() }),
+ *   errors: { PAGE_GONE: { message: "That page was removed", status: 410 } },
+ *   authorize: ({ user }) => user != null,
+ *   execute: async ({ input, ctx, error }) => {
+ *     const page = await findPage(ctx.db, input.id);
+ *     if (!page) throw error.NOT_FOUND("No such page");
+ *     return page;
+ *   },
+ * });
+ */
 export function defineAction<
   TInputSchema extends TSchema | undefined = undefined,
   TOutputSchema extends TSchema | undefined = undefined,

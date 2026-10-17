@@ -115,6 +115,15 @@ function effectRoutes<C extends ActionContext>(
   };
 }
 
+/**
+ * `defineServicePlugin` for Effect: the `routes` that `setup` receives take
+ * actions and endpoints written as Effects, and run them on the service's
+ * Effect runtime with the request's abort signal.
+ *
+ * @param definition - A unique `name`, optional `routes` controls, and a
+ * synchronous `setup`.
+ * @returns The same plugin descriptor `defineServicePlugin` makes.
+ */
 export function defineEffectServicePlugin<
   S extends Service<any, any> = Service<any, any>,
   A = unknown,
@@ -135,6 +144,15 @@ export function defineEffectServicePlugin<
   });
 }
 
+/**
+ * `defineResourcePlugin` for Effect: the `routes` that `setup` receives take
+ * actions and endpoints written as Effects, and run them on the service's
+ * Effect runtime with the request's abort signal.
+ *
+ * @param definition - A unique `name`, optional `routes` controls, and a
+ * synchronous `setup`.
+ * @returns The same plugin descriptor `defineResourcePlugin` makes.
+ */
 export function defineEffectResourcePlugin<
   S extends Service<any, any> = Service<any, any>,
   R extends Resource<any, any, any> = Resource<any, any, any>,
