@@ -97,12 +97,12 @@
     },
     "packages/cli": {
       "name": "@brickkit/cli",
-      "version": "0.8.0",
+      "version": "0.8.1",
       "bin": {
         "brick": "dist/bin.js",
       },
       "dependencies": {
-        "@brickkit/core": "^0.7.4",
+        "@brickkit/core": "^0.8.1",
         "@opentelemetry/api": "^1.9.1",
         "@opentelemetry/context-async-hooks": "^2.12.0",
         "@opentelemetry/core": "^2.12.0",
@@ -153,7 +153,7 @@
     },
     "packages/core": {
       "name": "@brickkit/core",
-      "version": "0.8.0",
+      "version": "0.8.1",
       "dependencies": {
         "@opentelemetry/api": "^1.9.1",
         "@sinclair/typebox": "^0.34.52",
@@ -183,7 +183,7 @@
     },
     "packages/crud": {
       "name": "@brickkit/crud",
-      "version": "0.8.0",
+      "version": "0.8.1",
       "dependencies": {
         "@sinclair/typebox": "^0.34.52",
         "drizzle-orm": "^0.45.2",
@@ -194,7 +194,7 @@
         "typescript": "^5.7.0",
       },
       "peerDependencies": {
-        "@brickkit/core": "^0.7.4",
+        "@brickkit/core": "^0.8.1",
       },
     },
     "www": {
