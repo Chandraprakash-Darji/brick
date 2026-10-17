@@ -77,6 +77,29 @@ export { defineAction, buildErrorHelpers } from "./action";
 export { defineResource } from "./resource";
 export { createServiceProxy } from "./rpc";
 
+export {
+  defineListener,
+  outboxTable,
+  isOutboxTable,
+  runInTransaction,
+  EventsHub,
+  Dispatcher,
+  type CrudEventPayload,
+  type DispatchOptions,
+  type EventDelivery,
+  type EventEnvelope,
+  type EventListener,
+  type EventRecorder,
+  type EventsDefinition,
+  type EventsOptions,
+  type OutboxCounts,
+  type OutboxStatus,
+  type OutboxTable,
+  type PostgresOutboxTable,
+  type SQLiteOutboxTable,
+  type ServiceEvents,
+} from "./events";
+
 // Typed HTTP Client (also importable as `@brickkit/core/client` for frontends)
 export {
   createBrickClient,

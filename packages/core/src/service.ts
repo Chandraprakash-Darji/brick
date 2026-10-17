@@ -29,6 +29,8 @@ import { defineAction } from "./action";
 import { getGlobalRegistry } from "./registry";
 import { getTableName, isDatabaseHandle, type DatabaseHandle } from "./db";
 import { defineResource } from "./resource";
+import { isOutboxTable, type OutboxTable } from "./events/outbox";
+import type { ServiceEvents } from "./events/types";
 import { getActionAccess } from "./access";
 import { pickContextEnvelope } from "./context";
 import { createLogger, DEFAULT_LOG_PREFIXES } from "./logger";
@@ -299,6 +301,17 @@ export class ServiceImpl<
 
   getDb(): TDb | undefined {
     return this.database?.getDb();
+  }
+
+  /** What a write needs to record events. Set by `brick({ events })`. */
+  events?: ServiceEvents;
+
+  getOutbox(): OutboxTable | undefined {
+    return Object.values(this.database?.tables ?? {}).find(isOutboxTable);
+  }
+
+  setEvents(events: ServiceEvents | undefined): void {
+    this.events = events;
   }
 
   setDb(database: DatabaseHandle<TDb>): void {

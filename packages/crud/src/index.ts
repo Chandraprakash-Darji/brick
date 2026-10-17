@@ -3,6 +3,7 @@ import {
   t,
   ActionExecutionError,
   setActionAccess,
+  type EventRecorder,
 } from "@brickkit/core";
 import { Type, FormatRegistry, Kind, type TSchema } from "@sinclair/typebox";
 import {
@@ -625,6 +626,25 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
             }
             const db: any = ctx.db ?? service.getDb();
             if (!db) throw new Error("CRUD requires a configured database");
+            const eventName = `${resource.name}.${operation}`;
+            const recording =
+              options.events !== false &&
+              (operation === "create" ||
+                operation === "update" ||
+                operation === "delete") &&
+              service.events?.wants(eventName)
+                ? service.events
+                : undefined;
+            const eventContext = {
+              traceId: ctx.traceId,
+              source: `${service.name}.${resource.name}`,
+            };
+            const readableEventRow = (row: Record<string, unknown>) =>
+              Object.fromEntries(
+                readable.map((field) => [field, jsonValue(row[field])]),
+              );
+            const eventId = (row: Record<string, unknown>) =>
+              jsonValue(row[resource.idField]);
             const scope =
               options.access === "public"
                 ? undefined
@@ -860,23 +880,35 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
             }
             if (operation === "delete") {
               await options.hooks?.beforeDelete?.({ id: input.id, ctx, error });
-              const rows = await executeQuery(
-                db,
-                key("delete"),
-                () =>
-                  db
-                    .delete(resource.table)
-                    .where(where)
-                    .returning({ id: idColumn }),
-                params,
-                cacheable,
-              );
-              if (!rows.length)
-                throw new ActionExecutionError(
-                  "NOT_FOUND",
-                  "Resource not found",
-                  404,
+              const remove = async (target: any, record?: EventRecorder) => {
+                const rows = await executeQuery(
+                  target,
+                  key(record ? "delete-row" : "delete"),
+                  () =>
+                    target
+                      .delete(resource.table)
+                      .where(where)
+                      .returning(record ? columns : { id: idColumn }),
+                  params,
+                  cacheable,
                 );
+                if (!rows.length)
+                  throw new ActionExecutionError(
+                    "NOT_FOUND",
+                    "Resource not found",
+                    404,
+                  );
+                if (record)
+                  await record(eventName, {
+                    id: eventId(rows[0]),
+                    row: readableEventRow(rows[0]),
+                  });
+              };
+              if (recording)
+                await recording.transaction(db, eventContext, (tx, record) =>
+                  remove(tx, record),
+                );
+              else await remove(db);
               await options.hooks?.afterDelete?.({ id: input.id, ctx, error });
               return { success: true };
             }
@@ -922,38 +954,82 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
               !Object.values(columns).some(
                 (column) => column.defaultFn || column.onUpdateFn,
               );
-            const rows = await executeQuery(
-              db,
-              key("write"),
-              () =>
-                operation === "create"
-                  ? db
-                      .insert(resource.table)
-                      .values(boundData)
-                      .returning(columns)
-                  : db
-                      .update(resource.table)
-                      .set(boundData)
+            const readRowBeforeUpdate = async (target: any) =>
+              (
+                await executeQuery(
+                  target,
+                  key("before"),
+                  () => {
+                    const query = target
+                      .select(columns)
+                      .from(resource.table)
                       .where(where)
-                      .returning(columns),
-              params,
-              safeCache,
-            ).catch((cause: unknown) => {
-              if (uniqueViolation(cause))
+                      .limit(1);
+                    return typeof query.for === "function"
+                      ? query.for("update")
+                      : query;
+                  },
+                  params,
+                  cacheable,
+                )
+              )[0] as Record<string, unknown> | undefined;
+            const write = async (target: any, record?: EventRecorder) => {
+              const before =
+                record && operation === "update"
+                  ? await readRowBeforeUpdate(target)
+                  : undefined;
+              const written = await executeQuery(
+                target,
+                key("write"),
+                () =>
+                  operation === "create"
+                    ? target
+                        .insert(resource.table)
+                        .values(boundData)
+                        .returning(columns)
+                    : target
+                        .update(resource.table)
+                        .set(boundData)
+                        .where(where)
+                        .returning(columns),
+                params,
+                safeCache,
+              ).catch((cause: unknown) => {
+                if (uniqueViolation(cause))
+                  throw new ActionExecutionError(
+                    "CONFLICT",
+                    "Resource already exists",
+                    409,
+                  );
+                throw cause;
+              });
+              if (!written[0])
                 throw new ActionExecutionError(
-                  "CONFLICT",
-                  "Resource already exists",
-                  409,
+                  "NOT_FOUND",
+                  "Resource not found",
+                  404,
                 );
-              throw cause;
-            });
-
-            if (!rows[0])
-              throw new ActionExecutionError(
-                "NOT_FOUND",
-                "Resource not found",
-                404,
-              );
+              if (record)
+                await record(
+                  eventName,
+                  operation === "create"
+                    ? {
+                        id: eventId(written[0]),
+                        row: readableEventRow(written[0]),
+                      }
+                    : {
+                        id: eventId(written[0]),
+                        before: readableEventRow(before ?? {}),
+                        after: readableEventRow(written[0]),
+                      },
+                );
+              return written;
+            };
+            const rows = recording
+              ? await recording.transaction(db, eventContext, (tx, record) =>
+                  write(tx, record),
+                )
+              : await write(db);
             if (operation === "create")
               await options.hooks?.afterCreate?.({ row: rows[0], ctx, error });
             else

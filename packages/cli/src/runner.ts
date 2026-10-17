@@ -10,6 +10,7 @@ import {
   type ArchitectureSchema,
   type BrickApp,
   type DocumentationOptions,
+  type EventsHub,
 } from "@brickkit/core";
 import { startDevDashboard, type DevDashboard } from "./dev-dashboard";
 import { DocsHost } from "./dev-docs";
@@ -66,6 +67,7 @@ async function createServer(
     });
 
   await app.listen({ port });
+  app.events?.start();
 
   const prefix = app.definition.prefix;
   const services = app.definition.services;
@@ -95,6 +97,12 @@ async function createServer(
   );
 
   return app;
+}
+
+function finishDeliveriesOnSignal(events: EventsHub) {
+  const stop = () => void events.stop().finally(() => process.exit(0));
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
 }
 
 export async function startProdServer(options: DevServerOptions = {}) {
@@ -162,6 +170,10 @@ export async function startProdServer(options: DevServerOptions = {}) {
   // Before listening, so the first request is already traced and its logs kept.
   const dashboard = await startProductionDashboard(app, { appPort: port });
   app.listen(port);
+  if (app.events) {
+    app.events.start();
+    finishDeliveriesOnSignal(app.events);
+  }
 
   console.log(`\n⚡ API Gateway running on: http://localhost:${port}`);
   console.log(`🩺 Health check:        http://localhost:${port}/_health`);

@@ -30,6 +30,8 @@ import {
   type EndpointDefinition,
 } from "./endpoints";
 import { instrumentDatabase, traceHttpRequest, withSpan } from "./telemetry";
+import { EventsHub } from "./events/hub";
+import type { EventsOptions } from "./events/types";
 
 export interface CreateServerOptions {
   port?: number;
@@ -75,6 +77,14 @@ export interface CreateServerOptions {
    * `auth`. Setting it turns on `telemetry`. See `DashboardOptions`.
    */
   dashboard?: DashboardOptions;
+  /**
+   * Record events in the same database transaction as the writes that cause them,
+   * and deliver them to listeners after the commit. Generated CRUD writes emit
+   * `<resource>.create`, `<resource>.update` and `<resource>.delete`. A service
+   * records events once its database holds an `outboxTable()`. Reads emit nothing,
+   * and an app without this option behaves exactly as before. See `EventsOptions`.
+   */
+  events?: EventsOptions;
 }
 
 export {
@@ -170,6 +180,9 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
   }
 
   const services = options.services ?? getGlobalRegistry().list();
+  const events = options.events
+    ? new EventsHub(options.events).attach(services)
+    : undefined;
   if (telemetry) {
     for (const service of services) instrumentDatabase(service.getDb());
   }
@@ -392,8 +405,10 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
     telemetry,
     documentation: normalizeDocumentation(options.documentation),
     dashboard,
+    ...(events ? { events: events.describe() } : {}),
   });
   Object.defineProperty(brickApp, "definition", { value: definition });
+  Object.defineProperty(brickApp, "events", { value: events });
   getGlobalRegistry().setApplicationRoutes(definition);
 
   // Serialize stable metadata once; registry changes invalidate the snapshot.
