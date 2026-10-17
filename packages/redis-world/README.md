@@ -50,6 +50,25 @@ Delivery is at least once. A worker paused beyond its heartbeat TTL can overlap 
 
 Use Redis persistence such as AOF. Redis data loss can lose workflow history. Use a single primary, optionally with Sentinel/failover. Redis Cluster is unsupported because the storage and queue scripts use multiple keys without a shared hash slot. Workflow v4 run data is incompatible; drain old runs or use a fresh key prefix.
 
+## Starting a run once
+
+`start()` takes no run id, so a caller that retries (an event delivered twice, a request sent again) normally starts a second run. This world lets the caller name the run instead. Pass `runKey` and `runKeyTime` in the options to `start()`:
+
+```ts
+import { start } from "workflow/api";
+
+const run = await start(myWorkflow, [input], {
+  runKey: "evt_01J...:welcome-email",
+  runKeyTime: Date.parse(event.occurredAt),
+} as never);
+```
+
+The same `runKey` and `runKeyTime` always give the same run id, so starting again returns the run that is already there instead of a second one. This holds when the starts happen at the same moment on different workers, and the run's first message is not queued a second time while the first is still waiting or running.
+
+`runKeyTime` is required with a `runKey`. A run id is a ULID, and the Workflow runtime seeds the workflow's clock (what `Date.now()` returns inside it) from the time in it. Passing the time the run is for, such as when the event happened, keeps that clock true and the same on every attempt. Pass the same time each time: a different `runKeyTime` is a different run. `runKey` is a non-empty string of at most 1024 characters. The world throws a `TypeError` for either one when it is not usable.
+
+Without `runKey`, ids are fresh ULIDs and nothing changes. The Workflow typings do not list these two options yet, hence the cast.
+
 ## Retention
 
 Finished runs stay forever unless you set a policy. `age` is in seconds; `count` keeps the newest runs. A status without a policy is kept.

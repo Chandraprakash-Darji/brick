@@ -71,4 +71,37 @@ describe("multi worker (3 processes, one Redis, shared prefixes)", () => {
       env.expectCleanWorkerLogs();
     },
   );
+
+  test(
+    "10b. the same runKey started on three workers at once is one run",
+    { timeout: 120_000 },
+    async () => {
+      const env = await Env.create({ workers: 3 });
+      const counterKey = env.counterKey("same-key-race");
+      const options = {
+        runKey: "evt_02:welcome-email",
+        runKeyTime: Date.UTC(2026, 9, 17, 12, 30, 0),
+      };
+      const runIds = await Promise.all(
+        env
+          .liveWorkers()
+          .map((worker) =>
+            env.invoke(W.fanOut, [5, counterKey], worker, options),
+          ),
+      );
+      expect(new Set(runIds).size).toBe(1);
+      const runId = runIds[0]!;
+      await env.waitForRuns([runId]);
+      expect(await env.output(runId)).toBe(20);
+
+      const counts = await env.counts(counterKey);
+      expect(Object.keys(counts)).toHaveLength(5);
+      expect(Object.values(counts).filter((count) => count !== 1)).toEqual([]);
+
+      const byType = Env.countByType(await env.expectDenseLog(runId));
+      expect(byType.run_created).toBe(1);
+      expect(byType.run_completed).toBe(1);
+      env.expectCleanWorkerLogs();
+    },
+  );
 });

@@ -16,6 +16,7 @@ import {
 import type { Redis } from "ioredis";
 import { monotonicFactory } from "ulid";
 import type { RedisWorldConfig } from "./config.js";
+import { initialMessageKey } from "./run-id.js";
 import { debug, hasBinary, uint8ArrayReplacer } from "./util.js";
 
 export interface QueueStats {
@@ -254,8 +255,9 @@ export function createQueue(
     if (closed) throw new Error("Queue is closed");
     const { prefix } = parseQueueName(queueName);
     const messageId = MessageId.parse(`msg_${generateMessageId()}`);
-    const dedupKey = opts?.idempotencyKey
-      ? `${root}:idempotent:${opts.idempotencyKey}`
+    const idempotencyKey = opts?.idempotencyKey ?? initialMessageKey(message);
+    const dedupKey = idempotencyKey
+      ? `${root}:idempotent:${idempotencyKey}`
       : "";
     const envelope: Envelope = {
       messageId,
