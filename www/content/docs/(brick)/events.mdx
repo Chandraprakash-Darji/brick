@@ -1,0 +1,163 @@
+---
+title: Events
+description: Record an event in the same transaction as a write, and run listeners for it after the commit.
+---
+
+Events let code react to a write without the write waiting for it. Every generated CRUD `create`, `update` and `delete` records an event in the same database transaction as the row it changes. After the commit, Brick delivers the event to your listeners and retries one that fails.
+
+Nothing changes for an app that does not set `events`.
+
+## Minimal Example
+
+Three steps: give the database an outbox table, define a listener, and pass it to `brick()`.
+
+```ts title="src/services/users.ts"
+import {
+  defineDatabase,
+  defineService,
+  outboxTable,
+  sqliteTable,
+  text,
+} from "@brickkit/core";
+import { crud } from "@brickkit/crud";
+
+export const users = sqliteTable("users", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  email: text("email").notNull(),
+});
+
+export const outbox = outboxTable("sqlite");
+
+const database = defineDatabase({ tables: { users, outbox } });
+export const usersService = defineService("users", { database });
+
+export const user = usersService
+  .resource({ name: "user", table: users, id: users.id })
+  .use(
+    crud({
+      access: "public",
+      fields: {
+        id: { read: true },
+        email: { read: true, create: true },
+      },
+    }),
+  );
+```
+
+```ts title="src/app.ts"
+import { brick, defineListener } from "@brickkit/core";
+import { usersService } from "./services/users";
+
+const welcome = defineListener({
+  name: "welcome-email",
+  on: "user.create",
+  run: async ({ payload, deliveryId }) => {
+    await mailer.sendWelcome(payload.row.email, { idempotencyKey: deliveryId });
+  },
+});
+
+export default brick({
+  services: [usersService],
+  events: { listeners: [welcome] },
+});
+```
+
+Creating a user now inserts the row and an event row together. `brick dev` and `brick start` deliver it to `welcome-email` a moment later.
+
+## The outbox table
+
+An event waits in a table until it is delivered. Brick does not create tables, so add the outbox to the schema of the database whose writes should emit events, and create it the way you create your other tables:
+
+- **PostgreSQL:** put `outboxTable("postgres")` in your Drizzle schema and generate a migration with Drizzle Kit.
+- **SQLite in development and tests:** `syncSchema` creates it, like your other tables.
+
+```ts title="src/schema.ts"
+import { outboxTable } from "@brickkit/core";
+
+export const outbox = outboxTable("postgres");
+```
+
+A service records events only when its database holds an outbox table. `outboxTable(engine, { name })` can name the table something other than `brick_outbox`.
+
+## Events from CRUD
+
+A generated write emits one event, named after the resource and the operation:
+
+| Event         | Payload                 |
+| ------------- | ----------------------- |
+| `user.create` | `{ id, row }`           |
+| `user.update` | `{ id, before, after }` |
+| `user.delete` | `{ id, row }`           |
+
+Reads emit nothing.
+
+`row`, `before` and `after` carry the fields the resource lets clients read. A column with no `read` permission is never put in an event, so a password hash or a token does not end up in the outbox. Values are plain JSON: dates are ISO strings.
+
+`before` is read in the same transaction as the update (and locked on PostgreSQL), so each update's `before` is the state the previous update left.
+
+A write that fails records no event, and an event whose write was rolled back is never delivered. A resource can opt out with `crud({ events: false })`.
+
+## Listeners
+
+`defineListener` takes a unique `name`, the event names it listens for in `on`, and `run`. A trailing `*` matches a prefix, so `user.*` listens for every user event and `*` for everything.
+
+Each listener gets its own delivery of an event. If two listeners listen for `user.create` and one of them fails, only that one is retried.
+
+A delivery has the event (`id`, `name`, `payload`, `occurredAt`, `traceId`, `source`), plus:
+
+- `listener`: the name of the listener it is for.
+- `deliveryId`: `<event id>:<listener>`. It is the same on every retry.
+- `attempt`: 1 on the first try.
+
+Delivery is at least once, so a listener can run twice for the same event, for example when a process dies after the work but before the delivery is marked done. Use `deliveryId` as an idempotency key when the work must not be repeated.
+
+## Retries
+
+A listener that throws is retried after a delay that starts at one second and doubles, up to `maxBackoffMs`. When its attempts run out, the delivery is parked as `dead`. It stays in the outbox, with the last error, until you retry it.
+
+```ts
+const events = app.events!;
+
+await events.counts();
+await events.retryDead();
+await events.retryDead("evt_01J...:welcome-email");
+```
+
+Set `maxAttempts` on a listener to override the dispatcher's default.
+
+## Delivery settings
+
+`events.dispatch` tunes delivery. All values are optional.
+
+| Option              | Default    | Meaning                                                                                                                |
+| ------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `timer`             | `true`     | Look for due deliveries on a timer and right after a commit. `false` delivers only when you call `app.events.drain()`. |
+| `intervalMs`        | `1000`     | How often to look for due deliveries.                                                                                  |
+| `batchSize`         | `50`       | Most deliveries running at once.                                                                                       |
+| `maxAttempts`       | `8`        | Attempts before a delivery is parked as `dead`.                                                                        |
+| `claimTimeoutMs`    | `60000`    | How long a running delivery may take before another process takes it over.                                             |
+| `maxBackoffMs`      | `300000`   | Longest wait before a retry.                                                                                           |
+| `retainDeliveredMs` | `86400000` | How long delivered rows are kept. `0` keeps none.                                                                      |
+
+`dispatch: false` only records events. Use it for a process that serves requests while another process delivers.
+
+## Several processes
+
+Several processes can deliver from one outbox table. On PostgreSQL they claim rows with `FOR UPDATE SKIP LOCKED`, so each delivery runs in one process at a time. A process that dies mid-delivery loses its claim after `claimTimeoutMs`, and another takes the row.
+
+A process that restarts delivers what was waiting when it stopped.
+
+<Callout type="warn">
+  SQLite has one connection, so run one process per database file. Writes that
+  record events take turns on that connection, and a write made at the same time
+  outside Brick would join their transaction. Use PostgreSQL where several
+  processes write.
+</Callout>
+
+## What is not promised
+
+- **Order.** Events are not ordered across listeners, or between two deliveries of one listener when one is retried.
+- **Exactly once.** Delivery is at least once.
+- **Events from your own code.** Only generated CRUD writes emit events so far.

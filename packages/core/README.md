@@ -160,6 +160,31 @@ app.all(
 `brick dev` registers a provider and sends the spans to its dashboard, so apps
 there need `telemetry: true` too.
 
+## Events
+
+Generated CRUD writes can record an event in the same transaction as the row, and
+Brick delivers it to your listeners after the commit, retrying one that fails.
+Add `outboxTable()` to the database, define a listener, and pass it to `brick()`.
+
+```ts
+import { brick, defineListener, outboxTable } from "@brickkit/core";
+
+export const outbox = outboxTable("postgres");
+
+const welcome = defineListener({
+  name: "welcome-email",
+  on: "user.create",
+  run: async ({ payload, deliveryId }) => {
+    await mailer.sendWelcome(payload.row.email, { idempotencyKey: deliveryId });
+  },
+});
+
+export default brick({ services, events: { listeners: [welcome] } });
+```
+
+Delivery is at least once, so use `deliveryId` as an idempotency key. An app
+without `events` behaves as before. See the Events page of the docs.
+
 ## TanStack Query options
 
 Install `@tanstack/query-core` v5 alongside your framework's TanStack Query package.
