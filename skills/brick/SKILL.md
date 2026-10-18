@@ -9,7 +9,7 @@ Read the project's package scripts and existing service definitions before chang
 
 ## Find documentation
 
-Fetch `https://brick.rega.run/llms.txt` and follow the relevant markdown links. Use `https://brick.rega.run/llms-full.txt` when you need the complete reference. Each docs page also has a `.md` URL, and accepts `Accept: text/markdown`.
+Fetch `https://www.brickkit.dev/llms.txt` and follow the relevant markdown links. Use `https://www.brickkit.dev/llms-full.txt` when you need the complete reference. Each docs page also has a `.md` URL, and accepts `Accept: text/markdown`.
 
 Use `/docs/quickstart.md` for a runnable starter and `/docs/tutorial.md` for an end-to-end REST API. For existing projects, fetch the relevant guides:
 

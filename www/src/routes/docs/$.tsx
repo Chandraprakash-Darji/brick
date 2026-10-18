@@ -12,9 +12,11 @@ import {
   ViewOptionsPopover,
 } from "@fumadocs/base-ui/layouts/spacious/page";
 import { Suspense, useState } from "react";
+import { StarIcon } from "lucide-react";
 
 import { AISearch, AISearchPanel } from "@/components/ai/search";
 import { EditOnGitHub } from "@/components/edit-on-github";
+import { InstallCommand } from "@/components/install-command";
 import { Wordmark } from "@/components/logo";
 import { useMDXComponents } from "@/components/mdx";
 import { baseOptions } from "@/lib/layout.shared";
@@ -132,6 +134,22 @@ const clientLoader = browserCollections.docs.createClientLoader({
         <DocsDescription className="docs-description">
           {frontmatter.description}
         </DocsDescription>
+        {markdownUrl === "/docs/quickstart.md" && (
+          <div className="mb-6 flex flex-wrap items-center gap-3">
+            <InstallCommand command="bun add @brickkit/core @brickkit/crud @brickkit/cli" />
+            <a
+              href={repoUrl}
+              target="_blank"
+              rel="noreferrer"
+              data-umami-event="github-click"
+              data-umami-event-location="quickstart"
+              className="inline-flex h-11 items-center gap-2 rounded-lg border px-4 text-sm transition-colors hover:border-foreground/25"
+            >
+              <StarIcon aria-hidden="true" className="size-4" />
+              Star on GitHub
+            </a>
+          </div>
+        )}
         <div className="-mt-4 flex flex-row items-center gap-2 border-b pb-6">
           <MarkdownCopyButton
             markdownUrl={markdownUrl}

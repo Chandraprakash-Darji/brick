@@ -147,7 +147,7 @@ Run the component checks with `bun test test` from `www`.
 Page views and custom events go to our self-hosted Umami instance
 (`https://unami.rega.run`). The tracker script is added in
 `src/routes/__root.tsx` via TanStack Start's `head()` `scripts` field.
-`data-domains` is the production hostname (`brick.rega.run`), so local dev,
+`data-domains` is the production hostname (`www.brickkit.dev`), so local dev,
 previews and forks never send events.
 
 TanStack Router client-side navigation is tracked automatically — Umami
@@ -166,7 +166,7 @@ Custom events (`src/lib/analytics.ts` `trackEvent` + `data-umami-event`):
 Umami is cookieless. The footer notes this.
 
 Optional ad-blocker proxy: serve `src` from the first-party `/stats` base
-(e.g. `https://brick.rega.run/stats`) so it stays first-party
+(e.g. `https://www.brickkit.dev/stats`) so it stays first-party
 (`/stats/script.js`) with `data-host-url` sending to `/stats/api/send` on our
 domain. Proxy `/stats/script.js` → the Umami instance's `/script.js` and
 forward `/stats/api/send` → the Umami instance's `/api/send` (`/api/collect`

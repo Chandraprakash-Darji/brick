@@ -9,11 +9,11 @@ test("nested docs use the same absolute PNG URL for OG and X", () => {
   });
   expect(meta).toContainEqual({
     property: "og:image",
-    content: "https://brick.rega.run/og/docs/reference/errors.png",
+    content: "https://www.brickkit.dev/og/docs/reference/errors.png",
   });
   expect(meta).toContainEqual({
     name: "twitter:image",
-    content: "https://brick.rega.run/og/docs/reference/errors.png",
+    content: "https://www.brickkit.dev/og/docs/reference/errors.png",
   });
   expect(meta).toContainEqual({ property: "og:title", content: "Errors" });
   expect(meta).toContainEqual({
@@ -33,7 +33,7 @@ test("home and trailing-slash index routes point to generated images", () => {
       socialMeta({ title: "Brick", description: "", path }),
     ).toContainEqual({
       property: "og:image",
-      content: `https://brick.rega.run/og/${image}`,
+      content: `https://www.brickkit.dev/og/${image}`,
     });
   }
 });

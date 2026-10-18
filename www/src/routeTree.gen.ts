@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as BrandRouteImport } from './routes/brand'
 import { Route as LlmsFullDottxtRouteImport } from './routes/llms-full[.]txt'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as ApiChatRouteImport } from './routes/api.chat'
 import { Route as ApiSearchRouteImport } from './routes/api/search'
 import { Route as BlogIndexRouteImport } from './routes/blog/index'
@@ -40,6 +41,11 @@ const LlmsFullDottxtRoute = LlmsFullDottxtRouteImport.update({
 const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
   id: '/llms.txt',
   path: '/llms.txt',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiChatRoute = ApiChatRouteImport.update({
@@ -88,6 +94,7 @@ export interface FileRoutesByFullPath {
   '/brand': typeof BrandRoute
   '/llms-full.txt': typeof LlmsFullDottxtRoute
   '/llms.txt': typeof LlmsDottxtRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/api/chat': typeof ApiChatRoute
   '/api/search': typeof ApiSearchRoute
   '/blog/$slug': typeof BlogSlugRoute
@@ -102,6 +109,7 @@ export interface FileRoutesByTo {
   '/brand': typeof BrandRoute
   '/llms-full.txt': typeof LlmsFullDottxtRoute
   '/llms.txt': typeof LlmsDottxtRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/api/chat': typeof ApiChatRoute
   '/api/search': typeof ApiSearchRoute
   '/blog/$slug': typeof BlogSlugRoute
@@ -117,6 +125,7 @@ export interface FileRoutesById {
   '/brand': typeof BrandRoute
   '/llms-full.txt': typeof LlmsFullDottxtRoute
   '/llms.txt': typeof LlmsDottxtRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/api/chat': typeof ApiChatRoute
   '/api/search': typeof ApiSearchRoute
   '/blog/$slug': typeof BlogSlugRoute
@@ -133,6 +142,7 @@ export interface FileRouteTypes {
     | '/brand'
     | '/llms-full.txt'
     | '/llms.txt'
+    | '/sitemap.xml'
     | '/api/chat'
     | '/api/search'
     | '/blog/$slug'
@@ -147,6 +157,7 @@ export interface FileRouteTypes {
     | '/brand'
     | '/llms-full.txt'
     | '/llms.txt'
+    | '/sitemap.xml'
     | '/api/chat'
     | '/api/search'
     | '/blog/$slug'
@@ -161,6 +172,7 @@ export interface FileRouteTypes {
     | '/brand'
     | '/llms-full.txt'
     | '/llms.txt'
+    | '/sitemap.xml'
     | '/api/chat'
     | '/api/search'
     | '/blog/$slug'
@@ -176,6 +188,7 @@ export interface RootRouteChildren {
   BrandRoute: typeof BrandRoute
   LlmsFullDottxtRoute: typeof LlmsFullDottxtRoute
   LlmsDottxtRoute: typeof LlmsDottxtRoute
+  SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiSearchRoute: typeof ApiSearchRoute
   BlogSlugRoute: typeof BlogSlugRoute
@@ -214,6 +227,13 @@ declare module '@tanstack/react-router' {
       path: '/llms.txt'
       fullPath: '/llms.txt'
       preLoaderRoute: typeof LlmsDottxtRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/chat': {
@@ -280,6 +300,7 @@ const rootRouteChildren: RootRouteChildren = {
   BrandRoute: BrandRoute,
   LlmsFullDottxtRoute: LlmsFullDottxtRoute,
   LlmsDottxtRoute: LlmsDottxtRoute,
+  SitemapDotxmlRoute: SitemapDotxmlRoute,
   ApiChatRoute: ApiChatRoute,
   ApiSearchRoute: ApiSearchRoute,
   BlogSlugRoute: BlogSlugRoute,
