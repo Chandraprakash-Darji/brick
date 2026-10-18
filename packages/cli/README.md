@@ -40,8 +40,9 @@ import { pagesService, billingService } from "./services";
 const app = brick({ services: [pagesService, billingService] });
 ```
 
-The typed HTTP client is available from `@brickkit/core/client`. See
-`www/content/docs/(brick)/typed-client.mdx` for routing and error handling.
+The typed HTTP client is available from `@brickkit/core/client`. See the
+[typed client guide](https://brickkit.dev/docs/typed-client) for routing and
+error handling.
 
 The `brick` binary ships in this package for local dev and inspection.
 `dev` and `start` accept an optional entry and resolve the port from
