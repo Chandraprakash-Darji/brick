@@ -74,7 +74,7 @@ const api = createBrickClient({ baseUrl: "http://localhost:4000", contract });
 const pages = await api.page.list({ limit: 10 });
 ```
 
-The generated contract contains browser-safe route metadata and inferred input/output/error types. It honors custom action paths and methods, encodes path parameters, and removes them from the remaining payload. No backend handlers are bundled. See the CLI README and `www/content/docs/(brick)/typed-client.mdx` for Vite setup and error handling.
+The generated contract contains browser-safe route metadata and inferred input/output/error types. It honors custom action paths and methods, encodes path parameters, and removes them from the remaining payload. No backend handlers are bundled. See the CLI README and the [typed client guide](https://brickkit.dev/docs/typed-client) for Vite setup and error handling.
 
 ## MCP tools
 
@@ -183,7 +183,7 @@ export default brick({ services, events: { listeners: [welcome] } });
 ```
 
 Delivery is at least once, so use `deliveryId` as an idempotency key. An app
-without `events` behaves as before. See the Events page of the docs.
+without `events` behaves as before. See the [Events guide](https://brickkit.dev/docs/events).
 
 ## TanStack Query options
 

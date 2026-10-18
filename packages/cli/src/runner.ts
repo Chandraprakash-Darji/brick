@@ -17,6 +17,7 @@ import { DocsHost } from "./dev-docs";
 import { DEFAULT_HISTORY_DAYS, openHistory } from "./dev-history";
 import { DevTelemetryStore } from "./dev-telemetry-store";
 import { parsePort } from "./port-utils";
+import { buildAppWorkflows, registerWorkflowTransform } from "./workflows";
 import { startProductionDashboard } from "./production-dashboard";
 import type {
   SerializedError,
@@ -66,6 +67,7 @@ async function createServer(
       prefix: options.prefix,
     });
 
+  await buildAppWorkflows(app);
   await app.listen({ port });
   app.events?.start();
 
@@ -116,6 +118,7 @@ export async function startProdServer(options: DevServerOptions = {}) {
       process.exit(1);
     }
     console.log(`[Brick-TS] Loading application entry: ${resolvedEntry}`);
+    await registerWorkflowTransform();
     const module = await import(resolvedEntry);
     // An entry that default-exports its app is served as it built it, with its
     // options (telemetry, dashboard, and the rest), as `brick dev` does.
@@ -167,6 +170,7 @@ export async function startProdServer(options: DevServerOptions = {}) {
     }
   }
 
+  await buildAppWorkflows(app);
   // Before listening, so the first request is already traced and its logs kept.
   const dashboard = await startProductionDashboard(app, { appPort: port });
   app.listen(port);
@@ -196,6 +200,7 @@ export async function startProdServer(options: DevServerOptions = {}) {
 }
 
 export async function startDevApplication(options: DevServerOptions) {
+  if (options.entry) await registerWorkflowTransform();
   const module = options.entry
     ? await import(resolve(options.entry))
     : undefined;

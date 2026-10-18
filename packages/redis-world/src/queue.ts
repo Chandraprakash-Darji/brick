@@ -195,6 +195,13 @@ function resolveBaseUrl(config: RedisWorldConfig): string {
 export function createQueue(
   redis: Redis,
   config: RedisWorldConfig,
+  options: {
+    /**
+     * Whether a run has moved past `pending`. The first message of a run is not
+     * queued again once it has, see `initialMessageKey`.
+     */
+    runHasStarted?: (runId: string) => Promise<boolean>;
+  } = {},
 ): QueueInterface & {
   start(): Promise<void>;
   close(): Promise<void>;
@@ -256,6 +263,16 @@ export function createQueue(
     const { prefix } = parseQueueName(queueName);
     const messageId = MessageId.parse(`msg_${generateMessageId()}`);
     const idempotencyKey = opts?.idempotencyKey ?? initialMessageKey(message);
+    if (
+      !opts?.idempotencyKey &&
+      idempotencyKey &&
+      (await options.runHasStarted?.((message as { runId: string }).runId))
+    ) {
+      debug("run already started, not queueing its first message again", {
+        runId: (message as { runId: string }).runId,
+      });
+      return { messageId };
+    }
     const dedupKey = idempotencyKey
       ? `${root}:idempotent:${idempotencyKey}`
       : "";

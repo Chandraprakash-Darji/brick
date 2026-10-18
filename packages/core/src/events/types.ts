@@ -53,10 +53,68 @@ export interface EventListener<TPayload = any> {
    * and `*` alone matches every event.
    */
   readonly on: readonly string[];
-  /** Runs for each delivery. Throwing retries the delivery with a growing delay. */
-  readonly run: (delivery: EventDelivery<TPayload>) => void | Promise<void>;
+  /**
+   * A handler that runs in the dispatching process for each delivery. Throwing
+   * retries the delivery with a growing delay. A listener has this or `workflow`.
+   */
+  readonly run?: (delivery: EventDelivery<TPayload>) => void | Promise<void>;
+  /**
+   * A durable workflow that runs for each delivery, on the app's `events.world`.
+   * The delivery counts as done once its run has started; the workflow retries
+   * its own steps from there. A listener has this or `run`.
+   */
+  readonly workflow?: EventWorkflow<TPayload>;
   /** Attempts before the delivery is parked as dead. Defaults to the dispatcher's. */
   readonly maxAttempts?: number;
+}
+
+/**
+ * What a workflow listener's workflow receives: the event and which listener it
+ * is for. It has no `attempt`, because one delivery starts one run however many
+ * times it is tried.
+ */
+export type WorkflowEvent<TPayload = any> = Omit<
+  EventDelivery<TPayload>,
+  "attempt"
+>;
+
+/**
+ * A function marked `"use workflow"`, run once per delivery of the listener it is
+ * given to.
+ */
+export type EventWorkflow<TPayload = any> = (
+  event: WorkflowEvent<TPayload>,
+) => Promise<unknown>;
+
+/**
+ * The world workflow listeners run on: the queue and storage behind the Workflow
+ * SDK. `createWorld()` from `@brickkit/redis-world` or `@brickkit/bullmq-world`
+ * makes one. Brick starts it with the app's events and closes it when they stop.
+ */
+export interface EventsWorld {
+  /**
+   * Names a run after its key so that starting it twice makes one run. A world
+   * without it would start a second run when an event is delivered again, so
+   * Brick refuses such a world.
+   */
+  createRunId?(options?: Readonly<Record<string, unknown>>): string;
+  start?(): Promise<void>;
+  close?(): Promise<void>;
+  registerHandler?(
+    prefix: any,
+    handler: (request: Request) => Promise<Response>,
+  ): void;
+}
+
+/**
+ * Where the built workflow bundle is and what it is built from. The CLI
+ * (`brick dev`, `brick start`) writes the bundle before events start.
+ */
+export interface WorkflowsOptions {
+  /** The project root: where the Workflow SDK is installed. Default: the working directory. */
+  root?: string;
+  /** Where the bundle is written and read. Default: `<root>/.well-known/workflow/v1`. */
+  dir?: string;
 }
 
 /**
@@ -95,6 +153,13 @@ export interface EventsOptions {
    * records events, for an app whose events are delivered by another process.
    */
   dispatch?: boolean | DispatchOptions;
+  /**
+   * The world that runs `workflow` listeners. Required when any listener has one.
+   * Brick starts it when the app's events start and closes it when they stop.
+   */
+  world?: EventsWorld;
+  /** Where the workflow bundle lives. Only used with workflow listeners. */
+  workflows?: WorkflowsOptions;
 }
 
 /**

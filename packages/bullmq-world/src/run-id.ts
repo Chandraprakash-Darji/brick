@@ -60,6 +60,12 @@ export function createRunId(
  * message that carries the run's input. `start()` sends no key of its own, so a
  * second start of the same run would otherwise queue a second first delivery.
  *
+ * The key only covers a first message that is still queued or running. Once the
+ * run has started, the queue does not enqueue the message at all (see
+ * `runHasStarted` in `createQueue`): the runtime runs a run's first step from the
+ * first message, in parallel with `run_created`, so a late second one would run
+ * that step's code again.
+ *
  * @param message - The queue payload.
  * @returns A key for a run's first message, and `undefined` for every other message.
  */

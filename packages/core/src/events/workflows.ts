@@ -1,0 +1,221 @@
+import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import type {
+  EventDelivery,
+  EventListener,
+  EventsWorld,
+  WorkflowEvent,
+  WorkflowsOptions,
+} from "./types";
+
+/** `getQueueTopicPrefix("workflow")` from `@workflow/world`: the queue the runtime reads. */
+const WORKFLOW_QUEUE_PREFIX = "__wkf_workflow_";
+const DEFAULT_BUNDLE_DIR = ".well-known/workflow/v1";
+/** Where the transform and the bundle register steps by id. The SDK's own generated code uses it. */
+const STEP_REGISTRY = Symbol.for("@workflow/core//registeredSteps");
+
+interface WorkflowSdk {
+  start(
+    workflow: unknown,
+    args: unknown[],
+    options: Record<string, unknown>,
+  ): Promise<{ runId: string }>;
+  setWorld(world: unknown): void;
+}
+
+interface BundleManifest {
+  steps?: Record<string, unknown>;
+  workflows?: Record<string, Record<string, { workflowId?: string }>>;
+}
+
+/**
+ * Where the workflow bundle is and what it is built from, with the defaults
+ * applied.
+ *
+ * @param options - The `events.workflows` option.
+ * @returns Absolute `root` and `dir`.
+ */
+export function resolveWorkflowPaths(options: WorkflowsOptions = {}): {
+  root: string;
+  dir: string;
+} {
+  const root = resolve(options.root ?? process.cwd());
+  return { root, dir: resolve(root, options.dir ?? DEFAULT_BUNDLE_DIR) };
+}
+
+/**
+ * Runs workflow listeners: wires the world into the Workflow SDK, serves the
+ * built bundle from this process, and starts one run for each delivery.
+ *
+ * Nothing is loaded until it is needed, so an app without workflow listeners
+ * never imports the SDK.
+ */
+export class WorkflowRuntime {
+  readonly root: string;
+  readonly dir: string;
+  private ready: Promise<WorkflowSdk> | undefined;
+  private closed = false;
+
+  constructor(
+    private readonly world: EventsWorld,
+    options: WorkflowsOptions | undefined,
+    private readonly listeners: readonly EventListener[],
+  ) {
+    ({ root: this.root, dir: this.dir } = resolveWorkflowPaths(options));
+  }
+
+  /** Begin loading the runtime now rather than at the first delivery. */
+  warmUp(): void {
+    this.ensure().catch((error) =>
+      console.error(
+        `[Brick-TS] The workflow runtime did not start: ${error instanceof Error ? error.message : String(error)}`,
+      ),
+    );
+  }
+
+  /**
+   * Start the run for a delivery.
+   *
+   * The run is named after the delivery id, so a delivery that is tried again
+   * finds the run it already started instead of starting another.
+   *
+   * @param listener - The workflow listener the delivery is for.
+   * @param delivery - The delivery.
+   * @returns The run id.
+   */
+  async startRun(
+    listener: EventListener,
+    delivery: EventDelivery,
+  ): Promise<string> {
+    const sdk = await this.ensure();
+    const { attempt: _attempt, ...event } = delivery;
+    const run = await sdk.start(
+      listener.workflow,
+      [event satisfies WorkflowEvent],
+      {
+        world: this.world,
+        runKey: delivery.deliveryId,
+        runKeyTime: Date.parse(delivery.occurredAt),
+      },
+    );
+    return run.runId;
+  }
+
+  /** Stop the world. The runtime cannot be started again afterwards. */
+  async close(): Promise<void> {
+    this.closed = true;
+    await this.ready?.catch(() => {});
+    await this.world.close?.();
+  }
+
+  private ensure(): Promise<WorkflowSdk> {
+    if (this.closed)
+      return Promise.reject(
+        new Error("The events were stopped, so workflows can no longer run"),
+      );
+    this.ready ??= this.initialize().catch((error) => {
+      this.ready = undefined;
+      throw error;
+    });
+    return this.ready;
+  }
+
+  private async initialize(): Promise<WorkflowSdk> {
+    if (typeof this.world.createRunId !== "function")
+      throw new Error(
+        "This world cannot name a run after its key, so an event delivered twice would start two runs. " +
+          "Use the world from @brickkit/redis-world or @brickkit/bullmq-world.",
+      );
+    const sdk = await this.loadSdk();
+    const flow = join(this.dir, "flow.mjs");
+    if (!existsSync(flow))
+      throw new Error(
+        `No workflow bundle at ${flow}. brick dev and brick start build it; ` +
+          "in a test or script, call buildWorkflows() from @brickkit/cli/workflows first.",
+      );
+    const manifest = this.readManifest();
+    this.checkListeners(manifest);
+    const bundle = await this.loadBundle(flow);
+    if (typeof bundle.POST !== "function")
+      throw new Error(`${flow} does not export a POST handler`);
+    sdk.setWorld(this.world);
+    this.world.registerHandler?.(WORKFLOW_QUEUE_PREFIX, bundle.POST);
+    await this.world.start?.();
+    return sdk;
+  }
+
+  private async loadSdk(): Promise<WorkflowSdk> {
+    const from = createRequire(join(this.root, "package.json"));
+    const load = async (specifier: string) => {
+      let path: string;
+      try {
+        path = from.resolve(specifier);
+      } catch {
+        throw new Error(
+          `The Workflow SDK is not installed in ${this.root} (could not resolve '${specifier}'). Add it with: bun add workflow`,
+        );
+      }
+      return import(pathToFileURL(path).href);
+    };
+    const [api, runtime] = await Promise.all([
+      load("workflow/api"),
+      load("workflow/runtime"),
+    ]);
+    return { start: api.start, setWorld: runtime.setWorld };
+  }
+
+  /**
+   * The bundle holds its own copy of every step and registers them all when it
+   * loads, replacing the ones the app registered. A copy has its own module state:
+   * a step would find no database connection, no config, none of what the app set
+   * up. So the app's steps are put back, and the bundle's copies serve only the
+   * steps the app never loaded.
+   */
+  private async loadBundle(
+    flow: string,
+  ): Promise<{ POST?: (request: Request) => Promise<Response> }> {
+    const registry = () =>
+      (globalThis as Record<symbol, unknown>)[STEP_REGISTRY] as
+        | Map<string, unknown>
+        | undefined;
+    const app = new Map(registry());
+    const bundle = await import(pathToFileURL(flow).href);
+    const registered = registry();
+    if (registered) for (const [id, step] of app) registered.set(id, step);
+    return bundle;
+  }
+
+  private readManifest(): BundleManifest | undefined {
+    const path = join(this.dir, "manifest.json");
+    if (!existsSync(path)) return undefined;
+    return JSON.parse(readFileSync(path, "utf8")) as BundleManifest;
+  }
+
+  /**
+   * A listener's workflow must carry the id the transform gives it, and the bundle
+   * must know that id: a function that was never transformed, or a bundle built
+   * before the workflow existed, would fail on its first delivery with a less
+   * helpful message.
+   */
+  private checkListeners(manifest: BundleManifest | undefined): void {
+    const known = new Set<string>();
+    for (const file of Object.values(manifest?.workflows ?? {}))
+      for (const entry of Object.values(file))
+        if (entry.workflowId) known.add(entry.workflowId);
+    for (const listener of this.listeners) {
+      const id = (listener.workflow as { workflowId?: unknown } | undefined)
+        ?.workflowId;
+      if (typeof id !== "string")
+        throw new Error(
+          `The workflow of listener '${listener.name}' was not transformed. ` +
+            "Run the app with brick dev or brick start, or call registerWorkflowTransform() from @brickkit/cli/workflows before importing it.",
+        );
+      if (manifest && !known.has(id))
+        throw new Error(
+          `The workflow bundle does not contain '${id}' (listener '${listener.name}'). Rebuild it with brick dev or brick start.`,
+        );
+    }
+  }
+}

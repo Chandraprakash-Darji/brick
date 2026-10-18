@@ -63,7 +63,7 @@ const run = await start(myWorkflow, [input], {
 } as never);
 ```
 
-The same `runKey` and `runKeyTime` always give the same run id, so starting again returns the run that is already there instead of a second one. This holds when the starts happen at the same moment on different workers, and the run's first message is not queued a second time while the first is still waiting or running.
+The same `runKey` and `runKeyTime` always give the same run id, so starting again returns the run that is already there instead of a second one. This holds when the starts happen at the same moment on different workers, and the run's first message is not queued a second time. Once a run has started, starting it again does nothing: its steps do not run again.
 
 `runKeyTime` is required with a `runKey`. A run id is a ULID, and the Workflow runtime seeds the workflow's clock (what `Date.now()` returns inside it) from the time in it. Passing the time the run is for, such as when the event happened, keeps that clock true and the same on every attempt. Pass the same time each time: a different `runKeyTime` is a different run. `runKey` is a non-empty string of at most 1024 characters. The world throws a `TypeError` for either one when it is not usable.
 

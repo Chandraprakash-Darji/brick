@@ -1,7 +1,8 @@
 import { and, asc, eq, inArray, lt, lte, or, sql } from "drizzle-orm";
 import { type OutboxStatus, type OutboxTable, outboxEngine } from "./outbox";
 import { runInTransaction } from "./transaction";
-import type { DispatchOptions, EventDelivery, EventListener } from "./types";
+import type { Deliverable } from "./hub";
+import type { DispatchOptions, EventDelivery } from "./types";
 
 export type ResolvedDispatchOptions = Required<DispatchOptions>;
 
@@ -65,7 +66,7 @@ export class Dispatcher {
   constructor(
     private readonly db: any,
     private readonly table: OutboxTable,
-    private readonly listeners: (name: string) => EventListener | undefined,
+    private readonly listeners: (name: string) => Deliverable | undefined,
     options: DispatchOptions = {},
     private readonly onError: (error: unknown) => void = (error) =>
       console.error("[Brick-TS events]", error),

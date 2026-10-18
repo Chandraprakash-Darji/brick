@@ -11,6 +11,7 @@ export {
 export { runInTransaction } from "./transaction";
 export { newEventId } from "./id";
 export { EventsHub, matchesEvent, type EventsDefinition } from "./hub";
+export { resolveWorkflowPaths } from "./workflows";
 export {
   Dispatcher,
   backoffMs,
@@ -25,6 +26,10 @@ export type {
   EventEnvelope,
   EventListener,
   EventRecorder,
+  EventWorkflow,
   EventsOptions,
+  EventsWorld,
   ServiceEvents,
+  WorkflowEvent,
+  WorkflowsOptions,
 } from "./types";

@@ -150,7 +150,7 @@ describe("EventsHub", () => {
     const described = hub.describe();
     expect(() => structuredClone(described)).not.toThrow();
     expect(described).toEqual({
-      listeners: [{ name: "a", on: ["x", "y.*"] }],
+      listeners: [{ name: "a", on: ["x", "y.*"], kind: "handler" }],
       dispatch: true,
     });
   });
@@ -507,7 +507,7 @@ describe("brick({ events })", () => {
     expect(app.events).toBeInstanceOf(EventsHub);
     expect(service.events).toBeDefined();
     expect(app.definition.events).toEqual({
-      listeners: [{ name: "a", on: ["x.*"] }],
+      listeners: [{ name: "a", on: ["x.*"], kind: "handler" }],
       dispatch: true,
     });
   });

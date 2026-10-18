@@ -405,6 +405,40 @@ describe("single worker", () => {
   );
 
   test(
+    "9c. starting a finished run again does not run its steps again",
+    { timeout: 120_000 },
+    async () => {
+      const env = await Env.create({ workers: 1 });
+      const counterKey = env.counterKey("restart-after-done");
+      const options = {
+        runKey: "evt_03:welcome-email",
+        runKeyTime: Date.UTC(2026, 9, 17, 12, 30, 0),
+      };
+      const runId = await env.invoke(
+        W.fanOut,
+        [5, counterKey],
+        undefined,
+        options,
+      );
+      await env.waitForRuns([runId]);
+      expect(await env.output(runId)).toBe(20);
+
+      expect(
+        await env.invoke(W.fanOut, [5, counterKey], undefined, options),
+      ).toBe(runId);
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      const counts = await env.counts(counterKey);
+      expect(Object.keys(counts)).toHaveLength(5);
+      expect(Object.values(counts).filter((count) => count !== 1)).toEqual([]);
+      const byType = Env.countByType(await env.expectDenseLog(runId));
+      expect(byType.run_created).toBe(1);
+      expect(byType.run_completed).toBe(1);
+      env.expectCleanWorkerLogs();
+    },
+  );
+
+  test(
     "9b. the same runKey started twice is one run: one id, one run_created, steps run once",
     { timeout: 120_000 },
     async () => {

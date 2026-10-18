@@ -11,6 +11,7 @@ export default defineConfig({
     "src/index.ts",
     "src/bin.ts",
     "src/compiler.ts",
+    "src/workflows.ts",
     "src/vite.ts",
     "src/dev-worker.ts",
     "src/dev-reporter.ts",

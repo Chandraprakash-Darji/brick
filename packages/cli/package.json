@@ -41,6 +41,10 @@
     },
     "./vite/client": {
       "types": "./vite-client.d.ts"
+    },
+    "./workflows": {
+      "import": "./dist/workflows.js",
+      "types": "./dist/workflows.d.ts"
     }
   },
   "publishConfig": {

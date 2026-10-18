@@ -4,11 +4,13 @@ import type { OutboxTable } from "./outbox";
 import { runInTransaction } from "./transaction";
 import type {
   DispatchOptions,
+  EventDelivery,
   EventListener,
   EventRecorder,
   EventsOptions,
   ServiceEvents,
 } from "./types";
+import { WorkflowRuntime } from "./workflows";
 
 interface EventsHost {
   readonly name: string;
@@ -28,8 +30,14 @@ export function matchesEvent(pattern: string, name: string): boolean {
  * definition, which is sent to the dev dashboard, so it holds no functions.
  */
 export interface EventsDefinition {
-  listeners: { name: string; on: string[] }[];
+  listeners: { name: string; on: string[]; kind: "handler" | "workflow" }[];
   dispatch: boolean;
+}
+
+/** What the dispatcher runs for a delivery. */
+export interface Deliverable {
+  readonly maxAttempts?: number;
+  run(delivery: EventDelivery): void | Promise<void>;
 }
 
 /**
@@ -40,7 +48,9 @@ export interface EventsDefinition {
 export class EventsHub {
   private readonly byName = new Map<string, EventListener>();
   private readonly dispatchers = new Map<OutboxTable, Dispatcher>();
+  private readonly deliverables = new Map<string, Deliverable>();
   private readonly dispatchOptions: DispatchOptions | false;
+  private readonly runtime: WorkflowRuntime | undefined;
   private started = false;
 
   constructor(options: EventsOptions) {
@@ -57,7 +67,26 @@ export class EventsHub {
         );
       if (this.byName.has(listener.name))
         throw new Error(`Duplicate event listener '${listener.name}'`);
+      if (!listener.run === !listener.workflow)
+        throw new Error(
+          `Event listener '${listener.name}' needs exactly one of run and workflow`,
+        );
       this.byName.set(listener.name, listener);
+    }
+    const workflowListeners = [...this.byName.values()].filter(
+      (listener) => listener.workflow,
+    );
+    if (workflowListeners.length) {
+      if (!options.world)
+        throw new Error(
+          `Event listener '${workflowListeners[0]!.name}' runs a workflow, so events needs a world: ` +
+            "brick({ events: { world: createWorld(...) } }) with createWorld from @brickkit/redis-world.",
+        );
+      this.runtime = new WorkflowRuntime(
+        options.world,
+        options.workflows,
+        workflowListeners,
+      );
     }
     this.dispatchOptions =
       options.dispatch === false
@@ -97,7 +126,7 @@ export class EventsHub {
           new Dispatcher(
             service.getDb(),
             table,
-            (name) => this.byName.get(name),
+            (name) => this.deliverable(name),
             this.dispatchOptions || {},
           ),
         );
@@ -121,27 +150,43 @@ export class EventsHub {
       listeners: [...this.byName.values()].map((listener) => ({
         name: listener.name,
         on: [...listener.on],
+        kind: listener.workflow ? ("workflow" as const) : ("handler" as const),
       })),
       dispatch: this.dispatchOptions !== false,
     };
   }
 
   /**
-   * Start delivering recorded events from this process. Does nothing if this
-   * process only records events (`dispatch: false`) or already started.
+   * Where the workflow bundle is read from, and the project it is built from.
+   * Only set when a listener runs a workflow. The CLI builds the bundle there
+   * before events start.
+   */
+  get workflows(): { root: string; dir: string } | undefined {
+    return this.runtime && { root: this.runtime.root, dir: this.runtime.dir };
+  }
+
+  /**
+   * Start delivering recorded events from this process, and start the world that
+   * runs workflow listeners. Does nothing if this process only records events
+   * (`dispatch: false`) or already started.
    */
   start(): void {
     if (this.dispatchOptions === false || this.started) return;
     this.started = true;
+    this.runtime?.warmUp();
     for (const dispatcher of this.dispatchers.values()) dispatcher.start();
   }
 
-  /** Stop delivering, and wait for the deliveries that are running. */
+  /**
+   * Stop delivering, wait for the deliveries that are running, and close the
+   * world. A world cannot be started again, so workflow listeners stop for good.
+   */
   async stop(): Promise<void> {
     this.started = false;
     await Promise.all(
       [...this.dispatchers.values()].map((dispatcher) => dispatcher.stop()),
     );
+    await this.runtime?.close();
   }
 
   /**
@@ -184,6 +229,27 @@ export class EventsHub {
     for (const dispatcher of this.dispatchers.values())
       total += await dispatcher.retryDead(deliveryId);
     return total;
+  }
+
+  private deliverable(name: string): Deliverable | undefined {
+    const listener = this.byName.get(name);
+    if (!listener) return undefined;
+    let found = this.deliverables.get(name);
+    if (!found) {
+      const runtime = this.runtime;
+      found = listener.workflow
+        ? {
+            ...(listener.maxAttempts !== undefined
+              ? { maxAttempts: listener.maxAttempts }
+              : {}),
+            run: async (delivery) => {
+              await runtime!.startRun(listener, delivery);
+            },
+          }
+        : (listener as Deliverable);
+      this.deliverables.set(name, found);
+    }
+    return found;
   }
 
   private bind(table: OutboxTable): ServiceEvents {

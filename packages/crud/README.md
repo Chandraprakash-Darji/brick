@@ -115,4 +115,5 @@ presence client-side when using `select`.
 - Read queries reuse bounded prepared statements (128-entry cache) where the
   driver supports them.
 
-See `www/content/docs/(brick)/resources.mdx` for the full guide.
+See the [resources guide](https://brickkit.dev/docs/resources) for the full
+guide.

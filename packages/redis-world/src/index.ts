@@ -4,6 +4,7 @@ import {
   type Storage,
   type World,
 } from "@workflow/world";
+import { WorkflowRunNotFoundError } from "@workflow/errors";
 import { Redis } from "ioredis";
 import type { RedisWorldConfig } from "./config.js";
 import { createQueue, type QueueStats } from "./queue.js";
@@ -67,8 +68,18 @@ export function createWorld(
     ? createReaper({ redis, keyPrefix, retention: config.retention })
     : undefined;
 
-  const queue = createQueue(redis, config);
   const storage = createStorage(redis, keyPrefix, config.maxEventsPerRun);
+  const queue = createQueue(redis, config, {
+    runHasStarted: async (runId) => {
+      try {
+        const run = await storage.runs.get(runId, { resolveData: "none" });
+        return run.status !== "pending";
+      } catch (error) {
+        if (WorkflowRunNotFoundError.is(error)) return false;
+        throw error;
+      }
+    },
+  });
   const streamer = createStreamer({ redis, keyPrefix });
 
   return {
