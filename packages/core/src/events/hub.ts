@@ -25,6 +25,9 @@ export function matchesEvent(pattern: string, name: string): boolean {
   return pattern === name;
 }
 
+/** The recorder of each service database, so `emitEvent(ctx, ...)` can find it from `ctx.db`. */
+export const recorders = new WeakMap<object, ServiceEvents>();
+
 /**
  * What an app's `events` option describes, as plain data. It goes in the app
  * definition, which is sent to the dev dashboard, so it holds no functions.
@@ -110,7 +113,10 @@ export class EventsHub {
       const table = service.getOutbox?.();
       if (!table) continue;
       attached++;
-      service.setEvents?.(this.bind(table));
+      const bound = this.bind(table);
+      service.setEvents?.(bound);
+      const db = service.getDb();
+      if (db && typeof db === "object") recorders.set(db, bound);
     }
     if (attached === 0 && this.byName.size > 0) {
       console.warn(
@@ -257,37 +263,48 @@ export class EventsHub {
       this.start();
       this.dispatchers.get(table)?.notify();
     };
+    const insert = async (
+      tx: any,
+      context: { traceId?: string; source?: string },
+      name: string,
+      payload: unknown,
+    ): Promise<boolean> => {
+      const listeners = this.matching(name);
+      if (!listeners.length) return false;
+      const eventId = newEventId();
+      const occurredAt = new Date();
+      await tx.insert(table as any).values(
+        listeners.map((listener) => ({
+          id: `${eventId}:${listener.name}`,
+          eventId,
+          listener: listener.name,
+          name,
+          payload,
+          traceId: context.traceId ?? null,
+          source: context.source ?? null,
+          occurredAt,
+          status: "pending",
+          attempts: 0,
+          availableAt: occurredAt,
+        })),
+      );
+      return true;
+    };
     return {
       wants: (name) => this.matching(name).length > 0,
       transaction: async (db, context, fn) => {
         let recorded = false;
         const result = await runInTransaction(db, async (tx) => {
           const record: EventRecorder = async (name, payload) => {
-            const listeners = this.matching(name);
-            if (!listeners.length) return;
-            const eventId = newEventId();
-            const occurredAt = new Date();
-            await tx.insert(table as any).values(
-              listeners.map((listener) => ({
-                id: `${eventId}:${listener.name}`,
-                eventId,
-                listener: listener.name,
-                name,
-                payload,
-                traceId: context.traceId ?? null,
-                source: context.source ?? null,
-                occurredAt,
-                status: "pending",
-                attempts: 0,
-                availableAt: occurredAt,
-              })),
-            );
-            recorded = true;
+            if (await insert(tx, context, name, payload)) recorded = true;
           };
           return fn(tx, record);
         });
         if (recorded) startAndNotify();
         return result;
+      },
+      record: async (tx, context, name, payload) => {
+        await insert(tx, context, name, payload);
       },
     };
   }

@@ -6,9 +6,11 @@ import {
   defineDatabase,
   defineListener,
   defineService,
+  emitEvent,
   EventsHub,
   isOutboxTable,
   outboxTable,
+  runInTransaction,
   syncSchema,
   type EventDelivery,
 } from "../src";
@@ -537,5 +539,85 @@ describe("row lookups the tests rely on", () => {
     expect(
       ctx.db.select().from(outbox).where(eq(outbox.id, row.id)).all(),
     ).toHaveLength(1);
+  });
+});
+
+describe("emitEvent", () => {
+  function emitting(listener: (delivery: EventDelivery) => void) {
+    const made = setup([{ name: "heard", on: "item.refunded", run: listener }]);
+    const action = made.service.action({
+      name: "refund",
+      execute: async ({ ctx }: any) => {
+        await emitEvent(ctx, "item.refunded", { id: 7 }, { source: "tests" });
+        return "ok";
+      },
+    });
+    return { ...made, action };
+  }
+
+  it("records an event of your own, delivered with the payload and the trace", async () => {
+    const heard: EventDelivery[] = [];
+    const { action, hub, db } = emitting(
+      (delivery) => void heard.push(delivery),
+    );
+
+    await action.run({}, { traceId: "tr_custom" });
+    expect(rows(db)).toHaveLength(1);
+    await hub.drain();
+
+    expect(heard).toHaveLength(1);
+    expect(heard[0]).toMatchObject({
+      name: "item.refunded",
+      payload: { id: 7 },
+      traceId: "tr_custom",
+      source: "tests",
+      listener: "heard",
+    });
+  });
+
+  it("records nothing when no listener wants the event", async () => {
+    const { service, db } = setup([
+      { name: "other", on: "x.y", run: () => {} },
+    ]);
+    const action = service.action({
+      name: "quiet",
+      execute: async ({ ctx }: any) => emitEvent(ctx, "item.refunded", {}),
+    });
+    await action.run({});
+    expect(rows(db)).toHaveLength(0);
+  });
+
+  it("commits with a transaction you hold, or not at all", async () => {
+    const { service, hub, db } = setup([
+      { name: "heard", on: "item.refunded", run: () => {} },
+    ]);
+    const ctx = { db: service.getDb(), traceId: "tr_tx" };
+
+    await expect(
+      runInTransaction(db, async (tx) => {
+        await tx.insert(items).values({ label: "gone" });
+        await emitEvent(ctx, "item.refunded", { id: 1 }, { tx });
+        throw new Error("rolled back");
+      }),
+    ).rejects.toThrow("rolled back");
+    expect(rows(db)).toHaveLength(0);
+    expect(db.select().from(items).all()).toHaveLength(0);
+
+    await runInTransaction(db, async (tx) => {
+      await tx.insert(items).values({ label: "kept" });
+      await emitEvent(ctx, "item.refunded", { id: 2 }, { tx });
+    });
+    expect(rows(db)).toHaveLength(1);
+    expect(await hub.drain()).toBe(1);
+  });
+
+  it("explains a context whose database has no outbox", async () => {
+    const plain = defineDatabase({ tables: { items } });
+    await expect(
+      emitEvent({ db: plain.getDb() }, "item.refunded", {}),
+    ).rejects.toThrow("outbox table");
+    await expect(emitEvent({}, "item.refunded", {})).rejects.toThrow(
+      "Cannot emit",
+    );
   });
 });

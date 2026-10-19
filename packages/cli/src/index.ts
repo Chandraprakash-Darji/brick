@@ -29,7 +29,7 @@ export {
   type HandlerFactory,
 } from "@brickkit/core";
 
-export { startDevServer, type DevServerOptions } from "./runner";
+export { startDevServer, startWorker, type DevServerOptions } from "./runner";
 export { buildApplication, type BuildApplicationOptions } from "./build";
 export { generateClientContract } from "./client-contract";
 export { emitCompiledApplication, emitHandlerFactory } from "./compiler/emit";

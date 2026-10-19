@@ -103,9 +103,10 @@ function writeBundle(root: string, manifest?: unknown, flow?: string) {
 }
 
 function transformed(id: string | undefined = WORKFLOW_ID) {
-  return Object.assign(async (_event: unknown) => ({}), {
-    ...(id ? { workflowId: id } : {}),
-  });
+  return Object.assign(
+    async (_event: unknown) => ({}),
+    id ? { workflowId: id } : {},
+  );
 }
 
 function fakeWorld(overrides: Partial<EventsWorld> = {}) {

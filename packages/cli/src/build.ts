@@ -3,6 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { compileBrickApplication, emitCompiledApplication } from "./compiler";
 import { aot } from "elysia/plugin/aot/bun";
 import { loadBrickApp } from "./app-entry";
+import { buildAppWorkflows, workflowTransformPlugin } from "./workflows";
 
 export interface BuildApplicationOptions {
   /** A module whose default export is a BrickApp, without starting a server. */
@@ -32,6 +33,9 @@ export async function buildApplication(options: BuildApplicationOptions) {
       "Brick compiler: port must be an integer between 1 and 65535",
     );
   const app = await loadBrickApp(entry);
+  // The bundle stays in the project, where the server finds it from the working
+  // directory, as `brick start` does.
+  await buildAppWorkflows(app);
   const services = [...app.definition.services];
   const compilation = compileBrickApplication({
     services,
@@ -51,13 +55,25 @@ if (import.meta.main) {
   const port = Number(process.env.PORT ?? ${port});
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Invalid PORT: must be between 1 and 65535");
   app.listen(port);
+  app.events?.start();
   console.log("Brick compiled server listening on http://localhost:" + app.server.port);
-  const stop = async () => { await app.stop(); process.exit(0); };
-  process.once("SIGINT", stop);
-  process.once("SIGTERM", stop);
+  let stopping = false;
+  const stop = async () => {
+    if (stopping) return;
+    stopping = true;
+    await app.events?.stop();
+    await app.stop();
+    process.exit(0);
+  };
+  // on, not once: the workflow runtime bundles signal-exit, which re-raises a signal when no listener is left.
+  process.on("SIGINT", stop);
+  process.on("SIGTERM", stop);
 }
 `;
     await Bun.write(join(staging, "entry.ts"), source);
+    const workflows = app.events?.workflows
+      ? await workflowTransformPlugin(app.events.workflows.root)
+      : undefined;
     const result = await Bun.build({
       entrypoints: [join(staging, "entry.ts")],
       target: "bun",
@@ -65,10 +81,12 @@ if (import.meta.main) {
       outdir: staging,
       naming: "server.js",
       sourcemap: "external",
-      plugins:
-        options.aot === false
+      plugins: [
+        ...(workflows ? [workflows] : []),
+        ...(options.aot === false
           ? []
-          : [aot(join(staging, "entry.ts"), { target: "bun", strip: true })],
+          : [aot(join(staging, "entry.ts"), { target: "bun", strip: true })]),
+      ],
     });
     if (!result.success)
       throw new AggregateError(result.logs, "Brick compiler: bundling failed");

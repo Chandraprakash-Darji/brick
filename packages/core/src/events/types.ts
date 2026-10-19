@@ -107,14 +107,13 @@ export interface EventsWorld {
 }
 
 /**
- * Where the built workflow bundle is and what it is built from. The CLI
- * (`brick dev`, `brick start`) writes the bundle before events start.
+ * Where the workflows of an app are built from. The CLI (`brick dev`,
+ * `brick start`) writes the bundle to `<root>/.well-known/workflow/v1` before
+ * events start, and events read it from there.
  */
 export interface WorkflowsOptions {
   /** The project root: where the Workflow SDK is installed. Default: the working directory. */
   root?: string;
-  /** Where the bundle is written and read. Default: `<root>/.well-known/workflow/v1`. */
-  dir?: string;
 }
 
 /**
@@ -185,4 +184,15 @@ export interface ServiceEvents {
     context: { traceId?: string; source?: string },
     fn: (tx: any, record: EventRecorder) => Promise<T>,
   ): Promise<T>;
+  /**
+   * Record an event in a transaction the caller already has open. It is
+   * committed with that transaction. Nothing tells Brick when the caller commits,
+   * so delivery waits for the dispatcher's next poll.
+   */
+  record(
+    tx: unknown,
+    context: { traceId?: string; source?: string },
+    name: string,
+    payload: unknown,
+  ): Promise<void>;
 }

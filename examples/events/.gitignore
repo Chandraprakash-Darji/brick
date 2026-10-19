@@ -1,3 +1,4 @@
 .data/
 .well-known/
+dist/
 /.swc

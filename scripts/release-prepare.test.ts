@@ -4,6 +4,8 @@ import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+const PACKAGES = ["core", "crud", "cli", "bullmq-world", "redis-world"];
+
 test("prepares candidates and dispatches releases without creating release refs", async () => {
   const root = await mkdtemp(join(tmpdir(), "brick-release-prepare-"));
   const checkout = join(root, "checkout");
@@ -25,7 +27,7 @@ test("prepares candidates and dispatches releases without creating release refs"
         scripts: { build: "exit 99", test: "exit 99" },
       }),
     );
-    for (const name of ["core", "crud", "cli"]) {
+    for (const name of PACKAGES) {
       const directory = join(checkout, "packages", name);
       await mkdir(directory, { recursive: true });
       await writeFile(
@@ -60,7 +62,7 @@ test("prepares candidates and dispatches releases without creating release refs"
       ["scripts/release.ts", "patch", "--prepare"],
       { cwd: checkout, stdio: "pipe" },
     );
-    for (const name of ["core", "crud", "cli"]) {
+    for (const name of PACKAGES) {
       const manifest = await Bun.file(
         join(checkout, "packages", name, "package.json"),
       ).json();

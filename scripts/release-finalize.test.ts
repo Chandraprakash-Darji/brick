@@ -12,6 +12,8 @@ const workflow: {
   ).text(),
 );
 
+const PACKAGES = ["core", "crud", "cli", "bullmq-world", "redis-world"];
+
 test("post-publication commit preserves branch updates and tags the validated source", async () => {
   const root = await mkdtemp(join(tmpdir(), "brick-release-finalize-"));
   const checkout = join(root, "candidate");
@@ -28,7 +30,7 @@ test("post-publication commit preserves branch updates and tags the validated so
     git(checkout, "init", "-b", "main");
     git(checkout, "config", "user.name", "Release test");
     git(checkout, "config", "user.email", "release@example.com");
-    for (const pkg of ["core", "crud", "cli"]) {
+    for (const pkg of PACKAGES) {
       await mkdir(join(checkout, "packages", pkg), { recursive: true });
       await writeFile(
         join(checkout, "packages", pkg, "package.json"),
@@ -68,7 +70,7 @@ test("post-publication commit preserves branch updates and tags the validated so
       concurrent,
       "HEAD:refs/heads/main",
     );
-    for (const pkg of ["core", "crud", "cli"]) {
+    for (const pkg of PACKAGES) {
       await writeFile(
         join(checkout, "packages", pkg, "package.json"),
         '{"version":"0.7.4"}\n',
@@ -100,15 +102,16 @@ test("post-publication commit preserves branch updates and tags the validated so
     expect(
       git(checkout, "--git-dir", origin, "show", "v0.7.4:source.txt"),
     ).toBe("validated source");
-    expect(
-      git(
-        checkout,
-        "--git-dir",
-        origin,
-        "show",
-        "main:packages/core/package.json",
-      ),
-    ).toBe('{"version":"0.7.4"}');
+    for (const pkg of PACKAGES)
+      expect(
+        git(
+          checkout,
+          "--git-dir",
+          origin,
+          "show",
+          `main:packages/${pkg}/package.json`,
+        ),
+      ).toBe('{"version":"0.7.4"}');
     expect(git(checkout, "--git-dir", origin, "rev-parse", "v0.7.4^")).toBe(
       source,
     );

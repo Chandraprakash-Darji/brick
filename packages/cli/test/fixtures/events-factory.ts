@@ -11,7 +11,10 @@ import {
   text,
 } from "@brickkit/core";
 
-export function createEventsApp(serviceName: string) {
+export function createEventsApp(
+  serviceName: string,
+  dispatch: boolean | { intervalMs: number } = { intervalMs: 50 },
+) {
   const notes = sqliteTable(`${serviceName}_notes`, {
     id: integer("id").primaryKey({ autoIncrement: true }),
     body: text("body").notNull(),
@@ -56,7 +59,7 @@ export function createEventsApp(serviceName: string) {
           run: ({ payload }) => void received.push(payload),
         }),
       ],
-      dispatch: { intervalMs: 50 },
+      dispatch,
     },
     requestLogging: false,
     docs: false,

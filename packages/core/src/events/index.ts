@@ -1,4 +1,5 @@
 export { defineListener } from "./listener";
+export { emitEvent } from "./emit";
 export {
   outboxTable,
   isOutboxTable,

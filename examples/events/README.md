@@ -21,21 +21,43 @@ listener shows retries and the `dead` state. Every listener writes its row under
 From the repository root:
 
 ```sh
-bun run --cwd examples/events test    # 10 tests, in memory
+bun run --cwd examples/events test    # in memory, no services needed
 bun run --cwd examples/events demo    # a walkthrough with a failing carrier
 bun run --cwd examples/events dev     # brick dev on port 4000, reloads on changes
 bun run --cwd examples/events start   # brick start
 ```
 
 The database is `.data/orders.sqlite`. Set `DB_PATH` to move it. Set
-`CARRIER_FAILURES=2` to make the carrier fail twice before it answers, which
-delays a shipped notification by the retry backoff (1s, then 2s).
+`CARRIER_FAILURES=2` to make the carrier fail twice before it answers.
 
 ```sh
 curl -s -X POST localhost:4000/api/order -H 'content-type: application/json' \
   -d '{"customer":"ada@example.com","totalCents":4200}'
 curl -s -X POST localhost:4000/api/notification/query -H 'content-type: application/json' -d '{}'
 ```
+
+## Shipping as a workflow
+
+With `REDIS_URL` set, the `shipping` handler is replaced by `fulfilment`, a
+workflow (`src/workflows/fulfil-order.ts`) that the Workflow SDK runs on a Redis
+world. It books the carrier in a step, waits a second with a durable timer, and
+notifies the customer in a second step.
+
+```sh
+docker run -d -p 6379:6379 redis:7
+REDIS_URL=redis://localhost:6379 bun run --cwd examples/events dev
+REDIS_URL=redis://localhost:6379 bun run --cwd examples/events test   # 16 tests, 6 need Redis
+```
+
+`brick dev` and `brick start` build the workflow bundle into
+`.well-known/workflow/v1` before events start. What to look at:
+
+- With `CARRIER_FAILURES=2`, the booking step fails twice and the SDK retries it
+  after 100 ms. The delivery is not retried, and the carrier is booked once.
+- Stop the server with `kill -9` while an order is shipping and start it again.
+  The run resumes and the notification still arrives.
+- Delivering the same event again (reset its outbox row to `pending`) does not
+  start a second run.
 
 SQLite allows one process per database file, so this example delivers events in
 the same process that serves requests. With PostgreSQL, run the API with

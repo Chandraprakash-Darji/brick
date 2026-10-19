@@ -79,6 +79,7 @@ export { createServiceProxy } from "./rpc";
 
 export {
   defineListener,
+  emitEvent,
   outboxTable,
   isOutboxTable,
   runInTransaction,

@@ -101,7 +101,7 @@ A write that fails records no event, and an event whose write was rolled back is
 
 ## Listeners
 
-`defineListener` takes a unique `name`, the event names it listens for in `on`, and `run`. A trailing `*` matches a prefix, so `user.*` listens for every user event and `*` for everything.
+`defineListener` takes a unique `name`, the event names it listens for in `on`, and either `run`, a handler, or `workflow`, a [workflow](#workflows). A trailing `*` matches a prefix, so `user.*` listens for every user event and `*` for everything.
 
 Each listener gets its own delivery of an event. If two listeners listen for `user.create` and one of them fails, only that one is retried.
 
@@ -111,7 +111,7 @@ A delivery has the event (`id`, `name`, `payload`, `occurredAt`, `traceId`, `sou
 - `deliveryId`: `<event id>:<listener>`. It is the same on every retry.
 - `attempt`: 1 on the first try.
 
-Delivery is at least once, so a listener can run twice for the same event, for example when a process dies after the work but before the delivery is marked done. Use `deliveryId` as an idempotency key when the work must not be repeated.
+Delivery is at least once, so a handler can run twice for the same event, for example when a process dies after the work but before the delivery is marked done. Use `deliveryId` as an idempotency key when the work must not be repeated, or run a [workflow](#workflows), which starts once per delivery.
 
 ## Retries
 
@@ -156,8 +156,89 @@ A process that restarts delivers what was waiting when it stopped.
   processes write.
 </Callout>
 
+## Workflows
+
+A listener can start a durable workflow instead of running a handler. The workflow is written for the [Workflow SDK](https://useworkflow.dev): a function marked `"use workflow"` that calls steps marked `"use step"`. The SDK retries a failing step, keeps the run's state in Redis, and resumes a run after a restart or a crash.
+
+Install the SDK, a Redis world, and the SDK's builders:
+
+```sh
+bun add workflow @brickkit/redis-world
+bun add -d @workflow/builders
+```
+
+Write the workflow, hand it to `defineListener` as `workflow`, and give `events` a world:
+
+```ts title="src/workflows/fulfil-order.ts"
+import type { WorkflowEvent } from "@brickkit/core";
+import { sleep } from "workflow";
+
+export async function fulfilOrder(event: WorkflowEvent<OrderUpdated>) {
+  "use workflow";
+  const trackingId = await bookCarrier(event.payload.after.id);
+  await sleep("1s");
+  await notifyCustomer(event.deliveryId, trackingId);
+}
+
+async function bookCarrier(orderId: string) {
+  "use step";
+  return carrier.book(orderId);
+}
+```
+
+```ts title="src/app.ts"
+import { createWorld } from "@brickkit/redis-world";
+
+export default brick({
+  services: [ordersService],
+  events: {
+    world: createWorld({ redis: process.env.REDIS_URL }),
+    listeners: [
+      defineListener({
+        name: "fulfilment",
+        on: "order.update",
+        workflow: fulfilOrder,
+      }),
+    ],
+  },
+});
+```
+
+`brick dev` and `brick start` do the rest. Before the app loads they make the `"use workflow"` and `"use step"` files load as workflows and steps, and before events start they build the workflow bundle into `.well-known/workflow/v1` (add it to `.gitignore`). The world starts with the app's events and closes when they stop.
+
+The workflow receives the event: `id`, `name`, `payload`, `occurredAt`, `traceId`, `source`, `listener` and `deliveryId`. It has no `attempt`.
+
+A delivery counts as done once its run has started. After that the workflow owns the retries, so a failing step does not retry the delivery, and a run that fails stays visible in the world rather than in the outbox. A delivery that is tried again, because a process died after starting the run or because you retried it, finds its run and does not start another: the run is named after the delivery id and its clock starts at the time of the event. The world must support this, so Brick refuses one without it. Both worlds from Brick do.
+
+Your steps run in your app, as the same module instances the rest of the app uses. A step can use the database client, config and other state your modules set up, exactly as a handler can.
+
+A process that only records events (`dispatch: false`) does not start the world. A process that delivers does, and it also runs the steps and replays of every run in the world, including runs another process started.
+
+### In tests and scripts
+
+Outside `brick dev` and `brick start`, prepare the project yourself, before importing the files that hold workflows:
+
+```ts
+import {
+  buildWorkflows,
+  registerWorkflowTransform,
+} from "@brickkit/cli/workflows";
+
+await registerWorkflowTransform(projectRoot);
+await buildWorkflows({ root: projectRoot });
+const { app } = await import("./app");
+```
+
+### Limits
+
+- `brick build` does not build workflows yet. Run the app with `brick start`.
+- Webhook routes (`createWebhook`) are not mounted. `resumeHook` works.
+- Stopping the events closes the world for good.
+- If you delete finished runs from Redis (a retention policy), delivering the same event again starts the workflow again.
+
 ## What is not promised
 
 - **Order.** Events are not ordered across listeners, or between two deliveries of one listener when one is retried.
 - **Exactly once.** Delivery is at least once.
 - **Events from your own code.** Only generated CRUD writes emit events so far.
+- **Exactly-once handlers.** A `run` handler can still run twice for one event. A workflow starts one run per delivery.

@@ -102,9 +102,16 @@ async function createServer(
 }
 
 function finishDeliveriesOnSignal(events: EventsHub) {
-  const stop = () => void events.stop().finally(() => process.exit(0));
-  process.once("SIGINT", stop);
-  process.once("SIGTERM", stop);
+  let stopping = false;
+  const stop = () => {
+    if (stopping) return;
+    stopping = true;
+    void events.stop().finally(() => process.exit(0));
+  };
+  // `on`, not `once`: the workflow bundle loads signal-exit, which re-raises the
+  // signal itself when it finds no listener left, and `once` removes ours first.
+  process.on("SIGINT", stop);
+  process.on("SIGTERM", stop);
 }
 
 export async function startProdServer(options: DevServerOptions = {}) {
@@ -196,6 +203,49 @@ export async function startProdServer(options: DevServerOptions = {}) {
     `🗺️ Architecture graph:  http://localhost:${port}/_brick/services\n`,
   );
 
+  return app;
+}
+
+/**
+ * What `brick worker` runs: load the app and deliver its events from this
+ * process, without serving HTTP. Run it beside API processes that only record
+ * events (`events: { dispatch: false }`), or alone for an app with no routes.
+ * Workflow listeners run here too: the world starts and the steps of every run
+ * in it execute in this process.
+ *
+ * @param options - `entry`: the app file, which must default-export a `brick()` app.
+ * @returns The app.
+ * @throws When the entry is missing, has no `events`, or only records events.
+ */
+export async function startWorker(options: { entry: string }) {
+  const resolvedEntry = resolve(process.cwd(), options.entry);
+  if (!existsSync(resolvedEntry)) {
+    console.error(`[Brick-TS] Error: Entry file not found: ${resolvedEntry}`);
+    process.exit(1);
+  }
+  console.log(`[Brick-TS] Loading application entry: ${resolvedEntry}`);
+  await registerWorkflowTransform();
+  const app = (await import(resolvedEntry))?.default;
+  if (!isBrickApp(app))
+    throw new Error(
+      "Brick: a worker needs an entry that default-exports a BrickApp.",
+    );
+  if (!app.events)
+    throw new Error(
+      "Brick: this app has no events, so a worker has nothing to deliver.",
+    );
+  if (!app.events.describe().dispatch)
+    throw new Error(
+      "Brick: this app only records events (events.dispatch is false), so a worker would deliver nothing. Enable dispatch for the worker process.",
+    );
+  await buildAppWorkflows(app);
+  app.events.start();
+  finishDeliveriesOnSignal(app.events);
+  const listeners = app.events.describe().listeners;
+  console.log(`\n🧱 Brick-TS Worker`);
+  console.log(
+    `   Delivering events to ${listeners.length} ${listeners.length === 1 ? "listener" : "listeners"}: ${listeners.map((l) => l.name).join(", ") || "none"}\n`,
+  );
   return app;
 }
 

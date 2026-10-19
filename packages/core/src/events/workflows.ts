@@ -12,7 +12,7 @@ import type {
 
 /** `getQueueTopicPrefix("workflow")` from `@workflow/world`: the queue the runtime reads. */
 const WORKFLOW_QUEUE_PREFIX = "__wkf_workflow_";
-const DEFAULT_BUNDLE_DIR = ".well-known/workflow/v1";
+const BUNDLE_DIR = ".well-known/workflow/v1";
 /** Where the transform and the bundle register steps by id. The SDK's own generated code uses it. */
 const STEP_REGISTRY = Symbol.for("@workflow/core//registeredSteps");
 
@@ -31,18 +31,19 @@ interface BundleManifest {
 }
 
 /**
- * Where the workflow bundle is and what it is built from, with the defaults
- * applied.
+ * Where the workflow bundle is read from, and the project it is built from.
  *
  * @param options - The `events.workflows` option.
- * @returns Absolute `root` and `dir`.
+ * @returns Absolute `root` and `dir`. The bundle cannot live elsewhere: the
+ * builder finds the SDK from where it writes, and skips only this directory when it
+ * looks for workflows.
  */
 export function resolveWorkflowPaths(options: WorkflowsOptions = {}): {
   root: string;
   dir: string;
 } {
   const root = resolve(options.root ?? process.cwd());
-  return { root, dir: resolve(root, options.dir ?? DEFAULT_BUNDLE_DIR) };
+  return { root, dir: join(root, BUNDLE_DIR) };
 }
 
 /**

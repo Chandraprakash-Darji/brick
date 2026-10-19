@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { Command, InvalidArgumentError } from "commander";
-import { startDevServer, startProdServer } from "./runner";
+import { startDevServer, startProdServer, startWorker } from "./runner";
 import { DEFAULT_DASHBOARD_PORT } from "./dev-dashboard";
 import { DEFAULT_HISTORY_DAYS } from "./dev-history";
 import { buildApplication } from "./build";
@@ -73,6 +73,7 @@ export function createProgram(): Command {
 Usage:
   brick dev [entry] [--port <number>] [--dashboard-port <number>] [--history-days <number>] [--no-dashboard]  Start development server with live reload and dashboard
   brick start [entry] [--port <number>]                  Start production server
+  brick worker <entry>                                   Deliver events without serving HTTP
   brick build <app.ts> [--outdir <dir>] [--port <number>] [--no-aot]  Compile a default-exported BrickApp into a Bun server
   brick gen openapi <entry> [--output <file>]            Generate OpenAPI 3.1 JSON specification
   brick gen client <entry> [--output <file>]             Generate a typed browser client contract
@@ -154,6 +155,17 @@ ${PORT_RESOLUTION_HELP}`,
     .action(async (entry: string | undefined, opts: { port?: number }) => {
       const port = resolveDevPort(opts.port);
       await startProdServer({ entry, port });
+    });
+
+  program
+    .command("worker")
+    .description("Deliver the app's events without serving HTTP")
+    .argument(
+      "<entry>",
+      "Application entry file (must default-export a BrickApp)",
+    )
+    .action(async (entry: string) => {
+      await startWorker({ entry });
     });
 
   program

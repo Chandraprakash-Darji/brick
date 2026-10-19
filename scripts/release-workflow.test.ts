@@ -14,12 +14,17 @@ const workflow: { jobs: Record<string, Job> } = Bun.YAML.parse(
   ).text(),
 );
 const { prepare, validate, commit, publish, release } = workflow.jobs;
+const PACKAGES = ["core", "crud", "cli", "bullmq-world", "redis-world"];
 
 test("every package must build, typecheck, test, and pack before publishing, with the release commit last", () => {
-  expect(validate!.strategy?.matrix.pkg).toEqual(["core", "crud", "cli"]);
+  expect(validate!.strategy?.matrix.pkg).toEqual(PACKAGES);
   expect(validate!.strategy?.["fail-fast"]).toBe(false);
   const commands = validate!.steps.map((step) => step.run ?? "").join("\n");
-  expect(commands).toContain("bun run build");
+  expect(commands).toMatch(/^bun run build$/m);
+  expect(commands).toContain("bun run build:worlds");
+  expect(commands).toContain(
+    "for pkg in core crud cli bullmq-world redis-world;",
+  );
   expect(commands).toContain(
     "bun run --filter @brickkit/${{ matrix.pkg }} typecheck",
   );
@@ -32,6 +37,23 @@ test("every package must build, typecheck, test, and pack before publishing, wit
   expect(commit!.if).not.toContain("always()");
   expect(publish!.if).not.toContain("always()");
   expect(release!.needs).toContain("publish");
+});
+
+test("worlds are staged, built, tested with vitest, and committed with the other packages", () => {
+  const manifests =
+    prepare!.steps.find((step) =>
+      step.uses?.startsWith("actions/upload-artifact@"),
+    )?.with?.path ?? "";
+  const committed = commit!.steps.map((step) => step.run ?? "").join("\n");
+  for (const pkg of PACKAGES) {
+    expect(manifests).toContain(`packages/${pkg}/package.json`);
+    expect(committed).toContain(`packages/${pkg}/package.json`);
+  }
+  const test = validate!.steps.find(
+    (step) => step.name === "Test world package",
+  );
+  expect(test?.if).toContain("endsWith(matrix.pkg, '-world')");
+  expect(test?.run).toBe("bun run --filter @brickkit/${{ matrix.pkg }} test");
 });
 
 test("candidate preparation cannot commit or publish, and dry runs stop after validation", () => {
@@ -62,7 +84,7 @@ test("publishing uses the exact checked tarballs without rerunning tests or buil
   const commands = publish!.steps.map((step) => step.run ?? "").join("\n");
   expect(commands).toContain('npm publish "$RUNNER_TEMP/package/"*.tgz');
   expect(commands).not.toMatch(/bun (test|run build|install)/);
-  expect(publish!.strategy?.matrix.pkg).toEqual(["core", "crud", "cli"]);
+  expect(publish!.strategy?.matrix.pkg).toEqual(PACKAGES);
 });
 
 test("release jobs use Node 24 actions and an explicit Ubuntu runner", () => {
