@@ -219,16 +219,7 @@ export function startDevDashboard(
       return;
     }
     if (request.method === "GET" && pathname.startsWith("/assets/")) {
-      serveAsset(response, pathname.slice("/assets/".length), () => {
-        // The inspector's stylesheet asks for its fonts without the prefix it is served under.
-        if (options.store.inspectorTarget() && /\.woff2?$/.test(pathname))
-          void inspector(
-            request,
-            response,
-            new URL(INSPECTOR_PATH + pathname, url),
-          );
-        else send(response, 404, "Not found");
-      });
+      serveAsset(response, pathname.slice("/assets/".length));
       return;
     }
     if (request.method === "GET" && pathname === "/api/state") {
@@ -435,7 +426,7 @@ export function startDevDashboard(
       send(
         response,
         503,
-        "The workflow inspector is not running. The app may be restarting, it may run no workflows, or @brickkit/workflow-inspector may not be installed in the project.",
+        "The workflow inspector is not running. The app may be restarting, or it may run no workflows.",
         { "content-type": "text/plain; charset=utf-8" },
       );
       return;
@@ -694,11 +685,7 @@ function assetsDirectory(): string | undefined {
   return undefined;
 }
 
-function serveAsset(
-  response: ServerResponse,
-  name: string,
-  onMissing: () => void = () => send(response, 404, "Not found"),
-): void {
+function serveAsset(response: ServerResponse, name: string): void {
   // Plain file names only: no separators, so a request cannot leave the folder.
   if (!/^[\w.-]+$/.test(name) || name.startsWith(".")) {
     send(response, 404, "Not found");
@@ -720,7 +707,7 @@ function serveAsset(
           ASSET_TYPES[extname(name)] ?? "application/octet-stream",
         "cache-control": "no-store",
       }),
-    onMissing,
+    () => send(response, 404, "Not found"),
   );
 }
 

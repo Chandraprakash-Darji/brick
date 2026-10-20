@@ -14,14 +14,7 @@ const workflow: { jobs: Record<string, Job> } = Bun.YAML.parse(
   ).text(),
 );
 const { prepare, validate, commit, publish, release } = workflow.jobs;
-const PACKAGES = [
-  "core",
-  "crud",
-  "cli",
-  "bullmq-world",
-  "redis-world",
-  "workflow-inspector",
-];
+const PACKAGES = ["core", "crud", "cli", "bullmq-world", "redis-world"];
 
 test("every package must build, typecheck, test, and pack before publishing, with the release commit last", () => {
   expect(validate!.strategy?.matrix.pkg).toEqual(PACKAGES);
@@ -30,7 +23,7 @@ test("every package must build, typecheck, test, and pack before publishing, wit
   expect(commands).toMatch(/^bun run build$/m);
   expect(commands).toContain("bun run build:worlds");
   expect(commands).toContain(
-    "for pkg in core crud cli bullmq-world redis-world workflow-inspector;",
+    "for pkg in core crud cli bullmq-world redis-world;",
   );
   expect(commands).toContain(
     "bun run --filter @brickkit/${{ matrix.pkg }} typecheck",

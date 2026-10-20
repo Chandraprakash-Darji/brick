@@ -132,8 +132,7 @@ to add, which the dashboard bundles. Links between pages and local images work a
 they do on a docs site. See `packages/cli/dashboard/README.md`.
 
 For an app with workflow listeners, a Workflows tab shows the Workflow SDK's
-inspector (`@brickkit/workflow-inspector`, installed in the project with
-`bun add -d @brickkit/workflow-inspector`) for the world the app runs on. The app serves it on a
+inspector, which comes with the CLI, for the world the app runs on. The app serves it on a
 loopback port of its own and the dashboard passes requests to it at `/workflows`.
 It can cancel runs, so only `brick dev` serves it, and only the dashboard's own
 page may change anything through it.

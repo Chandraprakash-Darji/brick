@@ -18,7 +18,6 @@ import { decode, encode } from "cbor-x";
 import { apiBase } from "~/lib/api-base";
 import type {
   EnvMap,
-  HealthCheckResult,
   HookListItem,
   HookTokenResult,
   PaginatedResult,
@@ -214,19 +213,6 @@ export async function fetchStreams(
   runId: string,
 ): Promise<ServerActionResult<string[]>> {
   return rpc("fetchStreams", { worldEnv, runId });
-}
-
-export async function fetchWorkflowsManifest(
-  worldEnv: EnvMap,
-): Promise<ServerActionResult<any>> {
-  return rpc("fetchWorkflowsManifest", { worldEnv });
-}
-
-export async function runHealthCheck(
-  worldEnv: EnvMap,
-  options?: { timeout?: number },
-): Promise<ServerActionResult<HealthCheckResult>> {
-  return rpc("runHealthCheck", { worldEnv, options });
 }
 
 export async function getEncryptionKeyForRun(

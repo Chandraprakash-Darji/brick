@@ -104,5 +104,3 @@ export type HookListItem = Omit<Hook, "token">;
 export interface HookTokenResult {
   token: string;
 }
-
-export type { HealthCheckResult } from "@workflow/core/runtime/helpers";

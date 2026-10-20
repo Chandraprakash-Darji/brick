@@ -84,11 +84,11 @@ test("stable notes include beta features and preserve breaking change markers", 
   expect(notes()).toContain("v0.2.4...v0.3.0");
 });
 
-test("notes list changes to the world packages and the workflow inspector", () => {
+test("notes list changes to the world packages", () => {
   const { root, git, commit, notes } = fixture();
   commit("chore(release): v0.8.1", "0.8.1");
   git("tag", "v0.8.1");
-  for (const pkg of ["bullmq-world", "redis-world", "workflow-inspector"]) {
+  for (const pkg of ["bullmq-world", "redis-world"]) {
     mkdirSync(join(root, "packages", pkg), { recursive: true });
     writeFileSync(join(root, "packages", pkg, "index.ts"), pkg);
     git("add", ".");
@@ -97,7 +97,6 @@ test("notes list changes to the world packages and the workflow inspector", () =
   const output = notes();
   expect(output).toContain("## @brickkit/bullmq-world");
   expect(output).toContain("## @brickkit/redis-world");
-  expect(output).toContain("## @brickkit/workflow-inspector");
   expect(output).not.toContain("## @brickkit/core");
 });
 

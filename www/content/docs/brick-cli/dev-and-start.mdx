@@ -104,7 +104,7 @@ A document that throws is skipped with a warning. Documents load again on each r
 
 ### Workflow Inspector
 
-For an app with workflow listeners (see [Events](/docs/events)), the dashboard gains a Workflows tab that shows the Workflow SDK's observability UI for the world the app runs on: runs, step and sleep traces, events, streams, hooks, replay and cancel. The UI is `@brickkit/workflow-inspector`, a vendored copy of `@workflow/web` without its own header, which follows the dashboard's light or dark theme. Install it in the project with `bun add -d @brickkit/workflow-inspector`; until then the tab says so. The app serves the UI on a loopback port of its own and the dashboard passes requests to it at `/workflows`, so the address stays the same when the app reloads. It is served only by `brick dev`: it can cancel runs and resume hooks, so the production dashboard does not have it, and the dev dashboard accepts changes to it only from its own page.
+For an app with workflow listeners (see [Events](/docs/events)), the dashboard gains a Workflows tab that shows the Workflow SDK's observability UI for the world the app runs on: runs, step and sleep traces, events, streams, hooks, replay and cancel. The UI is a vendored copy of `@workflow/web` that ships with the CLI, without its own header, in the dashboard's colors and fonts and following its light or dark theme. Nothing needs installing. The app serves the UI on a loopback port of its own and the dashboard passes requests to it at `/workflows`, so the address stays the same when the app reloads. It is served only by `brick dev`: it can cancel runs and resume hooks, so the production dashboard does not have it, and the dev dashboard accepts changes to it only from its own page.
 
 ### Developer Docs
 

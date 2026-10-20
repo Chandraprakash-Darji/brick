@@ -3,12 +3,9 @@ import { useNavigate, useSearchParams } from "react-router";
 import { HooksTable } from "~/components/hooks-table";
 import { RunsTable } from "~/components/runs-table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
-import { WorkflowsList } from "~/components/workflows-list";
-import { useServerConfig } from "~/lib/world-config-context";
 
 export default function Home() {
   const navigate = useNavigate();
-  const { serverConfig } = useServerConfig();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const sidebar = searchParams.get("sidebar");
@@ -26,11 +23,6 @@ export default function Home() {
   };
 
   const selectedHookId = sidebar === "hook" && hookId ? hookId : undefined;
-
-  // Only show workflows tab for local backend
-  const isLocalBackend =
-    serverConfig.backendId === "local" ||
-    serverConfig.backendId === "@workflow/world-local";
 
   const handleRunClick = (runId: string, streamId?: string) => {
     if (!streamId) {
@@ -54,9 +46,6 @@ export default function Home() {
         <TabsList className="mb-4">
           <TabsTrigger value="runs">Runs</TabsTrigger>
           <TabsTrigger value="hooks">Hooks</TabsTrigger>
-          {isLocalBackend && (
-            <TabsTrigger value="workflows">Workflows</TabsTrigger>
-          )}
         </TabsList>
         <TabsContent value="runs">
           <ErrorBoundaryComponent title="Failed to load workflow runs">
@@ -71,13 +60,6 @@ export default function Home() {
             />
           </ErrorBoundaryComponent>
         </TabsContent>
-        {isLocalBackend && (
-          <TabsContent value="workflows">
-            <ErrorBoundaryComponent title="Failed to load workflow graph data">
-              <WorkflowsList />
-            </ErrorBoundaryComponent>
-          </TabsContent>
-        )}
       </Tabs>
     </div>
   );

@@ -1,12 +1,7 @@
 {
   "name": "@brickkit/workflow-inspector",
-  "version": "0.8.1",
-  "description": "The Workflow SDK's observability UI, for the Brick dev dashboard",
-  "keywords": [
-    "workflow",
-    "observability",
-    "dashboard"
-  ],
+  "private": true,
+  "description": "The Workflow SDK's observability UI, built into @brickkit/cli for the dev dashboard",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -14,32 +9,10 @@
     "directory": "packages/workflow-inspector"
   },
   "type": "module",
-  "files": [
-    "build",
-    "handler.js",
-    "handler.d.ts",
-    "static.js",
-    "LICENSE.md",
-    "NOTICE"
-  ],
-  "exports": {
-    "./handler": {
-      "types": "./handler.d.ts",
-      "default": "./handler.js"
-    },
-    "./package.json": "./package.json"
-  },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
-  },
   "scripts": {
     "build": "react-router build",
     "typecheck": "react-router typegen && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
     "clean": "rm -rf build .react-router"
-  },
-  "dependencies": {
-    "srvx": "^0.12.4"
   },
   "devDependencies": {
     "@radix-ui/react-alert-dialog": "1.1.5",
@@ -63,12 +36,10 @@
     "@workflow/utils": "5.0.2",
     "@workflow/web-shared": "5.0.5",
     "@workflow/world": "5.0.4",
-    "@xyflow/react": "12.10.1",
     "cbor-x": "^1",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "date-fns": "4.1.0",
-    "geist": "^1.7.0",
     "isbot": "^5",
     "lucide-react": "0.575.0",
     "next-themes": "0.4.6",

@@ -670,25 +670,12 @@ describe("startDevDashboard", () => {
       });
     });
 
-    it("serves the inspector's fonts, which its stylesheet asks for at /assets", async () => {
-      await withInspector(async ({ base }) => {
-        const font = await fetch(`${base}/assets/Geist-Variable-abc123.woff2`);
-        expect(font.status).toBe(201);
-        expect(((await font.json()) as { path: string }).path).toBe(
-          "/workflows/assets/Geist-Variable-abc123.woff2",
-        );
-        // Anything else that the dashboard lacks is still not found.
-        expect((await fetch(`${base}/assets/nothing.js`)).status).toBe(404);
-      });
-    });
-
     it("says so when there is no inspector, or it cannot be reached", async () => {
       const { store, dashboard, base } = await setup();
       try {
         const none = await fetch(`${base}/workflows/`);
         expect(none.status).toBe(503);
-        expect(await none.text()).toContain("@brickkit/workflow-inspector");
-        expect((await fetch(`${base}/assets/x.woff2`)).status).toBe(404);
+        expect(await none.text()).toContain("inspector is not running");
 
         const closed = Bun.serve({ port: 0, fetch: () => new Response() });
         const port = closed.port!;

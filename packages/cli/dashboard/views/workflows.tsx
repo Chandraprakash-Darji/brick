@@ -24,7 +24,7 @@ export function WorkflowsView({
     return hidden ? null : (
       <Empty
         title="The workflow inspector is not running"
-        hint="It needs a workflow listener and @brickkit/workflow-inspector in the project: bun add -d @brickkit/workflow-inspector"
+        hint="It needs a workflow listener in the app, and shows its runs once the app is up."
       />
     );
   return (

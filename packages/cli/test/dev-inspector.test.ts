@@ -1,15 +1,14 @@
 import { describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { brick } from "@brickkit/core";
 import { startInspector } from "../src/dev-inspector";
 
-const root = join(import.meta.dir, "fixtures", "workflow-app");
+const built = join(import.meta.dir, "..", "inspector-dist");
 
 describe("startInspector", () => {
   it("serves the inspector for the app's own world, to the dashboard only", async () => {
-    // All the inspector reads of an app is where its workflows are and its world.
+    // All the inspector reads of an app is its world.
     const world = {
       listed: 0,
       runs: {
@@ -19,11 +18,7 @@ describe("startInspector", () => {
         },
       },
     };
-    const app = {
-      events: {
-        workflows: { root, dir: join(root, ".well-known/workflow/v1"), world },
-      },
-    };
+    const app = { events: { workflows: { world } } };
     const inspector = await startInspector(app as never);
     try {
       expect(inspector).toBeDefined();
@@ -48,19 +43,50 @@ describe("startInspector", () => {
     }
   });
 
+  it("serves the page's scripts and styles from the build, to keep", async () => {
+    const inspector = await startInspector({
+      events: { workflows: { world: {} } },
+    } as never);
+    try {
+      const base = `http://127.0.0.1:${inspector!.port}`;
+      const headers = { "x-brick-inspector": inspector!.token };
+      const styles = readdirSync(join(built, "client", "assets")).find((name) =>
+        name.endsWith(".css"),
+      )!;
+
+      const asset = await fetch(`${base}/workflows/assets/${styles}`, {
+        headers,
+      });
+      expect(asset.status).toBe(200);
+      expect(asset.headers.get("content-type")).toContain("text/css");
+      expect(asset.headers.get("cache-control")).toContain("immutable");
+      // The page names them under the path it is served at.
+      const page = await (
+        await fetch(`${base}/workflows/`, { headers })
+      ).text();
+      expect(page).toContain(`/workflows/assets/`);
+
+      // A name the build lacks, or a folder, is the page's to answer, not a file.
+      for (const path of ["assets/missing.js", "assets/"]) {
+        const other = await fetch(`${base}/workflows/${path}`, { headers });
+        expect(other.status).toBe(404);
+        expect(other.headers.get("cache-control") ?? "").not.toContain(
+          "immutable",
+        );
+      }
+    } finally {
+      inspector?.stop();
+    }
+  });
+
   it("does nothing for an app that runs no workflows", async () => {
     expect(await startInspector(brick({ docs: false }))).toBeUndefined();
   });
 
-  it("does nothing when @brickkit/workflow-inspector is not installed", async () => {
-    const bare = mkdtempSync(join(tmpdir(), "brick-no-inspector-"));
-    try {
-      const app = {
-        events: { workflows: { root: bare, dir: bare, world: {} } },
-      };
-      expect(await startInspector(app as never)).toBeUndefined();
-    } finally {
-      rmSync(bare, { recursive: true });
-    }
+  it("says how to build it when the build is missing", async () => {
+    const app = { events: { workflows: { world: {} } } };
+    await expect(
+      startInspector(app as never, join(built, "nowhere")),
+    ).rejects.toThrow("not built");
   });
 });

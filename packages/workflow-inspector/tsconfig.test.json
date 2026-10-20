@@ -9,5 +9,5 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["handler.d.ts", "test/**/*.ts"]
+  "include": ["test/**/*.ts"]
 }

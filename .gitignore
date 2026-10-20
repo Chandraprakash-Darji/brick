@@ -63,8 +63,9 @@ docs/
 
 .openqodex/
 
-# Built dev dashboard (packages/cli)
+# Built dev dashboard and workflow inspector (packages/cli)
 dashboard-dist/
+inspector-dist/
 
 # Workflow SDK build output and SWC cache
 .well-known/workflow/

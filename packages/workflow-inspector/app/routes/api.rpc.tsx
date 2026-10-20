@@ -20,13 +20,11 @@ import {
   fetchRuns,
   fetchStep,
   fetchStreams,
-  fetchWorkflowsManifest,
   getEncryptionKeyForRun,
   getPublicServerConfig,
   recreateRun,
   reenqueueRun,
   resumeHook,
-  runHealthCheck,
   wakeUpRun,
 } from "~/server/workflow-server-actions.server";
 import type { Route } from "./+types/api.rpc";
@@ -60,8 +58,6 @@ const handlers = {
   wakeUpRun: (p: any) => wakeUpRun(p.worldEnv ?? {}, p.runId, p.options),
   resumeHook: (p: any) => resumeHook(p.worldEnv ?? {}, p.token, p.payload),
   fetchStreams: (p: any) => fetchStreams(p.worldEnv ?? {}, p.runId),
-  fetchWorkflowsManifest: (p: any) => fetchWorkflowsManifest(p.worldEnv ?? {}),
-  runHealthCheck: (p: any) => runHealthCheck(p.worldEnv ?? {}, p.options),
   getEncryptionKeyForRun: (p: any) =>
     getEncryptionKeyForRun(p.worldEnv ?? {}, p.runId),
   getPublicServerConfig: () => getPublicServerConfig(),

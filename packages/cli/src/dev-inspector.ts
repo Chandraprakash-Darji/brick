@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
-import { createRequire } from "node:module";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { existsSync, statSync } from "node:fs";
+import { join, resolve, sep } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import type { BrickApp } from "@brickkit/core";
 
 /** Where the dashboard serves the inspector. */
@@ -16,45 +16,58 @@ export interface Inspector {
   stop(): void;
 }
 
+/** The built inspector, next to `src/` in the repo and next to `dist/` when published. */
+const INSPECTOR_DIRECTORY = fileURLToPath(
+  new URL("../inspector-dist/", import.meta.url),
+);
+
 /**
- * Serve the Workflow inspector (`@brickkit/workflow-inspector`, the Workflow
- * SDK's observability UI) for the app's world, on a loopback port of its own.
- * The dashboard proxies it at `/workflows`; it is the only caller that knows the
+ * A file of the inspector's browser build. Its names carry a hash of their
+ * content, so a browser may keep them for good. `undefined` for anything else,
+ * which is the page's to answer.
+ */
+function browserAsset(request: Request, client: string): Response | undefined {
+  if (request.method !== "GET" && request.method !== "HEAD") return undefined;
+  const { pathname } = new URL(request.url);
+  if (!pathname.startsWith(`${INSPECTOR_PATH}/assets/`)) return undefined;
+  const file = resolve(client, pathname.slice(INSPECTOR_PATH.length + 1));
+  if (!file.startsWith(client + sep)) return undefined;
+  if (!statSync(file, { throwIfNoEntry: false })?.isFile()) return undefined;
+  return new Response(Bun.file(file), {
+    headers: { "cache-control": "public, max-age=31536000, immutable" },
+  });
+}
+
+/**
+ * Serve the Workflow inspector (the Workflow SDK's observability UI, built into
+ * this package) for the app's world, on a loopback port of its own. The
+ * dashboard proxies it at `/workflows`; it is the only caller that knows the
  * token. The UI can cancel runs and resume hooks, so nothing else may reach it,
  * and it exists only under `brick dev`.
  *
  * @param app - The loaded app, running in this process.
- * @returns The inspector, or `undefined` when the app runs no workflows or the
- * project does not have `@brickkit/workflow-inspector` installed.
+ * @param directory - The inspector's build; this package's own by default.
+ * @returns The inspector, or `undefined` when the app runs no workflows.
  */
 export async function startInspector(
   app: BrickApp,
+  directory = INSPECTOR_DIRECTORY,
 ): Promise<Inspector | undefined> {
   const target = app.events?.workflows;
   if (!target) return undefined;
-  let handlerPath: string;
-  try {
-    handlerPath = createRequire(join(target.root, "package.json")).resolve(
-      "@brickkit/workflow-inspector/handler",
+  const entry = join(directory, "server", "index.js");
+  if (!existsSync(entry))
+    throw new Error(
+      "The workflow inspector is not built. Build it with: bun run --filter @brickkit/cli build",
     );
-  } catch {
-    // The Workflows view says how to install it.
-    return undefined;
-  }
-  const { createInspectorHandler } = (await import(
-    pathToFileURL(handlerPath).href
-  )) as {
-    createInspectorHandler(options: {
-      basename: string;
-      world: unknown;
-      manifestPath: string;
-    }): Promise<(request: Request) => Promise<Response>>;
+  const { createFetchHandler } = (await import(pathToFileURL(entry).href)) as {
+    createFetchHandler(
+      basename: string,
+      host: { world: unknown },
+    ): (request: Request) => Promise<Response>;
   };
-  const handle = await createInspectorHandler({
-    basename: INSPECTOR_PATH,
-    world: target.world,
-    manifestPath: join(target.dir, "manifest.json"),
-  });
+  const page = createFetchHandler(INSPECTOR_PATH, { world: target.world });
+  const client = join(directory, "client");
   const token = randomBytes(16).toString("hex");
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -63,7 +76,7 @@ export async function startInspector(
     idleTimeout: 0,
     fetch: (request) =>
       request.headers.get(INSPECTOR_TOKEN_HEADER) === token
-        ? handle(request)
+        ? (browserAsset(request, client) ?? page(request))
         : new Response("Forbidden", { status: 403 }),
   });
   return { port: server.port!, token, stop: () => void server.stop(true) };

@@ -11,6 +11,7 @@
     "**/routeTree.gen.ts",
     "**/.output/**",
     "**/.tanstack/**",
-    "**/dashboard-dist/**"
+    "**/dashboard-dist/**",
+    "**/inspector-dist/**"
   ]
 }

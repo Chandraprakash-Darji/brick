@@ -1,10 +1,17 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { beforeAll, describe, expect, it } from "bun:test";
 import { SPEC_VERSION_SUPPORTS_SLOT_IDENTITY } from "@workflow/world";
 import { decode } from "cbor-x";
-import { createInspectorHandler } from "../handler.js";
+
+// The server build, which `bun run build` makes. The CLI serves its files; this
+// is the page and the calls it makes. Named by a variable so that the type
+// checker does not follow it into the bundle.
+const build = "../build/server/index.js";
+const { createFetchHandler } = (await import(build)) as {
+  createFetchHandler(
+    basename: string,
+    host: { world: unknown },
+  ): (request: Request) => Promise<Response>;
+};
 
 const base = "http://localhost/inspect";
 
@@ -49,23 +56,11 @@ async function rpc(
   };
 }
 
-describe("createInspectorHandler", () => {
-  const dir = mkdtempSync(join(tmpdir(), "brick-inspector-"));
-  const manifestPath = join(dir, "manifest.json");
-  afterAll(() => rmSync(dir, { recursive: true, force: true }));
-
+describe("createFetchHandler", () => {
   const world = stubWorld();
   let handle: (request: Request) => Promise<Response>;
-  beforeAll(async () => {
-    writeFileSync(
-      manifestPath,
-      JSON.stringify({ version: "1.0.0", steps: {}, workflows: { a: {} } }),
-    );
-    handle = await createInspectorHandler({
-      basename: "/inspect",
-      world,
-      manifestPath,
-    });
+  beforeAll(() => {
+    handle = createFetchHandler("/inspect", { world });
   });
 
   it("serves the page under its base path, without a header of its own", async () => {
@@ -138,21 +133,5 @@ describe("createInspectorHandler", () => {
     } finally {
       global[cache] = before;
     }
-  });
-
-  it("gives the Graph view the host's manifest, or an empty one", async () => {
-    const found = await rpc(handle, "fetchWorkflowsManifest");
-    expect(found.data.workflows).toEqual({ a: {} });
-
-    const empty = await createInspectorHandler({
-      basename: "/inspect",
-      world,
-      manifestPath: join(dir, "missing.json"),
-    });
-    expect((await rpc(empty, "fetchWorkflowsManifest")).data).toEqual({
-      version: "1.0.0",
-      steps: {},
-      workflows: {},
-    });
   });
 });

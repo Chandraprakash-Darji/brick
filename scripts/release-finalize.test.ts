@@ -12,14 +12,7 @@ const workflow: {
   ).text(),
 );
 
-const PACKAGES = [
-  "core",
-  "crud",
-  "cli",
-  "bullmq-world",
-  "redis-world",
-  "workflow-inspector",
-];
+const PACKAGES = ["core", "crud", "cli", "bullmq-world", "redis-world"];
 
 test("post-publication commit preserves branch updates and tags the validated source", async () => {
   const root = await mkdtemp(join(tmpdir(), "brick-release-finalize-"));

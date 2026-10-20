@@ -63,8 +63,8 @@ REDIS_URL=redis://localhost:6379 bun run --cwd examples/events test   # the work
   so the SDK finds the port the server listens on.
 
 - `bunx brick dev src/app.ts` (without `--no-dashboard`) serves the dashboard on
-  9400; its Workflows tab is the SDK's inspector (`@brickkit/workflow-inspector`, a dev
-  dependency here) showing each `fulfilOrder` run and its trace.
+  9400; its Workflows tab is the SDK's inspector (it comes with the CLI) showing each
+  `fulfilOrder` run and its trace.
 
 SQLite allows one process per database file, so this example delivers events in
 the same process that serves requests. With PostgreSQL, run the API with

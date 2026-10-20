@@ -5,12 +5,7 @@
  * These functions are called from React Router route loaders/actions.
  */
 
-import fs from "node:fs/promises";
 import * as workflowRunHelpers from "@workflow/core/runtime";
-import {
-  type HealthCheckResult,
-  healthCheck,
-} from "@workflow/core/runtime/helpers";
 import { resumeHook as resumeHookRuntime } from "@workflow/core/runtime/resume-hook";
 
 import { WorkflowRunNotFoundError, WorkflowWorldError } from "@workflow/errors";
@@ -865,66 +860,6 @@ export async function fetchStreams(
   } catch (error) {
     return createServerActionError<string[]>(error, "world.streams.list", {
       runId,
-    });
-  }
-}
-
-/**
- * Fetch the workflows manifest the Graph view draws, from the host's bundle.
- */
-export async function fetchWorkflowsManifest(
-  _worldEnv: EnvMap,
-): Promise<ServerActionResult<any>> {
-  // Brick change: the host says where its manifest is (upstream searches a list
-  // of Next.js and local-world locations).
-  const { manifestPath } = getInspectorHost();
-  if (manifestPath) {
-    try {
-      return createResponse(
-        JSON.parse(await fs.readFile(manifestPath, "utf-8")),
-      );
-    } catch {
-      // No bundle yet: show the UI without graph data.
-    }
-  }
-  return createResponse({
-    version: "1.0.0",
-    steps: {},
-    workflows: {},
-  });
-}
-
-/**
- * Run a queue-based health check on a workflow endpoint.
- *
- * This sends a health check message through the Queue infrastructure,
- * bypassing Vercel Deployment Protection. The endpoint processes the
- * message and writes a response to a stream, which we then read to
- * verify the endpoint is healthy.
- *
- * @param worldEnv - Environment configuration for the World
- * @param options - Optional configuration (timeout in ms)
- */
-export async function runHealthCheck(
-  worldEnv: EnvMap,
-  options?: { timeout?: number },
-): Promise<ServerActionResult<HealthCheckResult>> {
-  try {
-    const world = await getWorldFromEnv(worldEnv);
-    const result = await healthCheck(world, options);
-    return createResponse({
-      ...result,
-    });
-  } catch (error) {
-    // For health check failures, we want to return success=true with healthy=false
-    // so the UI can display the error properly, rather than propagating the server
-    // action error. This allows the health check result to be parsed by the UI
-    // even when the endpoint is down or unreachable.
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return createResponse({
-      healthy: false,
-      error: errorMessage,
-      latencyMs: undefined,
     });
   }
 }

@@ -203,6 +203,8 @@ bun add workflow @brickkit/redis-world
 bun add -d @workflow/builders
 ```
 
+If you already run BullMQ, use `@brickkit/bullmq-world` instead: it has the same `createWorld()` and the same behavior here, so only the import changes.
+
 Write the workflow, hand it to `defineListener` as `workflow`, and give `events` a world:
 
 ```ts title="src/workflows/fulfil-order.ts"
@@ -288,7 +290,7 @@ The SDK builds the URL from the port the process listens on, which it finds with
 
 ### Inspecting runs in the dev dashboard
 
-With `@brickkit/workflow-inspector` installed (`bun add -d @brickkit/workflow-inspector`), the `brick dev` dashboard gains a Workflows tab: the Workflow SDK's observability UI (a vendored copy of `@workflow/web`, without its own header, in the dashboard's theme), with every run, its trace of steps and sleeps, its events, streams and hooks, and the buttons to replay or cancel a run. It reads the world your app runs on, whichever `createWorld()` settings you gave it, and follows the app across reloads. Without the package the tab says what to install.
+The `brick dev` dashboard gains a Workflows tab for an app with workflow listeners: the Workflow SDK's observability UI (a vendored copy of `@workflow/web` that ships with the CLI, without its own header, in the dashboard's theme), with every run, its trace of steps and sleeps, its events, streams and hooks, and the buttons to replay or cancel a run. It reads the world your app runs on, whichever `createWorld()` settings you gave it, and follows the app across reloads.
 
 The inspector can cancel runs and resume hooks, so it is a developer's tool: the production dashboard of `brick start` does not serve it, and the dev dashboard passes it only requests made from its own page. It needs `brick dev` with the dashboard on (the default).
 
@@ -300,6 +302,7 @@ The inspector can cancel runs and resume hooks, so it is a developer's tool: the
 
 - The bundle is always written to `<root>/.well-known/workflow/v1`; its location cannot be changed.
 - Stopping the events closes the world for good.
+- `stopAllEvents()` from `@brickkit/core` stops every events hub started in the process, even one made by another copy of the package, and waits for the deliveries that are running. `brick dev` calls it when you press Ctrl-C or the app reloads; call it yourself if you host an app in a process of your own and need the deliveries to finish before it exits.
 - If you delete finished runs from Redis (a retention policy), delivering the same event again starts the workflow again.
 
 ## What is not promised

@@ -21,7 +21,6 @@
     "workflow": "5.2.2"
   },
   "devDependencies": {
-    "@brickkit/workflow-inspector": "workspace:*",
     "@workflow/builders": "5.0.5",
     "@workflow/utils": "5.0.2",
     "oxfmt": "^0.73.0",
