@@ -16,9 +16,13 @@ let stopping = false;
 const stop = () => {
   if (stopping) return;
   stopping = true;
-  void Promise.race([stopAllEvents(), Bun.sleep(3000)]).finally(() =>
-    process.exit(0),
-  );
+  void Promise.race([stopAllEvents(), Bun.sleep(3000)])
+    .catch((error: unknown) =>
+      console.error(
+        `[Brick-TS] Could not stop the events: ${error instanceof Error ? error.message : String(error)}`,
+      ),
+    )
+    .finally(() => process.exit(0));
 };
 process.on("SIGTERM", stop);
 if (process.connected && typeof process.send === "function") {

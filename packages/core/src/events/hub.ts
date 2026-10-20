@@ -34,9 +34,19 @@ const startedHubs = ((globalThis as Record<symbol, unknown>)[
   Symbol.for("brickkit.events.started")
 ] ??= new Set()) as Set<Pick<EventsHub, "stop">>;
 
-/** Stop every events hub started in this process, by any copy of `@brickkit/core`, and wait for their deliveries. */
+/**
+ * Stop every events hub started in this process, by any copy of `@brickkit/core`,
+ * and wait for their deliveries. A hub that fails to stop does not cut the wait
+ * for the others: the first failure is thrown once every hub is done.
+ */
 export async function stopAllEvents(): Promise<void> {
-  await Promise.all([...startedHubs].map((hub) => hub.stop()));
+  const results = await Promise.allSettled(
+    [...startedHubs].map((hub) => hub.stop()),
+  );
+  const failed = results.find(
+    (result): result is PromiseRejectedResult => result.status === "rejected",
+  );
+  if (failed) throw failed.reason;
 }
 
 /**
@@ -69,7 +79,7 @@ export class EventsHub {
   private readonly runtime: WorkflowRuntime | undefined;
   private readonly recorderNames: string[] = [];
   private started = false;
-  private stopping = 0;
+  private stopping: Promise<void> | undefined;
 
   constructor(options: EventsOptions) {
     for (const listener of options.listeners ?? []) {
@@ -225,19 +235,22 @@ export class EventsHub {
   /**
    * Stop delivering, wait for the deliveries that are running, and close the
    * world. A world cannot be started again, so workflow listeners stop for good.
+   * A stop that arrives while another runs waits for that one.
    */
-  async stop(): Promise<void> {
-    this.started = false;
-    this.stopping++;
-    try {
-      await Promise.all(
-        [...this.dispatchers.values()].map((dispatcher) => dispatcher.stop()),
-      );
-      await this.runtime?.close();
-    } finally {
+  stop(): Promise<void> {
+    return (this.stopping ??= this.shutDown().finally(() => {
       // Removed only when done, so a stop-all waits for a stop already running.
-      if (--this.stopping === 0) startedHubs.delete(this);
-    }
+      this.stopping = undefined;
+      startedHubs.delete(this);
+    }));
+  }
+
+  private async shutDown(): Promise<void> {
+    this.started = false;
+    await Promise.all(
+      [...this.dispatchers.values()].map((dispatcher) => dispatcher.stop()),
+    );
+    await this.runtime?.close();
   }
 
   /**

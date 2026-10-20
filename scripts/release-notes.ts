@@ -33,6 +33,8 @@ for (const pkg of ["core", "crud", "cli", "bullmq-world", "redis-world"]) {
     previous ? `${previous}..HEAD` : "HEAD",
     "--",
     `packages/${pkg}`,
+    // The inspector ships inside the CLI.
+    ...(pkg === "cli" ? ["packages/workflow-inspector"] : []),
   )
     .split("\n")
     .filter((line) =>

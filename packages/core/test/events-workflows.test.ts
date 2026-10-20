@@ -316,6 +316,16 @@ describe("workflow listeners", () => {
     expect(calls.close).toBe(1);
   });
 
+  it("closes the world once when two stops overlap", async () => {
+    const { root } = project();
+    const { world, calls } = fakeWorld();
+    const { hub } = setup({ world, root });
+    hub.start();
+    await settle(hub, () => calls.start === 1);
+    await Promise.all([hub.stop(), hub.stop()]);
+    expect(calls.close).toBe(1);
+  });
+
   it("does not start the world in a process that only records", async () => {
     const { root } = project();
     const { world, calls } = fakeWorld();

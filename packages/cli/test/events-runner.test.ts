@@ -305,6 +305,50 @@ describe("signals", () => {
     15000,
   );
 
+  it.skipIf(process.platform === "win32")(
+    "a dev worker exits and says so when its events fail to stop",
+    async () => {
+      const listener = Bun.serve({ port: 0, fetch: () => new Response() });
+      const port = listener.port!;
+      listener.stop(true);
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          new URL("../src/dev-worker.ts", import.meta.url).pathname,
+          fixture("events-dev-failing-stop"),
+          String(port),
+        ],
+        { stdout: "pipe", stderr: "pipe" },
+      );
+      let output = "";
+      let errors = "";
+      const reading = Promise.all([
+        (async () => {
+          for await (const chunk of child.stdout)
+            output += new TextDecoder().decode(chunk);
+        })(),
+        (async () => {
+          for await (const chunk of child.stderr)
+            errors += new TextDecoder().decode(chunk);
+        })(),
+      ]);
+      try {
+        await waitForOutput(() => output, "entry loading");
+        child.kill("SIGTERM");
+        expect(await child.exited).toBe(0);
+        await reading;
+        expect(errors).toContain(
+          "[Brick-TS] Could not stop the events: close failed",
+        );
+      } finally {
+        child.kill("SIGKILL");
+        await child.exited;
+        await reading;
+      }
+    },
+    15000,
+  );
+
   for (const mode of ["drain", "force", "timeout"] as const)
     it.skipIf(process.platform === "win32")(
       `brick dev handles process-group signals (${mode})`,

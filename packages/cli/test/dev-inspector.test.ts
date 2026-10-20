@@ -66,10 +66,18 @@ describe("startInspector", () => {
       ).text();
       expect(page).toContain(`/workflows/assets/`);
 
-      // A name the build lacks, or a folder, is the page's to answer, not a file.
-      for (const path of ["assets/missing.js", "assets/"]) {
+      // Nothing else under assets/ is a file: a name the build lacks, a folder,
+      // a path through a file, a name no file system takes. A plain 404, not the
+      // page (which answers HTML) and not a server error.
+      for (const path of [
+        "assets/missing.js",
+        "assets/",
+        `assets/${styles}/x`,
+        `assets/${"a".repeat(300)}`,
+      ]) {
         const other = await fetch(`${base}/workflows/${path}`, { headers });
         expect(other.status).toBe(404);
+        expect(await other.text()).toBe("Not found");
         expect(other.headers.get("cache-control") ?? "").not.toContain(
           "immutable",
         );

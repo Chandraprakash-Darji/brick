@@ -68,7 +68,8 @@ interface RunDetailViewProps {
   selectedId?: string;
 }
 
-type Tab = "trace" | "streams" | "events";
+const TABS = ["trace", "events", "streams"] as const;
+type Tab = (typeof TABS)[number];
 
 export function RunDetailView({
   runId,
@@ -83,7 +84,9 @@ export function RunDetailView({
   // Empty env object - server actions read from process.env
   const env: EnvMap = useMemo(() => ({}), []);
 
-  const activeTab = (searchParams.get("tab") as Tab) || "trace";
+  // An unknown `?tab=` shows the trace, not an empty body.
+  const activeTab: Tab =
+    TABS.find((tab) => tab === searchParams.get("tab")) ?? "trace";
   const selectedStreamId = searchParams.get("streamId");
 
   // Helper to update URL search params

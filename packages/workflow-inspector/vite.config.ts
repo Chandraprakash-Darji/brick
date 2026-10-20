@@ -4,6 +4,11 @@ import { defineConfig } from "vite";
 import { nodeRequireBanner } from "./vite-plugin-node-require";
 
 export default defineConfig(({ command, isSsrBuild }) => ({
+  // The dashboard serves the page, and so its files, at /workflows (INSPECTOR_PATH
+  // in the CLI). Every URL the build writes, in the page and in the scripts
+  // (preloads, the zstd wasm), then points there and not at the dashboard's own
+  // /assets/.
+  base: "/workflows/",
   build: {
     // A developer's tool for current browsers: no lowering of modern syntax.
     target: "es2022",

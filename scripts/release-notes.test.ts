@@ -100,6 +100,25 @@ test("notes list changes to the world packages", () => {
   expect(output).not.toContain("## @brickkit/core");
 });
 
+test("notes list changes to the inspector under the CLI, which ships it", () => {
+  const { root, git, commit, notes } = fixture();
+  commit("chore(release): v0.8.1", "0.8.1");
+  git("tag", "v0.8.1");
+  mkdirSync(join(root, "packages/workflow-inspector"), { recursive: true });
+  writeFileSync(join(root, "packages/workflow-inspector/index.ts"), "x");
+  git("add", ".");
+  git(
+    "commit",
+    "-m",
+    "fix(workflow-inspector): show the trace for an unknown tab",
+  );
+  const output = notes();
+  expect(output).toContain("## @brickkit/cli");
+  expect(output).toContain("show the trace for an unknown tab");
+  expect(output).not.toContain("## @brickkit/workflow-inspector");
+  expect(output).not.toContain("## @brickkit/core");
+});
+
 test("notes ignore tags on unrelated branches and handle maintenance-only releases", () => {
   const { git, commit, notes } = fixture();
   commit("feat: initial feature", "0.2.4");

@@ -1,4 +1,6 @@
 import { beforeAll, describe, expect, it } from "bun:test";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { SPEC_VERSION_SUPPORTS_SLOT_IDENTITY } from "@workflow/world";
 import { decode } from "cbor-x";
 
@@ -13,7 +15,8 @@ const { createFetchHandler } = (await import(build)) as {
   ): (request: Request) => Promise<Response>;
 };
 
-const base = "http://localhost/inspect";
+// Where the dashboard serves it, and what the build is made for (Vite `base`).
+const base = "http://localhost/workflows";
 
 /** A world that records what the UI asks of it. */
 function stubWorld() {
@@ -60,7 +63,7 @@ describe("createFetchHandler", () => {
   const world = stubWorld();
   let handle: (request: Request) => Promise<Response>;
   beforeAll(() => {
-    handle = createFetchHandler("/inspect", { world });
+    handle = createFetchHandler("/workflows", { world });
   });
 
   it("serves the page under its base path, without a header of its own", async () => {
@@ -68,12 +71,30 @@ describe("createFetchHandler", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
     const html = await response.text();
-    expect(html).toContain("/inspect/assets/");
+    expect(html).toContain("/workflows/assets/");
+    // The dashboard around it has its own /assets/, which has none of these.
+    expect(html).not.toMatch(/["'(]\/assets\//);
     // The dashboard around it has the navigation, the health probe and the theme switch.
     for (const header of ["Connected to", "Health Check", "Workflow Logo"])
       expect(html).not.toContain(header);
     // It takes the theme of the page that frames it, before first paint.
     expect(html).toContain("window.parent.document.documentElement");
+  });
+
+  it("names its files under its own path in the scripts too, and the fonts at the dashboard's", () => {
+    const directory = join(import.meta.dir, "..", "build", "client", "assets");
+    const files = readdirSync(directory);
+    const read = (extension: string) =>
+      files
+        .filter((name) => name.endsWith(extension))
+        .map((name) => readFileSync(join(directory, name), "utf8"))
+        .join("\n");
+    // The manifest, the preloads of lazy chunks and the wasm decoder's URL.
+    expect(read(".js")).not.toMatch(/["'`]\/assets\//);
+    expect(read(".js")).toContain("/workflows/assets/zstd-");
+    // Only the dashboard serves the two fonts, and at its own /assets/.
+    expect(read(".css")).toMatch(/url\(["']?\/assets\/Geist-Variable\.woff2/);
+    expect(read(".css")).not.toContain("/workflows/assets/Geist");
   });
 
   it("reads the world the host gave it", async () => {

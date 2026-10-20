@@ -21,18 +21,28 @@ const INSPECTOR_DIRECTORY = fileURLToPath(
   new URL("../inspector-dist/", import.meta.url),
 );
 
+/** Whether a path is a regular file; any failure to find out (not a directory, name too long) says no. */
+function isFile(path: string): boolean {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
 /**
  * A file of the inspector's browser build. Its names carry a hash of their
- * content, so a browser may keep them for good. `undefined` for anything else,
- * which is the page's to answer.
+ * content, so a browser may keep them for good. Anything else under `assets/`
+ * is a plain 404: the page would answer with HTML. `undefined` for requests
+ * outside `assets/`, which are the page's to answer.
  */
 function browserAsset(request: Request, client: string): Response | undefined {
   if (request.method !== "GET" && request.method !== "HEAD") return undefined;
   const { pathname } = new URL(request.url);
   if (!pathname.startsWith(`${INSPECTOR_PATH}/assets/`)) return undefined;
   const file = resolve(client, pathname.slice(INSPECTOR_PATH.length + 1));
-  if (!file.startsWith(client + sep)) return undefined;
-  if (!statSync(file, { throwIfNoEntry: false })?.isFile()) return undefined;
+  if (!file.startsWith(client + sep) || !isFile(file))
+    return new Response("Not found", { status: 404 });
   return new Response(Bun.file(file), {
     headers: { "cache-control": "public, max-age=31536000, immutable" },
   });
@@ -48,6 +58,7 @@ function browserAsset(request: Request, client: string): Response | undefined {
  * @param app - The loaded app, running in this process.
  * @param directory - The inspector's build; this package's own by default.
  * @returns The inspector, or `undefined` when the app runs no workflows.
+ * @throws When the inspector's build is missing.
  */
 export async function startInspector(
   app: BrickApp,

@@ -1,6 +1,6 @@
 import "react-router";
-// The React Router server build (virtual module). Imported as a namespace so we
-// can reprefix a copy of it for a mounted base path (see `reprefixBuild`).
+// The React Router server build (virtual module). Imported as a namespace so a
+// copy can carry the mount path as its `basename`.
 import * as serverBuild from "virtual:react-router/server-build";
 import {
   type InspectorHost,
@@ -43,58 +43,10 @@ function normalizeBasename(basename: string): string {
 }
 
 /**
- * Return a copy of the server build with every root-absolute asset URL (and
- * `publicPath`) reprefixed by `basename`. The build is produced with Vite base
- * "/", so assets are emitted at `/assets/...`; under a mount prefix both the SSR
- * document and the client-serialized manifest must resolve them at
- * `<basename>/assets/...`. Routing is handled separately via `basename`.
- */
-function reprefixBuild(build: ServerBuild, basename: string): ServerBuild {
-  const pre = <T extends string | undefined>(url: T): T =>
-    typeof url === "string" && url.startsWith("/") && !url.startsWith("//")
-      ? ((basename + url) as T)
-      : url;
-  const preArr = (arr: string[] | undefined) =>
-    Array.isArray(arr) ? arr.map((u) => pre(u)) : arr;
-
-  const { assets } = build;
-  const routes: typeof assets.routes = {};
-  for (const [id, route] of Object.entries(assets.routes)) {
-    if (!route) continue;
-    routes[id] = {
-      ...route,
-      module: pre(route.module),
-      imports: preArr(route.imports),
-      css: preArr(route.css),
-      clientActionModule: pre(route.clientActionModule),
-      clientLoaderModule: pre(route.clientLoaderModule),
-      clientMiddlewareModule: pre(route.clientMiddlewareModule),
-      hydrateFallbackModule: pre(route.hydrateFallbackModule),
-    };
-  }
-
-  return {
-    ...build,
-    basename,
-    publicPath: pre(build.publicPath) || build.publicPath,
-    assets: {
-      ...assets,
-      url: pre(assets.url),
-      entry: {
-        ...assets.entry,
-        module: pre(assets.entry.module),
-        imports: preArr(assets.entry.imports) ?? assets.entry.imports,
-      },
-      routes,
-    },
-  };
-}
-
-/**
  * Build a framework-agnostic Web `Request` -> `Response` handler for the
- * observability UI, suitable for mounting inside another server under an
- * arbitrary base path. Pass `basename` as the mount prefix (e.g. `/_workflow`);
- * `/` (the default) mounts at the root.
+ * observability UI, suitable for mounting inside another server. Pass
+ * `basename` as the mount prefix. The build writes its file URLs under the Vite
+ * `base` (see vite.config.ts), so it must be mounted at that same path.
  *
  * The mount prefix is threaded into the React Router load context so the root
  * route can expose it to the client (RPC/stream fetches need the prefix).
@@ -106,9 +58,10 @@ export function createFetchHandler(
   // Brick change: the host gives the inspector its world.
   setInspectorHost(host);
   const normalized = normalizeBasename(basename);
-  const build = normalized
-    ? reprefixBuild(serverBuild as unknown as ServerBuild, normalized)
-    : (serverBuild as unknown as ServerBuild);
+  const build = {
+    ...serverBuild,
+    basename: normalized || "/",
+  } as unknown as ServerBuild;
   const handler = createReactRouterRequestHandler(build, "production");
   const loadContext: AppLoadContext = { basename: normalized };
   return (request: Request) => handler(request, loadContext);

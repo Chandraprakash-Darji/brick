@@ -16,7 +16,7 @@ import {
   syncSchema,
   type EventDelivery,
 } from "../src";
-import { backoffMs } from "../src/events/dispatcher";
+import { backoffMs, Dispatcher } from "../src/events/dispatcher";
 import { matchesEvent } from "../src/events/hub";
 import { newEventId } from "../src/events/id";
 import { outboxEngine } from "../src/events/outbox";
@@ -600,6 +600,94 @@ describe("delivering events", () => {
     expect(seen).toEqual(["started", "finished"]);
     expect(started.has(ctx.hub)).toBe(false);
     expect(rows(ctx.db)[0].status).toBe("delivered");
+  });
+
+  it("waits for every hub when one of them fails to stop, then reports the failure", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let running = false;
+    const slow = setup(
+      [
+        {
+          name: "mail",
+          on: "item.create",
+          run: async () => {
+            running = true;
+            await gate;
+          },
+        },
+      ],
+      { timer: true, intervalMs: 5 },
+    );
+    await record(slow);
+    for (let wait = 0; wait < 100 && !running; wait++)
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    const broken = setup([{ name: "mail", on: "item.create", run: () => {} }]);
+    broken.hub.start();
+    const failure = new Error("close failed");
+    const fails = spyOn(broken.hub, "stop").mockRejectedValue(failure);
+
+    const others = [...started].filter(
+      (hub) => hub !== slow.hub && hub !== broken.hub,
+    );
+    for (const hub of others) started.delete(hub);
+    let settled = false;
+    const stopping = stopAllEvents().then(
+      () => new Error("stopAllEvents did not fail"),
+      (error: unknown) => error,
+    );
+    void stopping.then(() => (settled = true));
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      // The failing hub is done, the slow one is still delivering.
+      expect(fails).toHaveBeenCalledTimes(1);
+      expect(settled).toBe(false);
+    } finally {
+      release();
+      await stopping;
+      fails.mockRestore();
+      started.delete(broken.hub);
+      for (const hub of others) started.add(hub);
+    }
+    expect(await stopping).toBe(failure);
+    expect(started.has(slow.hub)).toBe(false);
+    expect(rows(slow.db)[0].status).toBe("delivered");
+  });
+
+  it("stops the dispatchers once when stops overlap", async () => {
+    const { hub } = setup([{ name: "mail", on: "item.create", run: () => {} }]);
+    hub.start();
+    const stop = spyOn(Dispatcher.prototype, "stop");
+    try {
+      await Promise.all([hub.stop(), hub.stop()]);
+      expect(stop).toHaveBeenCalledTimes(1);
+    } finally {
+      stop.mockRestore();
+    }
+  });
+
+  it("starts again once its stop is done", async () => {
+    const seen: unknown[] = [];
+    const ctx = setup(
+      [
+        {
+          name: "mail",
+          on: "item.create",
+          run: ({ payload }) => void seen.push(payload),
+        },
+      ],
+      { timer: true, intervalMs: 5 },
+    );
+    ctx.hub.start();
+    await Promise.all([ctx.hub.stop(), ctx.hub.stop()]);
+    expect(started.has(ctx.hub)).toBe(false);
+
+    ctx.hub.start();
+    expect(started.has(ctx.hub)).toBe(true);
+    await record(ctx, "item.create", { id: 1 });
+    for (let wait = 0; wait < 100 && seen.length === 0; wait++)
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(seen).toEqual([{ id: 1 }]);
   });
 });
 
