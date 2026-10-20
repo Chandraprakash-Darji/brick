@@ -282,7 +282,7 @@ export async function approveOrder(event: WorkflowEvent<OrderCreated>) {
 }
 ```
 
-Brick serves the route behind `webhook.url`, `/.well-known/workflow/v1/webhook/<token>`, on its own server, for any app with a workflow listener. A process that only records events (`dispatch: false`) serves it too; it needs the world but does not consume the queue. Any method works. The call resumes the run, wherever it runs, and answers `202`.
+Brick serves the route behind `webhook.url`, `/.well-known/workflow/v1/webhook/<token>`, on its own server, for any app with a workflow listener. A process that only records events (`dispatch: false`) serves it too; it needs the world but does not consume the queue. It accepts `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD` and `OPTIONS`, and answers `405` to any other method. The call resumes the run, wherever it runs, and answers `202`.
 
 The SDK builds the URL from the port the process listens on, which it finds with `@workflow/utils`. Add it to the app (`bun add -d @workflow/utils`): with a strict install the SDK cannot see it otherwise, and the URL points to `localhost:3000`. Behind a proxy or on another host, build the public URL yourself from `webhook.token`.
 

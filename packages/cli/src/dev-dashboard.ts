@@ -268,6 +268,10 @@ export function startDevDashboard(
       pathname === INSPECTOR_PATH ||
       pathname.startsWith(`${INSPECTOR_PATH}/`)
     ) {
+      // Only the dashboard may frame it: framed by another site, a click could
+      // land on Cancel or Replay. The rest of the dashboard may be embedded.
+      response.setHeader("content-security-policy", "frame-ancestors 'self'");
+      response.setHeader("x-frame-options", "SAMEORIGIN");
       void inspector(request, response, url);
       return;
     }

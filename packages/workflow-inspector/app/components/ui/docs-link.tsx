@@ -20,7 +20,7 @@ const DocsLink = React.forwardRef<HTMLAnchorElement, DocsLinkProps>(
 
     return (
       <Link
-        href={fullHref}
+        to={fullHref}
         className={cn(
           "font-medium underline underline-offset-4 transition-colors",
           className,

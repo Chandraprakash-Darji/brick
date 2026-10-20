@@ -513,9 +513,18 @@ describe("startDevDashboard", () => {
 
   describe("workflow inspector", () => {
     async function withInspector<T>(
-      run: (context: { store: DevTelemetryStore; base: string }) => Promise<T>,
+      run: (context: {
+        store: DevTelemetryStore;
+        base: string;
+        /** Lets the stream write its second piece. */
+        release: () => void;
+      }) => Promise<T>,
     ): Promise<T> {
       const token = "secret-token";
+      let release!: () => void;
+      const released = new Promise<void>((resolve) => {
+        release = resolve;
+      });
       const inspector = Bun.serve({
         port: 0,
         async fetch(request) {
@@ -526,7 +535,7 @@ describe("startDevDashboard", () => {
               new ReadableStream({
                 async start(controller) {
                   controller.enqueue(new TextEncoder().encode("one,"));
-                  await Bun.sleep(30);
+                  await released;
                   controller.enqueue(new TextEncoder().encode("two"));
                   controller.close();
                 },
@@ -548,7 +557,7 @@ describe("startDevDashboard", () => {
       const { store, dashboard, base } = await setup();
       store.setInspector({ port: inspector.port!, token });
       try {
-        return await run({ store, base });
+        return await run({ store, base, release });
       } finally {
         dashboard.stop();
         inspector.stop(true);
@@ -588,12 +597,30 @@ describe("startDevDashboard", () => {
       });
     });
 
-    it("streams what the inspector writes without waiting for the end", async () => {
+    it("lets only the dashboard frame it, and leaves the dashboard's own page as it was", async () => {
       await withInspector(async ({ base }) => {
+        for (const path of ["/workflows/", "/workflows/run/abc"]) {
+          const answer = await fetch(`${base}${path}`);
+          expect(answer.headers.get("content-security-policy")).toBe(
+            "frame-ancestors 'self'",
+          );
+          expect(answer.headers.get("x-frame-options")).toBe("SAMEORIGIN");
+        }
+        const page = await fetch(`${base}/`);
+        expect(page.status).toBe(200);
+        expect(page.headers.get("content-security-policy")).toBeNull();
+        expect(page.headers.get("x-frame-options")).toBeNull();
+      });
+    });
+
+    it("streams what the inspector writes without waiting for the end", async () => {
+      await withInspector(async ({ base, release }) => {
         const answer = await fetch(`${base}/workflows/stream`);
         const reader = answer.body!.getReader();
+        // The rest is written only once the first piece came through.
         const first = await reader.read();
         expect(new TextDecoder().decode(first.value)).toBe("one,");
+        release();
         const second = await reader.read();
         expect(new TextDecoder().decode(second.value)).toBe("two");
       });

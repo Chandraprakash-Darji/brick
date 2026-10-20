@@ -1,0 +1,750 @@
+---
+title: "Durable workflows with BrickKit events"
+description: "Record transactional events with the outbox pattern, then run durable workflows that survive restarts using the Workflow SDK."
+date: "2026-10-20"
+category: guide
+---
+
+This guide connects transactional events and durable workflows to database writes in a BrickKit app. When a support ticket is created or updated, BrickKit writes an event to an outbox table in the same database transaction as the row change. A plain listener records an audit log entry idempotently. A durable workflow, run by the Workflow SDK on Redis, monitors the ticket, survives process restarts, retries failed steps, and escalates unresolved tickets after a delay.
+
+You need Bun, a running Redis instance on `localhost:6379`, and familiarity with TypeScript, async functions, and the CRUD basics from [Build a REST API with BrickKit](/blog/build-a-rest-api-with-brick).
+
+## Starting point
+
+The app manages support tickets with a title, a status, and an optional assignee. Start with a minimal project:
+
+```sh
+mkdir support-tickets
+cd support-tickets
+bun init -y
+bun add @brickkit/core @brickkit/crud @brickkit/cli
+```
+
+Create `src/schema.ts` to define the tickets table:
+
+```ts
+import { sqliteTable, text } from "@brickkit/core";
+
+export const tickets = sqliteTable("tickets", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  title: text("title").notNull(),
+  status: text("status").notNull().default("open"),
+  assignee: text("assignee"),
+});
+
+export type TicketRow = {
+  id: string;
+  title: string;
+  status: string;
+  assignee: string | null;
+};
+```
+
+Create `src/db.ts` to open the database connection and sync the tables:
+
+```ts
+import process from "node:process";
+import { defineDatabase, syncSchema } from "@brickkit/core";
+import { tickets } from "./schema";
+
+export const database = defineDatabase({
+  path: process.env.DB_PATH ?? ".data/tickets.sqlite",
+  tables: { tickets },
+});
+
+export const db = database.getDb();
+syncSchema(database.tables, db);
+```
+
+Create `src/app.ts` to expose the tickets resource over HTTP:
+
+```ts
+import { brick, defineService } from "@brickkit/core";
+import { crud } from "@brickkit/crud";
+import { database } from "./db";
+import { tickets } from "./schema";
+
+export const supportService = defineService("support", { database });
+
+export const ticket = supportService
+  .resource({ name: "ticket", table: tickets, id: tickets.id })
+  .use(
+    crud({
+      access: "public",
+      fields: {
+        id: { read: true, filter: ["eq"] },
+        title: { read: true, create: true, update: true },
+        status: { read: true, create: true, update: true, filter: ["eq"] },
+        assignee: { read: true, create: true, update: true },
+      },
+    }),
+  );
+
+export default brick({
+  services: [supportService],
+});
+```
+
+This base app serves CRUD routes under `/api/ticket`. Creating or updating a ticket has no effect outside the database yet.
+
+## Why an outbox
+
+Triggering a notification or background job directly inside a route handler creates the dual-write problem. If the HTTP request or notification fails after the database transaction commits, the event is lost. If the notification succeeds but the transaction rolls back, external systems act on data that never existed.
+
+BrickKit solves this with the transactional outbox pattern. When you configure events, every generated CRUD write (`create`, `update`, `delete`) inserts an event row into a dedicated table in the same transaction as the row change. Either both commit or neither does.
+
+Once the transaction commits, BrickKit's background dispatcher claims pending events and invokes the registered listeners. A process crash or network split can happen after a listener runs but before the dispatcher records completion, so delivery is at least once and listeners must be idempotent. BrickKit supplies a stable `deliveryId` in the format `<event id>:<listener>`, which handlers can use as a deduplication key or primary key.
+
+## Add the outbox and audit log
+
+Update `src/schema.ts` to add an outbox table and an audit log table:
+
+```ts
+import { outboxTable, sqliteTable, text } from "@brickkit/core";
+
+export const tickets = sqliteTable("tickets", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  title: text("title").notNull(),
+  status: text("status").notNull().default("open"),
+  assignee: text("assignee"),
+});
+
+export const auditLog = sqliteTable("audit_log", {
+  id: text("id").primaryKey(),
+  event: text("event").notNull(),
+  ticketId: text("ticket_id").notNull(),
+  detail: text("detail").notNull(),
+});
+
+export const outbox = outboxTable("sqlite");
+
+export type TicketRow = {
+  id: string;
+  title: string;
+  status: string;
+  assignee: string | null;
+};
+```
+
+Update `src/db.ts` to register `auditLog` and `outbox` with `defineDatabase`:
+
+```ts
+import process from "node:process";
+import { defineDatabase, syncSchema } from "@brickkit/core";
+import { auditLog, outbox, tickets } from "./schema";
+
+export const database = defineDatabase({
+  path: process.env.DB_PATH ?? ".data/tickets.sqlite",
+  tables: { tickets, auditLog, outbox },
+});
+
+export const db = database.getDb();
+syncSchema(database.tables, db);
+```
+
+When `outboxTable("sqlite")` is in the database definition, BrickKit's CRUD engine emits these events:
+
+| Event           | Payload                 |
+| --------------- | ----------------------- |
+| `ticket.create` | `{ id, row }`           |
+| `ticket.update` | `{ id, before, after }` |
+| `ticket.delete` | `{ id, row }`           |
+
+Only fields with `read: true` appear in event payloads, so sensitive columns are never written to the outbox.
+
+## Define a handler listener
+
+A plain handler runs an async function when an event arrives. Handlers suit short tasks such as inserting an audit record.
+
+In `src/app.ts`, define an `audit` listener with `defineListener`:
+
+```ts
+import {
+  brick,
+  defineListener,
+  defineService,
+  type EventDelivery,
+} from "@brickkit/core";
+import { crud } from "@brickkit/crud";
+import { database, db } from "./db";
+import { auditLog, tickets, type TicketRow } from "./schema";
+
+type TicketCreated = { id: string; row: TicketRow };
+type TicketUpdated = { id: string; before: TicketRow; after: TicketRow };
+
+export const supportService = defineService("support", { database });
+
+export const ticket = supportService
+  .resource({ name: "ticket", table: tickets, id: tickets.id })
+  .use(
+    crud({
+      access: "public",
+      fields: {
+        id: { read: true, filter: ["eq"] },
+        title: { read: true, create: true, update: true },
+        status: { read: true, create: true, update: true, filter: ["eq"] },
+        assignee: { read: true, create: true, update: true },
+      },
+    }),
+  );
+
+export const auditEntry = supportService
+  .resource({ name: "auditEntry", table: auditLog, id: auditLog.id })
+  .use(
+    crud({
+      access: "public",
+      operations: { create: false, update: false, delete: false },
+      fields: {
+        id: { read: true },
+        event: { read: true, filter: ["eq"] },
+        ticketId: { read: true, filter: ["eq"] },
+        detail: { read: true },
+      },
+    }),
+  );
+
+export const audit = defineListener({
+  name: "audit",
+  on: "ticket.*",
+  run: async (delivery: EventDelivery<any>) => {
+    const payload = delivery.payload;
+    const detail =
+      delivery.name === "ticket.create"
+        ? `created "${(payload as TicketCreated).row.title}"`
+        : delivery.name === "ticket.update"
+          ? `status: ${(payload as TicketUpdated).before.status} -> ${(payload as TicketUpdated).after.status}`
+          : "deleted";
+
+    await db
+      .insert(auditLog)
+      .values({
+        id: delivery.deliveryId,
+        event: delivery.name,
+        ticketId: payload.id,
+        detail,
+      })
+      .onConflictDoNothing();
+  },
+});
+```
+
+Using `delivery.deliveryId` as the table's primary key together with `.onConflictDoNothing()` makes the listener idempotent. If the dispatcher retries the delivery after a crash, the duplicate insert is ignored. Exposing `auditEntry` as a read-only CRUD resource lets you query the audit trail over HTTP.
+
+## Why durable workflows
+
+Plain handlers fall short when a task spans time or needs several coordinated steps. Take an escalation rule: if a ticket is still open after ten seconds (or two hours in production), alert an on-call engineer and assign the ticket to tier-2 support.
+
+Standard timers such as `setTimeout` fail in production:
+
+- If the server restarts, crashes, or redeploys during the wait, the in-memory timer is gone and the escalation never happens.
+- If a downstream notification service fails temporarily, a plain handler retries from the beginning and repeats steps that may have already succeeded.
+
+The [Workflow SDK](https://useworkflow.dev) provides durable execution. A workflow pauses without holding a process thread, its state is checkpointed to Redis, and failed steps retry independently with backoff.
+
+Workflows must be deterministic. The Workflow SDK re-executes workflow functions during replay to reconstruct state, so the workflow body cannot do anything non-deterministic: no direct database queries, network calls, or random number generation. Side effects and external calls belong in dedicated step functions marked `"use step"`.
+
+## Set up the world and dependencies
+
+Workflows need a storage backend and an execution queue, together called a world. Install the Workflow SDK runtime, the Redis world, and the development tools:
+
+```sh
+bun add workflow @brickkit/redis-world
+bun add -d @workflow/builders @brickkit/workflow-inspector
+```
+
+Each package has its own job:
+
+- `workflow`: the Workflow SDK runtime, with primitives such as `sleep()` and `RetryableError`.
+- `@brickkit/redis-world`: a Redis-backed world that manages durable state, queue recovery, and step scheduling.
+- `@workflow/builders`: SWC transforms that detect `"use workflow"` and `"use step"` directives and generate the workflow bundles.
+- `@brickkit/workflow-inspector`: an observability view for workflow runs, embedded in `brick dev`.
+
+If you already use BullMQ, you can use `@brickkit/bullmq-world` in place of `@brickkit/redis-world`. Both implement the same world interface, so switching is a change to one import.
+
+## Define the workflow steps
+
+Create `src/notifier.ts` to simulate an on-call paging service that fails transiently:
+
+```ts
+export interface Notifier {
+  alert(ticketId: string, title: string): Promise<string>;
+  failNext(count: number): void;
+}
+
+export function createNotifier(options: { failures?: number } = {}): Notifier {
+  let failures = options.failures ?? 0;
+  return {
+    failNext(count) {
+      failures = count;
+    },
+    async alert(ticketId, title) {
+      if (failures > 0) {
+        failures--;
+        throw new Error("On-call alert service temporarily unavailable (503)");
+      }
+      return `alert_${ticketId.slice(0, 8)}`;
+    },
+  };
+}
+
+export const notifier = createNotifier({ failures: 1 });
+```
+
+`failures: 1` makes the first alert attempt fail, so you can watch the Workflow SDK retry the step without failing the workflow.
+
+Create `src/workflows/steps.ts` for the workflow steps:
+
+```ts
+import { eq } from "@brickkit/core";
+import { RetryableError } from "workflow";
+import { db } from "../db";
+import { notifier } from "../notifier";
+import { tickets, type TicketRow } from "../schema";
+
+export async function checkTicketStatus(
+  ticketId: string,
+): Promise<TicketRow | undefined> {
+  "use step";
+  const rows = await db.select().from(tickets).where(eq(tickets.id, ticketId));
+  return rows[0];
+}
+
+export async function alertOnCall(
+  ticketId: string,
+  title: string,
+): Promise<string> {
+  "use step";
+  try {
+    return await notifier.alert(ticketId, title);
+  } catch (error) {
+    throw new RetryableError((error as Error).message, { retryAfter: "1s" });
+  }
+}
+
+export async function assignTier2(ticketId: string): Promise<void> {
+  "use step";
+  await db
+    .update(tickets)
+    .set({ status: "in_progress", assignee: "tier-2-support" })
+    .where(eq(tickets.id, ticketId));
+}
+```
+
+The `"use step"` directive tells the builder that each function is an isolated step. If `alertOnCall` fails, throwing `RetryableError` tells the workflow runtime to reschedule that step after one second.
+
+## Write the durable workflow
+
+Create `src/workflows/escalate-ticket.ts`:
+
+```ts
+import type { WorkflowEvent } from "@brickkit/core";
+import { sleep } from "workflow";
+import type { TicketRow } from "../schema";
+import { alertOnCall, assignTier2, checkTicketStatus } from "./steps";
+
+type TicketCreated = { id: string; row: TicketRow };
+
+export async function escalateTicket(event: WorkflowEvent<TicketCreated>) {
+  "use workflow";
+
+  // Pause execution durably. In production this would be "2h" or "24h";
+  // we use 10s here so the flow can be observed in real time.
+  await sleep("10s");
+
+  const ticket = await checkTicketStatus(event.payload.id);
+  if (!ticket || ticket.status !== "open") {
+    return {
+      escalated: false,
+      reason: ticket ? `Ticket is ${ticket.status}` : "Ticket not found",
+    };
+  }
+
+  // If the alert service fails, the Workflow SDK retries this step
+  const alertId = await alertOnCall(ticket.id, ticket.title);
+
+  // Reassign the ticket to tier 2 support
+  await assignTier2(ticket.id);
+
+  return { escalated: true, alertId };
+}
+```
+
+The `"use workflow"` directive marks the entry point. When `sleep("10s")` runs, the runtime checkpoints the execution state in Redis and schedules a timer. The workflow process releases its resources during the wait. When the timer expires, the runtime restores the workflow and resumes from the next line.
+
+## Wire the app to the world
+
+Update `src/app.ts` to attach the Redis world and both listeners:
+
+```ts
+import process from "node:process";
+import {
+  brick,
+  defineListener,
+  defineService,
+  type EventDelivery,
+} from "@brickkit/core";
+import { crud } from "@brickkit/crud";
+import { createWorld } from "@brickkit/redis-world";
+import { database, db } from "./db";
+import { auditLog, tickets, type TicketRow } from "./schema";
+import { escalateTicket } from "./workflows/escalate-ticket";
+
+type TicketCreated = { id: string; row: TicketRow };
+type TicketUpdated = { id: string; before: TicketRow; after: TicketRow };
+
+export const supportService = defineService("support", { database });
+
+export const ticket = supportService
+  .resource({ name: "ticket", table: tickets, id: tickets.id })
+  .use(
+    crud({
+      access: "public",
+      fields: {
+        id: { read: true, filter: ["eq"] },
+        title: { read: true, create: true, update: true },
+        status: { read: true, create: true, update: true, filter: ["eq"] },
+        assignee: { read: true, create: true, update: true },
+      },
+    }),
+  );
+
+export const auditEntry = supportService
+  .resource({ name: "auditEntry", table: auditLog, id: auditLog.id })
+  .use(
+    crud({
+      access: "public",
+      operations: { create: false, update: false, delete: false },
+      fields: {
+        id: { read: true },
+        event: { read: true, filter: ["eq"] },
+        ticketId: { read: true, filter: ["eq"] },
+        detail: { read: true },
+      },
+    }),
+  );
+
+export const audit = defineListener({
+  name: "audit",
+  on: "ticket.*",
+  run: async (delivery: EventDelivery<any>) => {
+    const payload = delivery.payload;
+    const detail =
+      delivery.name === "ticket.create"
+        ? `created "${(payload as TicketCreated).row.title}"`
+        : delivery.name === "ticket.update"
+          ? `status: ${(payload as TicketUpdated).before.status} -> ${(payload as TicketUpdated).after.status}`
+          : "deleted";
+
+    await db
+      .insert(auditLog)
+      .values({
+        id: delivery.deliveryId,
+        event: delivery.name,
+        ticketId: payload.id,
+        detail,
+      })
+      .onConflictDoNothing();
+  },
+});
+
+export const escalation = defineListener<TicketCreated>({
+  name: "escalation",
+  on: "ticket.create",
+  workflow: escalateTicket,
+});
+
+export default brick({
+  services: [supportService],
+  events: {
+    // Reads REDIS_URL, or falls back to redis://localhost:6379.
+    world: createWorld(),
+    listeners: [audit, escalation],
+  },
+});
+```
+
+A listener passes its workflow function under the `workflow` key instead of `run`. When an event occurs, BrickKit starts the workflow run on the Redis world and names the run after the delivery ID. Once the run has started, the workflow runtime manages retries.
+
+## Start the development server
+
+Start `brick dev`. The API listens on port 4000 and the dev dashboard on 9400:
+
+```sh
+bunx brick dev src/app.ts
+```
+
+Before loading the app, `brick dev` scans for files with `"use workflow"` and `"use step"`, builds the standalone workflow bundle into `.well-known/workflow/v1`, and registers the steps:
+
+```text
+📊 Dev dashboard:       http://127.0.0.1:9400
+
+👀 Watching for changes in: /path/to/support-tickets/src
+[Brick-TS] Built workflows in 1478ms
+
+🧱 Brick-TS Development Server
+   Registered Services: 1
+   • support (13 actions)
+     -> POST   /api/ticket/query
+     -> GET    /api/ticket/:id
+     -> POST   /api/ticket
+     -> PATCH  /api/ticket/:id
+     -> DELETE /api/ticket/:id
+     -> POST   /api/ticket/find-one
+     -> POST   /api/ticket/count
+     -> POST   /api/ticket/exists
+     -> POST   /api/auditEntry/query
+     -> GET    /api/auditEntry/:id
+     -> POST   /api/auditEntry/find-one
+     -> POST   /api/auditEntry/count
+     -> POST   /api/auditEntry/exists
+
+⚡ API Gateway running on: http://localhost:4000
+🩺 Health check:        http://localhost:4000/_health
+🗺️ Architecture graph:  http://localhost:4000/_brick/services
+
+[Brick-TS] The dashboard shows no requests: pass { telemetry: true } to brick() in your app entry.
+```
+
+Later edits to routes reload quickly. The workflow bundle rebuilds only when a file with a workflow directive, or something it imports, changes.
+
+## Trigger the workflow
+
+Create a ticket with `curl`:
+
+```sh
+curl -i -X POST http://localhost:4000/api/ticket \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Database connection pool exhausted"}'
+```
+
+The server returns the inserted row:
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json;charset=utf-8
+
+{"id":"ad92324d-a800-4bcc-a563-8a94a1429820","title":"Database connection pool exhausted","status":"open","assignee":null}
+```
+
+The ticket and event IDs in this guide are examples. Yours will differ, so use the `id` from your own responses wherever one appears.
+
+The audit listener commits its row right away:
+
+```sh
+curl -s -X POST http://localhost:4000/api/auditEntry/query \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+Output:
+
+```json
+{
+  "items": [
+    {
+      "id": "evt_01M5C39VEA4PW5RQDFSQB3E4RF:audit",
+      "event": "ticket.create",
+      "ticketId": "ad92324d-a800-4bcc-a563-8a94a1429820",
+      "detail": "created \"Database connection pool exhausted\""
+    }
+  ],
+  "limit": 20,
+  "offset": 0
+}
+```
+
+The audit listener finishes in milliseconds, while the `escalation` workflow starts its ten-second sleep. Wait eleven seconds, then fetch the ticket:
+
+```sh
+curl -s http://localhost:4000/api/ticket/ad92324d-a800-4bcc-a563-8a94a1429820
+```
+
+Output:
+
+```json
+{
+  "id": "ad92324d-a800-4bcc-a563-8a94a1429820",
+  "title": "Database connection pool exhausted",
+  "status": "in_progress",
+  "assignee": "tier-2-support"
+}
+```
+
+The workflow woke up, saw that the ticket was still open, retried the failing `alertOnCall` step, and moved the ticket to `in_progress` with `assignee: tier-2-support`.
+
+## Inspect runs in the dev dashboard
+
+Open the dev dashboard at `http://127.0.0.1:9400` and click **Workflows**. With `@brickkit/workflow-inspector` installed, this tab shows the Workflow SDK's own observability UI for the world your app runs on, inside the dashboard and in its theme.
+
+- **Runs:** every run in the world, with its workflow name (`escalateTicket`), run ID, status, and start and completion times. The run ID is derived from the delivery ID, which is how BrickKit starts one run per delivery.
+- **Run detail:** click a run to see a trace. It draws the workflow as one span with a bar for the `sleep` and a bar for each step that ran (`checkTicketStatus`, `alertOnCall`, `assignTier2`). The Events and Streams tabs show the run's event log and output.
+- **Controls:** a run can be replayed or cancelled from its page.
+
+The inspector can cancel runs and resume hooks, so it is a development tool: `brick start` does not serve it, and the dev dashboard only accepts changes made from its own page.
+
+## Survive a process restart
+
+To check durability, start a workflow and kill the server process while the workflow is sleeping.
+
+Create a second ticket:
+
+```sh
+curl -s -X POST http://localhost:4000/api/ticket \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Restart resilience test"}'
+```
+
+Output:
+
+```json
+{
+  "id": "1c5f0432-21c9-4fc9-965a-40d6356db0cc",
+  "title": "Restart resilience test",
+  "status": "open",
+  "assignee": null
+}
+```
+
+Stop the running `brick dev` process right away with `Ctrl-C` (or kill the PID). While the process is down, the ticket stays open in the SQLite database on disk:
+
+```text
+^C
+```
+
+Restart the development server:
+
+```sh
+bunx brick dev src/app.ts
+```
+
+When the server starts, `@brickkit/redis-world` connects to Redis, recovers active timers and leases, and resumes waiting workflows. Wait ten seconds after the restart and fetch the ticket:
+
+```sh
+curl -s http://localhost:4000/api/ticket/1c5f0432-21c9-4fc9-965a-40d6356db0cc
+```
+
+Output:
+
+```json
+{
+  "id": "1c5f0432-21c9-4fc9-965a-40d6356db0cc",
+  "title": "Restart resilience test",
+  "status": "in_progress",
+  "assignee": "tier-2-support"
+}
+```
+
+The server was down for part of the sleep, but the timer stayed intact in Redis. After the restart, the workflow resumed and completed the escalation.
+
+## Skip escalation when a ticket is resolved early
+
+If an agent resolves a ticket before the escalation delay expires, the workflow should exit without notifying tier-2 support.
+
+Create a third ticket:
+
+```sh
+curl -s -X POST http://localhost:4000/api/ticket \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Printer paper jam"}'
+```
+
+Output:
+
+```json
+{
+  "id": "64dbeb5c-a453-4250-ab83-1a3f2a1b1378",
+  "title": "Printer paper jam",
+  "status": "open",
+  "assignee": null
+}
+```
+
+Right away, update the ticket status to `resolved`:
+
+```sh
+curl -s -X PATCH http://localhost:4000/api/ticket/64dbeb5c-a453-4250-ab83-1a3f2a1b1378 \
+  -H "Content-Type: application/json" \
+  -d '{"data": {"status": "resolved"}}'
+```
+
+Output:
+
+```json
+{
+  "id": "64dbeb5c-a453-4250-ab83-1a3f2a1b1378",
+  "title": "Printer paper jam",
+  "status": "resolved",
+  "assignee": null
+}
+```
+
+Filter the audit log by this ticket to see both the create and the update event:
+
+```sh
+curl -s -X POST http://localhost:4000/api/auditEntry/query \
+  -H "Content-Type: application/json" \
+  -d '{"where": {"field": "ticketId", "op": "eq", "value": "64dbeb5c-a453-4250-ab83-1a3f2a1b1378"}}'
+```
+
+Output:
+
+```json
+{
+  "items": [
+    {
+      "id": "evt_01M5C3BJA3VAHYNHV0K49DRERF:audit",
+      "event": "ticket.create",
+      "ticketId": "64dbeb5c-a453-4250-ab83-1a3f2a1b1378",
+      "detail": "created \"Printer paper jam\""
+    },
+    {
+      "id": "evt_01M5C3BNYMTPWWGANGECGQXNNF:audit",
+      "event": "ticket.update",
+      "ticketId": "64dbeb5c-a453-4250-ab83-1a3f2a1b1378",
+      "detail": "status: open -> resolved"
+    }
+  ],
+  "limit": 20,
+  "offset": 0
+}
+```
+
+Wait eleven seconds for the sleep to finish, then fetch the ticket:
+
+```sh
+curl -s http://localhost:4000/api/ticket/64dbeb5c-a453-4250-ab83-1a3f2a1b1378
+```
+
+Output:
+
+```json
+{
+  "id": "64dbeb5c-a453-4250-ab83-1a3f2a1b1378",
+  "title": "Printer paper jam",
+  "status": "resolved",
+  "assignee": null
+}
+```
+
+The status is still `resolved` and `assignee` is still null. The `checkTicketStatus` step read the updated database state, and the workflow returned `{ escalated: false }` without triggering an alert.
+
+## Limits to design around
+
+BrickKit events and durable workflows give you reliability guarantees, but they have explicit limits:
+
+- **Order:** events are not strictly ordered across different listeners or across retried deliveries of the same listener. Do not assume listener B runs after listener A.
+- **Delivery is at least once:** if a worker halts during execution, an event may be delivered again. Plain handlers must always use `delivery.deliveryId` to enforce idempotency.
+- **Workflow deduplication:** a workflow starts once per delivery. But if you configure a Redis run retention policy that purges completed run histories, delivering that same event ID again after the retention window starts a fresh workflow run.
+- **Bundle location:** workflow bundles are always written to `.well-known/workflow/v1` in the project root. You cannot change this path.
+- **Shutdown lifecycle:** stopping events during process termination closes the world connection permanently for that process.
+
+## Where to go next
+
+- [Events](/docs/events) covers PostgreSQL outbox migrations, custom `emitEvent` calls, and multi-process workers.
+- [Resources and CRUD](/docs/resources) covers resource options, field filtering, and access rules.
+- [Build a REST API with BrickKit](/blog/build-a-rest-api-with-brick) covers service definitions and CRUD resources.
+- [Full-stack with the BrickKit typed client](/blog/full-stack-with-the-brick-typed-client) connects a frontend to your backend with end-to-end type safety.

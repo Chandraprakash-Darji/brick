@@ -36,6 +36,8 @@ The entry must default-export a `BrickApp` without calling `.listen()`. Keep sta
 The development worker tracks imported local files, including dependencies outside the entry directory. It coalesces edits and restarts with a fresh module graph. Each restart regenerates types and HTTP route metadata before starting the backend. Contract writes are atomic, unchanged content preserves the file timestamp, and generated files cannot trigger regeneration loops.
 
 If generation fails, the error appears in the terminal and the previous contract remains intact. The backend worker exits; the supervisor waits for edits and retries. The frontend command waits for the first successful generation and remains running through later backend restarts. Stopping `brick dev` stops its backend and frontend children.
+When you stop `brick dev` with Ctrl-C or it reloads, the backend first finishes its in-flight event deliveries (up to 3 seconds); a second Ctrl-C exits at once.
+On Windows, stopping or reloading the backend forcibly terminates it, so in-flight event deliveries may be interrupted.
 
 Omit `--frontend` if another process starts the frontend. For an embedded Vite app such as Pages, use the [Vite contract plugin](/docs/typed-client#generate-the-contract-automatically), which generates during development and production builds.
 

@@ -101,17 +101,23 @@ async function createServer(
   return app;
 }
 
-function finishDeliveriesOnSignal(events: EventsHub) {
+/**
+ * Finish the deliveries in flight at SIGINT or SIGTERM, then exit. A second
+ * signal exits at once, for a delivery that never finishes.
+ */
+export function finishDeliveriesOnSignal(
+  events: Pick<EventsHub, "stop">,
+  signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"],
+) {
   let stopping = false;
-  const stop = () => {
-    if (stopping) return;
+  const stop = (signal: NodeJS.Signals) => {
+    if (stopping) return process.exit(signal === "SIGINT" ? 130 : 143);
     stopping = true;
     void events.stop().finally(() => process.exit(0));
   };
   // `on`, not `once`: the workflow bundle loads signal-exit, which re-raises the
   // signal itself when it finds no listener left, and `once` removes ours first.
-  process.on("SIGINT", stop);
-  process.on("SIGTERM", stop);
+  for (const signal of signals) process.on(signal, stop);
 }
 
 export async function startProdServer(options: DevServerOptions = {}) {
@@ -249,11 +255,19 @@ export async function startWorker(options: { entry: string }) {
   return app;
 }
 
+/**
+ * The events hub of the app `startDevApplication` loaded, set before it starts
+ * the server, so the dev worker can finish deliveries when stopped mid-startup.
+ */
+export let devEvents: Pick<EventsHub, "stop"> | undefined;
+
 export async function startDevApplication(options: DevServerOptions) {
   if (options.entry) await registerWorkflowTransform();
   const module = options.entry
     ? await import(resolve(options.entry))
     : undefined;
+  // An event emitted while the entry loads already started the hub.
+  if (isBrickApp(module?.default)) devEvents = module.default.events;
   if (isBrickApp(module?.default) && options.prefix !== undefined) {
     console.warn(
       `[Brick-TS] Ignoring prefix ${options.prefix}: exported BrickApp prefix ${module.default.definition.prefix} takes precedence.`,
@@ -610,9 +624,15 @@ export async function startDevServer(options: DevServerOptions = {}) {
     process.off("SIGTERM", onSignal);
     process.off("exit", stop);
   };
-  const onSignal = () => {
+  const onSignal = (signal: NodeJS.Signals) => {
+    if (stopped) {
+      child.kill("SIGKILL");
+      process.exit(signal === "SIGINT" ? 130 : 143);
+    }
     stop();
-    process.exit(0);
+    process.on("SIGINT", onSignal);
+    process.on("SIGTERM", onSignal);
+    void child.exited.then(() => process.exit(0));
   };
   process.on("SIGINT", onSignal);
   process.on("SIGTERM", onSignal);

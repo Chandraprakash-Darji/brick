@@ -59,6 +59,7 @@ export class EventsHub {
   private readonly runtime: WorkflowRuntime | undefined;
   private readonly recorderNames: string[] = [];
   private started = false;
+  private stopping = 0;
 
   constructor(options: EventsOptions) {
     for (const listener of options.listeners ?? []) {
@@ -199,10 +200,12 @@ export class EventsHub {
   /**
    * Start delivering recorded events from this process, and start the world that
    * runs workflow listeners. Does nothing if this process only records events
-   * (`dispatch: false`) or already started.
+   * (`dispatch: false`), already started, or a stop is still waiting.
    */
   start(): void {
-    if (this.dispatchOptions === false || this.started) return;
+    // A process being stopped exits when the stop is done, and would drop what
+    // this start claims. A startup that finishes late, or a commit, lands here.
+    if (this.dispatchOptions === false || this.started || this.stopping) return;
     this.started = true;
     this.runtime?.warmUp();
     for (const dispatcher of this.dispatchers.values()) dispatcher.start();
@@ -214,10 +217,15 @@ export class EventsHub {
    */
   async stop(): Promise<void> {
     this.started = false;
-    await Promise.all(
-      [...this.dispatchers.values()].map((dispatcher) => dispatcher.stop()),
-    );
-    await this.runtime?.close();
+    this.stopping++;
+    try {
+      await Promise.all(
+        [...this.dispatchers.values()].map((dispatcher) => dispatcher.stop()),
+      );
+      await this.runtime?.close();
+    } finally {
+      this.stopping--;
+    }
   }
 
   /**

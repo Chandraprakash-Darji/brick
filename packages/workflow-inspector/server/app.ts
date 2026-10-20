@@ -60,6 +60,7 @@ function reprefixBuild(build: ServerBuild, basename: string): ServerBuild {
   const { assets } = build;
   const routes: typeof assets.routes = {};
   for (const [id, route] of Object.entries(assets.routes)) {
+    if (!route) continue;
     routes[id] = {
       ...route,
       module: pre(route.module),

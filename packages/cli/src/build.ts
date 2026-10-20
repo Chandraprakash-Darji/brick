@@ -58,8 +58,9 @@ if (import.meta.main) {
   app.events?.start();
   console.log("Brick compiled server listening on http://localhost:" + app.server.port);
   let stopping = false;
-  const stop = async () => {
-    if (stopping) return;
+  const stop = async (signal: string) => {
+    // A second signal exits at once, for a delivery that never finishes.
+    if (stopping) process.exit(signal === "SIGINT" ? 130 : 143);
     stopping = true;
     await app.events?.stop();
     await app.stop();

@@ -171,14 +171,17 @@ async function settle(hub: EventsHub, done: () => boolean | Promise<boolean>) {
   }
 }
 
+let quiet: ReturnType<typeof spyOn>;
+
 beforeEach(() => {
   globalThis.__fakeWorkflow = { starts: [], worlds: [] };
-  spyOn(console, "error").mockImplementation(() => {});
+  quiet = spyOn(console, "error").mockImplementation(() => {});
 });
 
 afterEach(async () => {
   await Promise.all(hubs.splice(0).map((hub) => hub.stop()));
   for (const root of roots.splice(0)) rmSync(root, { recursive: true });
+  quiet.mockRestore();
 });
 
 describe("workflow listeners", () => {

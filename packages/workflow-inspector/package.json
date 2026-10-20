@@ -35,7 +35,7 @@
   },
   "scripts": {
     "build": "react-router build",
-    "typecheck": "tsc --noEmit -p tsconfig.test.json",
+    "typecheck": "react-router typegen && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
     "clean": "rm -rf build .react-router"
   },
   "dependencies": {

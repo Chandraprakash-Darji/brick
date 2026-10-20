@@ -1,6 +1,6 @@
 import { getGlobalRegistry } from "@brickkit/core";
 import { startInspector } from "./dev-inspector";
-import { startDevApplication } from "./runner";
+import { devEvents, startDevApplication } from "./runner";
 import { parsePort } from "./port-utils";
 import {
   installWorkerTelemetry,
@@ -8,6 +8,25 @@ import {
   sendToSupervisor,
 } from "./dev-telemetry";
 import type { WorkerErrorPhase } from "./dev-telemetry";
+
+let stopping = false;
+// A reload stops this process. Deliveries cut off would stay claimed, and wait
+// a minute (claimTimeoutMs) before the next process takes them.
+const stop = () => {
+  if (stopping) return;
+  stopping = true;
+  void Promise.race([devEvents?.stop(), Bun.sleep(3000)]).finally(() =>
+    process.exit(0),
+  );
+};
+process.on("SIGTERM", stop);
+if (process.connected && typeof process.send === "function") {
+  // The terminal also signals the supervisor, which sends SIGTERM and waits for us.
+  process.on("SIGINT", () => {});
+  process.on("disconnect", stop);
+} else {
+  process.on("SIGINT", stop);
+}
 
 // argv[6] is "1" when the supervisor serves the dashboard and needs spans.
 const telemetry = process.argv[6] === "1";

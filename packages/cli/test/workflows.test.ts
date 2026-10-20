@@ -3,6 +3,7 @@ import {
   cpSync,
   existsSync,
   mkdtempSync,
+  mkdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -49,6 +50,9 @@ describe("workflow build and transform", () => {
   });
 
   it("gives a workflow the id the bundle knows, and registers its steps", async () => {
+    // This installs the transform for the whole `bun test` process, once: Bun
+    // keeps a plugin until the process ends. The test above needs it not yet
+    // installed, so no other test file may install it; run a child process instead.
     expect(await registerWorkflowTransform(root)).toBe(true);
     const { hello } = await import("./fixtures/workflow-app/src/hello");
 
@@ -57,6 +61,28 @@ describe("workflow build and transform", () => {
       Symbol.for("@workflow/core//registeredSteps")
     ] as Map<string, unknown>;
     expect(steps.has("step//./src/hello//greet")).toBe(true);
+  });
+
+  it("loads every other file as Bun would: require() works, and JSX in .js", async () => {
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        join(import.meta.dir, "fixtures", "workflow-transform", "check.ts"),
+      ],
+      { stdout: "pipe", stderr: "inherit" },
+    );
+    const output = await new Response(child.stdout).text();
+    expect(await child.exited).toBe(0);
+    const jsx = (tag: string) => ({ tag, props: null, children: ["hi"] });
+    expect(JSON.parse(output)).toEqual({
+      installed: true,
+      ts: { plain: 1 },
+      cts: { plain: 1 },
+      jsx: jsx("p"),
+      // A file with a directive goes through SWC, which leaves its JSX.
+      step: jsx("b"),
+      workflowId: WORKFLOW_ID,
+    });
   });
 
   it("leaves the generated bundle alone when it is loaded", async () => {
@@ -85,6 +111,8 @@ describe("apps with workflows", () => {
       const server = readFileSync(join(outdir, "server.js"), "utf8");
       expect(server).toContain(WORKFLOW_ID);
       expect(server).toContain("events?.start()");
+      // A second Ctrl-C exits even while a delivery hangs.
+      expect(server).toContain('process.exit(signal === "SIGINT" ? 130 : 143)');
       // The workflow plugin must not keep the AOT plugin from the entry: without
       // the precompiled handlers every route answers 500.
       expect(server).toContain("Compiled.register(");
@@ -99,6 +127,13 @@ describe("reusing the bundle", () => {
   // A copy, so the edits below do not touch the fixture the other tests use.
   const copy = join(import.meta.dir, "fixtures", "workflow-app-reuse");
   const flow = join(copy, ".well-known", "workflow", "v1", "flow.mjs");
+  const steps = join(
+    copy,
+    ".well-known",
+    "workflow",
+    "v1",
+    "__step_registrations.mjs",
+  );
   const manifest = () =>
     JSON.parse(
       readFileSync(
@@ -106,8 +141,12 @@ describe("reusing the bundle", () => {
         "utf8",
       ),
     );
-  const write = (file: string, text: string) =>
+  const write = (file: string, text: string) => {
     writeFileSync(join(copy, "src", file), text);
+    // A file written in the millisecond a build starts counts as changed while
+    // it ran, and the build keeps no state to reuse.
+    Bun.sleepSync(2);
+  };
   const reuse = () => buildWorkflows({ root: copy, reuse: true });
 
   beforeAll(() => {
@@ -116,10 +155,15 @@ describe("reusing the bundle", () => {
       recursive: true,
       filter: (path) => !path.includes(".well-known"),
     });
+    mkdirSync(join(copy, "node_modules", "@tsconfig", "test"), {
+      recursive: true,
+    });
     write("shared.ts", 'export const suffix = "!";\n');
+    write("data.json", '{ "greeting": "hi" }\n');
     write(
       "hello.ts",
       `import { suffix } from "./shared";
+import data from "./data.json";
 export async function hello(name: string) {
   "use workflow";
   return (await greet(name)) + suffix;
@@ -127,7 +171,7 @@ export async function hello(name: string) {
 
 async function greet(name: string) {
   "use step";
-  return \`hi \${name}\`;
+  return \`\${data.greeting} \${name}\`;
 }
 `,
     );
@@ -153,6 +197,13 @@ async function greet(name: string) {
     expect(await reuse()).toBe(false);
   });
 
+  it("rebuilds when a JSON file a step imports changes", async () => {
+    write("data.json", '{ "greeting": "hey" }\n');
+    expect(await reuse()).toBe(true);
+    expect(readFileSync(steps, "utf8")).toContain('"hey"');
+    expect(await reuse()).toBe(false);
+  });
+
   it("rebuilds when a file that was left out comes to hold a step", async () => {
     write(
       "app.ts",
@@ -172,5 +223,112 @@ async function greet(name: string) {
     expect(await reuse()).toBe(true);
     expect(existsSync(flow)).toBe(true);
     expect(await buildWorkflows({ root: copy })).toBe(true);
+  });
+
+  const config = (file: string, text: string) => {
+    writeFileSync(join(copy, file), text);
+    Bun.sleepSync(2);
+  };
+
+  it("tracks a two-level JSONC tsconfig extends chain", async () => {
+    config("tsconfig.json", '{ "extends": "./base.json" }');
+    config("base.json", '{ // intermediate\n "extends": "./parent", }');
+    config("parent.json", '{ "compilerOptions": { "strict": true, }, }');
+    try {
+      await buildWorkflows({ root: copy });
+      expect(await reuse()).toBe(false);
+      config("parent.json", '{ "compilerOptions": { "strict": false } }');
+      expect(await reuse()).toBe(true);
+      expect(await reuse()).toBe(false);
+      config("base.json", '{ "extends": "./parent", "compilerOptions": {} }');
+      expect(await reuse()).toBe(true);
+    } finally {
+      for (const file of ["tsconfig.json", "base.json", "parent.json"])
+        rmSync(join(copy, file), { force: true });
+    }
+  });
+
+  it("tracks package configs and every entry in an extends array", async () => {
+    config(
+      "node_modules/@tsconfig/test/package.json",
+      '{ "name": "@tsconfig/test" }',
+    );
+    config(
+      "node_modules/@tsconfig/test/tsconfig.json",
+      '{ "compilerOptions": { "strict": true } }',
+    );
+    config("base.json", "{}");
+    config("tsconfig.json", '{ "extends": ["@tsconfig/test", "./base.json"] }');
+    try {
+      await buildWorkflows({ root: copy });
+      expect(await reuse()).toBe(false);
+      config(
+        "node_modules/@tsconfig/test/tsconfig.json",
+        '{ "compilerOptions": { "strict": false } }',
+      );
+      expect(await reuse()).toBe(true);
+      expect(await reuse()).toBe(false);
+      config("base.json", '{ "compilerOptions": { "strict": true } }');
+      expect(await reuse()).toBe(true);
+    } finally {
+      for (const file of ["tsconfig.json", "base.json", "node_modules"])
+        rmSync(join(copy, file), { recursive: true, force: true });
+    }
+  });
+
+  const configPackage = (name: string, manifest: object, tsconfig?: string) => {
+    mkdirSync(join(copy, "node_modules", name), { recursive: true });
+    config(`node_modules/${name}/package.json`, JSON.stringify(manifest));
+    config(`node_modules/${name}/index.js`, "module.exports = {};\n");
+    if (tsconfig) config(`node_modules/${name}/tsconfig.json`, tsconfig);
+  };
+
+  for (const [kind, manifest] of [
+    ["main", { main: "index.js" }],
+    ["exports", { exports: { "./package.json": "./package.json" } }],
+  ] as const)
+    it(`tracks a package's tsconfig.json, despite its ${kind}`, async () => {
+      configPackage(`brick-${kind}`, manifest, '{ "compilerOptions": {} }');
+      config("tsconfig.json", `{ "extends": "brick-${kind}" }`);
+      try {
+        await buildWorkflows({ root: copy });
+        expect(await reuse()).toBe(false);
+        config(
+          `node_modules/brick-${kind}/tsconfig.json`,
+          '{ "compilerOptions": { "strict": true } }',
+        );
+        expect(await reuse()).toBe(true);
+      } finally {
+        for (const file of ["tsconfig.json", "node_modules"])
+          rmSync(join(copy, file), { recursive: true, force: true });
+      }
+    });
+
+  it("ignores a package parent that has no tsconfig.json", async () => {
+    configPackage("brick-js", { main: "index.js" });
+    config("tsconfig.json", '{ "extends": "brick-js" }');
+    try {
+      await buildWorkflows({ root: copy });
+      expect(await reuse()).toBe(false);
+      config("node_modules/brick-js/index.js", "module.exports = 1;\n");
+      expect(await reuse()).toBe(false);
+    } finally {
+      for (const file of ["tsconfig.json", "node_modules"])
+        rmSync(join(copy, file), { recursive: true, force: true });
+    }
+  });
+
+  it("tolerates a missing tsconfig parent and notices when it appears", async () => {
+    config("tsconfig.json", '{ "extends": "./missing.json" }');
+    try {
+      await buildWorkflows({ root: copy });
+      expect(await reuse()).toBe(false);
+      config("missing.json", "{}");
+      expect(await reuse()).toBe(true);
+      expect(await reuse()).toBe(false);
+    } finally {
+      for (const file of ["tsconfig.json", "missing.json"])
+        rmSync(join(copy, file), { force: true });
+    }
   });
 });

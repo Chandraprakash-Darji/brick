@@ -57,7 +57,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       headers["X-Stream-Cursor"] = result.cursor;
     }
 
-    return new Response(result.buffer, { headers });
+    return new Response(new Uint8Array(result.buffer), { headers });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return Response.json({ message, layer: "server" }, { status: 500 });

@@ -475,6 +475,44 @@ describe("delivering events", () => {
     expect(seen).toEqual(["item.create"]);
   });
 
+  it("ignores a start while a stop waits for a delivery", async () => {
+    const seen: unknown[] = [];
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const ctx = setup(
+      [
+        {
+          name: "mail",
+          on: "item.create",
+          run: async ({ payload }) => {
+            seen.push(payload);
+            if (seen.length === 1) await gate;
+          },
+        },
+      ],
+      { timer: true, intervalMs: 5 },
+    );
+    ctx.hub.start();
+    await record(ctx, "item.create", { id: 1 });
+    for (let wait = 0; wait < 100 && seen.length === 0; wait++)
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const stopping = ctx.hub.stop();
+    // The startup of a process that is being stopped still starts the hub, and a
+    // commit does too. Neither may claim what the process will drop on exit.
+    ctx.hub.start();
+    await record(ctx, "item.create", { id: 2 });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    release();
+    await stopping;
+
+    expect(seen).toEqual([{ id: 1 }]);
+    expect(rows(ctx.db).map((row: any) => row.status)).toEqual([
+      "delivered",
+      "pending",
+    ]);
+  });
+
   it("only records when this process does not dispatch", async () => {
     const seen: string[] = [];
     const ctx = setup([

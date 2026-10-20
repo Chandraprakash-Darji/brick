@@ -390,6 +390,8 @@ directory are watched too. Changes coalesce before restart; every restart evalua
 the app in a fresh process and generates the contract before starting the server.
 Generation failures preserve the previous contract and print the error. The next
 valid edit retries. Stopping `brick dev` stops its backend and frontend children.
+When you stop `brick dev` with Ctrl-C or it reloads, the backend first finishes its in-flight event deliveries (up to 3 seconds); a second Ctrl-C exits at once.
+On Windows, stopping or reloading the backend forcibly terminates it, so in-flight event deliveries may be interrupted.
 `--client` also works without `--frontend` if another process owns the frontend.
 
 For an embedded Vite app such as Pages, keep using `brickClient` in `vite.config.ts`.

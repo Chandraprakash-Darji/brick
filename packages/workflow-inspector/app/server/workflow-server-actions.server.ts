@@ -140,10 +140,15 @@ function getPageInfo(result: unknown): AnalyticsPageInfo | undefined {
 
 /**
  * The world the host process runs on. Brick change: upstream builds one from the
- * environment; the host passes its own to `createInspectorHandler`.
+ * environment; the host passes its own to `createInspectorHandler`. Like
+ * upstream it also makes it the SDK's world, which `resumeHook` reads: an app
+ * that only records events may never have set it, and the SDK would then build
+ * one from the environment.
  */
 async function getWorldFromEnv(_userEnvMap?: EnvMap): Promise<World> {
-  return getInspectorHost().world;
+  const { world } = getInspectorHost();
+  workflowRunHelpers.setWorld(world);
+  return world;
 }
 
 function createServerActionError<T>(

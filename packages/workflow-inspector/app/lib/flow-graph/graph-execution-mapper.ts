@@ -3,6 +3,7 @@
  */
 
 import type { Event, Step, WorkflowRun } from "@workflow/web-shared";
+import { readSerializedError } from "./serialized-error";
 import type {
   EdgeTraversal,
   GraphNode,
@@ -69,6 +70,7 @@ function createStepExecution(
         new Date(attemptStep.startedAt).getTime()
       : undefined;
 
+  const error = readSerializedError(attemptStep.error);
   return {
     nodeId: graphNodeId,
     stepId: attemptStep.stepId,
@@ -83,10 +85,10 @@ function createStepExecution(
     duration,
     input: attemptStep.input,
     output: attemptStep.output,
-    error: attemptStep.error
+    error: error
       ? {
-          message: attemptStep.error.message,
-          stack: attemptStep.error.stack || "",
+          message: error.message,
+          stack: error.stack || "",
         }
       : undefined,
   };
@@ -807,7 +809,7 @@ function processAgentAndToolNodes(
       duration,
       input: step.input,
       output: step.output,
-      error: step.error,
+      error: readSerializedError(step.error),
     };
 
     // Append execution to existing or create new

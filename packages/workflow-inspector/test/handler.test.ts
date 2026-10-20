@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { SPEC_VERSION_SUPPORTS_SLOT_IDENTITY } from "@workflow/world";
 import { decode } from "cbor-x";
 import { createInspectorHandler } from "../handler.js";
 
@@ -10,11 +11,19 @@ const base = "http://localhost/inspect";
 /** A world that records what the UI asks of it. */
 function stubWorld() {
   const world = {
+    specVersion: SPEC_VERSION_SUPPORTS_SLOT_IDENTITY,
     listed: 0,
+    tokens: [] as string[],
     runs: {
       list: async () => {
         world.listed++;
         return { data: [], cursor: null, hasMore: false };
+      },
+    },
+    hooks: {
+      getByToken: async (token: string) => {
+        world.tokens.push(token);
+        throw new Error("No such hook");
       },
     },
   };
@@ -80,17 +89,54 @@ describe("createInspectorHandler", () => {
   });
 
   it("exposes nothing from the environment", async () => {
-    process.env.WORKFLOW_POSTGRES_URL = "postgres://secret@example/db";
+    // What upstream read to pick and describe its world.
+    const env: Record<string, string> = {
+      WORKFLOW_TARGET_WORLD: "@workflow/world-postgres",
+      WORKFLOW_VERCEL_AUTH_TOKEN: "secret-vercel-token",
+      WORKFLOW_REDIS_URI: "redis://secret-redis@example:6379",
+      WORKFLOW_MANIFEST_PATH: "/secret/manifest.json",
+      WORKFLOW_LOCAL_DATA_DIR: "/secret/data-dir",
+    };
+    const saved = Object.fromEntries(
+      Object.keys(env).map((name) => [name, process.env[name]]),
+    );
+    Object.assign(process.env, env);
     try {
       const answer = await rpc(handle, "getPublicServerConfig");
-      expect(answer).toMatchObject({
+      expect(answer as unknown).toEqual({
+        backendDisplayName: "Brick",
         backendId: "brick",
         publicEnv: {},
         sensitiveEnvKeys: [],
       });
-      expect(JSON.stringify(answer)).not.toContain("secret");
+      const text = JSON.stringify(answer);
+      for (const value of Object.values(env)) expect(text).not.toContain(value);
     } finally {
-      delete process.env.WORKFLOW_POSTGRES_URL;
+      for (const [name, value] of Object.entries(saved))
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+    }
+  });
+
+  it("gives the SDK the host's world, which Resume hook reads", async () => {
+    // An app that only records events may never set the SDK's world, so it may
+    // hold another one, or none.
+    const cache = Symbol.for("@workflow/world//cache");
+    const global = globalThis as Record<symbol, unknown>;
+    const other = stubWorld();
+    const before = global[cache];
+    global[cache] = other;
+    try {
+      const answer = await rpc(handle, "resumeHook", {
+        token: "hook_token",
+        payload: { approved: true },
+      });
+      expect(answer.success).toBe(false);
+      expect(world.tokens).toEqual(["hook_token"]);
+      expect(other.tokens).toEqual([]);
+      expect(global[cache]).toBe(world);
+    } finally {
+      global[cache] = before;
     }
   });
 

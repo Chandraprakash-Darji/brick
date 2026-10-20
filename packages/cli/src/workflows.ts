@@ -1,7 +1,7 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { resolveWorkflowPaths, type BrickApp } from "@brickkit/core";
 
@@ -31,16 +31,18 @@ const DIRECTIVE = /["']use (?:step|workflow)["']/;
 
 /**
  * Every project source file. Not the generated bundle: it holds the directives as
- * text inside the SDK's own code and is already built.
+ * text inside the SDK's own code and is already built. Not `.cjs` and `.cts`
+ * either: Bun drops `module.exports` from a file a plugin loads.
  */
 const TRANSFORMED = new RegExp(
-  String.raw`^(?!.*(?:node_modules|\.well-known/workflow/)).*\.[cm]?[jt]sx?$`,
+  String.raw`^(?!.*(?:node_modules|\.well-known/workflow/)).*\.(?:m?[jt]s|[jt]sx)$`,
 );
 
+/** Bun's own loader for each extension: JSX is allowed in `.js` but not in `.mjs`. */
 function loaderFor(path: string): "ts" | "tsx" | "js" | "jsx" {
   if (path.endsWith(".tsx")) return "tsx";
-  if (path.endsWith(".jsx")) return "jsx";
-  return /\.[cm]?ts$/.test(path) ? "ts" : "js";
+  if (/\.m?ts$/.test(path)) return "ts";
+  return path.endsWith(".mjs") ? "js" : "jsx";
 }
 
 async function loadBuilders(
@@ -77,19 +79,23 @@ export async function workflowTransformPlugin(
   return {
     name: "brick:workflows",
     setup(build) {
-      build.onLoad({ filter: TRANSFORMED }, async (args) => {
-        const source = await readFile(args.path, "utf8");
+      // Not async: Bun treats a module whose load returns a promise as async, and
+      // `require()` refuses it. Only a file with a directive waits for SWC.
+      build.onLoad({ filter: TRANSFORMED }, (args) => {
+        const source = readFileSync(args.path, "utf8");
         if (!DIRECTIVE.test(source))
           return { contents: source, loader: loaderFor(args.path) };
-        const { code } = await builders.applySwcTransform(
-          relative(projectRoot, args.path).replaceAll("\\", "/"),
-          source,
-          "step",
-          args.path,
-          projectRoot,
-          projectRoot,
-        );
-        return { contents: code, loader: "js" };
+        // SWC strips the types but leaves JSX as it is.
+        return builders
+          .applySwcTransform(
+            relative(projectRoot, args.path).replaceAll("\\", "/"),
+            source,
+            "step",
+            args.path,
+            projectRoot,
+            projectRoot,
+          )
+          .then(({ code }) => ({ contents: code, loader: "jsx" as const }));
       });
     },
   };
@@ -126,9 +132,12 @@ export async function registerWorkflowTransform(
 /** The state of the last build, kept beside the bundle it describes. */
 const STATE_FILE = ".brick-build.json";
 /** Bump it when what the state records changes, so an older state is not trusted. */
-const STATE_VERSION = 1;
-/** esbuild starts each module of a bundle with a `// <path>` comment. */
-const MODULE_COMMENT = /^\/\/ (.+\.[cm]?[jt]sx?)$/gm;
+const STATE_VERSION = 2;
+/**
+ * esbuild starts each module of a bundle with a `// <path>` comment, whatever
+ * the file (`data.json` too). The other comments it keeps name no file.
+ */
+const MODULE_COMMENT = /^\/\/ (.+)$/gm;
 const LOCKFILES = [
   "bun.lock",
   "bun.lockb",
@@ -169,6 +178,57 @@ function lockfileOf(root: string): string | undefined {
       if (existsSync(join(dir, name))) return join(dir, name);
     if (dirname(dir) === dir) return undefined;
   }
+}
+
+async function tsconfigInputs(path: string | undefined): Promise<string[]> {
+  const files = new Set<string>();
+  async function visit(file: string) {
+    if (files.has(file)) return;
+    files.add(file);
+    let config: unknown;
+    try {
+      config = Bun.JSONC.parse(await readFile(file, "utf8"));
+    } catch {
+      return;
+    }
+    if (!config || typeof config !== "object" || !("extends" in config)) return;
+    const parents = Array.isArray(config.extends)
+      ? config.extends
+      : [config.extends];
+    const require = createRequire(file);
+    for (const parent of parents) {
+      if (typeof parent !== "string") continue;
+      // esbuild's order, which builds the bundle: a path as written, then with
+      // .json; for a package, its tsconfig.json before `${parent}.json`, never `main`.
+      const isPath =
+        isAbsolute(parent) ||
+        parent.startsWith("./") ||
+        parent.startsWith("../");
+      const candidates = isPath
+        ? [parent, `${parent}.json`]
+        : [`${parent}/tsconfig.json`, `${parent}.json`, parent];
+      let found: string | undefined;
+      for (const specifier of candidates) {
+        try {
+          found = require.resolve(specifier);
+        } catch {
+          continue;
+        }
+        if (found.endsWith(".json")) break;
+        found = undefined;
+      }
+      // esbuild still reads the tsconfig.json of a package whose `exports` hides it.
+      found ??= isPath
+        ? undefined
+        : require.resolve
+            .paths(parent)
+            ?.map((dir) => join(dir, parent, "tsconfig.json"))
+            .find(existsSync);
+      if (found) await visit(found);
+    }
+  }
+  if (path) await visit(path);
+  return [...files];
 }
 
 /**
@@ -312,10 +372,20 @@ export async function buildWorkflows(
     join(dir, "manifest.json"),
     join(dir, "webhook.mjs"),
   ];
+  const configs = await tsconfigInputs(await builder.findTsConfigPath());
   const key = JSON.stringify([
     STATE_VERSION,
     loaded.path,
-    process.env.NODE_ENV ?? "",
+    // Resolve again on reload so a formerly missing parent also invalidates reuse.
+    await stamps(configs),
+    // The builder reads these too, and writes a different bundle for each.
+    ...[
+      "NODE_ENV",
+      "WORKFLOW_DISCOVER_NODE_MODULES",
+      "WORKFLOW_SOURCEMAP",
+      "WORKFLOW_EMIT_SOURCEMAPS_FOR_DEBUGGING",
+      "WORKFLOW_PUBLIC_MANIFEST",
+    ].map((name) => process.env[name] ?? ""),
   ]);
   const sources = await builder.getInputFiles();
   if (
@@ -336,11 +406,7 @@ export async function buildWorkflows(
       root,
       dir,
       bundles,
-      [
-        join(root, "package.json"),
-        lockfileOf(root),
-        await builder.findTsConfigPath(),
-      ],
+      [join(root, "package.json"), lockfileOf(root), ...configs],
       startedAt,
     );
   } catch {
