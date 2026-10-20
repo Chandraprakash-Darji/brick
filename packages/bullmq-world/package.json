@@ -1,7 +1,8 @@
 {
   "name": "@brickkit/bullmq-world",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "Redis and BullMQ world for the Workflow SDK: durable runs, steps, hooks and streams on Redis",
+  "homepage": "https://brickkit.dev",
   "keywords": [
     "bullmq",
     "durable-functions",

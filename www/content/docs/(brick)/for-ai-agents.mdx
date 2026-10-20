@@ -14,13 +14,13 @@ Give your coding agent the documentation index, then let it fetch the pages need
 To request markdown at the regular page URL:
 
 ```bash
-curl -H 'Accept: text/markdown' https://brick.rega.run/docs/quickstart
+curl -H 'Accept: text/markdown' https://www.brickkit.dev/docs/quickstart
 ```
 
 Start an agent task with this instruction:
 
 ```text
-Read https://brick.rega.run/llms.txt. Fetch the relevant markdown pages before
+Read https://www.brickkit.dev/llms.txt. Fetch the relevant markdown pages before
 changing this Brick project. Check package.json for the installed Brick version
 and follow the existing service definitions and verification scripts.
 ```
@@ -53,7 +53,7 @@ Copy this into your project's `AGENTS.md`, or adapt it for your agent's instruct
 ```md
 ## Brick
 
-- Read https://brick.rega.run/llms.txt and fetch relevant markdown pages.
+- Read https://www.brickkit.dev/llms.txt and fetch relevant markdown pages.
 - Check the installed @brickkit package versions before using an API.
 - Follow existing defineService, action, resource, and tool definitions.
 - Define input and output schemas with t from @brickkit/core.

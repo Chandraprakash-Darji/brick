@@ -58,6 +58,10 @@ function RootComponent() {
     <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
+        <link
+          rel="canonical"
+          href={new URL(pathname.replace(/\/+$/, "") || "/", site.url).href}
+        />
       </head>
       <body className="flex min-h-screen flex-col bg-background text-foreground antialiased">
         <RootProvider>
