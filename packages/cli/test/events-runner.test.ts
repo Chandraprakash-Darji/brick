@@ -267,6 +267,44 @@ describe("signals", () => {
     15000,
   );
 
+  it.skipIf(process.platform === "win32")(
+    "a dev worker drains a delivery that its entry started while loading",
+    async () => {
+      const listener = Bun.serve({ port: 0, fetch: () => new Response() });
+      const port = listener.port!;
+      listener.stop(true);
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          new URL("../src/dev-worker.ts", import.meta.url).pathname,
+          fixture("events-dev-loading"),
+          String(port),
+        ],
+        { stdout: "pipe", stderr: "inherit" },
+      );
+      let output = "";
+      const reading = (async () => {
+        for await (const chunk of child.stdout)
+          output += new TextDecoder().decode(chunk);
+      })();
+      try {
+        await waitForOutput(() => output, "delivery started");
+        const sent = performance.now();
+        child.kill("SIGTERM");
+        expect(await child.exited).toBe(0);
+        expect(performance.now() - sent).toBeLessThan(3000);
+        await reading;
+        expect(output).toContain("delivery finished");
+        expect(output).not.toContain("API Gateway");
+      } finally {
+        child.kill("SIGKILL");
+        await child.exited;
+        await reading;
+      }
+    },
+    15000,
+  );
+
   for (const mode of ["drain", "force", "timeout"] as const)
     it.skipIf(process.platform === "win32")(
       `brick dev handles process-group signals (${mode})`,

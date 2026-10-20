@@ -11,7 +11,12 @@ export {
 } from "./outbox";
 export { runInTransaction } from "./transaction";
 export { newEventId } from "./id";
-export { EventsHub, matchesEvent, type EventsDefinition } from "./hub";
+export {
+  EventsHub,
+  matchesEvent,
+  stopAllEvents,
+  type EventsDefinition,
+} from "./hub";
 export { resolveWorkflowPaths } from "./workflows";
 export {
   Dispatcher,

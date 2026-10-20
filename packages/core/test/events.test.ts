@@ -12,6 +12,7 @@ import {
   isOutboxTable,
   outboxTable,
   runInTransaction,
+  stopAllEvents,
   syncSchema,
   type EventDelivery,
 } from "../src";
@@ -532,6 +533,73 @@ describe("delivering events", () => {
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(rows(ctx.db)[0].status).toBe("pending");
     expect(seen).toEqual([]);
+  });
+
+  // Shared by name, so the CLI's copy of the package sees the app's hubs.
+  const started = (globalThis as Record<symbol, unknown>)[
+    Symbol.for("brickkit.events.started")
+  ] as Set<EventsHub>;
+
+  it("keeps the hubs that are started, in a set every copy of the package shares", async () => {
+    const { hub } = setup([{ name: "mail", on: "item.create", run: () => {} }]);
+    expect(started.has(hub)).toBe(false);
+    hub.start();
+    expect(started.has(hub)).toBe(true);
+    await hub.stop();
+    expect(started.has(hub)).toBe(false);
+    hub.start();
+    expect(started.has(hub)).toBe(true);
+
+    const recordOnly = new EventsHub({
+      listeners: [
+        defineListener({ name: "mail", on: "item.create", run: () => {} }),
+      ],
+      dispatch: false,
+    });
+    hubs.push(recordOnly);
+    recordOnly.start();
+    expect(started.has(recordOnly)).toBe(false);
+  });
+
+  it("stops every started hub once its deliveries finish", async () => {
+    const seen: string[] = [];
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const ctx = setup(
+      [
+        {
+          name: "mail",
+          on: "item.create",
+          run: async () => {
+            seen.push("started");
+            await gate;
+            seen.push("finished");
+          },
+        },
+      ],
+      { timer: true, intervalMs: 5 },
+    );
+    // The commit starts the hub, as an event emitted while an entry loads does.
+    await record(ctx);
+    for (let wait = 0; wait < 100 && seen.length === 0; wait++)
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // Hubs that other test files left started are not this test's to stop.
+    const others = [...started].filter((hub) => hub !== ctx.hub);
+    for (const hub of others) started.delete(hub);
+    let stopped = false;
+    const stopping = stopAllEvents().then(() => (stopped = true));
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(stopped).toBe(false);
+    } finally {
+      release();
+      await stopping;
+      for (const hub of others) started.add(hub);
+    }
+    expect(seen).toEqual(["started", "finished"]);
+    expect(started.has(ctx.hub)).toBe(false);
+    expect(rows(ctx.db)[0].status).toBe("delivered");
   });
 });
 

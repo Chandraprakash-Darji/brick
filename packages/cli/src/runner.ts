@@ -255,19 +255,11 @@ export async function startWorker(options: { entry: string }) {
   return app;
 }
 
-/**
- * The events hub of the app `startDevApplication` loaded, set before it starts
- * the server, so the dev worker can finish deliveries when stopped mid-startup.
- */
-export let devEvents: Pick<EventsHub, "stop"> | undefined;
-
 export async function startDevApplication(options: DevServerOptions) {
   if (options.entry) await registerWorkflowTransform();
   const module = options.entry
     ? await import(resolve(options.entry))
     : undefined;
-  // An event emitted while the entry loads already started the hub.
-  if (isBrickApp(module?.default)) devEvents = module.default.events;
   if (isBrickApp(module?.default) && options.prefix !== undefined) {
     console.warn(
       `[Brick-TS] Ignoring prefix ${options.prefix}: exported BrickApp prefix ${module.default.definition.prefix} takes precedence.`,

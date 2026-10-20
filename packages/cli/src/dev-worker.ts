@@ -1,6 +1,6 @@
-import { getGlobalRegistry } from "@brickkit/core";
+import { getGlobalRegistry, stopAllEvents } from "@brickkit/core";
 import { startInspector } from "./dev-inspector";
-import { devEvents, startDevApplication } from "./runner";
+import { startDevApplication } from "./runner";
 import { parsePort } from "./port-utils";
 import {
   installWorkerTelemetry,
@@ -11,11 +11,12 @@ import type { WorkerErrorPhase } from "./dev-telemetry";
 
 let stopping = false;
 // A reload stops this process. Deliveries cut off would stay claimed, and wait
-// a minute (claimTimeoutMs) before the next process takes them.
+// a minute (claimTimeoutMs) before the next process takes them. Stop every
+// started hub: an event emitted while the entry still loads starts one.
 const stop = () => {
   if (stopping) return;
   stopping = true;
-  void Promise.race([devEvents?.stop(), Bun.sleep(3000)]).finally(() =>
+  void Promise.race([stopAllEvents(), Bun.sleep(3000)]).finally(() =>
     process.exit(0),
   );
 };

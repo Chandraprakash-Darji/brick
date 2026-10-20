@@ -85,6 +85,7 @@ export {
   runInTransaction,
   resolveWorkflowPaths,
   EventsHub,
+  stopAllEvents,
   Dispatcher,
   type CrudEventPayload,
   type DispatchOptions,

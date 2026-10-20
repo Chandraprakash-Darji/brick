@@ -29,6 +29,16 @@ export function matchesEvent(pattern: string, name: string): boolean {
 /** The recorder of each service database, so `emitEvent(ctx, ...)` can find it from `ctx.db`. */
 export const recorders = new WeakMap<object, ServiceEvents>();
 
+// Shared by name: the CLI that stops the hubs may hold another copy of this package.
+const startedHubs = ((globalThis as Record<symbol, unknown>)[
+  Symbol.for("brickkit.events.started")
+] ??= new Set()) as Set<Pick<EventsHub, "stop">>;
+
+/** Stop every events hub started in this process, by any copy of `@brickkit/core`, and wait for their deliveries. */
+export async function stopAllEvents(): Promise<void> {
+  await Promise.all([...startedHubs].map((hub) => hub.stop()));
+}
+
 /**
  * What an app's `events` option describes, as plain data. It goes in the app
  * definition, which is sent to the dev dashboard, so it holds no functions.
@@ -207,6 +217,7 @@ export class EventsHub {
     // this start claims. A startup that finishes late, or a commit, lands here.
     if (this.dispatchOptions === false || this.started || this.stopping) return;
     this.started = true;
+    startedHubs.add(this);
     this.runtime?.warmUp();
     for (const dispatcher of this.dispatchers.values()) dispatcher.start();
   }
@@ -224,7 +235,8 @@ export class EventsHub {
       );
       await this.runtime?.close();
     } finally {
-      this.stopping--;
+      // Removed only when done, so a stop-all waits for a stop already running.
+      if (--this.stopping === 0) startedHubs.delete(this);
     }
   }
 
