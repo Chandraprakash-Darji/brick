@@ -99,6 +99,31 @@ Reads emit nothing.
 
 A write that fails records no event, and an event whose write was rolled back is never delivered. A resource can opt out with `crud({ events: false })`.
 
+## Events from your own code
+
+`emitEvent` records an event of your own from an action, a tool or a hook. Listeners get it as they get a CRUD event, with the payload you give:
+
+```ts
+import { emitEvent } from "@brickkit/core";
+
+service.action({
+  name: "refund",
+  input: t.Object({ id: t.String() }),
+  execute: async ({ ctx, input }) => {
+    await ctx.db
+      .update(orders)
+      .set({ status: "refunded" })
+      .where(eq(orders.id, input.id));
+    await emitEvent(ctx, "order.refunded", { id: input.id });
+    return { ok: true };
+  },
+});
+```
+
+By default the event is committed in a transaction of its own, after your writes. To commit it with them, pass the `tx` of a transaction you have open: `emitEvent(ctx, name, payload, { tx })`. It is then delivered at the dispatcher's next poll, because Brick does not see your commit. `source` says what emitted it, and listeners see it.
+
+`ctx.db` must be the service's own database, not a transaction, and the app needs `events`. Otherwise `emitEvent` throws. It records nothing when no listener wants the event.
+
 ## Listeners
 
 `defineListener` takes a unique `name`, the event names it listens for in `on`, and either `run`, a handler, or `workflow`, a [workflow](#workflows). A trailing `*` matches a prefix, so `user.*` listens for every user event and `*` for everything.
@@ -156,6 +181,17 @@ A process that restarts delivers what was waiting when it stopped.
   processes write.
 </Callout>
 
+### Serving and delivering apart
+
+Run the API with `events: { dispatch: false }`, so it records events and delivers none, and deliver them from `brick worker`:
+
+```sh
+brick start src/app.ts      # serves HTTP, records events
+brick worker src/app.ts     # delivers events, serves nothing
+```
+
+`brick worker` loads the same app file and delivers from this process only. Workflow listeners run in it too: the world starts, and the steps and replays of every run in the world execute here. It stops delivering on `SIGINT` and `SIGTERM`, after the deliveries that are running finish. It fails to start for an app without `events`, or one with `dispatch: false`.
+
 ## Workflows
 
 A listener can start a durable workflow instead of running a handler. The workflow is written for the [Workflow SDK](https://useworkflow.dev): a function marked `"use workflow"` that calls steps marked `"use step"`. The SDK retries a failing step, keeps the run's state in Redis, and resumes a run after a restart or a crash.
@@ -204,7 +240,7 @@ export default brick({
 });
 ```
 
-`brick dev` and `brick start` do the rest. Before the app loads they make the `"use workflow"` and `"use step"` files load as workflows and steps, and before events start they build the workflow bundle into `.well-known/workflow/v1` (add it to `.gitignore`). The world starts with the app's events and closes when they stop.
+`brick dev` and `brick start` do the rest. Before the app loads they make the `"use workflow"` and `"use step"` files load as workflows and steps, and before events start they build the workflow bundle into `.well-known/workflow/v1` (add it to `.gitignore`). On a reload of `brick dev` the bundle is kept when nothing it was built from has changed (the workflow and step files, what they import, `package.json`, the lockfile, `tsconfig.json`), so editing a route costs nothing; adding or removing a source file, or giving one a `"use workflow"` or `"use step"` directive, rebuilds it. `brick start` and `brick build` always build. The world starts with the app's events and closes when they stop.
 
 The workflow receives the event: `id`, `name`, `payload`, `occurredAt`, `traceId`, `source`, `listener` and `deliveryId`. It has no `attempt`.
 
@@ -229,10 +265,40 @@ await buildWorkflows({ root: projectRoot });
 const { app } = await import("./app");
 ```
 
+### Webhooks
+
+A workflow can wait for an HTTP request with `createWebhook`:
+
+```ts
+import { createWebhook } from "workflow";
+
+export async function approveOrder(event: WorkflowEvent<OrderCreated>) {
+  "use workflow";
+  const webhook = createWebhook();
+  await sendApprovalLink(event.payload.id, webhook.url);
+  const request = await webhook; // resumes when someone calls the URL
+  const { approved } = await request.json();
+  // ...
+}
+```
+
+Brick serves the route behind `webhook.url`, `/.well-known/workflow/v1/webhook/<token>`, on its own server, for any app with a workflow listener. A process that only records events (`dispatch: false`) serves it too; it needs the world but does not consume the queue. Any method works. The call resumes the run, wherever it runs, and answers `202`.
+
+The SDK builds the URL from the port the process listens on, which it finds with `@workflow/utils`. Add it to the app (`bun add -d @workflow/utils`): with a strict install the SDK cannot see it otherwise, and the URL points to `localhost:3000`. Behind a proxy or on another host, build the public URL yourself from `webhook.token`.
+
+### Inspecting runs in the dev dashboard
+
+With `@brickkit/workflow-inspector` installed (`bun add -d @brickkit/workflow-inspector`), the `brick dev` dashboard gains a Workflows tab: the Workflow SDK's observability UI (a vendored copy of `@workflow/web`, without its own header, in the dashboard's theme), with every run, its trace of steps and sleeps, its events, streams and hooks, and the buttons to replay or cancel a run. It reads the world your app runs on, whichever `createWorld()` settings you gave it, and follows the app across reloads. Without the package the tab says what to install.
+
+The inspector can cancel runs and resume hooks, so it is a developer's tool: the production dashboard of `brick start` does not serve it, and the dev dashboard passes it only requests made from its own page. It needs `brick dev` with the dashboard on (the default).
+
+### With `brick build`
+
+`brick build` transforms the workflows, builds the bundle into `.well-known/workflow/v1`, and makes the compiled server start its events and stop them on `SIGINT` and `SIGTERM`. Run the server from the project root: it finds the bundle from the working directory and loads the SDK from `node_modules`, so deploy those with it.
+
 ### Limits
 
-- `brick build` does not build workflows yet. Run the app with `brick start`.
-- Webhook routes (`createWebhook`) are not mounted. `resumeHook` works.
+- The bundle is always written to `<root>/.well-known/workflow/v1`; its location cannot be changed.
 - Stopping the events closes the world for good.
 - If you delete finished runs from Redis (a retention policy), delivering the same event again starts the workflow again.
 
@@ -240,5 +306,4 @@ const { app } = await import("./app");
 
 - **Order.** Events are not ordered across listeners, or between two deliveries of one listener when one is retried.
 - **Exactly once.** Delivery is at least once.
-- **Events from your own code.** Only generated CRUD writes emit events so far.
 - **Exactly-once handlers.** A `run` handler can still run twice for one event. A workflow starts one run per delivery.

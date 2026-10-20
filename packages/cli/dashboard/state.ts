@@ -28,6 +28,8 @@ export interface DashboardState {
   api: ApiSnapshot | null;
   /** The app's developer documentation; null when it has none. */
   docs: DocsSnapshot | null;
+  /** Whether the app serves the workflow inspector, shown in the Workflows view. */
+  inspector: boolean;
   canRestart: boolean;
   /** Days of requests kept on disk; zero when history is off. */
   historyDays: number;
@@ -55,6 +57,7 @@ type Action =
   | { type: "architecture"; architecture: ArchitectureSnapshot }
   | { type: "api"; api: ApiSnapshot }
   | { type: "docs"; docs: DocsSnapshot | null }
+  | { type: "inspector"; inspector: boolean }
   | { type: "connection"; connected: boolean };
 
 export const initialState: DashboardState = {
@@ -64,6 +67,7 @@ export const initialState: DashboardState = {
   architecture: null,
   api: null,
   docs: null,
+  inspector: false,
   canRestart: false,
   historyDays: 0,
   mode: "dev",
@@ -82,6 +86,7 @@ export function reduce(state: DashboardState, action: Action): DashboardState {
         architecture: action.snapshot.architecture,
         api: action.snapshot.api,
         docs: action.snapshot.docs,
+        inspector: action.snapshot.inspector ?? false,
         canRestart: action.snapshot.canRestart,
         historyDays: action.snapshot.historyDays,
         mode: action.snapshot.mode ?? "dev",
@@ -117,6 +122,8 @@ export function reduce(state: DashboardState, action: Action): DashboardState {
       return { ...state, api: action.api };
     case "docs":
       return { ...state, docs: action.docs };
+    case "inspector":
+      return { ...state, inspector: action.inspector };
     case "connection":
       return { ...state, connected: action.connected };
   }
@@ -153,6 +160,9 @@ export function useDashboard(): DashboardState {
     listen<{ docs: DocsSnapshot | null }>("docs", ({ docs }) =>
       dispatch({ type: "docs", docs }),
     );
+    listen<{ inspector: boolean }>("inspector", ({ inspector }) =>
+      dispatch({ type: "inspector", inspector }),
+    );
     source.onopen = () => dispatch({ type: "connection", connected: true });
     source.onerror = () => dispatch({ type: "connection", connected: false });
     return () => source.close();
@@ -166,6 +176,7 @@ export type View =
   | "overview"
   | "apis"
   | "docs"
+  | "workflows"
   | "errors"
   | "reloads";
 export interface Route {
@@ -183,6 +194,7 @@ const VIEWS: View[] = [
   "overview",
   "apis",
   "docs",
+  "workflows",
   "errors",
   "reloads",
 ];

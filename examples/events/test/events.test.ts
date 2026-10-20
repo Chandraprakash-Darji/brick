@@ -285,179 +285,188 @@ describe("a process that restarts", () => {
 });
 
 // Shipping as a durable workflow needs a Redis world: REDIS_URL=redis://localhost:6379 bun test
-describe.skipIf(!REDIS_URL)("shipping as a workflow on a Redis world", () => {
-  async function open2(
-    options: Partial<Parameters<typeof createOrdersApp>[0]> = {},
-    prefix?: string,
-  ) {
-    const { createWorld } = await import("@brickkit/redis-world");
-    const world = createWorld({
-      redis: REDIS_URL!,
-      keyPrefix: prefix ?? `orders-test:${crypto.randomUUID()}:`,
-    });
-    return open({ world: world as EventsWorld, ...options });
-  }
+for (const worldPackage of ["redis-world", "bullmq-world"] as const)
+  describe.skipIf(!REDIS_URL)(
+    `shipping as a workflow on ${worldPackage}`,
+    () => {
+      async function open2(
+        options: Partial<Parameters<typeof createOrdersApp>[0]> = {},
+        prefix?: string,
+      ) {
+        const { createWorld } = await import(`@brickkit/${worldPackage}`);
+        const keyPrefix = prefix ?? `orders-test:${crypto.randomUUID()}:`;
+        // Worlds with the same job prefix would take each other's queued messages.
+        const world = createWorld({
+          redis: REDIS_URL!,
+          keyPrefix,
+          jobPrefix: keyPrefix.replaceAll(":", "_"),
+        });
+        return open({ world: world as EventsWorld, ...options });
+      }
 
-  async function until<T>(
-    what: string,
-    probe: () => Promise<T | undefined | false>,
-    timeoutMs = 15_000,
-  ): Promise<T> {
-    const deadline = Date.now() + timeoutMs;
-    for (;;) {
-      const found = await probe();
-      if (found) return found;
-      if (Date.now() > deadline)
-        throw new Error(`Timed out waiting for ${what}`);
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-  }
+      async function until<T>(
+        what: string,
+        probe: () => Promise<T | undefined | false>,
+        timeoutMs = 15_000,
+      ): Promise<T> {
+        const deadline = Date.now() + timeoutMs;
+        for (;;) {
+          const found = await probe();
+          if (found) return found;
+          if (Date.now() > deadline)
+            throw new Error(`Timed out waiting for ${what}`);
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      }
 
-  const shipped = async (made: OrdersApp) =>
-    (await rows(made, notifications)).find(
-      (row: any) => row.kind === "shipped",
-    );
+      const shipped = async (made: OrdersApp) =>
+        (await rows(made, notifications)).find(
+          (row: any) => row.kind === "shipped",
+        );
 
-  /** The workflow run a delivery started: its id follows from the delivery's id and time. */
-  async function runOf(made: OrdersApp) {
-    const [row] = (
-      (await (made.database.getDb() as any).select().from(outbox)) as any[]
-    ).filter((row) => row.listener === "fulfilment");
-    const world = (made.app.events as any).runtime.world;
-    const runId = `wrun_${world.createRunId({
-      runKey: row.id,
-      runKeyTime: row.occurredAt.getTime(),
-    })}`;
-    return { runId, world, row };
-  }
+      /** The workflow run a delivery started: its id follows from the delivery's id and time. */
+      async function runOf(made: OrdersApp) {
+        const [row] = (
+          (await (made.database.getDb() as any).select().from(outbox)) as any[]
+        ).filter((row) => row.listener === "fulfilment");
+        const world = (made.app.events as any).runtime.world;
+        const runId = `wrun_${world.createRunId({
+          runKey: row.id,
+          runKeyTime: row.occurredAt.getTime(),
+        })}`;
+        return { runId, world, row };
+      }
 
-  async function runStatus(made: OrdersApp, terminal: string) {
-    const { runId, world } = await runOf(made);
-    return until(`run ${runId} to be ${terminal}`, async () => {
-      const run = await world.runs.get(runId, { resolveData: "none" });
-      return run.status === terminal ? run : undefined;
-    });
-  }
+      async function runStatus(made: OrdersApp, terminal: string) {
+        const { runId, world } = await runOf(made);
+        return until(`run ${runId} to be ${terminal}`, async () => {
+          const run = await world.runs.get(runId, { resolveData: "none" });
+          return run.status === terminal ? run : undefined;
+        });
+      }
 
-  it("books the carrier, waits, and notifies, as one run", async () => {
-    const carrier = createCarrier();
-    const made = await open2({ carrier });
-    const order = await place(made);
-    await made.app.events!.drain();
-    await ship(made, order.id);
-    await made.app.events!.drain();
+      it("books the carrier, waits, and notifies, as one run", async () => {
+        const carrier = createCarrier();
+        const made = await open2({ carrier });
+        const order = await place(made);
+        await made.app.events!.drain();
+        await ship(made, order.id);
+        await made.app.events!.drain();
 
-    const notice = await until("the shipped notification", () => shipped(made));
+        const notice = await until("the shipped notification", () =>
+          shipped(made),
+        );
 
-    expect(notice).toMatchObject({
-      id: expect.stringMatching(/:fulfilment$/),
-      orderId: order.id,
-      recipient: "ada@example.com",
-      detail: `trk_${order.id.slice(0, 8)}`,
-    });
-    expect(carrier.bookings).toEqual([order.id]);
-    await runStatus(made, "completed");
-    expect(await made.app.events!.counts()).toMatchObject({
-      pending: 0,
-      dead: 0,
-    });
-  });
+        expect(notice).toMatchObject({
+          id: expect.stringMatching(/:fulfilment$/),
+          orderId: order.id,
+          recipient: "ada@example.com",
+          detail: `trk_${order.id.slice(0, 8)}`,
+        });
+        expect(carrier.bookings).toEqual([order.id]);
+        await runStatus(made, "completed");
+        expect(await made.app.events!.counts()).toMatchObject({
+          pending: 0,
+          dead: 0,
+        });
+      });
 
-  it("does not run for an update that is not a shipment", async () => {
-    const carrier = createCarrier();
-    const made = await open2({ carrier });
-    const order = await place(made);
-    await call(made, `/api/order/${order.id}`, "PATCH", {
-      data: { internalNote: "gift wrap" },
-    });
-    await made.app.events!.drain();
+      it("does not run for an update that is not a shipment", async () => {
+        const carrier = createCarrier();
+        const made = await open2({ carrier });
+        const order = await place(made);
+        await call(made, `/api/order/${order.id}`, "PATCH", {
+          data: { internalNote: "gift wrap" },
+        });
+        await made.app.events!.drain();
 
-    await runStatus(made, "completed");
-    expect(carrier.bookings).toEqual([]);
-    expect(await shipped(made)).toBeUndefined();
-  });
+        await runStatus(made, "completed");
+        expect(carrier.bookings).toEqual([]);
+        expect(await shipped(made)).toBeUndefined();
+      });
 
-  it("retries the booking step when the carrier fails, and books once", async () => {
-    const carrier = createCarrier({ failures: 2 });
-    const made = await open2({ carrier });
-    const order = await place(made);
-    await ship(made, order.id);
-    await made.app.events!.drain();
+      it("retries the booking step when the carrier fails, and books once", async () => {
+        const carrier = createCarrier({ failures: 2 });
+        const made = await open2({ carrier });
+        const order = await place(made);
+        await ship(made, order.id);
+        await made.app.events!.drain();
 
-    await until("the shipped notification", () => shipped(made));
+        await until("the shipped notification", () => shipped(made));
 
-    expect(carrier.bookings).toEqual([order.id]);
-    await runStatus(made, "completed");
-    // The retries happened inside the run: the delivery was never retried.
-    const [delivery] = (
-      (await (made.database.getDb() as any).select().from(outbox)) as any[]
-    ).filter((row) => row.listener === "fulfilment");
-    expect(delivery).toMatchObject({ status: "delivered", attempts: 1 });
-  });
+        expect(carrier.bookings).toEqual([order.id]);
+        await runStatus(made, "completed");
+        // The retries happened inside the run: the delivery was never retried.
+        const [delivery] = (
+          (await (made.database.getDb() as any).select().from(outbox)) as any[]
+        ).filter((row) => row.listener === "fulfilment");
+        expect(delivery).toMatchObject({ status: "delivered", attempts: 1 });
+      });
 
-  it("fails the run, not the delivery, when the carrier never answers", async () => {
-    const carrier = createCarrier({ failures: 99 });
-    const made = await open2({ carrier });
-    const order = await place(made);
-    await ship(made, order.id);
-    await made.app.events!.drain();
+      it("fails the run, not the delivery, when the carrier never answers", async () => {
+        const carrier = createCarrier({ failures: 99 });
+        const made = await open2({ carrier });
+        const order = await place(made);
+        await ship(made, order.id);
+        await made.app.events!.drain();
 
-    await runStatus(made, "failed");
+        await runStatus(made, "failed");
 
-    expect(await shipped(made)).toBeUndefined();
-    expect(await made.app.events!.counts()).toMatchObject({
-      pending: 0,
-      dead: 0,
-    });
-  });
+        expect(await shipped(made)).toBeUndefined();
+        expect(await made.app.events!.counts()).toMatchObject({
+          pending: 0,
+          dead: 0,
+        });
+      });
 
-  it("starts one run however often the delivery is tried", async () => {
-    const carrier = createCarrier();
-    const made = await open2({ carrier });
-    const order = await place(made);
-    await ship(made, order.id);
-    await made.app.events!.drain();
-    await until("the shipped notification", () => shipped(made));
+      it("starts one run however often the delivery is tried", async () => {
+        const carrier = createCarrier();
+        const made = await open2({ carrier });
+        const order = await place(made);
+        await ship(made, order.id);
+        await made.app.events!.drain();
+        await until("the shipped notification", () => shipped(made));
 
-    (made.database.getDb() as any)
-      .update(outbox)
-      .set({ status: "pending", deliveredAt: null })
-      .run();
-    await made.app.events!.drain();
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+        (made.database.getDb() as any)
+          .update(outbox)
+          .set({ status: "pending", deliveredAt: null })
+          .run();
+        await made.app.events!.drain();
+        await new Promise((resolve) => setTimeout(resolve, 1500));
 
-    expect(carrier.bookings).toEqual([order.id]);
-    expect(
-      (await rows(made, notifications)).filter(
-        (row: any) => row.kind === "shipped",
-      ),
-    ).toHaveLength(1);
-  });
+        expect(carrier.bookings).toEqual([order.id]);
+        expect(
+          (await rows(made, notifications)).filter(
+            (row: any) => row.kind === "shipped",
+          ),
+        ).toHaveLength(1);
+      });
 
-  it("finishes a run that was in flight when the process went away", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "brick-events-example-"));
-    directories.push(directory);
-    const path = join(directory, "orders.sqlite");
-    const prefix = `orders-test:${crypto.randomUUID()}:`;
-    const carrier = createCarrier();
+      it("finishes a run that was in flight when the process went away", async () => {
+        const directory = mkdtempSync(join(tmpdir(), "brick-events-example-"));
+        directories.push(directory);
+        const path = join(directory, "orders.sqlite");
+        const prefix = `orders-test:${crypto.randomUUID()}:`;
+        const carrier = createCarrier();
 
-    const first = await open2({ path, carrier }, prefix);
-    const order = await place(first);
-    await first.app.events!.drain();
-    await ship(first, order.id);
-    await first.app.events!.drain();
-    opened.splice(opened.indexOf(first), 1);
-    await first.app.events!.stop();
-    await first.database.close?.();
-    resetGlobalRegistry();
+        const first = await open2({ path, carrier }, prefix);
+        const order = await place(first);
+        await first.app.events!.drain();
+        await ship(first, order.id);
+        await first.app.events!.drain();
+        opened.splice(opened.indexOf(first), 1);
+        await first.app.events!.stop();
+        await first.database.close?.();
+        resetGlobalRegistry();
 
-    const second = await open2({ path, carrier }, prefix);
-    second.app.events!.start();
+        const second = await open2({ path, carrier }, prefix);
+        second.app.events!.start();
 
-    await until("the shipped notification after the restart", () =>
-      shipped(second),
-    );
-    expect(carrier.bookings).toEqual([order.id]);
-    await runStatus(second, "completed");
-  });
-});
+        await until("the shipped notification after the restart", () =>
+          shipped(second),
+        );
+        expect(carrier.bookings).toEqual([order.id]);
+        await runStatus(second, "completed");
+      });
+    },
+  );

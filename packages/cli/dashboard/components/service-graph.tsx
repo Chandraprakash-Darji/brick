@@ -23,26 +23,33 @@ const EDGE_STROKE: Record<EdgeKind, string> = {
   request: "stroke-span-request",
   rpc: "stroke-span-rpc",
   sql: "stroke-span-sql",
+  event: "stroke-span-event",
 };
 const EDGE_FILL: Record<EdgeKind, string> = {
   request: "fill-span-request",
   rpc: "fill-span-rpc",
   sql: "fill-span-sql",
+  event: "fill-span-event",
 };
 const EDGE_LABEL: Record<EdgeKind, string> = {
   request: "Request",
   rpc: "Service call",
   sql: "SQL",
+  event: "Event",
 };
 const KIND_ACCENT: Record<GraphKind, string> = {
   client: "border-l-span-request",
   service: "border-l-span-action",
   database: "border-l-span-sql",
+  events: "border-l-span-event",
+  listener: "border-l-span-event",
 };
 const KIND_LABEL: Record<GraphKind, string> = {
   client: "Client",
   service: "Service",
   database: "Database",
+  events: "Events",
+  listener: "Listener",
 };
 const HEALTH_DOT: Record<Health, string> = {
   ok: "bg-positive",

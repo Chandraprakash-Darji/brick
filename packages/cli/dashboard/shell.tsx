@@ -15,6 +15,7 @@ import {
   Sun,
   SunMoon,
   TriangleAlert,
+  Workflow,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ const NAV: { view: View; label: string; icon: ReactNode }[] = [
   { view: "logs", label: "Logs", icon: <ScrollText /> },
   { view: "apis", label: "APIs", icon: <BookOpen /> },
   { view: "docs", label: "Docs", icon: <BookText /> },
+  { view: "workflows", label: "Workflows", icon: <Workflow /> },
   { view: "errors", label: "Errors", icon: <TriangleAlert /> },
   { view: "reloads", label: "Reloads", icon: <RefreshCw /> },
 ];
@@ -48,6 +50,7 @@ export function Sidebar({
   errorCount,
   hasNewErrors,
   hasDocs,
+  hasWorkflows,
   production,
 }: {
   view: View;
@@ -55,7 +58,8 @@ export function Sidebar({
   errorCount: number;
   hasNewErrors: boolean;
   hasDocs: boolean;
-  /** The monitoring dashboard: no APIs or Docs, which need a developer's machine. */
+  hasWorkflows: boolean;
+  /** The monitoring dashboard: no APIs, Docs or Workflows, which need a developer's machine. */
   production: boolean;
 }) {
   if (!sidebar.visible) return null;
@@ -90,8 +94,14 @@ export function Sidebar({
         </div>
         {NAV.filter(
           (item) =>
-            !(production && (item.view === "apis" || item.view === "docs")) &&
-            (item.view !== "docs" || hasDocs),
+            !(
+              production &&
+              (item.view === "apis" ||
+                item.view === "docs" ||
+                item.view === "workflows")
+            ) &&
+            (item.view !== "docs" || hasDocs) &&
+            (item.view !== "workflows" || hasWorkflows),
         ).map((item) => {
           const showCount = item.view === "errors" && errorCount > 0;
           const link = (

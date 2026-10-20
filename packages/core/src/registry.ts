@@ -1,9 +1,11 @@
 import type { Service, ArchitectureSchema } from "./types";
 import { analyzeDeclaredApplication, type RouteIR } from "./compiler/ir";
+import type { EventsDefinition } from "./events/hub";
 
 export interface ArchitectureApplication {
   services: readonly Service[];
   routes: readonly RouteIR[];
+  events?: EventsDefinition;
 }
 
 export class ServiceRegistry {
@@ -65,6 +67,7 @@ export class ServiceRegistry {
   ): ArchitectureSchema {
     return {
       version: "1.0.0",
+      ...(application?.events ? { events: application.events } : {}),
       services: (application?.services ?? this.list()).map((service) => {
         const routes = application
           ? application.routes.filter((route) => route.service === service.name)

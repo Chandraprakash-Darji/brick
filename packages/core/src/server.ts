@@ -31,6 +31,7 @@ import {
 } from "./endpoints";
 import { instrumentDatabase, traceHttpRequest, withSpan } from "./telemetry";
 import { EventsHub } from "./events/hub";
+import { WEBHOOK_ROUTE } from "./events/workflows";
 import type { EventsOptions } from "./events/types";
 
 export interface CreateServerOptions {
@@ -183,6 +184,8 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
   const events = options.events
     ? new EventsHub(options.events).attach(services)
     : undefined;
+  if (events?.workflows)
+    app.all(WEBHOOK_ROUTE, ({ request }) => events.webhook(request));
   if (telemetry) {
     for (const service of services) instrumentDatabase(service.getDb());
   }

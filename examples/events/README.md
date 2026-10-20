@@ -46,7 +46,7 @@ notifies the customer in a second step.
 ```sh
 docker run -d -p 6379:6379 redis:7
 REDIS_URL=redis://localhost:6379 bun run --cwd examples/events dev
-REDIS_URL=redis://localhost:6379 bun run --cwd examples/events test   # 16 tests, 6 need Redis
+REDIS_URL=redis://localhost:6379 bun run --cwd examples/events test   # the workflow tests run on both worlds
 ```
 
 `brick dev` and `brick start` build the workflow bundle into
@@ -58,6 +58,13 @@ REDIS_URL=redis://localhost:6379 bun run --cwd examples/events test   # 16 tests
   The run resumes and the notification still arrives.
 - Delivering the same event again (reset its outbox row to `pending`) does not
   start a second run.
+- `test/webhook.test.ts` runs a workflow that waits on `createWebhook`: a request
+  to its URL on the Brick server resumes it. The example lists `@workflow/utils`
+  so the SDK finds the port the server listens on.
+
+- `bunx brick dev src/app.ts` (without `--no-dashboard`) serves the dashboard on
+  9400; its Workflows tab is the SDK's inspector (`@brickkit/workflow-inspector`, a dev
+  dependency here) showing each `fulfilOrder` run and its trace.
 
 SQLite allows one process per database file, so this example delivers events in
 the same process that serves requests. With PostgreSQL, run the API with

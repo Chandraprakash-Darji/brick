@@ -105,6 +105,80 @@ function architecture(
   };
 }
 
+describe("buildServiceGraph with events", () => {
+  const withEvents = (events: unknown): ArchitectureSnapshot => {
+    const snapshot = architecture([
+      { name: "orders", database: { engine: "sqlite" } },
+    ]);
+    (snapshot.schema as { events?: unknown }).events = events;
+    return snapshot;
+  };
+
+  it("draws the services that record events, the outbox, and each listener", () => {
+    const graph = buildServiceGraph(
+      withEvents({
+        listeners: [
+          { name: "audit", on: ["order.*"], kind: "handler" },
+          { name: "shipping", on: ["order.update"], kind: "workflow" },
+        ],
+        dispatch: true,
+        recorders: ["orders"],
+      }),
+      [],
+    );
+
+    const node = (id: string) => graph.nodes.find((n) => n.id === id);
+    expect(node("events")).toMatchObject({
+      kind: "events",
+      caption: "2 listeners",
+      detail: "outbox · delivering",
+    });
+    expect(node("listener:shipping")).toMatchObject({
+      kind: "listener",
+      caption: "workflow",
+      detail: "on order.update",
+    });
+    expect(
+      graph.edges
+        .filter((edge) => edge.kind === "event")
+        .map((edge) => `${edge.from}->${edge.to}`),
+    ).toEqual([
+      "service:orders->events",
+      "events->listener:audit",
+      "events->listener:shipping",
+    ]);
+  });
+
+  it("draws nothing when no service records events", () => {
+    const graph = buildServiceGraph(
+      withEvents({ listeners: [], dispatch: true, recorders: [] }),
+      [],
+    );
+    expect(graph.nodes.map((node) => node.kind)).toEqual([
+      "client",
+      "service",
+      "database",
+    ]);
+  });
+
+  it("puts the outbox after its services and the listeners after the outbox", () => {
+    const layout = layoutGraph(
+      buildServiceGraph(
+        withEvents({
+          listeners: [{ name: "audit", on: ["x"], kind: "handler" }],
+          dispatch: false,
+          recorders: ["orders"],
+        }),
+        [],
+      ),
+    );
+    const column = (id: string) =>
+      layout.nodes.find((n) => n.id === id)!.column;
+    expect(column("events")).toBeGreaterThan(column("service:orders"));
+    expect(column("listener:audit")).toBe(column("events") + 1);
+  });
+});
+
 describe("buildServiceGraph", () => {
   it("is empty before the app starts and nothing has run", () => {
     expect(buildServiceGraph(null, [])).toEqual({ nodes: [], edges: [] });

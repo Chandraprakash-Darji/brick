@@ -1,0 +1,16 @@
+@brickkit/workflow-inspector
+
+This package is derived from @workflow/web 5.0.5, the Workflow SDK's
+observability UI (https://github.com/vercel/workflow, packages/web), copyright
+Vercel, Inc. and its contributors, licensed under Apache-2.0. The UI components
+it draws (traces, graphs, streams) come unchanged from @workflow/web-shared.
+
+Changes: removed the header (logo, connection status, health check, theme
+picker, docs link) and the pages and server settings that only matter when the
+UI runs on its own; the page follows the light or dark theme of the document
+that frames it; the host process passes its own world and manifest path to
+createInspectorHandler() instead of the UI building a world from WORKFLOW_*
+environment variables, so nothing from the environment is read or sent to the
+browser; the Vercel and self-host entry points, the registry file and the
+upstream tests were dropped; the stylesheet imports @workflow/web-shared from
+npm; the client is built for current browsers (es2022).

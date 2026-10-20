@@ -1,4 +1,5 @@
 import { getGlobalRegistry } from "@brickkit/core";
+import { startInspector } from "./dev-inspector";
 import { startDevApplication } from "./runner";
 import { parsePort } from "./port-utils";
 import {
@@ -89,6 +90,21 @@ try {
       (error: unknown) =>
         console.warn(
           `[Brick-TS] Could not load the API documents: ${error instanceof Error ? error.message : String(error)}`,
+        ),
+    );
+  }
+  if (telemetry) {
+    void startInspector(app).then(
+      (inspector) =>
+        inspector &&
+        sendToSupervisor({
+          type: "brick:inspector",
+          port: inspector.port,
+          token: inspector.token,
+        }),
+      (error: unknown) =>
+        console.warn(
+          `[Brick-TS] Could not start the workflow inspector: ${error instanceof Error ? error.message : String(error)}`,
         ),
     );
   }

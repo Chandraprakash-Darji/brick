@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import {
+  brick,
   defineDatabase,
   defineListener,
   defineService,
@@ -217,13 +218,15 @@ describe("workflow listeners", () => {
 
   it("describes a listener as a workflow, and tells the CLI where the bundle goes", () => {
     const { root } = project();
-    const { hub } = setup({ world: fakeWorld().world, root });
+    const { world } = fakeWorld();
+    const { hub } = setup({ world, root });
     expect(hub.describe().listeners).toEqual([
       { name: "fulfil", on: ["item.create"], kind: "workflow" },
     ]);
     expect(hub.workflows).toEqual({
       root,
       dir: join(root, ".well-known", "workflow", "v1"),
+      world,
     });
     expect(
       new EventsHub({
@@ -415,5 +418,82 @@ describe("workflow listeners", () => {
     await record();
     await hub.drain();
     expect(rows(db)[0].lastError).toContain("were stopped");
+  });
+});
+
+describe("webhooks", () => {
+  const resumed = `export const POST = (request) =>
+    new Response("resumed " + new URL(request.url).pathname.split("/").pop());`;
+
+  function webhookProject() {
+    const { root, dir } = project();
+    writeFileSync(join(dir, "webhook.mjs"), resumed);
+    return root;
+  }
+
+  it("resumes through the bundle's handler, with the world set but not started", async () => {
+    const root = webhookProject();
+    const { world, calls } = fakeWorld();
+    const { hub } = setup({ world, root });
+
+    const response = await hub.webhook(
+      new Request("http://x/.well-known/workflow/v1/webhook/tok_1", {
+        method: "POST",
+      }),
+    );
+
+    expect(await response.text()).toBe("resumed tok_1");
+    expect(globalThis.__fakeWorkflow.worlds).toEqual([world]);
+    expect(calls.start).toBe(0);
+  });
+
+  it("answers 405 for a method the bundle does not handle, and fails clearly without a bundle", async () => {
+    const root = webhookProject();
+    const { hub } = setup({ world: fakeWorld().world, root });
+    const get = await hub.webhook(
+      new Request("http://x/.well-known/workflow/v1/webhook/t"),
+    );
+    expect(get.status).toBe(405);
+
+    const bare = project();
+    const { hub: other } = setup({ world: fakeWorld().world, root: bare.root });
+    await expect(
+      other.webhook(new Request("http://x/webhook/t", { method: "POST" })),
+    ).rejects.toThrow("No webhook bundle");
+  });
+
+  it("is served by the app on the route the SDK puts in webhook URLs, even when it only records events", async () => {
+    const root = webhookProject();
+    const service = defineService(`wf_events_${++serial}`, {
+      database: defineDatabase({ tables: { items, outbox } }),
+    });
+    const app = brick({
+      services: [service],
+      events: {
+        world: fakeWorld().world,
+        workflows: { root },
+        listeners: [
+          defineListener({
+            name: "fulfil",
+            on: "item.create",
+            workflow: transformed(),
+          }),
+        ],
+        dispatch: false,
+      },
+      requestLogging: false,
+      docs: false,
+    });
+    try {
+      const response = await app.handle(
+        new Request("http://x/.well-known/workflow/v1/webhook/tok_2", {
+          method: "POST",
+          body: "{}",
+        }),
+      );
+      expect(await response.text()).toBe("resumed tok_2");
+    } finally {
+      await app.events?.stop();
+    }
   });
 });

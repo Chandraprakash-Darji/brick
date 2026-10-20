@@ -90,6 +90,7 @@ jobs:
             packages/cli/package.json
             packages/bullmq-world/package.json
             packages/redis-world/package.json
+            packages/workflow-inspector/package.json
             bun.lock
           if-no-files-found: error
 
@@ -99,7 +100,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pkg: [core, crud, cli, bullmq-world, redis-world]
+        pkg: [core, crud, cli, bullmq-world, redis-world, workflow-inspector]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -119,7 +120,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
         run: |
-          for pkg in core crud cli bullmq-world redis-world; do
+          for pkg in core crud cli bullmq-world redis-world workflow-inspector; do
             version="$(node -p "require('./packages/$pkg/package.json').version")"
             if [[ "v$version" != "$RELEASE_TAG" ]]; then
               echo "::error::$pkg version does not match $RELEASE_TAG"
@@ -160,7 +161,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pkg: [core, crud, cli, bullmq-world, redis-world]
+        pkg: [core, crud, cli, bullmq-world, redis-world, workflow-inspector]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -234,7 +235,7 @@ jobs:
         with:
           name: release-manifests
           path: .
-      - name: Commit and tag only after all five packages were published
+      - name: Commit and tag only after all packages were published
         if: github.event_name == 'workflow_dispatch'
         env:
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
@@ -242,7 +243,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add packages/core/package.json packages/crud/package.json packages/cli/package.json packages/bullmq-world/package.json packages/redis-world/package.json bun.lock
+          git add packages/core/package.json packages/crud/package.json packages/cli/package.json packages/bullmq-world/package.json packages/redis-world/package.json packages/workflow-inspector/package.json bun.lock
           git commit -m "chore(release): $RELEASE_TAG"
           git tag "$RELEASE_TAG"
           for attempt in 1 2 3; do

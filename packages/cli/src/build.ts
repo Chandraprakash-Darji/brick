@@ -81,11 +81,13 @@ if (import.meta.main) {
       outdir: staging,
       naming: "server.js",
       sourcemap: "external",
+      // AOT first: the workflow plugin loads every project file it sees, so after
+      // it the AOT plugin would never get to transform the entry.
       plugins: [
-        ...(workflows ? [workflows] : []),
         ...(options.aot === false
           ? []
           : [aot(join(staging, "entry.ts"), { target: "bun", strip: true })]),
+        ...(workflows ? [workflows] : []),
       ],
     });
     if (!result.success)

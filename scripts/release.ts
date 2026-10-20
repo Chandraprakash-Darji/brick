@@ -54,10 +54,13 @@ const GIT = resolveBin("git");
 const CORE_PKG = join(ROOT, "packages/core/package.json");
 const CLI_PKG = join(ROOT, "packages/cli/package.json");
 const CRUD_PKG = join(ROOT, "packages/crud/package.json");
-// Worlds depend on no other @brickkit package, so only their version is bumped.
-const WORLD_PKGS = ["bullmq-world", "redis-world"].map((name) =>
-  join(ROOT, `packages/${name}/package.json`),
-);
+// The worlds and the workflow inspector depend on no other @brickkit package, so
+// only their version is bumped.
+const STANDALONE_PKGS = [
+  "bullmq-world",
+  "redis-world",
+  "workflow-inspector",
+].map((name) => join(ROOT, `packages/${name}/package.json`));
 
 function sh(cmd: string[], cwd = ROOT): string {
   if (DRY) {
@@ -170,10 +173,10 @@ const releases = [
   { file: CORE_PKG, data: coreJson },
   { file: CLI_PKG, data: cliJson },
   { file: CRUD_PKG, data: crudJson },
-  ...WORLD_PKGS.map((file) => ({ file, data: readJson(file) })),
+  ...STANDALONE_PKGS.map((file) => ({ file, data: readJson(file) })),
 ];
 if (releases.some((r) => r.data.version !== coreJson.version))
-  fail("core, cli, crud and world versions must match");
+  fail("core, cli, crud, world and inspector versions must match");
 const version = bumpVersion(coreJson.version, bump);
 const tag = `v${version}`;
 cliJson.dependencies["@brickkit/core"] = `^${version}`;

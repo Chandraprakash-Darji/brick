@@ -26,7 +26,14 @@ const previous =
     .find((candidate) => candidate !== `core-v${version}`);
 
 let hasChanges = false;
-for (const pkg of ["core", "crud", "cli", "bullmq-world", "redis-world"]) {
+for (const pkg of [
+  "core",
+  "crud",
+  "cli",
+  "bullmq-world",
+  "redis-world",
+  "workflow-inspector",
+]) {
   const commits = git(
     "log",
     "--format=%H\t%s",

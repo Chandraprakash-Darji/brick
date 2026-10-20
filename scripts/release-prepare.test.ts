@@ -4,7 +4,14 @@ import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const PACKAGES = ["core", "crud", "cli", "bullmq-world", "redis-world"];
+const PACKAGES = [
+  "core",
+  "crud",
+  "cli",
+  "bullmq-world",
+  "redis-world",
+  "workflow-inspector",
+];
 
 test("prepares candidates and dispatches releases without creating release refs", async () => {
   const root = await mkdtemp(join(tmpdir(), "brick-release-prepare-"));

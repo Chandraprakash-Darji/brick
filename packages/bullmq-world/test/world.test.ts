@@ -22,6 +22,11 @@ describe("world queue and recovery (Redis integration)", () => {
     return;
   }
 
+  // Each wait below allows 10s, so the test timeout must be longer: at vitest's
+  // 5s default a stalled Redis or a starved CPU fails the test with a timeout
+  // even though the queue delivers correctly afterwards.
+  vi.setConfig({ testTimeout: 30_000 });
+
   const prefix: QueuePrefix = getQueueTopicPrefix("workflow");
   let container: Awaited<ReturnType<RedisContainer["start"]>> | undefined;
   let redisUrl: string;
@@ -246,9 +251,11 @@ describe("world queue and recovery (Redis integration)", () => {
 
   test("delays a message by delaySeconds", async () => {
     const world = newWorld();
-    const deliveries = recordDeliveries(world, () =>
-      Response.json({ ok: true }),
-    );
+    let deliveredAt = 0;
+    const deliveries = recordDeliveries(world, () => {
+      deliveredAt ||= Date.now();
+      return Response.json({ ok: true });
+    });
     await world.start();
 
     const startedAt = Date.now();
@@ -256,7 +263,9 @@ describe("world queue and recovery (Redis integration)", () => {
     await vi.waitFor(() => expect(deliveries).toHaveLength(1), {
       timeout: 10_000,
     });
-    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(900);
+    // Stamped by the handler, so polling and load can only make it later, and
+    // startedAt precedes the enqueue: an early delivery cannot reach a full second.
+    expect(deliveredAt - startedAt).toBeGreaterThanOrEqual(1000);
   });
 
   test("start() puts runs that were in flight back on the queue", async () => {

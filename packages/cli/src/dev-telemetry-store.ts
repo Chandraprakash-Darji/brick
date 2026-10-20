@@ -107,7 +107,8 @@ export type DevTelemetryEvent =
   | { type: "reload"; reload: ReloadSummary }
   | { type: "architecture"; architecture: ArchitectureSnapshot }
   | { type: "api"; api: ApiSnapshot }
-  | { type: "docs"; docs: DocsSnapshot | null };
+  | { type: "docs"; docs: DocsSnapshot | null }
+  | { type: "inspector"; inspector: boolean };
 
 export interface DevTelemetrySnapshot {
   traces: TraceSummary[];
@@ -117,6 +118,8 @@ export interface DevTelemetrySnapshot {
   api: ApiSnapshot | null;
   /** Null when the app has no `documentation`. */
   docs: DocsSnapshot | null;
+  /** Whether the app serves the workflow inspector the dashboard can show. */
+  inspector: boolean;
 }
 
 const LIMITS = { traces: 200, spansPerTrace: 500, failures: 200, reloads: 100 };
@@ -158,6 +161,7 @@ export class DevTelemetryStore {
   #architecture: ArchitectureSnapshot | null = null;
   #api: ApiSnapshot | null = null;
   #docs: DocsSnapshot | null = null;
+  #inspector: { port: number; token: string } | undefined;
   #apiDocuments: ApiDocument[] = [];
   #sequence = 0;
   #generation = 0;
@@ -270,6 +274,20 @@ export class DevTelemetryStore {
     this.#emit({ type: "docs", docs });
   }
 
+  /**
+   * Set where the app serves its workflow inspector, or `undefined` when it
+   * stops. The address stays here: the snapshot says only whether there is one.
+   */
+  setInspector(target: { port: number; token: string } | undefined): void {
+    this.#inspector = target;
+    this.#emit({ type: "inspector", inspector: Boolean(target) });
+  }
+
+  /** Where the dashboard proxies the workflow inspector, when the app serves one. */
+  inspectorTarget(): { port: number; token: string } | undefined {
+    return this.#inspector;
+  }
+
   /** What the APIs view knows about the documents, without the documents. */
   apiSnapshot(): ApiSnapshot | null {
     return this.#api;
@@ -288,6 +306,7 @@ export class DevTelemetryStore {
       architecture: this.#architecture,
       api: this.#api,
       docs: this.#docs,
+      inspector: Boolean(this.#inspector),
     };
   }
 

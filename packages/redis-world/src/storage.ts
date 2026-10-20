@@ -2726,6 +2726,18 @@ export function createHooksStorage(
     `${keyPrefix}hooks:by_token:${token}`;
   const hooksIndexKey = (runId: string) => `${keyPrefix}hooks:by_run:${runId}`;
 
+  // A finished run holds no hooks, so every hook is in the index of a live run.
+  // shortcut: one index read per live run on each page, upgrade to a global hooks
+  // index (kept in the create/dispose/finish scripts) if that count gets large.
+  async function liveHooksIndexKeys(): Promise<string[]> {
+    const live = await Promise.all(
+      ["pending", "running"].map((status) =>
+        redis.zrange(`${keyPrefix}runs:by_status:${status}`, "0", "-1"),
+      ),
+    );
+    return live.flat().map(hooksIndexKey);
+  }
+
   return {
     async get(hookId: string, params?: GetHookParams): Promise<Hook> {
       const data = await redis.get(hookKeyFn(hookId));
@@ -2750,13 +2762,9 @@ export function createHooksStorage(
       const limit = params?.pagination?.limit ?? 100;
       const fromCursor = params?.pagination?.cursor;
 
-      if (!params.runId) {
-        return { data: [], cursor: null, hasMore: false };
-      }
-
       const entries = await pageIndex(
         redis,
-        hooksIndexKey(params.runId),
+        params.runId ? hooksIndexKey(params.runId) : await liveHooksIndexKeys(),
         fromCursor,
         limit + 1,
         params?.pagination?.sortOrder ?? "asc",

@@ -8,6 +8,7 @@ import type {
   EventListener,
   EventRecorder,
   EventsOptions,
+  EventsWorld,
   ServiceEvents,
 } from "./types";
 import { WorkflowRuntime } from "./workflows";
@@ -35,6 +36,8 @@ export const recorders = new WeakMap<object, ServiceEvents>();
 export interface EventsDefinition {
   listeners: { name: string; on: string[]; kind: "handler" | "workflow" }[];
   dispatch: boolean;
+  /** Names of the services whose writes record events. */
+  recorders: string[];
 }
 
 /** What the dispatcher runs for a delivery. */
@@ -54,6 +57,7 @@ export class EventsHub {
   private readonly deliverables = new Map<string, Deliverable>();
   private readonly dispatchOptions: DispatchOptions | false;
   private readonly runtime: WorkflowRuntime | undefined;
+  private readonly recorderNames: string[] = [];
   private started = false;
 
   constructor(options: EventsOptions) {
@@ -113,6 +117,7 @@ export class EventsHub {
       const table = service.getOutbox?.();
       if (!table) continue;
       attached++;
+      this.recorderNames.push(service.name);
       const bound = this.bind(table);
       service.setEvents?.(bound);
       const db = service.getDb();
@@ -159,16 +164,36 @@ export class EventsHub {
         kind: listener.workflow ? ("workflow" as const) : ("handler" as const),
       })),
       dispatch: this.dispatchOptions !== false,
+      recorders: [...this.recorderNames],
     };
   }
 
   /**
-   * Where the workflow bundle is read from, and the project it is built from.
-   * Only set when a listener runs a workflow. The CLI builds the bundle there
-   * before events start.
+   * Where the workflow bundle is read from, the project it is built from, and
+   * the world the workflows run on. Only set when a listener runs a workflow.
+   * The CLI builds the bundle there before events start, and shows the world's
+   * runs in the dev dashboard.
    */
-  get workflows(): { root: string; dir: string } | undefined {
-    return this.runtime && { root: this.runtime.root, dir: this.runtime.dir };
+  get workflows():
+    | { root: string; dir: string; world: EventsWorld }
+    | undefined {
+    return (
+      this.runtime && {
+        root: this.runtime.root,
+        dir: this.runtime.dir,
+        world: this.runtime.world,
+      }
+    );
+  }
+
+  /**
+   * Resume the workflow that waits on a webhook. The server mounts this on the
+   * route the Workflow SDK puts in webhook URLs.
+   */
+  webhook(request: Request): Promise<Response> {
+    if (!this.runtime)
+      throw new Error("No listener of this app runs a workflow");
+    return this.runtime.handleWebhook(request);
   }
 
   /**

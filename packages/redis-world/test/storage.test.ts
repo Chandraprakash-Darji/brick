@@ -1287,6 +1287,138 @@ describe("Storage (Redis integration)", () => {
     });
   });
 
+  describe("hooks.list", () => {
+    async function createHook(runId: string, hookId: string) {
+      await events.create(runId, {
+        eventType: "hook_created",
+        correlationId: hookId,
+        eventData: { token: `token-${hookId}` },
+      });
+    }
+
+    const ids = (page: { data: { hookId: string }[] }) =>
+      page.data.map((hook) => hook.hookId);
+
+    it("should list the hooks of every run when no runId is given", async () => {
+      const first = await createRun();
+      const second = await createRun();
+      await events.create(second.runId, { eventType: "run_started" });
+      await createHook(first.runId, "hook-a1");
+      await createHook(first.runId, "hook-a2");
+      await createHook(second.runId, "hook-b1");
+
+      const all = await _hooks.list({});
+      expect(ids(all).sort()).toEqual(["hook-a1", "hook-a2", "hook-b1"]);
+      expect(all.hasMore).toBe(false);
+      expect(all.data.find((hook) => hook.hookId === "hook-b1")?.runId).toBe(
+        second.runId,
+      );
+    });
+
+    it("should list nothing when there are no hooks", async () => {
+      await createRun();
+      expect(await _hooks.list({})).toEqual({
+        data: [],
+        cursor: null,
+        hasMore: false,
+      });
+    });
+
+    it("should only list the hooks of the run given by runId", async () => {
+      const first = await createRun();
+      const second = await createRun();
+      await createHook(first.runId, "hook-a1");
+      await createHook(second.runId, "hook-b1");
+      await createHook(second.runId, "hook-b2");
+
+      expect(ids(await _hooks.list({ runId: first.runId }))).toEqual([
+        "hook-a1",
+      ]);
+      expect(ids(await _hooks.list({ runId: second.runId })).sort()).toEqual([
+        "hook-b1",
+        "hook-b2",
+      ]);
+    });
+
+    it("should paginate across runs without gaps or repeats, in either order", async () => {
+      const first = await createRun();
+      const second = await createRun();
+      for (const [runId, hookId] of [
+        [first.runId, "hook-1"],
+        [second.runId, "hook-2"],
+        [first.runId, "hook-3"],
+        [second.runId, "hook-4"],
+        [first.runId, "hook-5"],
+      ] as const) {
+        await createHook(runId, hookId);
+      }
+
+      const asc = ids(
+        await _hooks.list({ pagination: { sortOrder: "asc", limit: 100 } }),
+      );
+      expect([...asc].sort()).toEqual([
+        "hook-1",
+        "hook-2",
+        "hook-3",
+        "hook-4",
+        "hook-5",
+      ]);
+      expect(
+        ids(
+          await _hooks.list({ pagination: { sortOrder: "desc", limit: 100 } }),
+        ),
+      ).toEqual([...asc].reverse());
+
+      const paged: string[] = [];
+      let cursor: string | undefined;
+      let pages = 0;
+      for (;;) {
+        const page = await _hooks.list({
+          pagination: { sortOrder: "asc", limit: 2, cursor },
+        });
+        paged.push(...ids(page));
+        pages++;
+        if (!page.hasMore) break;
+        expect(page.data).toHaveLength(2);
+        cursor = page.cursor ?? undefined;
+      }
+      expect(pages).toBe(3);
+      expect(paged).toEqual(asc);
+    });
+
+    it("should not list disposed hooks or the hooks of a finished run", async () => {
+      const kept = await createRun();
+      const disposing = await createRun();
+      const finishing = await createRun();
+      await events.create(finishing.runId, { eventType: "run_started" });
+      await createHook(kept.runId, "hook-kept");
+      await createHook(disposing.runId, "hook-disposed");
+      await createHook(finishing.runId, "hook-finished");
+      expect(ids(await _hooks.list({})).sort()).toEqual([
+        "hook-disposed",
+        "hook-finished",
+        "hook-kept",
+      ]);
+
+      await events.create(disposing.runId, {
+        eventType: "hook_disposed",
+        correlationId: "hook-disposed",
+      });
+      await events.create(finishing.runId, {
+        eventType: "run_completed",
+        eventData: { output: [] },
+      });
+
+      expect(ids(await _hooks.list({}))).toEqual(["hook-kept"]);
+      expect(await _hooks.list({ runId: disposing.runId })).toMatchObject({
+        data: [],
+      });
+      expect(await _hooks.list({ runId: finishing.runId })).toMatchObject({
+        data: [],
+      });
+    });
+  });
+
   describe("step retry backoff (retryAfter)", () => {
     it("should reject early step_started with TooEarlyError while retryAfter is in the future", async () => {
       const run = await createRun();

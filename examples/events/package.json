@@ -13,6 +13,7 @@
     "format:check": "oxfmt --check ."
   },
   "dependencies": {
+    "@brickkit/bullmq-world": "workspace:*",
     "@brickkit/cli": "workspace:*",
     "@brickkit/core": "workspace:*",
     "@brickkit/crud": "workspace:*",
@@ -20,7 +21,9 @@
     "workflow": "5.2.2"
   },
   "devDependencies": {
+    "@brickkit/workflow-inspector": "workspace:*",
     "@workflow/builders": "5.0.5",
+    "@workflow/utils": "5.0.2",
     "oxfmt": "^0.73.0",
     "oxlint": "^1.88.0"
   }

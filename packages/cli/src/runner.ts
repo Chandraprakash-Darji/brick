@@ -67,7 +67,7 @@ async function createServer(
       prefix: options.prefix,
     });
 
-  await buildAppWorkflows(app);
+  await buildAppWorkflows(app, { reuse: label === "Development" });
   await app.listen({ port });
   app.events?.start();
 
@@ -354,6 +354,8 @@ export async function startDevServer(options: DevServerOptions = {}) {
   const launch = () => {
     const generation = ++generationCount;
     childGeneration = generation;
+    // The new process serves its own inspector once it is up.
+    telemetry?.setInspector(undefined);
     telemetry?.recordReload({ kind: "started", generation });
     const application = Bun.spawn(
       [
@@ -418,6 +420,18 @@ export async function startDevServer(options: DevServerOptions = {}) {
               generation,
             );
           }
+          if (
+            telemetry &&
+            message.type === "brick:inspector" &&
+            generation === childGeneration &&
+            "port" in message &&
+            "token" in message
+          ) {
+            telemetry.setInspector({
+              port: message.port as number,
+              token: message.token as string,
+            });
+          }
           if (docs && message.type === "brick:documentation") {
             void docs.configure(
               dirname(resolvedEntry),
@@ -475,6 +489,7 @@ export async function startDevServer(options: DevServerOptions = {}) {
       },
     );
     void application.exited.then((code) => {
+      if (generation === childGeneration) telemetry?.setInspector(undefined);
       if (!stopped && !intentionalExits.has(application)) {
         console.error(
           `[Brick-TS] Application process exited with code ${code}. Waiting for changes to restart.`,

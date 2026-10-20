@@ -94,9 +94,16 @@ describe("the production dashboard server", () => {
         "/api/openapi",
         "/api/docs",
         "/api/docs/search?q=x",
+        // The workflow inspector can cancel runs: a developer's tool only.
+        "/workflows/",
       ])
         expect(await answer(path)).toBe(404);
-      for (const path of ["/api/ingest", "/api/restart", "/api/proxy"])
+      for (const path of [
+        "/api/ingest",
+        "/api/restart",
+        "/api/proxy",
+        "/workflows/api/rpc",
+      ])
         expect(await answer(path, "POST")).toBe(404);
     } finally {
       dashboard.stop();

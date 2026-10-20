@@ -7,6 +7,7 @@ import {
   defineListener,
   defineService,
   emitEvent,
+  getGlobalRegistry,
   EventsHub,
   isOutboxTable,
   outboxTable,
@@ -148,12 +149,15 @@ describe("EventsHub", () => {
   });
 
   it("describes itself as plain data that survives structured clone", () => {
-    const { hub } = setup([{ name: "a", on: ["x", "y.*"], run: () => {} }]);
+    const { hub, service } = setup([
+      { name: "a", on: ["x", "y.*"], run: () => {} },
+    ]);
     const described = hub.describe();
     expect(() => structuredClone(described)).not.toThrow();
     expect(described).toEqual({
       listeners: [{ name: "a", on: ["x", "y.*"], kind: "handler" }],
       dispatch: true,
+      recorders: [service.name],
     });
   });
 });
@@ -511,7 +515,12 @@ describe("brick({ events })", () => {
     expect(app.definition.events).toEqual({
       listeners: [{ name: "a", on: ["x.*"], kind: "handler" }],
       dispatch: true,
+      recorders: [service.name],
     });
+    // The architecture export carries it to the dashboard and `brick info`.
+    expect(
+      getGlobalRegistry().exportArchitecture(app.definition).events,
+    ).toEqual(app.definition.events);
   });
 
   it("changes nothing when events are not set", () => {
