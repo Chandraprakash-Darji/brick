@@ -63,13 +63,17 @@ The entry module must default-export the `BrickApp` and must not call `.listen()
 
 ## Packages
 
-| Package          | Directory        | What it holds                                                                                |
-| ---------------- | ---------------- | -------------------------------------------------------------------------------------------- |
-| `@brickkit/core` | `packages/core/` | Services, actions, the `brick()` server, and the typed client at `@brickkit/core/client`.    |
-| `@brickkit/crud` | `packages/crud/` | Opt-in CRUD plugin with field policies, filtering, and hooks.                                |
-| `@brickkit/cli`  | `packages/cli/`  | The `brick` binary: `dev`, `start`, `build`, `gen`, and `info`, plus the Vite client plugin. |
+| Package                  | Directory                | What it holds                                                                                                                |
+| ------------------------ | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `@brickkit/core`         | `packages/core/`         | Services, actions, the `brick()` server, events and workflow listeners, and the typed client at `@brickkit/core/client`.     |
+| `@brickkit/crud`         | `packages/crud/`         | Opt-in CRUD plugin with field policies, filtering, and hooks.                                                                |
+| `@brickkit/cli`          | `packages/cli/`          | The `brick` binary: `dev`, `start`, `build`, `worker`, `gen`, and `info`, plus the Vite client plugin and the dev dashboard. |
+| `@brickkit/redis-world`  | `packages/redis-world/`  | A Redis world for the Workflow SDK, which runs workflow listeners durably.                                                   |
+| `@brickkit/bullmq-world` | `packages/bullmq-world/` | A Redis and BullMQ world for the Workflow SDK, the same interface as the Redis world.                                        |
 
-The full app is in `examples/pages/`. It mounts the API in process with TanStack Start and uses workspace packages directly. The docs site is in `www/`, with content in `www/content/docs`.
+The dev dashboard's Workflows tab is the Workflow SDK's inspector. Its source is in `packages/workflow-inspector/`, which is not published: the CLI build copies it into `@brickkit/cli`.
+
+The events and workflows example is in `examples/events/`. The full app is in `examples/pages/`. It mounts the API in process with TanStack Start and uses workspace packages directly. The docs site is in `www/`, with content in `www/content/docs`.
 
 ## Develop and test
 
@@ -94,7 +98,7 @@ Run the full gate before you push:
 bun run check
 ```
 
-`bun run check` runs lint, format check, build, typecheck, and tests. Each package also has `lint`, `lint:fix`, `format`, and `format:check`. Shared config lives in `.oxlintrc.json` and `.oxfmtrc.json`.
+`bun run check` runs lint, format check, build, typecheck, and tests. The worlds' own tests need Redis and run separately with `bun run test:worlds` (point `REDIS_TEST_URL` at a server, or let it start a container). Each package also has `lint`, `lint:fix`, `format`, and `format:check`. Shared config lives in `.oxlintrc.json` and `.oxfmtrc.json`.
 
 ## Release
 
@@ -104,7 +108,7 @@ Releases run from a clean, up-to-date `main` checkout:
 bun run release patch
 ```
 
-The GitHub `publish-npm.yml` workflow stages candidate versions without changing Git refs. Its `validate` matrix builds, typechecks, tests, and packs `core`, `crud`, and `cli` separately. Only when all three validations pass does it publish each validated tarball. After all three npm publishes succeed, it commits and tags the version, then creates the GitHub release. A failed validation or publish does not create a release commit. No builds or tests run again inside the individual publish jobs, so a later test failure cannot leave only some packages published.
+The GitHub `publish-npm.yml` workflow stages candidate versions without changing Git refs. Its `validate` matrix builds, typechecks, tests, and packs `core`, `crud`, `cli`, `redis-world`, and `bullmq-world` separately. Only when all five validations pass does it publish each validated tarball. After all five npm publishes succeed, it commits and tags the version, then creates the GitHub release. A failed validation or publish does not create a release commit. No builds or tests run again inside the individual publish jobs, so a later test failure cannot leave only some packages published.
 
 Set `dry_run` to validate and pack the next version without creating a commit, tag, or npm release. Beta releases run from `beta`. If npm itself fails after some uploads, rerun the failed jobs for that same candidate; already-published package versions are skipped.
 
