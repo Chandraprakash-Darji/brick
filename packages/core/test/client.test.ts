@@ -71,6 +71,20 @@ const json = (body: unknown, status = 200) =>
   });
 
 describe("createBrickClient (typed HTTP client)", () => {
+  it("calls fetch without binding it to the options object", async () => {
+    // Mirrors browser fetch, which rejects any `this` other than the window.
+    function browserFetch(this: unknown): Promise<Response> {
+      if (this !== undefined && this !== globalThis)
+        throw new TypeError("Illegal invocation");
+      return Promise.resolve(Response.json({ id: "1" }));
+    }
+    const api = createBrickClient<AppServer>({
+      baseUrl: "http://localhost:4000",
+      fetch: browserFetch as typeof fetch,
+    });
+    expect(await api.billing.charge({ amount: 1 })).toEqual({ id: "1" });
+  });
+
   it("reads plain strings with or without a content type and rejects malformed JSON", async () => {
     for (const contentType of ["text/plain", undefined]) {
       const { fetchImpl } = mockFetch(() => {

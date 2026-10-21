@@ -492,9 +492,11 @@ async function dispatch(
   ].filter((value): value is AbortSignal => value !== undefined);
   const signal = signals.length > 1 ? AbortSignal.any(signals) : signals[0];
 
+  // Browsers throw "Illegal invocation" when fetch runs with a non-window `this`.
+  const fetchImpl = resolved.fetch;
   let response: Response;
   try {
-    response = await resolved.fetch(url, {
+    response = await fetchImpl(url, {
       method,
       headers,
       body: payload,
