@@ -2,6 +2,9 @@ import type { ServicePlugin, ResourcePlugin } from "./plugin";
 import type { TSchema, Static } from "@sinclair/typebox";
 import type { BunSQLiteDatabase } from "./db/sqlite";
 import type { DatabaseHandle } from "./db/define";
+import type { OutboxTable } from "./events/outbox";
+import type { ServiceEvents } from "./events/types";
+import type { EventsDefinition } from "./events/hub";
 
 /**
  * The logger on action, tool, and endpoint contexts. While a dashboard is on
@@ -517,6 +520,8 @@ export interface ServiceSchema {
 export interface ArchitectureSchema {
   version: string;
   services: ServiceSchema[];
+  /** Present when the app has an `events` option. */
+  events?: EventsDefinition;
 }
 
 export interface CompiledRoutePlan {
@@ -686,6 +691,11 @@ export interface Service<
   listResources(): Resource<any, BaseContext<TDb> & TServiceContext>[];
   getDb(): TDb | undefined;
   setDb(database: DatabaseHandle<TDb>): void;
+  /** The outbox table of this service's database, if it holds one (see `outboxTable`). */
+  getOutbox?(): OutboxTable | undefined;
+  /** What a write needs to record events. Set by `brick({ events })`; absent otherwise. */
+  readonly events?: ServiceEvents;
+  setEvents?(events: ServiceEvents | undefined): void;
   resolveContext(
     callCtx?: Partial<BaseContext<TDb> & TServiceContext>,
   ): Promise<BaseContext<TDb> & TServiceContext>;

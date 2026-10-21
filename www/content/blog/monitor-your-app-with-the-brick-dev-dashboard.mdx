@@ -17,8 +17,8 @@ The dashboard starts with `brick dev` and shows requests only from apps that opt
 import { brick } from "@brickkit/core";
 
 export default brick({
-	services: [pagesService],
-	telemetry: true,
+  services: [pagesService],
+  telemetry: true,
 });
 ```
 
@@ -100,13 +100,13 @@ To add more documents, such as the ones Better Auth generates, list them under `
 
 ```ts
 const app = brick({
-	services: [pagesService],
-	telemetry: true,
-	reference: {
-		documents: [
-			{ title: "Auth", document: () => auth.api.generateOpenAPISchema() },
-		],
-	},
+  services: [pagesService],
+  telemetry: true,
+  reference: {
+    documents: [
+      { title: "Auth", document: () => auth.api.generateOpenAPISchema() },
+    ],
+  },
 });
 ```
 
@@ -120,11 +120,11 @@ To watch a deployed app, set the `dashboard` option and run `brick start`. That 
 
 ```ts
 export default brick({
-	services: [pagesService],
-	dashboard: {
-		host: "0.0.0.0",
-		auth: { token: process.env.DASHBOARD_TOKEN },
-	},
+  services: [pagesService],
+  dashboard: {
+    host: "0.0.0.0",
+    auth: { token: process.env.DASHBOARD_TOKEN },
+  },
 });
 ```
 

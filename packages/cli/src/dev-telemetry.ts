@@ -85,6 +85,13 @@ export type WorkerMessage =
   | { type: "brick:architecture"; architecture: ArchitectureSchema }
   | { type: "brick:api-documents"; documents: ApiDocument[] }
   | {
+      type: "brick:inspector";
+      /** The loopback port the workflow inspector listens on. */
+      port: number;
+      /** What the dashboard sends with each request to prove who it is. */
+      token: string;
+    }
+  | {
       type: "brick:documentation";
       /** The app's `documentation` option; absent when it has none. */
       documentation?: DocumentationOptions;

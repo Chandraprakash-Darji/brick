@@ -13,6 +13,7 @@
     "**/.output/**",
     "**/.tanstack/**",
     "bun.lock",
-    "**/dashboard-dist/**"
+    "**/dashboard-dist/**",
+    "**/inspector-dist/**"
   ]
 }

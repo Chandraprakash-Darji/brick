@@ -69,6 +69,14 @@ export const ENTRY_POINTS: EntryPoint[] = [
       "The Vite plugin that generates the typed client contract and serves the dashboard.",
   },
   {
+    slug: "cli-workflows",
+    specifier: "@brickkit/cli/workflows",
+    file: "packages/cli/src/workflows.ts",
+    tsconfig: "packages/cli/tsconfig.build.json",
+    description:
+      'Load and build the `"use workflow"` and `"use step"` files of a Brick application, for tests and scripts that run workflows without `brick dev`.',
+  },
+  {
     slug: "cli-dev-reporter",
     specifier: "@brickkit/cli/dev-reporter",
     file: "packages/cli/src/dev-reporter.ts",

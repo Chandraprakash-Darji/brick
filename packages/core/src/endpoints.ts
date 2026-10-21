@@ -4,6 +4,7 @@ import type { Service } from "./types";
 import type { DatabaseHandle } from "./db/define";
 import type { ApiDocument, DocumentationOptions } from "./docs";
 import type { DashboardOptions } from "./dashboard";
+import type { EventsDefinition, EventsHub } from "./events/hub";
 import { toErrorResponse } from "./error-response";
 import { createLogger } from "./logger";
 import { ActionExecutionError, ValidationError } from "./types";
@@ -182,7 +183,15 @@ export type BrickApp = Elysia<any, any, any, any, any, any, any> & {
     readonly documentation?: DocumentationOptions;
     /** What `brick start` serves for monitoring; its `auth` is not enumerable. */
     readonly dashboard?: DashboardOptions;
+    /** The listeners and settings of `events`, as plain data. */
+    readonly events?: EventsDefinition;
   };
+  /**
+   * The events of this app, when `events` is set: start and stop delivery, drain
+   * what is due, and see or retry what is parked. `brick dev` and `brick start`
+   * start it for you.
+   */
+  readonly events?: EventsHub;
   /** Register a raw endpoint (outside the JSON action mesh). */
   endpoint(def: EndpointDefinition): void;
   /**

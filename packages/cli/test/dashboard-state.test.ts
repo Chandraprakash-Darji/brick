@@ -1,5 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { docsHref, parseRoute, routeHref } from "../dashboard/state";
+import {
+  docsHref,
+  initialState,
+  parseRoute,
+  reduce,
+  routeHref,
+} from "../dashboard/state";
 
 describe("parseRoute", () => {
   it("reads a view and a selected request", () => {
@@ -10,6 +16,10 @@ describe("parseRoute", () => {
       path: ["abc 123"],
     });
     expect(routeHref("requests", "abc 123")).toBe("#/requests/abc%20123");
+  });
+
+  it("knows the workflows view", () => {
+    expect(parseRoute("#/workflows")).toEqual({ view: "workflows", path: [] });
   });
 
   it("falls back to requests for an address that is not a view", () => {
@@ -72,5 +82,16 @@ describe("docsHref", () => {
       path: ["a b", "c"],
       anchor: "d e",
     });
+  });
+});
+
+describe("reduce", () => {
+  it("follows the workflow inspector as the app restarts", () => {
+    expect(initialState.inspector).toBe(false);
+    const up = reduce(initialState, { type: "inspector", inspector: true });
+    expect(up.inspector).toBe(true);
+    expect(reduce(up, { type: "inspector", inspector: false }).inspector).toBe(
+      false,
+    );
   });
 });

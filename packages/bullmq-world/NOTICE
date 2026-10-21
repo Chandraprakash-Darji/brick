@@ -1,0 +1,16 @@
+This package is a derivative work of `@fantasticfour/world-redis-bullmq`
+(https://github.com/vinnymac/worlds, packages/world-redis-bullmq), licensed under
+the Apache License, Version 2.0. See LICENSE.
+
+Changes made to the original files:
+
+- Ported from the Workflow SDK v4 World spec to v5: event ids are log positions
+  allocated inside the Lua scripts, stale writers are bumped and told what they
+  skipped, `sinceCursor` deltas, lazy step start, run attributes and `attr_set`,
+  `streams.*` with the run id first, one BullMQ queue, `registerHandler` and
+  `registerRoute`, restart recovery, and `runs.list` with status arrays.
+- Run, hook and step writes that were several round trips are single scripts.
+- Inlined the small helpers that were in the monorepo's private `shared`
+  package, so the package has no workspace dependencies.
+- Rewrote the test suite for v5 and added concurrency, crash and end-to-end
+  chaos tests.

@@ -26,6 +26,7 @@ whose default export is a `BrickApp` that does not call `.listen()`.
 brick dev [entry] [--port 4000] [--dashboard-port 9400] [--history-days 90] [--no-dashboard]
 brick start [entry] [--port 4000]
 brick build <entry> [--outdir dist/brick] [--port <number>] [--no-aot]
+brick worker <entry>
 brick gen openapi <entry> [--output openapi.json]
 brick gen client <entry> [--output _brick/contract.ts]
 brick info <entry>
@@ -130,6 +131,12 @@ InlineTOC, Banner), and `components` names a module of your own React components
 to add, which the dashboard bundles. Links between pages and local images work as
 they do on a docs site. See `packages/cli/dashboard/README.md`.
 
+For an app with workflow listeners, a Workflows tab shows the Workflow SDK's
+inspector, which comes with the CLI, for the world the app runs on. The app serves it on a
+loopback port of its own and the dashboard passes requests to it at `/workflows`.
+It can cancel runs, so only `brick dev` serves it, and only the dashboard's own
+page may change anything through it.
+
 The Logs tab lists what actions, tools, and endpoints log with `ctx.logger`, and
 what they print with `console.log`, `info`, `warn`, `error`, and `debug`, newest
 first. Under `brick dev` a line written while a traced request runs is a span
@@ -193,7 +200,7 @@ export default brick({
 
 It listens on a port of its own, so it can be kept private or mounted at another
 address, and it answers while the app's routes do not. It shows Requests, Logs,
-Errors, Overview, and Reloads; there is no restart, API proxy, APIs, or Docs, and
+Errors, Overview, and Reloads; there is no restart, API proxy, APIs, Docs, or Workflows, and
 OpenAPI documents are not served. Setting it turns `telemetry` on, and from then
 `ctx.logger` and `console` lines written during a request go to the dashboard
 and not to the container's console.
@@ -382,6 +389,8 @@ directory are watched too. Changes coalesce before restart; every restart evalua
 the app in a fresh process and generates the contract before starting the server.
 Generation failures preserve the previous contract and print the error. The next
 valid edit retries. Stopping `brick dev` stops its backend and frontend children.
+When you stop `brick dev` with Ctrl-C or it reloads, the backend first finishes its in-flight event deliveries (up to 3 seconds); a second Ctrl-C exits at once.
+On Windows, stopping or reloading the backend forcibly terminates it, so in-flight event deliveries may be interrupted.
 `--client` also works without `--frontend` if another process owns the frontend.
 
 For an embedded Vite app such as Pages, keep using `brickClient` in `vite.config.ts`.

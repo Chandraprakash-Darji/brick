@@ -17,7 +17,10 @@ bun install
 - `packages/core/` is services, actions, the `brick()` server, and the typed client in `@brickkit/core/client`.
 - `packages/cli/` is the `brick` binary: `dev`, `start`, `build`, `gen`, and `info`. Details live in `packages/cli/README.md`.
 - `packages/crud/` is the opt-in CRUD plugin.
+- `packages/redis-world/` and `packages/bullmq-world/` are the Workflow SDK worlds that run workflow listeners. Their tests need Redis: `bun run test:worlds`.
+- `packages/workflow-inspector/` is the Workflow SDK's observability UI for the dev dashboard, a modified copy of `@workflow/web`. It is not published: `bun run --filter @brickkit/cli build` builds it and copies it into the CLI. See its README before changing upstream files.
 - `www/` is the docs site. Content lives in `www/content/docs`. The agent skill lives in `skills/brick/SKILL.md`.
+- `examples/events/` is the events and workflows example, with tests that run over both worlds.
 - `examples/pages/` is the full app: TanStack Start frontend with the Brick API mounted in process. It uses workspace packages, so no npm publish is needed to try a framework change.
 
 ## Make a first change

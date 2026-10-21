@@ -5,8 +5,13 @@ import type {
 } from "../src/dev-telemetry-store";
 import { formatCount, formatDuration, spanKind } from "./format";
 
-export type GraphKind = "client" | "service" | "database";
-export type EdgeKind = "request" | "rpc" | "sql";
+export type GraphKind =
+  | "client"
+  | "service"
+  | "database"
+  | "events"
+  | "listener";
+export type EdgeKind = "request" | "rpc" | "sql" | "event";
 export type Health = "ok" | "failing" | "idle";
 
 export interface GraphNode {
@@ -176,6 +181,15 @@ export function buildServiceGraph(
     if (database) edge("sql", `service:${service.name}`, database);
   }
 
+  // Events are structure only: nothing times a delivery yet, so no traffic shows.
+  const events = architecture?.schema.events;
+  if (events && events.recorders.length > 0) {
+    for (const name of events.recorders)
+      edge("event", `service:${name}`, "events");
+    for (const listener of events.listeners)
+      edge("event", "events", `listener:${listener.name}`);
+  }
+
   for (const trace of traces) {
     record(
       clientActivity,
@@ -308,6 +322,34 @@ export function buildServiceGraph(
       failures: activity.failures,
       avgMs: average(activity),
     });
+  }
+
+  if (events && events.recorders.length > 0) {
+    nodes.push({
+      id: "events",
+      kind: "events",
+      label: "Events",
+      caption: plural(events.listeners.length, "listener"),
+      metric: "",
+      detail: events.dispatch ? "outbox · delivering" : "outbox · record only",
+      health: "idle",
+      calls: 0,
+      failures: 0,
+      avgMs: undefined,
+    });
+    for (const listener of events.listeners)
+      nodes.push({
+        id: `listener:${listener.name}`,
+        kind: "listener",
+        label: listener.name,
+        caption: listener.kind,
+        metric: "",
+        detail: `on ${listener.on.join(", ")}`,
+        health: "idle",
+        calls: 0,
+        failures: 0,
+        avgMs: undefined,
+      });
   }
 
   const present = new Set(nodes.map((node) => node.id));

@@ -23,6 +23,7 @@ import { ErrorsView } from "@/views/errors";
 import { OverviewView } from "@/views/overview";
 import { ReloadsView } from "@/views/reloads";
 import { RequestsView } from "@/views/requests";
+import { WorkflowsView } from "@/views/workflows";
 
 // Fumadocs' components and Shiki's styles are only needed for the Docs tab.
 const DocsView = lazy(() => import("@/views/docs"));
@@ -45,6 +46,10 @@ export function App() {
   // The API reference loads on first visit, then stays alive in the background.
   const production = state.mode === "production";
   const [apisOpened, setApisOpened] = useState(route.view === "apis");
+  // The inspector loads on first visit too, then keeps the run you were reading.
+  const [workflowsOpened, setWorkflowsOpened] = useState(
+    route.view === "workflows",
+  );
   const newest = state.failures[0]?.id ?? 0;
   const onErrors = route.view === "errors";
   // Changes whenever the app finishes a request, so stored views can catch up.
@@ -52,12 +57,18 @@ export function App() {
 
   useEffect(() => {
     if (route.view === "apis" && !production) setApisOpened(true);
+    if (route.view === "workflows" && !production) setWorkflowsOpened(true);
   }, [route.view, production]);
 
-  // The monitoring dashboard has no APIs or Docs; an old link lands on Requests.
+  // The monitoring dashboard has no APIs, Docs or Workflows; an old link lands on Requests.
   useEffect(() => {
     document.title = production ? "Brick" : "Brick dev";
-    if (production && (route.view === "apis" || route.view === "docs"))
+    if (
+      production &&
+      (route.view === "apis" ||
+        route.view === "docs" ||
+        route.view === "workflows")
+    )
       location.replace(routeHref("requests"));
   }, [production, route.view]);
 
@@ -66,6 +77,13 @@ export function App() {
     if (onErrors) setSeenFailure(newest);
   }, [onErrors, newest]);
   const hasNewErrors = newest > seenFailure;
+  // Shown for any app that runs workflows, so the view can say how to turn the inspector on.
+  const hasWorkflows =
+    state.inspector ||
+    (state.architecture?.schema.events?.listeners.some(
+      (listener) => listener.kind === "workflow",
+    ) ??
+      false);
 
   const focusSearch = useCallback(() => {
     if (route.view === "requests") {
@@ -116,6 +134,7 @@ export function App() {
           errorCount={state.failures.length}
           hasNewErrors={hasNewErrors}
           hasDocs={state.docs !== null}
+          hasWorkflows={hasWorkflows}
           production={production}
         />
         <div className="flex min-w-0 flex-1 flex-col">
@@ -135,8 +154,10 @@ export function App() {
           <main
             className={cn(
               "flex flex-col gap-4",
-              // The API reference and the docs bring their own sidebars and fill the page.
-              route.view === "apis" || route.view === "docs"
+              // The API reference, the docs and the inspector bring their own chrome and fill the page.
+              route.view === "apis" ||
+                route.view === "docs" ||
+                route.view === "workflows"
                 ? "p-0"
                 : "p-6 max-sm:p-4",
             )}
@@ -163,6 +184,12 @@ export function App() {
                 traces={state.traces}
                 failures={state.failures}
                 hidden={route.view !== "apis"}
+              />
+            )}
+            {workflowsOpened && !production && (
+              <WorkflowsView
+                available={state.inspector}
+                hidden={route.view !== "workflows"}
               />
             )}
             {route.view === "docs" && !production && (

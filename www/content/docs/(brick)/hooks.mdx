@@ -141,3 +141,7 @@ hooks: {
   },
 }
 ```
+
+## Reacting After the Commit
+
+Hooks run inside the request, so a slow hook slows the response. To run work after a write has been committed, such as sending an email, listen for the [events](/docs/events) that generated writes emit: they are recorded in the same transaction as the row and delivered with retries.

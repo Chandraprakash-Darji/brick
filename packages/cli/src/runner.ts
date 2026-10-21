@@ -10,12 +10,14 @@ import {
   type ArchitectureSchema,
   type BrickApp,
   type DocumentationOptions,
+  type EventsHub,
 } from "@brickkit/core";
 import { startDevDashboard, type DevDashboard } from "./dev-dashboard";
 import { DocsHost } from "./dev-docs";
 import { DEFAULT_HISTORY_DAYS, openHistory } from "./dev-history";
 import { DevTelemetryStore } from "./dev-telemetry-store";
 import { parsePort } from "./port-utils";
+import { buildAppWorkflows, registerWorkflowTransform } from "./workflows";
 import { startProductionDashboard } from "./production-dashboard";
 import type {
   SerializedError,
@@ -65,7 +67,9 @@ async function createServer(
       prefix: options.prefix,
     });
 
+  await buildAppWorkflows(app, { reuse: label === "Development" });
   await app.listen({ port });
+  app.events?.start();
 
   const prefix = app.definition.prefix;
   const services = app.definition.services;
@@ -97,6 +101,25 @@ async function createServer(
   return app;
 }
 
+/**
+ * Finish the deliveries in flight at SIGINT or SIGTERM, then exit. A second
+ * signal exits at once, for a delivery that never finishes.
+ */
+export function finishDeliveriesOnSignal(
+  events: Pick<EventsHub, "stop">,
+  signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"],
+) {
+  let stopping = false;
+  const stop = (signal: NodeJS.Signals) => {
+    if (stopping) return process.exit(signal === "SIGINT" ? 130 : 143);
+    stopping = true;
+    void events.stop().finally(() => process.exit(0));
+  };
+  // `on`, not `once`: the workflow bundle loads signal-exit, which re-raises the
+  // signal itself when it finds no listener left, and `once` removes ours first.
+  for (const signal of signals) process.on(signal, stop);
+}
+
 export async function startProdServer(options: DevServerOptions = {}) {
   const entry = options.entry;
 
@@ -108,6 +131,7 @@ export async function startProdServer(options: DevServerOptions = {}) {
       process.exit(1);
     }
     console.log(`[Brick-TS] Loading application entry: ${resolvedEntry}`);
+    await registerWorkflowTransform();
     const module = await import(resolvedEntry);
     // An entry that default-exports its app is served as it built it, with its
     // options (telemetry, dashboard, and the rest), as `brick dev` does.
@@ -159,9 +183,14 @@ export async function startProdServer(options: DevServerOptions = {}) {
     }
   }
 
+  await buildAppWorkflows(app);
   // Before listening, so the first request is already traced and its logs kept.
   const dashboard = await startProductionDashboard(app, { appPort: port });
   app.listen(port);
+  if (app.events) {
+    app.events.start();
+    finishDeliveriesOnSignal(app.events);
+  }
 
   console.log(`\n⚡ API Gateway running on: http://localhost:${port}`);
   console.log(`🩺 Health check:        http://localhost:${port}/_health`);
@@ -183,7 +212,51 @@ export async function startProdServer(options: DevServerOptions = {}) {
   return app;
 }
 
+/**
+ * What `brick worker` runs: load the app and deliver its events from this
+ * process, without serving HTTP. Run it beside API processes that only record
+ * events (`events: { dispatch: false }`), or alone for an app with no routes.
+ * Workflow listeners run here too: the world starts and the steps of every run
+ * in it execute in this process.
+ *
+ * @param options - `entry`: the app file, which must default-export a `brick()` app.
+ * @returns The app.
+ * @throws When the entry is missing, has no `events`, or only records events.
+ */
+export async function startWorker(options: { entry: string }) {
+  const resolvedEntry = resolve(process.cwd(), options.entry);
+  if (!existsSync(resolvedEntry)) {
+    console.error(`[Brick-TS] Error: Entry file not found: ${resolvedEntry}`);
+    process.exit(1);
+  }
+  console.log(`[Brick-TS] Loading application entry: ${resolvedEntry}`);
+  await registerWorkflowTransform();
+  const app = (await import(resolvedEntry))?.default;
+  if (!isBrickApp(app))
+    throw new Error(
+      "Brick: a worker needs an entry that default-exports a BrickApp.",
+    );
+  if (!app.events)
+    throw new Error(
+      "Brick: this app has no events, so a worker has nothing to deliver.",
+    );
+  if (!app.events.describe().dispatch)
+    throw new Error(
+      "Brick: this app only records events (events.dispatch is false), so a worker would deliver nothing. Enable dispatch for the worker process.",
+    );
+  await buildAppWorkflows(app);
+  app.events.start();
+  finishDeliveriesOnSignal(app.events);
+  const listeners = app.events.describe().listeners;
+  console.log(`\n🧱 Brick-TS Worker`);
+  console.log(
+    `   Delivering events to ${listeners.length} ${listeners.length === 1 ? "listener" : "listeners"}: ${listeners.map((l) => l.name).join(", ") || "none"}\n`,
+  );
+  return app;
+}
+
 export async function startDevApplication(options: DevServerOptions) {
+  if (options.entry) await registerWorkflowTransform();
   const module = options.entry
     ? await import(resolve(options.entry))
     : undefined;
@@ -287,6 +360,8 @@ export async function startDevServer(options: DevServerOptions = {}) {
   const launch = () => {
     const generation = ++generationCount;
     childGeneration = generation;
+    // The new process serves its own inspector once it is up.
+    telemetry?.setInspector(undefined);
     telemetry?.recordReload({ kind: "started", generation });
     const application = Bun.spawn(
       [
@@ -351,6 +426,18 @@ export async function startDevServer(options: DevServerOptions = {}) {
               generation,
             );
           }
+          if (
+            telemetry &&
+            message.type === "brick:inspector" &&
+            generation === childGeneration &&
+            "port" in message &&
+            "token" in message
+          ) {
+            telemetry.setInspector({
+              port: message.port as number,
+              token: message.token as string,
+            });
+          }
           if (docs && message.type === "brick:documentation") {
             void docs.configure(
               dirname(resolvedEntry),
@@ -408,6 +495,7 @@ export async function startDevServer(options: DevServerOptions = {}) {
       },
     );
     void application.exited.then((code) => {
+      if (generation === childGeneration) telemetry?.setInspector(undefined);
       if (!stopped && !intentionalExits.has(application)) {
         console.error(
           `[Brick-TS] Application process exited with code ${code}. Waiting for changes to restart.`,
@@ -528,9 +616,15 @@ export async function startDevServer(options: DevServerOptions = {}) {
     process.off("SIGTERM", onSignal);
     process.off("exit", stop);
   };
-  const onSignal = () => {
+  const onSignal = (signal: NodeJS.Signals) => {
+    if (stopped) {
+      child.kill("SIGKILL");
+      process.exit(signal === "SIGINT" ? 130 : 143);
+    }
     stop();
-    process.exit(0);
+    process.on("SIGINT", onSignal);
+    process.on("SIGTERM", onSignal);
+    void child.exited.then(() => process.exit(0));
   };
   process.on("SIGINT", onSignal);
   process.on("SIGTERM", onSignal);

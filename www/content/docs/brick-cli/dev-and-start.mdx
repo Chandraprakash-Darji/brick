@@ -36,6 +36,8 @@ The entry must default-export a `BrickApp` without calling `.listen()`. Keep sta
 The development worker tracks imported local files, including dependencies outside the entry directory. It coalesces edits and restarts with a fresh module graph. Each restart regenerates types and HTTP route metadata before starting the backend. Contract writes are atomic, unchanged content preserves the file timestamp, and generated files cannot trigger regeneration loops.
 
 If generation fails, the error appears in the terminal and the previous contract remains intact. The backend worker exits; the supervisor waits for edits and retries. The frontend command waits for the first successful generation and remains running through later backend restarts. Stopping `brick dev` stops its backend and frontend children.
+When you stop `brick dev` with Ctrl-C or it reloads, the backend first finishes its in-flight event deliveries (up to 3 seconds); a second Ctrl-C exits at once.
+On Windows, stopping or reloading the backend forcibly terminates it, so in-flight event deliveries may be interrupted.
 
 Omit `--frontend` if another process starts the frontend. For an embedded Vite app such as Pages, use the [Vite contract plugin](/docs/typed-client#generate-the-contract-automatically), which generates during development and production builds.
 
@@ -99,6 +101,10 @@ const app = brick({
 ```
 
 A document that throws is skipped with a warning. Documents load again on each restart.
+
+### Workflow Inspector
+
+For an app with workflow listeners (see [Events](/docs/events)), the dashboard gains a Workflows tab that shows the Workflow SDK's observability UI for the world the app runs on: runs, step and sleep traces, events, streams, hooks, replay and cancel. The UI is a vendored copy of `@workflow/web` that ships with the CLI, without its own header, in the dashboard's colors and fonts and following its light or dark theme. Nothing needs installing. The app serves the UI on a loopback port of its own and the dashboard passes requests to it at `/workflows`, so the address stays the same when the app reloads. It is served only by `brick dev`: it can cancel runs and resume hooks, so the production dashboard does not have it, and the dev dashboard accepts changes to it only from its own page.
 
 ### Developer Docs
 
@@ -248,7 +254,7 @@ The same shape fits any other provider, such as Clerk: verify the request's sess
 
 `GET /_health` on the dashboard's port needs no sign-in, so an uptime monitor can use it: it answers 200 `{"status":"ok","app":"up"}` while the app answers its own `/_health`, and 503 when it does not. It says nothing else.
 
-**What it shows, and what it does not.** Requests, spans, errors, logs, and the shape of the service, from the time the process started. Restart, the APIs and Docs tabs, the API proxy, and OpenAPI documents are not served at all, so a signed-in viewer can look but not change or call anything. Responses carry `Cache-Control: no-store`, a strict Content-Security-Policy, and `X-Frame-Options: DENY`. Serve it over HTTPS (terminate it at your proxy): a token sent over plain HTTP can be read on the way. There is no limit on failed sign-ins, so use long random tokens.
+**What it shows, and what it does not.** Requests, spans, errors, logs, and the shape of the service, from the time the process started. Restart, the APIs, Docs and Workflows tabs, the API proxy, and OpenAPI documents are not served at all, so a signed-in viewer can look but not change or call anything. Responses carry `Cache-Control: no-store`, a strict Content-Security-Policy, and `X-Frame-Options: DENY`. Serve it over HTTPS (terminate it at your proxy): a token sent over plain HTTP can be read on the way. There is no limit on failed sign-ins, so use long random tokens.
 
 **Logs go to the dashboard, not the console.** While the dashboard is on, `ctx.logger` and `console.log`, `info`, `warn`, `error`, and `debug` lines written during a request are kept for the dashboard and are not printed, so they stay out of the container's logs. Lines outside a request (startup, shutdown) and crashes still print. See [Logs](#logs).
 

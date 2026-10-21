@@ -1,0 +1,69 @@
+{
+  "name": "@brickkit/redis-world",
+  "version": "0.8.2",
+  "description": "Plain Redis World for Workflow SDK v5 with a reliable list queue and durable storage",
+  "homepage": "https://brickkit.dev",
+  "keywords": [
+    "durable-functions",
+    "redis",
+    "workflow"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Chandraprakash-Darji/brick.git",
+    "directory": "packages/redis-world"
+  },
+  "bin": {
+    "brickkit-redis-world-setup": "./bin/setup.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "default": "./dist/cli.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
+    "test:e2e": "bun run build && vitest run --config vitest.e2e.config.ts"
+  },
+  "dependencies": {
+    "@workflow/errors": "5.0.4",
+    "@workflow/utils": "5.0.2",
+    "@workflow/world": "5.0.4",
+    "ioredis": "^6.0.0",
+    "ulid": "^3.0.2"
+  },
+  "devDependencies": {
+    "@hono/node-server": "^2.1.5",
+    "@testcontainers/redis": "^12.1.0",
+    "@types/node": "^26.6.5",
+    "@workflow/cli": "5.0.5",
+    "@workflow/core": "5.2.2",
+    "@workflow/world-testing": "5.0.5",
+    "hono": "^4.13.13",
+    "tsdown": "^0.23.1",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.11",
+    "workflow": "5.2.2"
+  }
+}

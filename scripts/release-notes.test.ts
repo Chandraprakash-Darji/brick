@@ -43,7 +43,7 @@ function fixture() {
       cwd: root,
       encoding: "utf8",
     });
-  return { git, commit, notes };
+  return { root, git, commit, notes };
 }
 
 test("beta notes include only changes since the previous beta and omit maintenance", () => {
@@ -82,6 +82,41 @@ test("stable notes include beta features and preserve breaking change markers", 
   git("tag", "v0.3.0");
   expect(notes()).toContain("feat(core)!: new plugin API");
   expect(notes()).toContain("v0.2.4...v0.3.0");
+});
+
+test("notes list changes to the world packages", () => {
+  const { root, git, commit, notes } = fixture();
+  commit("chore(release): v0.8.1", "0.8.1");
+  git("tag", "v0.8.1");
+  for (const pkg of ["bullmq-world", "redis-world"]) {
+    mkdirSync(join(root, "packages", pkg), { recursive: true });
+    writeFileSync(join(root, "packages", pkg, "index.ts"), pkg);
+    git("add", ".");
+    git("commit", "-m", `feat(${pkg}): start a run once`);
+  }
+  const output = notes();
+  expect(output).toContain("## @brickkit/bullmq-world");
+  expect(output).toContain("## @brickkit/redis-world");
+  expect(output).not.toContain("## @brickkit/core");
+});
+
+test("notes list changes to the inspector under the CLI, which ships it", () => {
+  const { root, git, commit, notes } = fixture();
+  commit("chore(release): v0.8.1", "0.8.1");
+  git("tag", "v0.8.1");
+  mkdirSync(join(root, "packages/workflow-inspector"), { recursive: true });
+  writeFileSync(join(root, "packages/workflow-inspector/index.ts"), "x");
+  git("add", ".");
+  git(
+    "commit",
+    "-m",
+    "fix(workflow-inspector): show the trace for an unknown tab",
+  );
+  const output = notes();
+  expect(output).toContain("## @brickkit/cli");
+  expect(output).toContain("show the trace for an unknown tab");
+  expect(output).not.toContain("## @brickkit/workflow-inspector");
+  expect(output).not.toContain("## @brickkit/core");
 });
 
 test("notes ignore tags on unrelated branches and handle maintenance-only releases", () => {

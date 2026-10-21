@@ -511,6 +511,183 @@ describe("startDevDashboard", () => {
     });
   });
 
+  describe("workflow inspector", () => {
+    async function withInspector<T>(
+      run: (context: {
+        store: DevTelemetryStore;
+        base: string;
+        /** Lets the stream write its second piece. */
+        release: () => void;
+      }) => Promise<T>,
+    ): Promise<T> {
+      const token = "secret-token";
+      let release!: () => void;
+      const released = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const inspector = Bun.serve({
+        port: 0,
+        async fetch(request) {
+          const url = new URL(request.url);
+          if (url.pathname === "/workflows/stream") {
+            // Written in pieces, as a run's output is.
+            return new Response(
+              new ReadableStream({
+                async start(controller) {
+                  controller.enqueue(new TextEncoder().encode("one,"));
+                  await released;
+                  controller.enqueue(new TextEncoder().encode("two"));
+                  controller.close();
+                },
+              }),
+            );
+          }
+          return Response.json(
+            {
+              method: request.method,
+              path: url.pathname + url.search,
+              body: await request.text(),
+              token: request.headers.get("x-brick-inspector"),
+              cookie: request.headers.get("cookie"),
+            },
+            { status: 201, headers: { "x-from-inspector": "yes" } },
+          );
+        },
+      });
+      const { store, dashboard, base } = await setup();
+      store.setInspector({ port: inspector.port!, token });
+      try {
+        return await run({ store, base, release });
+      } finally {
+        dashboard.stop();
+        inspector.stop(true);
+      }
+    }
+
+    it("tells the page whether an inspector is running", async () => {
+      await withInspector(async ({ store, base }) => {
+        const state = async () =>
+          (
+            (await (await fetch(`${base}/api/state`)).json()) as {
+              inspector: boolean;
+            }
+          ).inspector;
+        expect(await state()).toBe(true);
+        const events = store.subscribe(() => {});
+        store.setInspector(undefined);
+        events();
+        expect(await state()).toBe(false);
+      });
+    });
+
+    it("passes requests on with the token the dashboard holds, and never the page's cookies", async () => {
+      await withInspector(async ({ base }) => {
+        const answer = await fetch(`${base}/workflows/run/abc?tab=events`, {
+          headers: { cookie: "session=mine", "x-brick-inspector": "guess" },
+        });
+        expect(answer.status).toBe(201);
+        expect(answer.headers.get("x-from-inspector")).toBe("yes");
+        expect(await answer.json()).toEqual({
+          method: "GET",
+          path: "/workflows/run/abc?tab=events",
+          body: "",
+          token: "secret-token",
+          cookie: null,
+        });
+      });
+    });
+
+    it("lets only the dashboard frame it, and leaves the dashboard's own page as it was", async () => {
+      await withInspector(async ({ base }) => {
+        for (const path of ["/workflows/", "/workflows/run/abc"]) {
+          const answer = await fetch(`${base}${path}`);
+          expect(answer.headers.get("content-security-policy")).toBe(
+            "frame-ancestors 'self'",
+          );
+          expect(answer.headers.get("x-frame-options")).toBe("SAMEORIGIN");
+        }
+        const page = await fetch(`${base}/`);
+        expect(page.status).toBe(200);
+        expect(page.headers.get("content-security-policy")).toBeNull();
+        expect(page.headers.get("x-frame-options")).toBeNull();
+      });
+    });
+
+    it("streams what the inspector writes without waiting for the end", async () => {
+      await withInspector(async ({ base, release }) => {
+        const answer = await fetch(`${base}/workflows/stream`);
+        const reader = answer.body!.getReader();
+        // The rest is written only once the first piece came through.
+        const first = await reader.read();
+        expect(new TextDecoder().decode(first.value)).toBe("one,");
+        release();
+        const second = await reader.read();
+        expect(new TextDecoder().decode(second.value)).toBe("two");
+      });
+    });
+
+    it("sends the body of a change that comes from the dashboard's own page", async () => {
+      await withInspector(async ({ base }) => {
+        const answer = await fetch(`${base}/workflows/api/rpc`, {
+          method: "POST",
+          body: '{"method":"cancelRun"}',
+          headers: {
+            origin: base,
+            "sec-fetch-site": "same-origin",
+          },
+        });
+        expect(answer.status).toBe(201);
+        expect(await answer.json()).toMatchObject({
+          method: "POST",
+          body: '{"method":"cancelRun"}',
+        });
+      });
+    });
+
+    it("refuses a change from another site, but lets it look", async () => {
+      await withInspector(async ({ base }) => {
+        for (const headers of [
+          { origin: "https://evil.example" },
+          { "sec-fetch-site": "cross-site" },
+          { origin: "null" },
+        ])
+          expect(
+            (
+              await fetch(`${base}/workflows/api/rpc`, {
+                method: "POST",
+                body: '{"method":"cancelRun"}',
+                headers,
+              })
+            ).status,
+          ).toBe(403);
+        expect(
+          (
+            await fetch(`${base}/workflows/`, {
+              headers: { "sec-fetch-site": "cross-site" },
+            })
+          ).status,
+        ).toBe(201);
+      });
+    });
+
+    it("says so when there is no inspector, or it cannot be reached", async () => {
+      const { store, dashboard, base } = await setup();
+      try {
+        const none = await fetch(`${base}/workflows/`);
+        expect(none.status).toBe(503);
+        expect(await none.text()).toContain("inspector is not running");
+
+        const closed = Bun.serve({ port: 0, fetch: () => new Response() });
+        const port = closed.port!;
+        closed.stop(true);
+        store.setInspector({ port, token: "t" });
+        expect((await fetch(`${base}/workflows/`)).status).toBe(502);
+      } finally {
+        dashboard.stop();
+      }
+    });
+  });
+
   it("explains a port conflict and how to resolve it", async () => {
     const first = await setup();
     try {

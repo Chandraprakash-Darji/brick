@@ -1,0 +1,702 @@
+---
+title: "Build a REST API with BrickKit"
+description: "Build a typed support ticket REST API with SQLite, generated CRUD routes, custom actions, validation, and access control."
+date: "2026-10-20"
+category: guide
+---
+
+This guide builds a support ticket REST API with BrickKit, Bun, and SQLite. You will declare a typed database table, expose generated CRUD endpoints, add custom actions with runtime schema validation, and protect the sensitive state transitions with request-scoped access control.
+
+You need Bun and a working knowledge of TypeScript. Prior experience with BrickKit or Drizzle ORM is not required.
+
+## What you will build
+
+A BrickKit app is a table definition, a service that holds the database and its routes, and an exported app instance. Here is the core of the finished app in one file. The sections below build it piece by piece and add the table sync, a context resolver, and two custom actions:
+
+```ts
+import {
+  brick,
+  defineDatabase,
+  defineService,
+  sqliteTable,
+  text,
+} from "@brickkit/core";
+import { crud } from "@brickkit/crud";
+
+export const tickets = sqliteTable("tickets", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  title: text("title").notNull(),
+  status: text("status").notNull().default("open"),
+  assignee: text("assignee"),
+});
+
+const database = defineDatabase({ tables: { tickets } });
+export const supportService = defineService("support", { database });
+
+supportService.resource({ name: "ticket", table: tickets, id: tickets.id }).use(
+  crud({
+    access: "public",
+    fields: {
+      id: { read: true, filter: ["eq"] },
+      title: {
+        read: true,
+        create: true,
+        update: true,
+        filter: ["eq", "contains"],
+        sort: true,
+      },
+      status: {
+        read: true,
+        create: true,
+        update: true,
+        filter: ["eq"],
+        sort: true,
+      },
+      assignee: { read: true, create: true, update: true, filter: ["eq"] },
+    },
+  }),
+);
+
+export const app = brick({ services: [supportService], telemetry: true });
+export default app;
+```
+
+Along the way you will test the API with real HTTP requests and inspect the running service graph.
+
+## Set up the project
+
+Create a project directory, initialize a Bun package, and install the BrickKit packages:
+
+```bash
+mkdir support-api && cd support-api
+bun init -y
+bun add @brickkit/core @brickkit/crud @brickkit/cli
+```
+
+The packages split the work like this:
+
+- `@brickkit/core` is the runtime: services, database wrappers, TypeBox schema primitives, and error handlers.
+- `@brickkit/crud` derives REST query, create, update, and delete endpoints from your database schema.
+- `@brickkit/cli` provides the `brick dev` server with reload, the dashboard, and the architecture introspection commands.
+
+BrickKit needs no separate build step or code generation to run. Bun executes the TypeScript source directly.
+
+## Define the database table
+
+Create `src/schema.ts`:
+
+```ts
+import { sqliteTable, text } from "@brickkit/core";
+
+export const tickets = sqliteTable("tickets", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  title: text("title").notNull(),
+  status: text("status").notNull().default("open"),
+  assignee: text("assignee"),
+});
+```
+
+BrickKit exports table builders backed by Drizzle ORM. In this schema:
+
+- `id` uses `$defaultFn(() => crypto.randomUUID())`, so Drizzle generates a UUID v4 string when an insert does not supply one.
+- `title` is a non-null string holding the user's issue description.
+- `status` defaults to `"open"`. A ticket moves through three values: `"open"`, `"in_progress"`, and `"resolved"`.
+- `assignee` is an optional text column with the username of the agent handling the ticket.
+
+BrickKit does not run database migrations automatically in production. For local development and testing, you will use the `syncSchema` helper, which creates missing SQLite tables.
+
+## Configure the service and CRUD resource
+
+A service defines a bounded domain. It groups a database connection, a request context resolver, and the resources and actions you expose.
+
+Create `src/app.ts`:
+
+```ts
+import {
+  brick,
+  defineDatabase,
+  defineService,
+  syncSchema,
+} from "@brickkit/core";
+import { crud } from "@brickkit/crud";
+import { tickets } from "./schema";
+
+const database = defineDatabase({
+  tables: { tickets },
+});
+
+export const supportService = defineService("support", {
+  database,
+  context: (baseCtx) => {
+    const user = baseCtx.request.headers.get("x-user");
+    return {
+      user: user ? { name: user } : null,
+    };
+  },
+});
+
+supportService.resource({ name: "ticket", table: tickets, id: tickets.id }).use(
+  crud({
+    access: "public",
+    fields: {
+      id: { read: true, filter: ["eq"] },
+      title: {
+        read: true,
+        create: true,
+        update: true,
+        filter: ["eq", "contains"],
+        sort: true,
+      },
+      status: {
+        read: true,
+        create: true,
+        update: true,
+        filter: ["eq"],
+        sort: true,
+      },
+      assignee: {
+        read: true,
+        create: true,
+        update: true,
+        filter: ["eq"],
+      },
+    },
+  }),
+);
+
+syncSchema(supportService);
+
+export const app = brick({
+  services: [supportService],
+  title: "Support Ticket API",
+  version: "1.0.0",
+  telemetry: true,
+});
+
+export default app;
+```
+
+What each part does:
+
+1. `defineDatabase` wraps the underlying `bun:sqlite` engine. `{ tables: { tickets } }` tells the runtime which tables this handle manages. Without a filename, you get an in-memory SQLite database.
+2. `defineService("support", { database, context })` creates the domain. The `context` function runs on every incoming HTTP request. It reads the `x-user` header and passes a typed `user` object to downstream handlers.
+3. `supportService.resource(...)` registers a CRUD resource named `ticket`. The `crud()` plugin is deny-by-default, so `access: "public"` is what lets unauthenticated callers use the configured operations.
+4. `fields` turns on reading, writing, filtering, and sorting per column. Clients cannot write a column that is missing from `create` or `update`.
+5. `syncSchema(supportService)` reads the resources registered on the service and runs `CREATE TABLE IF NOT EXISTS` statements against SQLite. Call it after registering your resources, so that `supportService.tables` contains the target definitions.
+6. `export const app = brick(...)` assembles the app from your services. `telemetry: true` enables span tracking and forwards execution metrics to the local dev dashboard.
+
+## Test the CRUD endpoints with curl
+
+Start the development server with the BrickKit CLI:
+
+```bash
+bunx brick dev src/app.ts --port 4000
+```
+
+The CLI prints the registered services and every mounted HTTP endpoint:
+
+```text
+🧱 Brick-TS Development Server
+   Registered Services: 1
+   • support (8 actions)
+     -> POST   /api/ticket/query
+     -> GET    /api/ticket/:id
+     -> POST   /api/ticket
+     -> PATCH  /api/ticket/:id
+     -> DELETE /api/ticket/:id
+     -> POST   /api/ticket/find-one
+     -> POST   /api/ticket/count
+     -> POST   /api/ticket/exists
+
+⚡ API Gateway running on: http://localhost:4000
+🩺 Health check:        http://localhost:4000/_health
+🗺️ Architecture graph:  http://localhost:4000/_brick/services
+```
+
+CRUD routes are mounted under `/api/` followed by the resource name (`ticket`), not the service name (`support`). The underlying action identifiers are `ticket.query`, `ticket.get`, `ticket.create`, `ticket.update`, and `ticket.delete`.
+
+Open a second terminal to try each operation.
+
+### Create a ticket
+
+Send a `POST` request to `/api/ticket` with the required `title`:
+
+```bash
+curl -s -i -X POST http://localhost:4000/api/ticket \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Cannot connect to VPN"}'
+```
+
+Response:
+
+```text
+HTTP/1.1 200 OK
+Content-Type: application/json;charset=utf-8
+x-request-id: req_1
+
+{"id":"0b843fb4-ac4c-48da-9fb4-b2cc5b1625fb","title":"Cannot connect to VPN","status":"open","assignee":null}
+```
+
+The insert fills in a UUID for `id`, the default status `"open"`, and a `null` assignee.
+
+The UUIDs in this guide are examples. Yours will differ, so use the `id` from your own responses wherever one appears.
+
+Create a second ticket so you can test filtering:
+
+```bash
+curl -s -X POST http://localhost:4000/api/ticket \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Printer paper jam"}'
+```
+
+Response:
+
+```json
+{
+  "id": "bdcac6ef-6b99-47c9-b1fd-6d782d589930",
+  "title": "Printer paper jam",
+  "status": "open",
+  "assignee": null
+}
+```
+
+### List tickets with a filter
+
+BrickKit exposes listing as a `POST` to `/api/ticket/query`. A JSON body can carry complex filter expressions, several orderings, and nested conditions without fitting them into a URL.
+
+Find the tickets whose title contains `"VPN"`:
+
+```bash
+curl -s -i -X POST http://localhost:4000/api/ticket/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "where": {
+      "field": "title",
+      "op": "contains",
+      "value": "VPN"
+    },
+    "limit": 10
+  }'
+```
+
+Response:
+
+```text
+HTTP/1.1 200 OK
+Content-Type: application/json;charset=utf-8
+
+{"items":[{"id":"0b843fb4-ac4c-48da-9fb4-b2cc5b1625fb","title":"Cannot connect to VPN","status":"open","assignee":null}],"limit":10,"offset":0}
+```
+
+The response includes the matching items, the effective page limit, and the current offset.
+
+### Retrieve a ticket by ID
+
+Fetch a single ticket with a plain `GET`:
+
+```bash
+curl -s -i http://localhost:4000/api/ticket/0b843fb4-ac4c-48da-9fb4-b2cc5b1625fb
+```
+
+Response:
+
+```text
+HTTP/1.1 200 OK
+Content-Type: application/json;charset=utf-8
+
+{"id":"0b843fb4-ac4c-48da-9fb4-b2cc5b1625fb","title":"Cannot connect to VPN","status":"open","assignee":null}
+```
+
+### Update a ticket
+
+With `@brickkit/crud`, `PATCH /api/ticket/:id` expects the changed columns inside a top-level `"data"` key. This keeps route identifiers and record columns from colliding.
+
+Update the ticket title:
+
+```bash
+curl -s -i -X PATCH http://localhost:4000/api/ticket/0b843fb4-ac4c-48da-9fb4-b2cc5b1625fb \
+  -H "Content-Type: application/json" \
+  -d '{"data": {"title": "Cannot connect to corporate VPN"}}'
+```
+
+Response:
+
+```text
+HTTP/1.1 200 OK
+Content-Type: application/json;charset=utf-8
+
+{"id":"0b843fb4-ac4c-48da-9fb4-b2cc5b1625fb","title":"Cannot connect to corporate VPN","status":"open","assignee":null}
+```
+
+### Delete a ticket
+
+Delete the second ticket by ID:
+
+```bash
+curl -s -i -X DELETE http://localhost:4000/api/ticket/bdcac6ef-6b99-47c9-b1fd-6d782d589930
+```
+
+Response:
+
+```text
+HTTP/1.1 200 OK
+Content-Type: application/json;charset=utf-8
+
+{"success":true}
+```
+
+## Add a custom action with typed errors
+
+Generic CRUD operations rarely capture a domain workflow. Assigning a ticket, for example, should check that the ticket exists, set the assignee, and move its status from `"open"` to `"in_progress"`.
+
+You add custom business logic as an action on a service. An action validates its input and output with TypeBox schemas (`t`) and receives helpers for returning structured HTTP errors.
+
+Add `assignTicket` to `src/app.ts`:
+
+```ts
+import { eq, t } from "@brickkit/core";
+
+export const assignTicket = supportService.action({
+  name: "assign",
+  method: "POST",
+  path: "/api/ticket/:id/assign",
+  input: t.Object({
+    id: t.String(),
+    assignee: t.String({ minLength: 1 }),
+  }),
+  output: t.Object({
+    id: t.String(),
+    title: t.String(),
+    status: t.String(),
+    assignee: t.Union([t.String(), t.Null()]),
+  }),
+  execute: async ({ input, ctx, error }) => {
+    const existing = await ctx.db
+      .select()
+      .from(tickets)
+      .where(eq(tickets.id, input.id))
+      .get();
+
+    if (!existing) {
+      return error.NOT_FOUND(`Ticket with ID "${input.id}" not found`);
+    }
+
+    const updated = await ctx.db
+      .update(tickets)
+      .set({
+        assignee: input.assignee,
+        status: "in_progress",
+      })
+      .where(eq(tickets.id, input.id))
+      .returning()
+      .get();
+
+    return updated;
+  },
+});
+```
+
+The options that matter here:
+
+- `path`: custom actions need the complete route path, including the `/api` prefix and any route parameters (`/api/ticket/:id/assign`). BrickKit does not add the service name for you.
+- `input`: declares the parameters from both the URL path (`:id`) and the JSON request body (`assignee`). BrickKit merges path parameters into `input` before validation runs.
+- `error.NOT_FOUND`: throws an `ActionExecutionError` with HTTP status 404. Writing `return error.NOT_FOUND(...)` lets TypeScript narrow types on the lines that follow.
+- `ctx.db`: the database handle configured on the service, available directly on `ctx`.
+
+Save `src/app.ts`. The `brick dev` process detects the file change and reloads the application.
+
+A reload starts a fresh process, and an in-memory database starts empty, so the tickets you created earlier are gone. Create one again and note its `id`:
+
+```bash
+curl -s -X POST http://localhost:4000/api/ticket \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Cannot connect to VPN"}'
+```
+
+Call the assign action with that `id`:
+
+```bash
+curl -s -i -X POST http://localhost:4000/api/ticket/0b843fb4-ac4c-48da-9fb4-b2cc5b1625fb/assign \
+  -H "Content-Type: application/json" \
+  -d '{"assignee": "alice"}'
+```
+
+Response:
+
+```text
+HTTP/1.1 200 OK
+Content-Type: application/json;charset=utf-8
+
+{"id":"0b843fb4-ac4c-48da-9fb4-b2cc5b1625fb","title":"Cannot connect to corporate VPN","status":"in_progress","assignee":"alice"}
+```
+
+Now try assigning an unknown ticket ID:
+
+```bash
+curl -s -i -X POST http://localhost:4000/api/ticket/non-existent-id/assign \
+  -H "Content-Type: application/json" \
+  -d '{"assignee": "alice"}'
+```
+
+Response:
+
+```text
+HTTP/1.1 404 Not Found
+Content-Type: application/json;charset=utf-8
+
+{"name":"ActionExecutionError","code":"NOT_FOUND","message":"Ticket with ID \"non-existent-id\" not found","status":404,"requestId":"req_9"}
+```
+
+BrickKit formats thrown errors as a JSON envelope with `name`, `code`, `message`, `status`, and a tracing `requestId`.
+
+## Trigger validation errors
+
+Input validation runs before `execute`. If the payload violates the schema, BrickKit stops there and returns `400 Bad Request` with the error paths.
+
+The `assign` action requires `assignee` to be a string of at least one character (`t.String({ minLength: 1 })`). Submit an empty string:
+
+```bash
+curl -s -i -X POST http://localhost:4000/api/ticket/0b843fb4-ac4c-48da-9fb4-b2cc5b1625fb/assign \
+  -H "Content-Type: application/json" \
+  -d '{"assignee": ""}'
+```
+
+Response:
+
+```text
+HTTP/1.1 400 Bad Request
+Content-Type: application/json;charset=utf-8
+
+{"name":"ValidationError","code":"VALIDATION_FAILED","message":"Validation failed for action 'assign' input","status":400,"errors":[{"path":"/assignee","message":"Expected string length greater or equal to 1","value":""}],"requestId":"req_a"}
+```
+
+Now send a number instead of a string:
+
+```bash
+curl -s -i -X POST http://localhost:4000/api/ticket/0b843fb4-ac4c-48da-9fb4-b2cc5b1625fb/assign \
+  -H "Content-Type: application/json" \
+  -d '{"assignee": 123}'
+```
+
+Response:
+
+```text
+HTTP/1.1 400 Bad Request
+Content-Type: application/json;charset=utf-8
+
+{"name":"ValidationError","code":"VALIDATION_FAILED","message":"Validation failed for action 'assign' input","status":400,"errors":[{"path":"/assignee","message":"Expected string","value":123}],"requestId":"req_b"}
+```
+
+Each entry in `errors` gives the JSON pointer path to the invalid field, the validation message, and the offending value. Output validation works the same way: if an action returns data that violates its declared `output` schema, BrickKit returns `500 Internal Server Error` instead of sending clients malformed data.
+
+## Enforce access control with request context
+
+Actions and CRUD resources accept an `authorize` hook to keep unauthorized users from modifying records. The guard runs after input validation and before `execute`.
+
+In this support workflow, only the agent assigned to a ticket may mark it resolved.
+
+Add the `resolveTicket` action to `src/app.ts`:
+
+```ts
+export const resolveTicket = supportService.action({
+  name: "resolve",
+  method: "POST",
+  path: "/api/ticket/:id/resolve",
+  input: t.Object({
+    id: t.String(),
+  }),
+  output: t.Object({
+    id: t.String(),
+    title: t.String(),
+    status: t.String(),
+    assignee: t.Union([t.String(), t.Null()]),
+  }),
+  authorize: async ({ user, input, ctx }) => {
+    if (!user) return false;
+    const existing = await ctx.db
+      .select()
+      .from(tickets)
+      .where(eq(tickets.id, input.id))
+      .get();
+    return existing?.assignee === user.name;
+  },
+  execute: async ({ input, ctx, error }) => {
+    const updated = await ctx.db
+      .update(tickets)
+      .set({ status: "resolved" })
+      .where(eq(tickets.id, input.id))
+      .returning()
+      .get();
+
+    if (!updated) {
+      return error.NOT_FOUND(`Ticket with ID "${input.id}" not found`);
+    }
+
+    return updated;
+  },
+});
+```
+
+The service already has this context resolver:
+
+```ts
+context: (baseCtx) => {
+  const user = baseCtx.request.headers.get("x-user");
+  return {
+    user: user ? { name: user } : null,
+  };
+},
+```
+
+When an action declares `authorize`:
+
+1. If `user` is null (the client sent no `x-user` header), returning `false` makes BrickKit reject the call with `401 Unauthorized`.
+2. If `user` is present but does not match the ticket's `assignee`, returning `false` makes BrickKit reject the call with `403 Forbidden`.
+3. If `authorize` returns `true`, BrickKit runs `execute`.
+
+Call `resolve` without an `x-user` header:
+
+```bash
+curl -s -i -X POST http://localhost:4000/api/ticket/0b843fb4-ac4c-48da-9fb4-b2cc5b1625fb/resolve
+```
+
+Response:
+
+```text
+HTTP/1.1 401 Unauthorized
+Content-Type: application/json;charset=utf-8
+
+{"name":"ActionExecutionError","code":"UNAUTHORIZED","message":"Access denied for action 'resolve'","status":401,"requestId":"req_c"}
+```
+
+Now try to resolve the ticket as `bob`. It is assigned to `alice`:
+
+```bash
+curl -s -i -X POST http://localhost:4000/api/ticket/0b843fb4-ac4c-48da-9fb4-b2cc5b1625fb/resolve \
+  -H "x-user: bob"
+```
+
+Response:
+
+```text
+HTTP/1.1 403 Forbidden
+Content-Type: application/json;charset=utf-8
+
+{"name":"ActionExecutionError","code":"FORBIDDEN","message":"Access denied for action 'resolve'","status":403,"requestId":"req_d"}
+```
+
+Finally, send the request with `x-user: alice`:
+
+```bash
+curl -s -i -X POST http://localhost:4000/api/ticket/0b843fb4-ac4c-48da-9fb4-b2cc5b1625fb/resolve \
+  -H "x-user: alice"
+```
+
+Response:
+
+```text
+HTTP/1.1 200 OK
+Content-Type: application/json;charset=utf-8
+
+{"id":"0b843fb4-ac4c-48da-9fb4-b2cc5b1625fb","title":"Cannot connect to corporate VPN","status":"resolved","assignee":"alice"}
+```
+
+The guard passed and the status is now `"resolved"`.
+
+## Use the dev dashboard and OpenAPI reference
+
+`brick dev` also serves a local dashboard at `http://127.0.0.1:9400` (or the port you pass with `--dashboard-port`).
+
+Open `http://127.0.0.1:9400` in your browser. It has three tabs:
+
+- **Requests**: lists every HTTP request as it happens. Click an entry to see an OpenTelemetry-compatible waterfall with the parent HTTP span, the internal service action span, and the exact SQL query run against SQLite (such as `insert into "tickets" ... returning "id"`).
+- **Logs**: collects the structured console messages emitted while requests run.
+- **APIs**: shows an interactive OpenAPI reference powered by Fumadocs OpenAPI. You can inspect the generated schemas and parameter requirements, and call endpoints with the built-in "Try in Playground" button.
+
+The app server itself also serves the raw OpenAPI spec and interactive documentation on its main port:
+
+- OpenAPI 3.1 Specification: `http://localhost:4000/openapi.json`
+- Scalar Interactive Documentation: `http://localhost:4000/docs`
+- Swagger UI Documentation: `http://localhost:4000/swagger`
+- Service Health Probe: `http://localhost:4000/_health`
+
+To check the spec from the command line:
+
+```bash
+curl -s http://localhost:4000/openapi.json | grep -o '"/api/ticket/[^"]*"' | sort -u
+```
+
+## Inspect the architecture graph with `brick info`
+
+`brick info` prints your routes, access policies, and registered database tables without running an HTTP server:
+
+```bash
+bunx brick info src/app.ts
+```
+
+The command loads your entry point and prints the architecture as JSON to standard output. This copy is trimmed; the real output also lists the other CRUD actions and more fields:
+
+```json
+{
+  "version": "1.0.0",
+  "services": [
+    {
+      "name": "support",
+      "hasDatabase": true,
+      "databaseConfig": {
+        "engine": "sqlite",
+        "tables": ["tickets"]
+      },
+      "resources": [{ "name": "ticket" }],
+      "actions": [
+        {
+          "name": "ticket.query",
+          "method": "POST",
+          "path": "/api/ticket/query",
+          "accessPolicy": "public"
+        },
+        {
+          "name": "ticket.get",
+          "method": "GET",
+          "path": "/api/ticket/:id",
+          "accessPolicy": "public"
+        },
+        {
+          "name": "assign",
+          "method": "POST",
+          "path": "/api/ticket/:id/assign",
+          "accessPolicy": "public"
+        },
+        {
+          "name": "resolve",
+          "method": "POST",
+          "path": "/api/ticket/:id/resolve",
+          "hasAuthorize": true,
+          "accessPolicy": "authorized"
+        }
+      ]
+    }
+  ]
+}
+```
+
+A running app serves the same JSON over HTTP:
+
+```bash
+curl -s http://localhost:4000/_brick/services
+```
+
+You can use this export to check security policies in CI, generate client SDKs, or draw service dependency diagrams.
+
+## Where to go next
+
+You now have a REST API with validation and access control. These pages cover what to add next:
+
+- [Resources and CRUD](/docs/resources) covers nested relations, search indexing, and custom lifecycle hooks on database models.
+- [Services and Actions](/docs/services-and-actions) shows how to call actions directly in-process, with the same types and no network overhead.
+- [Access Control and Policies](/docs/access-control) covers role-based access control and row-level tenant scoping with Drizzle SQL conditions.
+- [Full-stack with the BrickKit typed client](/blog/full-stack-with-the-brick-typed-client) calls these actions from a React or Vite frontend with types generated from your backend.

@@ -1,4 +1,5 @@
-import { getGlobalRegistry } from "@brickkit/core";
+import { getGlobalRegistry, stopAllEvents } from "@brickkit/core";
+import { startInspector } from "./dev-inspector";
 import { startDevApplication } from "./runner";
 import { parsePort } from "./port-utils";
 import {
@@ -7,6 +8,30 @@ import {
   sendToSupervisor,
 } from "./dev-telemetry";
 import type { WorkerErrorPhase } from "./dev-telemetry";
+
+let stopping = false;
+// A reload stops this process. Deliveries cut off would stay claimed, and wait
+// a minute (claimTimeoutMs) before the next process takes them. Stop every
+// started hub: an event emitted while the entry still loads starts one.
+const stop = () => {
+  if (stopping) return;
+  stopping = true;
+  void Promise.race([stopAllEvents(), Bun.sleep(3000)])
+    .catch((error: unknown) =>
+      console.error(
+        `[Brick-TS] Could not stop the events: ${error instanceof Error ? error.message : String(error)}`,
+      ),
+    )
+    .finally(() => process.exit(0));
+};
+process.on("SIGTERM", stop);
+if (process.connected && typeof process.send === "function") {
+  // The terminal also signals the supervisor, which sends SIGTERM and waits for us.
+  process.on("SIGINT", () => {});
+  process.on("disconnect", stop);
+} else {
+  process.on("SIGINT", stop);
+}
 
 // argv[6] is "1" when the supervisor serves the dashboard and needs spans.
 const telemetry = process.argv[6] === "1";
@@ -89,6 +114,21 @@ try {
       (error: unknown) =>
         console.warn(
           `[Brick-TS] Could not load the API documents: ${error instanceof Error ? error.message : String(error)}`,
+        ),
+    );
+  }
+  if (telemetry) {
+    void startInspector(app).then(
+      (inspector) =>
+        inspector &&
+        sendToSupervisor({
+          type: "brick:inspector",
+          port: inspector.port,
+          token: inspector.token,
+        }),
+      (error: unknown) =>
+        console.warn(
+          `[Brick-TS] Could not start the workflow inspector: ${error instanceof Error ? error.message : String(error)}`,
         ),
     );
   }

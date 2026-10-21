@@ -71,6 +71,17 @@ export interface CrudOptions<
   routes?: PluginRoutes;
   defaultLimit?: number;
   maxLimit?: number;
+  /**
+   * Whether writes through this resource emit events: `<resource>.create`,
+   * `<resource>.update` and `<resource>.delete`. Default `true`. It has an effect
+   * once the app sets `brick({ events })`, the service's database holds an
+   * `outboxTable()`, and a listener wants the event. Reads never emit.
+   *
+   * The payload carries the fields the resource lets you read, not hidden
+   * columns: `{ id, row }` for create and delete, `{ id, before, after }` for
+   * update. The write and its event are committed in one transaction.
+   */
+  events?: boolean;
   access:
     | "public"
     | {

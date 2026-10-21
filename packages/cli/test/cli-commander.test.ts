@@ -59,6 +59,7 @@ describe("brick CLI (commander)", () => {
       for (const args of [
         ["dev", "--help"],
         ["start", "--help"],
+        ["worker", "--help"],
         ["build", "--help"],
         ["gen", "--help"],
         ["gen", "openapi", "--help"],

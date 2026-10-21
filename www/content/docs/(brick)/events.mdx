@@ -1,0 +1,312 @@
+---
+title: Events
+description: Record an event in the same transaction as a write, and run listeners for it after the commit.
+---
+
+Events let code react to a write without the write waiting for it. Every generated CRUD `create`, `update` and `delete` records an event in the same database transaction as the row it changes. After the commit, Brick delivers the event to your listeners and retries one that fails.
+
+Nothing changes for an app that does not set `events`.
+
+## Minimal Example
+
+Three steps: give the database an outbox table, define a listener, and pass it to `brick()`.
+
+```ts title="src/services/users.ts"
+import {
+  defineDatabase,
+  defineService,
+  outboxTable,
+  sqliteTable,
+  text,
+} from "@brickkit/core";
+import { crud } from "@brickkit/crud";
+
+export const users = sqliteTable("users", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  email: text("email").notNull(),
+});
+
+export const outbox = outboxTable("sqlite");
+
+const database = defineDatabase({ tables: { users, outbox } });
+export const usersService = defineService("users", { database });
+
+export const user = usersService
+  .resource({ name: "user", table: users, id: users.id })
+  .use(
+    crud({
+      access: "public",
+      fields: {
+        id: { read: true },
+        email: { read: true, create: true },
+      },
+    }),
+  );
+```
+
+```ts title="src/app.ts"
+import { brick, defineListener } from "@brickkit/core";
+import { usersService } from "./services/users";
+
+const welcome = defineListener({
+  name: "welcome-email",
+  on: "user.create",
+  run: async ({ payload, deliveryId }) => {
+    await mailer.sendWelcome(payload.row.email, { idempotencyKey: deliveryId });
+  },
+});
+
+export default brick({
+  services: [usersService],
+  events: { listeners: [welcome] },
+});
+```
+
+Creating a user now inserts the row and an event row together. `brick dev` and `brick start` deliver it to `welcome-email` a moment later.
+
+## The outbox table
+
+An event waits in a table until it is delivered. Brick does not create tables, so add the outbox to the schema of the database whose writes should emit events, and create it the way you create your other tables:
+
+- **PostgreSQL:** put `outboxTable("postgres")` in your Drizzle schema and generate a migration with Drizzle Kit.
+- **SQLite in development and tests:** `syncSchema` creates it, like your other tables.
+
+```ts title="src/schema.ts"
+import { outboxTable } from "@brickkit/core";
+
+export const outbox = outboxTable("postgres");
+```
+
+A service records events only when its database holds an outbox table. `outboxTable(engine, { name })` can name the table something other than `brick_outbox`.
+
+## Events from CRUD
+
+A generated write emits one event, named after the resource and the operation:
+
+| Event         | Payload                 |
+| ------------- | ----------------------- |
+| `user.create` | `{ id, row }`           |
+| `user.update` | `{ id, before, after }` |
+| `user.delete` | `{ id, row }`           |
+
+Reads emit nothing.
+
+`row`, `before` and `after` carry the fields the resource lets clients read. A column with no `read` permission is never put in an event, so a password hash or a token does not end up in the outbox. Values are plain JSON: dates are ISO strings.
+
+`before` is read in the same transaction as the update (and locked on PostgreSQL), so each update's `before` is the state the previous update left.
+
+A write that fails records no event, and an event whose write was rolled back is never delivered. A resource can opt out with `crud({ events: false })`.
+
+## Events from your own code
+
+`emitEvent` records an event of your own from an action, a tool or a hook. Listeners get it as they get a CRUD event, with the payload you give:
+
+```ts
+import { emitEvent } from "@brickkit/core";
+
+service.action({
+  name: "refund",
+  input: t.Object({ id: t.String() }),
+  execute: async ({ ctx, input }) => {
+    await ctx.db
+      .update(orders)
+      .set({ status: "refunded" })
+      .where(eq(orders.id, input.id));
+    await emitEvent(ctx, "order.refunded", { id: input.id });
+    return { ok: true };
+  },
+});
+```
+
+By default the event is committed in a transaction of its own, after your writes. To commit it with them, pass the `tx` of a transaction you have open: `emitEvent(ctx, name, payload, { tx })`. It is then delivered at the dispatcher's next poll, because Brick does not see your commit. `source` says what emitted it, and listeners see it.
+
+`ctx.db` must be the service's own database, not a transaction, and the app needs `events`. Otherwise `emitEvent` throws. It records nothing when no listener wants the event.
+
+## Listeners
+
+`defineListener` takes a unique `name`, the event names it listens for in `on`, and either `run`, a handler, or `workflow`, a [workflow](#workflows). A trailing `*` matches a prefix, so `user.*` listens for every user event and `*` for everything.
+
+Each listener gets its own delivery of an event. If two listeners listen for `user.create` and one of them fails, only that one is retried.
+
+A delivery has the event (`id`, `name`, `payload`, `occurredAt`, `traceId`, `source`), plus:
+
+- `listener`: the name of the listener it is for.
+- `deliveryId`: `<event id>:<listener>`. It is the same on every retry.
+- `attempt`: 1 on the first try.
+
+Delivery is at least once, so a handler can run twice for the same event, for example when a process dies after the work but before the delivery is marked done. Use `deliveryId` as an idempotency key when the work must not be repeated, or run a [workflow](#workflows), which starts once per delivery.
+
+## Retries
+
+A listener that throws is retried after a delay that starts at one second and doubles, up to `maxBackoffMs`. When its attempts run out, the delivery is parked as `dead`. It stays in the outbox, with the last error, until you retry it.
+
+```ts
+const events = app.events!;
+
+await events.counts();
+await events.retryDead();
+await events.retryDead("evt_01J...:welcome-email");
+```
+
+Set `maxAttempts` on a listener to override the dispatcher's default.
+
+## Delivery settings
+
+`events.dispatch` tunes delivery. All values are optional.
+
+| Option              | Default    | Meaning                                                                                                                |
+| ------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `timer`             | `true`     | Look for due deliveries on a timer and right after a commit. `false` delivers only when you call `app.events.drain()`. |
+| `intervalMs`        | `1000`     | How often to look for due deliveries.                                                                                  |
+| `batchSize`         | `50`       | Most deliveries running at once.                                                                                       |
+| `maxAttempts`       | `8`        | Attempts before a delivery is parked as `dead`.                                                                        |
+| `claimTimeoutMs`    | `60000`    | How long a running delivery may take before another process takes it over.                                             |
+| `maxBackoffMs`      | `300000`   | Longest wait before a retry.                                                                                           |
+| `retainDeliveredMs` | `86400000` | How long delivered rows are kept. `0` keeps none.                                                                      |
+
+`dispatch: false` only records events. Use it for a process that serves requests while another process delivers.
+
+## Several processes
+
+Several processes can deliver from one outbox table. On PostgreSQL they claim rows with `FOR UPDATE SKIP LOCKED`, so each delivery runs in one process at a time. A process that dies mid-delivery loses its claim after `claimTimeoutMs`, and another takes the row.
+
+A process that restarts delivers what was waiting when it stopped.
+
+<Callout type="warn">
+  SQLite has one connection, so run one process per database file. Writes that
+  record events take turns on that connection, and a write made at the same time
+  outside Brick would join their transaction. Use PostgreSQL where several
+  processes write.
+</Callout>
+
+### Serving and delivering apart
+
+Run the API with `events: { dispatch: false }`, so it records events and delivers none, and deliver them from `brick worker`:
+
+```sh
+brick start src/app.ts      # serves HTTP, records events
+brick worker src/app.ts     # delivers events, serves nothing
+```
+
+`brick worker` loads the same app file and delivers from this process only. Workflow listeners run in it too: the world starts, and the steps and replays of every run in the world execute here. It stops delivering on `SIGINT` and `SIGTERM`, after the deliveries that are running finish. It fails to start for an app without `events`, or one with `dispatch: false`.
+
+## Workflows
+
+A listener can start a durable workflow instead of running a handler. The workflow is written for the [Workflow SDK](https://useworkflow.dev): a function marked `"use workflow"` that calls steps marked `"use step"`. The SDK retries a failing step, keeps the run's state in Redis, and resumes a run after a restart or a crash.
+
+Install the SDK, a Redis world, and the SDK's builders:
+
+```sh
+bun add workflow @brickkit/redis-world
+bun add -d @workflow/builders
+```
+
+If you already run BullMQ, use `@brickkit/bullmq-world` instead: it has the same `createWorld()` and the same behavior here, so only the import changes.
+
+Write the workflow, hand it to `defineListener` as `workflow`, and give `events` a world:
+
+```ts title="src/workflows/fulfil-order.ts"
+import type { WorkflowEvent } from "@brickkit/core";
+import { sleep } from "workflow";
+
+export async function fulfilOrder(event: WorkflowEvent<OrderUpdated>) {
+  "use workflow";
+  const trackingId = await bookCarrier(event.payload.after.id);
+  await sleep("1s");
+  await notifyCustomer(event.deliveryId, trackingId);
+}
+
+async function bookCarrier(orderId: string) {
+  "use step";
+  return carrier.book(orderId);
+}
+```
+
+```ts title="src/app.ts"
+import { createWorld } from "@brickkit/redis-world";
+
+export default brick({
+  services: [ordersService],
+  events: {
+    world: createWorld({ redis: process.env.REDIS_URL }),
+    listeners: [
+      defineListener({
+        name: "fulfilment",
+        on: "order.update",
+        workflow: fulfilOrder,
+      }),
+    ],
+  },
+});
+```
+
+`brick dev` and `brick start` do the rest. Before the app loads they make the `"use workflow"` and `"use step"` files load as workflows and steps, and before events start they build the workflow bundle into `.well-known/workflow/v1` (add it to `.gitignore`). On a reload of `brick dev` the bundle is kept when nothing it was built from has changed (the workflow and step files, what they import, `package.json`, the lockfile, `tsconfig.json`), so editing a route costs nothing; adding or removing a source file, or giving one a `"use workflow"` or `"use step"` directive, rebuilds it. `brick start` and `brick build` always build. The world starts with the app's events and closes when they stop.
+
+The workflow receives the event: `id`, `name`, `payload`, `occurredAt`, `traceId`, `source`, `listener` and `deliveryId`. It has no `attempt`.
+
+A delivery counts as done once its run has started. After that the workflow owns the retries, so a failing step does not retry the delivery, and a run that fails stays visible in the world rather than in the outbox. A delivery that is tried again, because a process died after starting the run or because you retried it, finds its run and does not start another: the run is named after the delivery id and its clock starts at the time of the event. The world must support this, so Brick refuses one without it. Both worlds from Brick do.
+
+Your steps run in your app, as the same module instances the rest of the app uses. A step can use the database client, config and other state your modules set up, exactly as a handler can.
+
+A process that only records events (`dispatch: false`) does not start the world. A process that delivers does, and it also runs the steps and replays of every run in the world, including runs another process started.
+
+### In tests and scripts
+
+Outside `brick dev` and `brick start`, prepare the project yourself, before importing the files that hold workflows:
+
+```ts
+import {
+  buildWorkflows,
+  registerWorkflowTransform,
+} from "@brickkit/cli/workflows";
+
+await registerWorkflowTransform(projectRoot);
+await buildWorkflows({ root: projectRoot });
+const { app } = await import("./app");
+```
+
+### Webhooks
+
+A workflow can wait for an HTTP request with `createWebhook`:
+
+```ts
+import { createWebhook } from "workflow";
+
+export async function approveOrder(event: WorkflowEvent<OrderCreated>) {
+  "use workflow";
+  const webhook = createWebhook();
+  await sendApprovalLink(event.payload.id, webhook.url);
+  const request = await webhook; // resumes when someone calls the URL
+  const { approved } = await request.json();
+  // ...
+}
+```
+
+Brick serves the route behind `webhook.url`, `/.well-known/workflow/v1/webhook/<token>`, on its own server, for any app with a workflow listener. A process that only records events (`dispatch: false`) serves it too; it needs the world but does not consume the queue. It accepts `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD` and `OPTIONS`, and answers `405` to any other method. The call resumes the run, wherever it runs, and answers `202`.
+
+The SDK builds the URL from the port the process listens on, which it finds with `@workflow/utils`. Add it to the app (`bun add -d @workflow/utils`): with a strict install the SDK cannot see it otherwise, and the URL points to `localhost:3000`. Behind a proxy or on another host, build the public URL yourself from `webhook.token`.
+
+### Inspecting runs in the dev dashboard
+
+The `brick dev` dashboard gains a Workflows tab for an app with workflow listeners: the Workflow SDK's observability UI (a vendored copy of `@workflow/web` that ships with the CLI, without its own header, in the dashboard's theme), with every run, its trace of steps and sleeps, its events, streams and hooks, and the buttons to replay or cancel a run. It reads the world your app runs on, whichever `createWorld()` settings you gave it, and follows the app across reloads.
+
+The inspector can cancel runs and resume hooks, so it is a developer's tool: the production dashboard of `brick start` does not serve it, and the dev dashboard passes it only requests made from its own page. It needs `brick dev` with the dashboard on (the default).
+
+### With `brick build`
+
+`brick build` transforms the workflows, builds the bundle into `.well-known/workflow/v1`, and makes the compiled server start its events and stop them on `SIGINT` and `SIGTERM`. Run the server from the project root: it finds the bundle from the working directory and loads the SDK from `node_modules`, so deploy those with it.
+
+### Limits
+
+- The bundle is always written to `<root>/.well-known/workflow/v1`; its location cannot be changed.
+- Stopping the events closes the world for good.
+- `stopAllEvents()` from `@brickkit/core` stops every events hub started in the process, even one made by another copy of the package, and waits for the deliveries that are running. `brick dev` calls it when you press Ctrl-C or the app reloads; call it yourself if you host an app in a process of your own and need the deliveries to finish before it exits.
+- If you delete finished runs from Redis (a retention policy), delivering the same event again starts the workflow again.
+
+## What is not promised
+
+- **Order.** Events are not ordered across listeners, or between two deliveries of one listener when one is retried.
+- **Exactly once.** Delivery is at least once.
+- **Exactly-once handlers.** A `run` handler can still run twice for one event. A workflow starts one run per delivery.

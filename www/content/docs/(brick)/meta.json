@@ -18,6 +18,7 @@
     "access-control",
     "validation-and-errors",
     "hooks",
+    "events",
     "primary-keys",
     "relations",
     "typed-client",

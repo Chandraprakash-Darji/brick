@@ -1,0 +1,29 @@
+{
+  "name": "brick-events-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test test",
+    "demo": "bun src/demo.ts",
+    "dev": "brick dev src/app.ts --no-dashboard",
+    "start": "brick start src/app.ts",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check ."
+  },
+  "dependencies": {
+    "@brickkit/bullmq-world": "workspace:*",
+    "@brickkit/cli": "workspace:*",
+    "@brickkit/core": "workspace:*",
+    "@brickkit/crud": "workspace:*",
+    "@brickkit/redis-world": "workspace:*",
+    "workflow": "5.2.2"
+  },
+  "devDependencies": {
+    "@workflow/builders": "5.0.5",
+    "@workflow/utils": "5.0.2",
+    "oxfmt": "^0.73.0",
+    "oxlint": "^1.88.0"
+  }
+}

@@ -25,7 +25,7 @@ a browser reload shows the new UI without restarting `brick dev`.
 - `history.ts`: the hooks that read `/api/history/*` for the stored requests,
   their counts, volume, and summary (`../test/dashboard-history.test.ts`).
 - `shell.tsx`: the sidebar and top bar.
-- `views/`: Requests, Overview, APIs, Docs, Errors, Reloads.
+- `views/`: Requests, Overview, APIs, Docs, Workflows (a frame around the inspector the dev server proxies at `/workflows`), Errors, Reloads.
 - `components/`: `Panel`, `Metric`, `TimelineStrip`, `FacetPanel`,
   `RequestDrawer`, `Waterfall`, `ServiceGraphPanel`, `ApiReference`.
 - `components/docs/`: the Docs tab: `DocsTree`, `DocsSearch`, `DocsPageView` and

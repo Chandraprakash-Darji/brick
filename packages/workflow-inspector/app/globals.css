@@ -1,0 +1,97 @@
+@import "tailwindcss";
+@import "@workflow/web-shared/styles.css";
+/* The dashboard's colors, type and radii: this page is shown in a frame of it. */
+@import "../../cli/dashboard/theme.css";
+
+/* Scan web-shared package for Tailwind classes */
+@source "../node_modules/@workflow/web-shared/dist";
+@source "./components";
+
+/* The dashboard serves its fonts at /assets/, on the origin this page is framed from. */
+@font-face {
+  font-family: "Geist";
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/assets/Geist-Variable.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/assets/GeistMono-Variable.woff2") format("woff2");
+}
+
+:root {
+  /* GeistCN gaps still needed by the app and web-shared consumers */
+  --ds-green-50: color-mix(in srgb, var(--ds-green-100) 55%, white);
+  --ds-shadow-2xs: 0 1px 2px rgba(0, 0, 0, 0.03);
+  --ds-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --ds-shadow-medium:
+    0 0 0 1px rgba(0, 0, 0, 0.07), 0 4px 8px rgba(0, 0, 0, 0.07),
+    0 24px 48px rgba(0, 0, 0, 0.07);
+  --ds-shadow-large:
+    0 0 0 1px rgba(0, 0, 0, 0.07), 0 8px 16px rgba(0, 0, 0, 0.1),
+    0 48px 96px rgba(0, 0, 0, 0.1);
+  --ds-shadow-xl: var(--ds-shadow-large);
+  --ds-shadow-2xl: var(--ds-shadow-large);
+  --ds-shadow-border: 0 0 0 1px var(--ds-gray-alpha-200);
+  --ds-shadow-border-small: var(--ds-shadow-small);
+  --ds-shadow-border-medium: var(--ds-shadow-medium);
+  --ds-shadow-border-large: var(--ds-shadow-large);
+  --ds-shadow-tooltip: var(--ds-shadow-medium);
+  --ds-shadow-menu: var(--ds-shadow-medium);
+  --ds-shadow-modal: var(--ds-shadow-large);
+  --ds-shadow-fullscreen: var(--ds-shadow-large);
+
+  /* Legacy aliases used by trace-viewer.module.css */
+  --geist-background: var(--ds-background-100);
+  --accents-2: var(--ds-gray-300);
+  --accents-5: var(--ds-gray-700);
+  --accents-7: var(--ds-gray-900);
+}
+
+.dark,
+.dark-theme,
+[data-theme="dark"] {
+  /* GeistCN gaps still needed by the app and web-shared consumers */
+  --ds-green-50: color-mix(in srgb, var(--ds-green-100) 35%, black);
+  --ds-shadow-2xs: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --ds-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --ds-shadow-medium:
+    0 0 0 1px rgba(255, 255, 255, 0.07), 0 4px 8px rgba(0, 0, 0, 0.4),
+    0 24px 48px rgba(0, 0, 0, 0.4);
+  --ds-shadow-large:
+    0 0 0 1px rgba(255, 255, 255, 0.07), 0 8px 16px rgba(0, 0, 0, 0.5),
+    0 48px 96px rgba(0, 0, 0, 0.5);
+  --ds-shadow-xl: var(--ds-shadow-large);
+  --ds-shadow-2xl: var(--ds-shadow-large);
+  --ds-shadow-border: 0 0 0 1px var(--ds-gray-alpha-200);
+  --ds-shadow-border-small: var(--ds-shadow-small);
+  --ds-shadow-border-medium: var(--ds-shadow-medium);
+  --ds-shadow-border-large: var(--ds-shadow-large);
+  --ds-shadow-tooltip: var(--ds-shadow-medium);
+  --ds-shadow-menu: var(--ds-shadow-medium);
+  --ds-shadow-modal: var(--ds-shadow-large);
+  --ds-shadow-fullscreen: var(--ds-shadow-large);
+
+  /* Legacy aliases used by trace-viewer.module.css */
+  --geist-background: var(--ds-background-100);
+  --accents-2: var(--ds-gray-300);
+  --accents-5: var(--ds-gray-700);
+  --accents-7: var(--ds-gray-900);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground overscroll-none;
+  }
+
+  html {
+    @apply overscroll-none;
+  }
+}

@@ -88,6 +88,8 @@ jobs:
             packages/core/package.json
             packages/crud/package.json
             packages/cli/package.json
+            packages/bullmq-world/package.json
+            packages/redis-world/package.json
             bun.lock
           if-no-files-found: error
 
@@ -97,7 +99,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pkg: [core, crud, cli]
+        pkg: [core, crud, cli, bullmq-world, redis-world]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -117,7 +119,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
         run: |
-          for pkg in core crud cli; do
+          for pkg in core crud cli bullmq-world redis-world; do
             version="$(node -p "require('./packages/$pkg/package.json').version")"
             if [[ "v$version" != "$RELEASE_TAG" ]]; then
               echo "::error::$pkg version does not match $RELEASE_TAG"
@@ -126,10 +128,17 @@ jobs:
           done
       - name: Build packages and their workspace dependencies
         run: bun run build
+      - name: Build world packages
+        run: bun run build:worlds
       - name: Typecheck package
         run: bun run --filter @brickkit/${{ matrix.pkg }} typecheck
       - name: Test package
+        if: ${{ !endsWith(matrix.pkg, '-world') }}
         run: bun test packages/${{ matrix.pkg }}
+      # Worlds use vitest (with Redis testcontainers), which bun test cannot run.
+      - name: Test world package
+        if: ${{ endsWith(matrix.pkg, '-world') }}
+        run: bun run --filter @brickkit/${{ matrix.pkg }} test
       - name: Pack the validated package
         working-directory: packages/${{ matrix.pkg }}
         run: |
@@ -151,7 +160,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pkg: [core, crud, cli]
+        pkg: [core, crud, cli, bullmq-world, redis-world]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -225,7 +234,7 @@ jobs:
         with:
           name: release-manifests
           path: .
-      - name: Commit and tag only after all three packages were published
+      - name: Commit and tag only after all packages were published
         if: github.event_name == 'workflow_dispatch'
         env:
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
@@ -233,7 +242,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add packages/core/package.json packages/crud/package.json packages/cli/package.json bun.lock
+          git add packages/core/package.json packages/crud/package.json packages/cli/package.json packages/bullmq-world/package.json packages/redis-world/package.json bun.lock
           git commit -m "chore(release): $RELEASE_TAG"
           git tag "$RELEASE_TAG"
           for attempt in 1 2 3; do

@@ -492,9 +492,11 @@ async function dispatch(
   ].filter((value): value is AbortSignal => value !== undefined);
   const signal = signals.length > 1 ? AbortSignal.any(signals) : signals[0];
 
+  // Called detached: a browser's `fetch` throws "Illegal invocation" when `this` is not the window.
+  const send = resolved.fetch;
   let response: Response;
   try {
-    response = await resolved.fetch(url, {
+    response = await send(url, {
       method,
       headers,
       body: payload,

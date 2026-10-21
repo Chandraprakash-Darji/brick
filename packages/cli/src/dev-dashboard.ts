@@ -6,8 +6,11 @@ import {
   type ServerResponse,
 } from "node:http";
 import { extname, join } from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import type { DevDocs } from "./dev-docs";
+import { INSPECTOR_PATH, INSPECTOR_TOKEN_HEADER } from "./dev-inspector";
 import { parseHistoryQuery, type DevHistory } from "./dev-history";
 import type { TelemetryRecord } from "./dev-telemetry";
 import type {
@@ -252,6 +255,17 @@ export function startDevDashboard(
       void proxy(request, response, url);
       return;
     }
+    if (
+      pathname === INSPECTOR_PATH ||
+      pathname.startsWith(`${INSPECTOR_PATH}/`)
+    ) {
+      // Only the dashboard may frame it: framed by another site, a click could
+      // land on Cancel or Replay. The rest of the dashboard may be embedded.
+      response.setHeader("content-security-policy", "frame-ancestors 'self'");
+      response.setHeader("x-frame-options", "SAMEORIGIN");
+      void inspector(request, response, url);
+      return;
+    }
     if (request.method === "POST" && pathname === "/api/ingest") {
       ingest(request, response);
       return;
@@ -395,6 +409,80 @@ export function startDevDashboard(
    * `?cookie=` is the cookie parameters the reader typed into Try it, and the
    * only cookie the app is sent (the dashboard's own are never forwarded).
    */
+  /**
+   * Pass a request to the workflow inspector, which the app serves on a port of
+   * its own, and stream its answer back (it follows a run's output as it
+   * grows). Anyone who can open the dashboard may look, but a change must come
+   * from the dashboard's own page: the inspector can cancel runs and resume
+   * hooks, and a page on another site could otherwise post to it.
+   */
+  async function inspector(
+    request: IncomingMessage,
+    response: ServerResponse,
+    url: URL,
+  ): Promise<void> {
+    const target = options.store.inspectorTarget();
+    if (!target) {
+      send(
+        response,
+        503,
+        "The workflow inspector is not running. The app may be restarting, or it may run no workflows.",
+        { "content-type": "text/plain; charset=utf-8" },
+      );
+      return;
+    }
+    const bodyless = request.method === "GET" || request.method === "HEAD";
+    const site = request.headers["sec-fetch-site"];
+    const origin = request.headers.origin;
+    if (
+      !bodyless &&
+      ((site !== undefined && site !== "same-origin") ||
+        (origin !== undefined && origin !== `http://${request.headers.host}`))
+    ) {
+      send(response, 403, "Forbidden");
+      return;
+    }
+    const headers = new Headers();
+    for (const [name, value] of Object.entries(request.headers)) {
+      if (value === undefined || NOT_FORWARDED.has(name)) continue;
+      if (name.startsWith("sec-")) continue;
+      headers.set(name, Array.isArray(value) ? value.join(", ") : value);
+    }
+    headers.set(INSPECTOR_TOKEN_HEADER, target.token);
+    const abort = new AbortController();
+    response.on("close", () => abort.abort());
+    try {
+      const upstream = await fetch(
+        `http://127.0.0.1:${target.port}${url.pathname}${url.search}`,
+        {
+          method: request.method,
+          headers,
+          redirect: "manual",
+          signal: abort.signal,
+          ...(bodyless
+            ? {}
+            : {
+                body: Readable.toWeb(request) as unknown as BodyInit,
+                duplex: "half",
+              }),
+        } as RequestInit,
+      );
+      const returned: Record<string, string> = {};
+      upstream.headers.forEach((value, name) => {
+        if (!NOT_RETURNED.has(name)) returned[name] = value;
+      });
+      response.writeHead(upstream.status, returned);
+      if (!upstream.body || request.method === "HEAD") {
+        response.end();
+        return;
+      }
+      await pipeline(Readable.fromWeb(upstream.body as never), response);
+    } catch {
+      if (response.headersSent) response.destroy();
+      else send(response, 502, "Could not reach the workflow inspector.");
+    }
+  }
+
   async function proxy(
     request: IncomingMessage,
     response: ServerResponse,
