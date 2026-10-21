@@ -33,8 +33,11 @@ beforeAll(() => {
   b = new Redis(url);
 });
 afterAll(async () => {
-  await a.quit();
-  await b.quit();
+  try {
+    await Promise.all([a.quit(), b.quit()]);
+  } finally {
+    await testContainer?.stop();
+  }
 });
 
 function gate() {
@@ -497,8 +500,4 @@ describe("races: runs.list pagination under churn", () => {
       );
     expect(page2).toBe(1);
   });
-});
-
-afterAll(async () => {
-  await testContainer?.stop();
 });
