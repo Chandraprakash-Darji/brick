@@ -85,8 +85,7 @@ function Home() {
           data-umami-event-location="hero-release"
           className="hero-release"
         >
-          <span /> BRICK v{site.version}{" "}
-          <span className="hero-release-divider">/</span> OPEN SOURCE
+          Brick v{site.version}, open source
         </a>
         <LogoMark className="hero-symbol" />
         <h1>
@@ -106,7 +105,7 @@ function Home() {
             params={{ _splat: "quickstart" }}
             className="home-button home-button-primary"
           >
-            Start building <ArrowRightIcon className="size-3.5" />
+            Start building
           </Link>
           <a
             href={site.repo}
@@ -116,18 +115,14 @@ function Home() {
             data-umami-event-location="hero"
             className="home-button home-button-secondary"
           >
-            Explore the source <ArrowRightIcon className="size-3.5" />
+            Explore the source
           </a>
         </div>
         <InstallOptions />
-        <a href="#definitions" className="hero-scroll">
-          DEFINE / COMPILE / RUN <span>↓</span>
-        </a>
       </section>
 
       <div id="definitions" className="home-section-heading">
         <div>
-          <p className="label">01 / THE DEVELOPER SURFACE</p>
           <h2>
             One codebase.
             <br />
@@ -141,17 +136,6 @@ function Home() {
       </div>
 
       <div className="brick-workbench">
-        <div className="workbench-toolbar">
-          <span className="window-controls" aria-hidden="true">
-            <i />
-            <i />
-            <i />
-          </span>
-          <span>BRICK / APPLICATION WORKBENCH</span>
-          <span className="workbench-status">
-            <i /> READY TO RUN
-          </span>
-        </div>
         <div
           role="tablist"
           aria-label="Kind of deployment"
@@ -209,8 +193,8 @@ function Home() {
             </figure>
           ) : (
             <div className="flex min-w-0 flex-col border-t lg:border-t-0">
-              <p className="label border-b px-4 py-3 sm:px-6">
-                Zero-Refactor Deployment
+              <p className="brick-caption border-b px-4 py-3 sm:px-6">
+                Zero-refactor deployment
               </p>
               <div className="space-y-4 px-4 py-5 text-sm leading-6 text-muted-foreground sm:px-6">
                 <p>
@@ -224,7 +208,7 @@ function Home() {
                 </p>
               </div>
               <figure className="mt-auto border-t">
-                <figcaption className="label border-b px-4 py-3 sm:px-6">
+                <figcaption className="brick-caption border-b px-4 py-3 sm:px-6">
                   Run the example
                 </figcaption>
                 <pre className="overflow-x-auto px-4 py-4 font-mono text-[13px] leading-[1.7] sm:px-6">
@@ -241,7 +225,6 @@ function Home() {
 
       <div id="platform" className="home-section-heading home-platform-heading">
         <div>
-          <p className="label">02 / BUILT TO FIT TOGETHER</p>
           <h2>
             A foundation for
             <br />
@@ -265,7 +248,7 @@ function Home() {
                 aria-hidden="true"
                 data-variant={i}
               >
-                <span className="visual-index">BRICK / 0{i + 1}</span>
+                <span className="visual-index">0{i + 1}</span>
                 <div className="visual-flow">
                   <span>
                     {["ACTION", "ROUTE", "SERVICE", "HTTP", "SESSION"][i]}
@@ -278,11 +261,11 @@ function Home() {
                 <span className="visual-caption">
                   {
                     [
-                      "TYPE-SAFE EXECUTION",
-                      "COMPILED AHEAD OF TIME",
-                      "DIRECT IN-PROCESS CALLS",
-                      "SAME ACTION. NEW INTERFACE.",
-                      "YOUR IDENTITY. YOUR RULES.",
+                      "Type-safe execution",
+                      "Compiled ahead of time",
+                      "Direct in-process calls",
+                      "Same action, new interface",
+                      "Your identity, your rules",
                     ][i]
                   }
                 </span>
@@ -290,7 +273,7 @@ function Home() {
               <div className="feature-copy">
                 <h3 className="flex items-center justify-between font-semibold tracking-tight">
                   {feature.title}
-                  <ArrowRightIcon className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
+                  <ArrowRightIcon className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground motion-reduce:transition-none motion-reduce:group-hover:translate-x-0" />
                 </h3>
                 <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
                   {feature.text}

@@ -73,17 +73,14 @@ function ExampleDetail() {
         </p>
         <ul className="mt-6 flex flex-wrap gap-2">
           {example.tags.map((tag) => (
-            <li
-              key={tag}
-              className="border border-border px-2 py-1 font-mono text-xs"
-            >
+            <li key={tag} className="border border-border px-2 py-1 text-xs">
               {tag}
             </li>
           ))}
         </ul>
-        <p className="mt-5 font-mono text-xs text-muted-foreground">
-          {stats.services} services · {stats.actions} actions · {stats.tables}{" "}
-          tables · {example.fileCount} files
+        <p className="mt-5 text-xs text-muted-foreground">
+          {stats.services} services, {stats.actions} actions, {stats.tables}{" "}
+          tables, {example.fileCount} files
         </p>
         <div className="mt-8 flex flex-wrap items-center gap-3">
           <InstallCommand command={exampleCloneCommand(example.slug)} />

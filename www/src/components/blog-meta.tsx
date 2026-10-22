@@ -9,7 +9,7 @@ export function BlogMeta({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-3 self-start font-mono text-xs text-muted-foreground">
-      <span className="border border-border px-2 py-1 text-foreground">
+      <span className="border border-border px-2 py-1 font-sans text-foreground">
         {category === "release" ? "Framework update" : "Building with BrickKit"}
       </span>
       <time dateTime={date}>

@@ -22,8 +22,7 @@ function Blog() {
   return (
     <main className="py-14 sm:py-20">
       <header className="mb-14 max-w-3xl">
-        <p className="label mb-5 text-gopher">THE BRICKKIT BLOG</p>
-        <h1 className="text-5xl font-medium tracking-tight sm:text-7xl">
+        <h1 className="text-5xl font-medium tracking-tight text-balance sm:text-7xl">
           Updates. Ideas.
           <br />
           Things you can build.

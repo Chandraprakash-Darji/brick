@@ -48,7 +48,6 @@ function DocsLink({
   return (
     <Link to="/docs/$" params={{ _splat: slug }} className="capability-link">
       {children}
-      <ArrowRightIcon className="size-3.5" />
     </Link>
   );
 }
@@ -57,11 +56,6 @@ function CodePanel({ title, code }: { title: string; code: string }) {
   return (
     <figure className="brick-workbench capability-code">
       <figcaption>
-        <span className="window-controls" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-        </span>
         <span>{title}</span>
       </figcaption>
       <div className="capability-code-body">
@@ -79,7 +73,6 @@ export function HomeCapabilities() {
     <div className="home-capabilities">
       <section id="resources" className="capability-section capability-split">
         <div className="capability-copy">
-          <p className="label">03 / RESOURCES</p>
           <h2>
             A table becomes an API.
             <br />
@@ -134,7 +127,7 @@ export function HomeCapabilities() {
             aria-labelledby={`feature-tab-${example}`}
           >
             <CodePanel
-              title="comments/index.ts · runnable source"
+              title="comments/index.ts"
               code={example === "resource" ? resourceCode : actionCode}
             />
           </div>
@@ -150,7 +143,6 @@ export function HomeCapabilities() {
       >
         <div className="capability-section-heading">
           <div>
-            <p className="label">04 / TYPE SAFETY</p>
             <h2>
               One definition.
               <br />
@@ -209,7 +201,7 @@ export function HomeCapabilities() {
               <div className="pipeline-top">
                 <span>{number}</span>
                 <ArrowRightIcon
-                  className="size-3 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+                  className="size-3 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground motion-reduce:transition-none motion-reduce:group-hover:translate-x-0"
                   aria-hidden="true"
                 />
               </div>
@@ -228,7 +220,6 @@ export function HomeCapabilities() {
         className="capability-section capability-split"
       >
         <div className="capability-copy">
-          <p className="label">05 / ACCESS CONTROL</p>
           <h2>
             Put access rules
             <br />
@@ -248,7 +239,7 @@ export function HomeCapabilities() {
         <div className="policy-panel">
           <div className="panel-label">
             <ShieldCheckIcon className="size-4" />
-            <span>REQUEST / POLICY PIPELINE</span>
+            <span>The policy pipeline</span>
           </div>
           <ol>
             {[
@@ -276,7 +267,6 @@ export function HomeCapabilities() {
       <section id="databases" className="capability-section">
         <div className="capability-section-heading">
           <div>
-            <p className="label">06 / DATABASES</p>
             <h2>Drizzle at the foundation.</h2>
           </div>
           <p className="capability-heading-copy">
@@ -338,7 +328,6 @@ export function HomeCapabilities() {
         className="capability-section capability-split capability-surface"
       >
         <div className="capability-copy">
-          <p className="label">07 / EXTENSIONS</p>
           <h2>
             Build once.
             <br />
@@ -374,7 +363,6 @@ export function HomeCapabilities() {
       <section id="endpoints" className="capability-section">
         <div className="capability-section-heading">
           <div>
-            <p className="label">08 / ENDPOINTS</p>
             <h2>More than a JSON API.</h2>
           </div>
           <p className="capability-heading-copy">
@@ -423,7 +411,6 @@ export function HomeCapabilities() {
       <section id="tooling" className="capability-section">
         <div className="capability-section-heading">
           <div>
-            <p className="label">09 / TOOLING</p>
             <h2>
               Inspect it.
               <br />
@@ -485,7 +472,7 @@ export function HomeCapabilities() {
               <p>{text}</p>
               <span className="capability-link mt-auto pt-1">
                 {link}
-                <ArrowRightIcon className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+                <ArrowRightIcon className="size-3.5 transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none motion-reduce:group-hover:translate-x-0" />
               </span>
             </Link>
           ))}
@@ -493,7 +480,6 @@ export function HomeCapabilities() {
       </section>
 
       <section id="ecosystem" className="capability-section ecosystem-section">
-        <p className="label">10 / THE FOUNDATION</p>
         <h2>
           Tools you know.
           <br />A backend you own.
@@ -511,7 +497,6 @@ export function HomeCapabilities() {
 
       <section className="home-final-cta capability-section">
         <LogoMark className="cta-symbol" />
-        <p className="label">YOUR NEXT BACKEND STARTS HERE</p>
         <h2>
           Write the definitions.
           <br />
@@ -524,7 +509,6 @@ export function HomeCapabilities() {
             className="home-button home-button-primary"
           >
             Start with the guide
-            <ArrowRightIcon className="size-3.5" />
           </Link>
           <Link
             to="/docs/$"
@@ -532,7 +516,6 @@ export function HomeCapabilities() {
             className="home-button home-button-secondary"
           >
             Run an example
-            <ArrowRightIcon className="size-3.5" />
           </Link>
         </div>
         <InstallCommand className="home-install" />

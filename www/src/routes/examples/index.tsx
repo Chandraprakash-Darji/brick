@@ -17,8 +17,7 @@ function Examples() {
   return (
     <main className="py-14 sm:py-20">
       <header className="mb-14 max-w-3xl">
-        <p className="label mb-5 text-gopher">EXAMPLES</p>
-        <h1 className="text-5xl font-medium tracking-tight sm:text-7xl">
+        <h1 className="text-5xl font-medium tracking-tight text-balance sm:text-7xl">
           Real apps.
           <br />
           Real service graphs.
@@ -55,7 +54,7 @@ function Examples() {
                 {example.tags.map((tag) => (
                   <li
                     key={tag}
-                    className="border border-border px-2 py-1 font-mono text-xs"
+                    className="border border-border px-2 py-1 text-xs"
                   >
                     {tag}
                   </li>
@@ -66,9 +65,9 @@ function Examples() {
                   <li key={feature}>— {feature}</li>
                 ))}
               </ul>
-              <p className="mt-5 flex items-center justify-between gap-3 border-t pt-4 font-mono text-xs text-muted-foreground">
+              <p className="mt-5 flex items-center justify-between gap-3 border-t pt-4 text-xs text-muted-foreground">
                 <span>
-                  {stats.services} services · {stats.actions} actions ·{" "}
+                  {stats.services} services, {stats.actions} actions,{" "}
                   {stats.tables} tables
                 </span>
                 {example.demo && (
