@@ -106,6 +106,14 @@ When `crud()` installs onto `pagesService.resource({ name: "page", ... })`, acti
 | `page.count`   | `POST /api/page/count`    | `{ where? }`; returns `{ count }`                               |
 | `page.exists`  | `POST /api/page/exists`   | `{ where? }`; returns `{ exists }`                              |
 
+The bulk operations are off until you enable them (see [Bulk Operations](#bulk-operations)):
+
+| Action            | Route                        | Input                                  |
+| :---------------- | :--------------------------- | :------------------------------------- |
+| `page.bulkCreate` | `POST /api/page/bulk-create` | `{ items }`, each item as for `create` |
+| `page.bulkUpdate` | `POST /api/page/bulk-update` | `{ items }`, each item `{ id, data }`  |
+| `page.bulkDelete` | `POST /api/page/bulk-delete` | `{ ids }`; returns `{ count }`         |
+
 The action names appear in architecture introspection and client contracts; OpenAPI summaries use `service.action` (for example, `pages.page.list`). `.use(crud(...))` also returns the resource with these actions attached, so you can call `page.list({ input: {} })` in-process. Use the `routes` option to change a route's `path` or `scope`, or set a route to `false` to keep the action but not mount it over HTTP.
 
 ## Field Policies
@@ -167,6 +175,35 @@ crud({
   },
 });
 ```
+
+## Bulk Operations
+
+`bulkCreate`, `bulkUpdate` and `bulkDelete` write many rows in one call. They are off by default; turn each on with `true`:
+
+```ts title="src/services/contacts.ts"
+crud({
+  access: { authorize, scope },
+  operations: { bulkCreate: true, bulkUpdate: true, bulkDelete: true },
+  maxBatchSize: 200, // Default 100
+  fields: {
+    id: { read: true },
+    name: { read: true, create: true, update: true },
+  },
+});
+
+await contact.bulkCreate.run({ items: [{ name: "Ada" }, { name: "Lin" }] });
+// { items: [{ id: 1, name: "Ada" }, { id: 2, name: "Lin" }] }
+await contact.bulkUpdate.run({ items: [{ id: 1, data: { name: "Ada L." } }] });
+await contact.bulkDelete.run({ ids: [1, 2] }); // { count: 2 }
+```
+
+Each item goes through the same path as its single-row operation:
+
+- It is validated with the same schema, so the `create` and `update` field allow-lists apply per item. A validation error names the item in its path, such as `/items/2/name`.
+- `authorize` is called once per item with the single-row operation and input (`operation: "update"`, `input: { id, data }`), so a policy written for `update` also covers `bulkUpdate`. `scope` is applied to every row. A row outside the scope fails as a missing row would, with `NOT_FOUND`, and does not reveal that it exists.
+- [Lifecycle hooks](/docs/hooks) and [events](/docs/events) fire once per row, as for single writes.
+
+The whole batch runs in one transaction. If any item fails, nothing is kept and the error names the failing item: its `code` and `status` are the item's, its message starts with `Item <index>:`, and `details` is `{ index, code, message }`. The result lists the written rows in input order, limited to readable fields as for `create` and `update`. A batch must hold between 1 and `maxBatchSize` items, and `bulkDelete` rejects repeated IDs.
 
 ## Performance & Prepared Statement Caching
 

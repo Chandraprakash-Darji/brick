@@ -141,6 +141,6 @@ accountResource.use(
 
 ## Architectural Considerations
 
-- **Asynchronous Execution**: `after*` hooks run after the write commits to the primary table. If audit row insertions must commit atomically with the mutation, run both queries inside an application transaction via `ctx.db.transaction()`.
+- **Atomic Writes**: `after*` hooks run inside the write's transaction and receive it as `tx`. Insert audit rows through `tx` and they commit or roll back with the mutation. Side effects outside the database belong in `afterCommit`.
 - **Masking & Security**: Never log unredacted passwords, payment details, or personal data to audit tables.
 - **Dedicated Read Policy**: Expose audit logs through a separate administrative resource with restricted access controls.

@@ -9,7 +9,7 @@ export {
   type PostgresOutboxTable,
   type SQLiteOutboxTable,
 } from "./outbox";
-export { runInTransaction } from "./transaction";
+export { runInTransaction, onTransactionCommit } from "./transaction";
 export { newEventId } from "./id";
 export {
   EventsHub,

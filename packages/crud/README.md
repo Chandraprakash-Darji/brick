@@ -79,21 +79,42 @@ string/number/boolean/date/bigint columns.
 
 ## Operations and routes
 
-| Method | Path                 | Action  |
-| ------ | -------------------- | ------- |
-| POST   | `/api/page/query`    | list    |
-| GET    | `/api/page/:id`      | get     |
-| POST   | `/api/page`          | create  |
-| PATCH  | `/api/page/:id`      | update  |
-| DELETE | `/api/page/:id`      | delete  |
-| POST   | `/api/page/find-one` | findOne |
-| POST   | `/api/page/count`    | count   |
-| POST   | `/api/page/exists`   | exists  |
+| Method | Path                    | Action     |
+| ------ | ----------------------- | ---------- |
+| POST   | `/api/page/query`       | list       |
+| GET    | `/api/page/:id`         | get        |
+| POST   | `/api/page`             | create     |
+| PATCH  | `/api/page/:id`         | update     |
+| DELETE | `/api/page/:id`         | delete     |
+| POST   | `/api/page/find-one`    | findOne    |
+| POST   | `/api/page/count`       | count      |
+| POST   | `/api/page/exists`      | exists     |
+| POST   | `/api/page/bulk-create` | bulkCreate |
+| POST   | `/api/page/bulk-update` | bulkUpdate |
+| POST   | `/api/page/bulk-delete` | bulkDelete |
 
 `operations: { delete: false }` (or `operations: false`) removes local
 capabilities. `routes: { list: false }` (or `routes: false`) keeps local
 actions callable without HTTP, OpenAPI, or browser exposure. `defaultLimit`
 (default 20) and `maxLimit` (default 100) bound pagination.
+
+The bulk operations are off until `operations` sets them to `true`.
+`bulkCreate` takes `{ items }`, `bulkUpdate` takes `{ items: [{ id, data }] }`
+and `bulkDelete` takes `{ ids }`. Each item is validated, authorized, scoped
+and hooked as its single-row operation would be. The whole batch is one
+transaction: when an item fails, nothing is kept, and the error carries the
+item's code and `details: { index, code, message }`. `maxBatchSize`
+(default 100) caps the items per call.
+
+## Hooks and transactions
+
+`beforeCreate`, `afterCreate`, `beforeUpdate`, `afterUpdate`, `beforeDelete`
+and `afterDelete` run inside the write's transaction and receive it as `tx`.
+Write other tables through `tx`, or call another resource with
+`{ ...ctx, db: tx }`, and the writes commit or roll back with the row. A hook
+that throws rolls the whole operation back. `afterCommit` runs after the
+commit, for cache clears and realtime publishes. Its errors are logged, not
+returned.
 
 ## Local vs HTTP row precision
 

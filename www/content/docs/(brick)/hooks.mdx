@@ -89,22 +89,25 @@ export const articlesSchemaFields = [
 
 All hooks are declared inside the `hooks` configuration of `crud()`:
 
-Hooks run after input validation, `authorize`, and `scope`.
+Hooks run after input validation, `authorize`, and `scope`. Every hook except `afterCommit` runs inside the write's transaction and receives it as `tx`.
 
-| Hook           | Arguments                  | Timing                   | Common Use Cases                                               |
-| :------------- | :------------------------- | :----------------------- | :------------------------------------------------------------- |
-| `beforeCreate` | `{ data, ctx, error }`     | Before `INSERT` query    | Data trimming, hashing, slug generation, permission validation |
-| `afterCreate`  | `{ row, ctx, error }`      | After `INSERT` completes | Audit logging, notification dispatch, webhooks                 |
-| `beforeUpdate` | `{ id, data, ctx, error }` | Before `UPDATE` query    | Field mutation validation, updated timestamp stamping          |
-| `afterUpdate`  | `{ id, row, ctx, error }`  | After `UPDATE` completes | Cache invalidation, audit logging                              |
-| `beforeDelete` | `{ id, ctx, error }`       | Before `DELETE` query    | Cascade checks, preventing deletion of active resources        |
-| `afterDelete`  | `{ id, ctx, error }`       | After `DELETE` completes | Cleanup associated files/assets, search index purging          |
+| Hook           | Arguments                      | Timing                              | Common Use Cases                                       |
+| :------------- | :----------------------------- | :---------------------------------- | :----------------------------------------------------- |
+| `beforeCreate` | `{ data, ctx, error, tx }`     | Before `INSERT`, in the transaction | Normalizing input, naming, permission validation       |
+| `afterCreate`  | `{ row, ctx, error, tx }`      | After `INSERT`, in the transaction  | Child rows, audit rows, counters in other tables       |
+| `beforeUpdate` | `{ id, data, ctx, error, tx }` | Before `UPDATE`, in the transaction | Field mutation validation, updated timestamp stamping  |
+| `afterUpdate`  | `{ id, row, ctx, error, tx }`  | After `UPDATE`, in the transaction  | Keeping related tables in step, audit rows             |
+| `beforeDelete` | `{ id, ctx, error, tx }`       | Before `DELETE`, in the transaction | Cascade checks, deleting child rows                    |
+| `afterDelete`  | `{ id, ctx, error, tx }`       | After `DELETE`, in the transaction  | Cleaning up related rows                               |
+| `afterCommit`  | `{ operation, id, row?, ctx }` | After the transaction commits       | Cache clears, realtime publishes, search index updates |
+
+Bulk operations (`bulkCreate`, `bulkUpdate`, `bulkDelete`) fire the same hooks once per row, in item order, all inside the batch's one transaction. Each row's `afterCommit` runs after the whole batch commits.
 
 `row` in `afterCreate` and `afterUpdate` is the full database row, including columns without `read` permission. The response is still limited to readable fields.
 
 ## Mutating Input in `before*` Hooks
 
-Before hooks receive `data`, a copy of the validated write payload (the `create` input, or `update`'s `data` object). You can mutate fields or add values for columns clients can't write. Every key must be a column of the table, or the call fails with a 500. An update whose `data` is empty after `beforeUpdate` is rejected with `BAD_REQUEST`.
+This is the supported place to adjust or normalize input before it is written. Before hooks receive `data`, a copy of the validated write payload (the `create` input, or `update`'s `data` object). You can mutate fields or add values for columns clients can't write. Every key must be a column of the table, or the call fails with a 500. An update whose `data` is empty after `beforeUpdate` is rejected with `BAD_REQUEST`.
 
 ```ts title="src/services/profiles.ts"
 hooks: {
@@ -125,7 +128,7 @@ hooks: {
 
 Hooks receive the standard `error` builder (`BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `INTERNAL_SERVER_ERROR`). Calling a helper throws an `ActionExecutionError` with that code and status.
 
-CRUD doesn't wrap hooks in a transaction. Throwing in a `before*` hook stops the write before it runs. Throwing in an `after*` hook returns an error to the client, but the row has already been written and isn't rolled back.
+A hook runs inside the write's transaction, so throwing in any `before*` or `after*` hook rolls back the whole operation: the row, anything the hook wrote through `tx`, and, for a bulk operation, every other item in the batch. Error helpers return their code and status to the client. Any other error is a 500.
 
 ```ts title="src/services/comments.ts"
 hooks: {
@@ -142,6 +145,87 @@ hooks: {
 }
 ```
 
+## Writing Other Tables in the Same Transaction
+
+Write through `tx` to make changes that commit or roll back with the row. To call another CRUD resource, pass `tx` as its `db` so the call joins the transaction:
+
+```ts title="src/services/invoices.ts"
+hooks: {
+  afterCreate: async ({ row, tx, ctx }) => {
+    await tx.insert(ledger).values({ invoiceId: row.id, amount: row.total });
+    await auditLog.create.run({ note: `invoice ${row.id}` }, { ...ctx, db: tx });
+  },
+}
+```
+
+A write made through `ctx.db` instead of `tx` is not part of the transaction on Postgres. On SQLite it joins anyway, because the database has one connection.
+
+## Naming and Generated IDs
+
+Set the ID or name in `beforeCreate`. Because the hook runs in the transaction, it can take the next number from a counter table without racing another insert:
+
+```ts title="src/services/leads.ts"
+hooks: {
+  beforeCreate: async ({ data, tx }) => {
+    const [series] = await tx
+      .update(namingSeries)
+      .set({ current: sql`${namingSeries.current} + 1` })
+      .where(eq(namingSeries.prefix, "LEAD"))
+      .returning();
+    data.name = `LEAD-${String(series.current).padStart(5, "0")}`;
+  },
+}
+```
+
+For other strategies you don't need a hook. Leave an autoincrement or `$defaultFn()` key to the database or Drizzle. For a hash, set `data.id` in `beforeCreate`. To let callers choose the ID, give the key `create: true` (see [Primary Keys](/docs/primary-keys)).
+
+## Child Rows
+
+CRUD has no input field for child rows yet. To write a parent and its child rows in one transaction, use an action that runs both resources' operations on the same `tx`:
+
+```ts title="src/services/quotes.ts"
+import { runInTransaction, t } from "@brickkit/core";
+
+export const createQuote = quotesService.action({
+  name: "createQuote",
+  input: t.Object({
+    title: t.String(),
+    items: t.Array(t.Object({ sku: t.String(), qty: t.Integer() })),
+  }),
+  execute: ({ input, ctx }) =>
+    runInTransaction(ctx.db, async (tx) => {
+      const joined = { ...ctx, db: tx };
+      const parent = await quote.create.run({ title: input.title }, joined);
+      await quoteItem.bulkCreate.run(
+        {
+          items: input.items.map((item, idx) => ({
+            ...item,
+            parent: parent.id,
+            idx,
+          })),
+        },
+        joined,
+      );
+      return parent;
+    }),
+});
+```
+
+Both resources' hooks run in that transaction, and each `afterCommit` waits for it to commit. To delete child rows with their parent, delete them through `tx` in `beforeDelete`.
+
 ## Reacting After the Commit
 
-Hooks run inside the request, so a slow hook slows the response. To run work after a write has been committed, such as sending an email, listen for the [events](/docs/events) that generated writes emit: they are recorded in the same transaction as the row and delivered with retries.
+`afterCommit` runs once the transaction has committed, and never for a write that rolled back. Use it for side effects outside the database, such as clearing a cache or publishing a realtime update:
+
+```ts
+hooks: {
+  afterCommit: async ({ operation, id, row }) => {
+    cache.delete(`lead:${id}`);
+    realtime.publish("lead", { operation, id, row });
+  },
+}
+```
+
+`row` is the full written row for `create` and `update`, and absent for `delete`. The write is already committed, so an error thrown in `afterCommit` is logged with `ctx.logger` and the client still gets its result. When the write runs inside an outer transaction, such as a hook of another resource or a bulk operation, `afterCommit` waits for that outer transaction to commit.
+
+`afterCommit` runs in the request, so a slow hook slows the response. For work that must not be lost, such as sending an email, listen for the [events](/docs/events) that generated writes emit: they are recorded in the same transaction as the row and delivered with retries.

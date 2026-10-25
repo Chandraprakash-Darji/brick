@@ -11,6 +11,7 @@ import {
   EventsHub,
   isOutboxTable,
   outboxTable,
+  onTransactionCommit,
   runInTransaction,
   stopAllEvents,
   syncSchema,
@@ -812,6 +813,66 @@ describe("emitEvent", () => {
     });
     expect(rows(db)).toHaveLength(1);
     expect(await hub.drain()).toBe(1);
+  });
+
+  it("joins a transaction already open on the same handle", async () => {
+    const { db } = setup([]);
+    const label = (tx: any) =>
+      tx
+        .select()
+        .from(items)
+        .all()
+        .map((r: any) => r.label);
+    const committed: string[] = [];
+    await runInTransaction(db, async (tx) => {
+      await tx.insert(items).values({ label: "outer" });
+      await runInTransaction(tx, async (inner) => {
+        await inner.insert(items).values({ label: "inner" });
+        await onTransactionCommit(inner, () => committed.push("inner"));
+      });
+      await expect(
+        runInTransaction(tx, async (inner) => {
+          await inner.insert(items).values({ label: "undone" });
+          await onTransactionCommit(inner, () => committed.push("undone"));
+          throw new Error("nested failure");
+        }),
+      ).rejects.toThrow("nested failure");
+      expect(committed).toEqual([]);
+    });
+    expect(label(db)).toEqual(["outer", "inner"]);
+    expect(committed).toEqual(["inner"]);
+
+    await expect(
+      runInTransaction(db, async (tx) => {
+        await runInTransaction(tx, async (inner) => {
+          await inner.insert(items).values({ label: "gone" });
+          await onTransactionCommit(inner, () => committed.push("gone"));
+        });
+        throw new Error("outer failure");
+      }),
+    ).rejects.toThrow("outer failure");
+    expect(label(db)).toEqual(["outer", "inner"]);
+    expect(committed).toEqual(["inner"]);
+    await onTransactionCommit(db, () => committed.push("now"));
+    expect(committed).toEqual(["inner", "now"]);
+  });
+
+  it("still makes separate callers take turns", async () => {
+    const { db } = setup([]);
+    const order: string[] = [];
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const first = runInTransaction(db, async () => {
+      order.push("first");
+      await held;
+      order.push("first done");
+    });
+    const second = runInTransaction(db, async () => void order.push("second"));
+    await Bun.sleep(5);
+    expect(order).toEqual(["first"]);
+    release();
+    await Promise.all([first, second]);
+    expect(order).toEqual(["first", "first done", "second"]);
   });
 
   it("explains a context whose database has no outbox", async () => {
