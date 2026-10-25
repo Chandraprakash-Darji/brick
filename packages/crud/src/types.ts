@@ -61,7 +61,19 @@ export type Operation =
   | "findOne"
   | "count"
   | "exists";
-export type Operations = false | Partial<Record<Operation, boolean>>;
+/** Batch writes. Off unless `operations` sets them to `true`. */
+export type BulkOperation = "bulkCreate" | "bulkUpdate" | "bulkDelete";
+export type Operations =
+  | false
+  | Partial<Record<Operation | BulkOperation, boolean>>;
+/** What `afterCommit` receives for each written row. */
+export type CrudCommitArgs = {
+  id: unknown;
+  ctx: ActionContext;
+} & (
+  | { operation: "create" | "update"; row: Record<string, unknown> }
+  | { operation: "delete"; row?: undefined }
+);
 export interface CrudOptions<
   F extends Fields = Fields,
   O extends Operations = Operations,
@@ -71,6 +83,8 @@ export interface CrudOptions<
   routes?: PluginRoutes;
   defaultLimit?: number;
   maxLimit?: number;
+  /** Most items one bulk call accepts. Default 100. */
+  maxBatchSize?: number;
   /**
    * Whether writes through this resource emit events: `<resource>.create`,
    * `<resource>.update` and `<resource>.delete`. Default `true`. It has an effect
@@ -91,38 +105,57 @@ export interface CrudOptions<
           ctx: ActionContext;
         }) => SQL | undefined | Promise<SQL | undefined>;
       };
+  /**
+   * Write hooks run inside the operation's transaction, once per row (bulk
+   * operations included): a hook that throws rolls the whole operation back.
+   * `afterCommit` runs after the commit, for side effects that must not happen
+   * when the write is undone; an error it throws is logged, not returned.
+   */
   hooks?: {
+    afterCommit?: (args: CrudCommitArgs) => void | Promise<void>;
     beforeCreate?: (args: {
       data: Record<string, unknown>;
       ctx: ActionContext;
       error: ErrorBuilder<Record<string, never>>;
+      /** The operation's open transaction: write other tables through it. */
+      tx: any;
     }) => void | Promise<void>;
     afterCreate?: (args: {
       row: Record<string, unknown>;
       ctx: ActionContext;
       error: ErrorBuilder<Record<string, never>>;
+      /** The operation's open transaction: write other tables through it. */
+      tx: any;
     }) => void | Promise<void>;
     afterUpdate?: (args: {
       id: unknown;
       row: Record<string, unknown>;
       ctx: ActionContext;
       error: ErrorBuilder<Record<string, never>>;
+      /** The operation's open transaction: write other tables through it. */
+      tx: any;
     }) => void | Promise<void>;
     beforeDelete?: (args: {
       id: unknown;
       ctx: ActionContext;
       error: ErrorBuilder<Record<string, never>>;
+      /** The operation's open transaction: write other tables through it. */
+      tx: any;
     }) => void | Promise<void>;
     afterDelete?: (args: {
       id: unknown;
       ctx: ActionContext;
       error: ErrorBuilder<Record<string, never>>;
+      /** The operation's open transaction: write other tables through it. */
+      tx: any;
     }) => void | Promise<void>;
     beforeUpdate?: (args: {
       id: unknown;
       data: Record<string, unknown>;
       ctx: ActionContext;
       error: ErrorBuilder<Record<string, never>>;
+      /** The operation's open transaction: write other tables through it. */
+      tx: any;
     }) => void | Promise<void>;
   };
 }
@@ -393,6 +426,17 @@ type AllAPI<T extends Table, C, F, ID> = {
   delete: Callable<{ id: ID }, { success: true }, C>;
   count: Callable<{ where?: Where<T, F> }, { count: number }, C>;
   exists: Callable<{ where?: Where<T, F> }, { exists: boolean }, C>;
+  bulkCreate: Callable<
+    { items: WriteRow<T, F, "create">[] },
+    { items: ReadRow<T, F>[] },
+    C
+  >;
+  bulkUpdate: Callable<
+    { items: { id: ID; data: Partial<WriteRow<T, F, "update">> }[] },
+    { items: ReadRow<T, F>[] },
+    C
+  >;
+  bulkDelete: Callable<{ ids: ID[] }, { count: number }, C>;
 };
 export type CrudAPI<T extends Table, C, F, O, ID = Row<T>[keyof Row<T>]> = [
   O,
@@ -400,7 +444,10 @@ export type CrudAPI<T extends Table, C, F, O, ID = Row<T>[keyof Row<T>]> = [
   ? {}
   : Pick<
       AllAPI<T, C, F, ID>,
-      { [K in Operation]: O extends Record<K, false> ? never : K }[Operation]
+      | { [K in Operation]: O extends Record<K, false> ? never : K }[Operation]
+      | {
+          [K in BulkOperation]: O extends Record<K, true> ? K : never;
+        }[BulkOperation]
     >;
 export interface CrudTypes<F, O> {
   readonly table: unknown;

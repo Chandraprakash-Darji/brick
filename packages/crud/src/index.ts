@@ -3,6 +3,8 @@ import {
   t,
   ActionExecutionError,
   setActionAccess,
+  runInTransaction,
+  onTransactionCommit,
   type EventRecorder,
 } from "@brickkit/core";
 import { Type, FormatRegistry, Kind, type TSchema } from "@sinclair/typebox";
@@ -29,6 +31,7 @@ import {
 } from "drizzle-orm";
 
 import type {
+  BulkOperation,
   CrudAuthorizeArgs,
   CrudOptions,
   CrudPlugin,
@@ -40,7 +43,7 @@ import type {
 export type * from "./types";
 
 const methods: Record<
-  Operation,
+  Operation | BulkOperation,
   { method: "GET" | "POST" | "PATCH" | "DELETE"; path: string }
 > = {
   list: { method: "POST", path: "/query" },
@@ -51,6 +54,15 @@ const methods: Record<
   findOne: { method: "POST", path: "/find-one" },
   count: { method: "POST", path: "/count" },
   exists: { method: "POST", path: "/exists" },
+  bulkCreate: { method: "POST", path: "/bulk-create" },
+  bulkUpdate: { method: "POST", path: "/bulk-update" },
+  bulkDelete: { method: "POST", path: "/bulk-delete" },
+};
+// Each bulk operation runs its single-row operation once per item.
+const bulkOperations: Record<BulkOperation, "create" | "update" | "delete"> = {
+  bulkCreate: "create",
+  bulkUpdate: "update",
+  bulkDelete: "delete",
 };
 const isoPattern =
   "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?Z$";
@@ -366,6 +378,15 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
         maxLimit < defaultLimit
       )
         throw new Error("Invalid CRUD pagination limits");
+      const maxBatchSize = options.maxBatchSize ?? 100;
+      if (!Number.isInteger(maxBatchSize) || maxBatchSize < 1)
+        throw new Error("Invalid CRUD maxBatchSize");
+      const batch = (item: TSchema, unique = false) =>
+        t.Array(item, {
+          minItems: 1,
+          maxItems: maxBatchSize,
+          uniqueItems: unique,
+        });
       const fieldLiteral = (keys: string[]) =>
         keys.length ? t.Union(keys.map((key) => t.Literal(key))) : t.Never();
       // Named where leaves: one union schema per filterable field plus named
@@ -510,7 +531,7 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
         );
       const createSchema = writeSchema("create");
       const updateSchema = writeSchema("update");
-      const inputs: Record<Operation, TSchema> = {
+      const inputs: Record<Operation | BulkOperation, TSchema> = {
         list: querySchema,
         findOne: querySchema,
         get: object({ id: idSchema, select: selection, include: includes }),
@@ -519,8 +540,13 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
         delete: object({ id: idSchema }),
         count: object({ where: t.Optional(whereSchema) }),
         exists: object({ where: t.Optional(whereSchema) }),
+        bulkCreate: object({ items: batch(createSchema) }),
+        bulkUpdate: object({
+          items: batch(object({ id: idSchema, data: updateSchema })),
+        }),
+        bulkDelete: object({ ids: batch(idSchema, true) }),
       };
-      const outputs: Record<Operation, TSchema> = {
+      const outputs: Record<Operation | BulkOperation, TSchema> = {
         list: object({
           items: t.Array(rowSchema),
           total: t.Optional(t.Integer()),
@@ -534,9 +560,12 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
         delete: object({ success: t.Literal(true) }),
         count: object({ count: t.Integer() }),
         exists: object({ exists: t.Boolean() }),
+        bulkCreate: object({ items: t.Array(rowSchema) }),
+        bulkUpdate: object({ items: t.Array(rowSchema) }),
+        bulkDelete: object({ count: t.Integer() }),
       };
       // Runtime-only outputs: same shape but rows may be subset projections.
-      const looseOutputs: Record<Operation, TSchema> = {
+      const looseOutputs: Record<Operation | BulkOperation, TSchema> = {
         list: object({
           items: t.Array(rowSchemaLoose),
           total: t.Optional(t.Integer()),
@@ -550,6 +579,9 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
         delete: object({ success: t.Literal(true) }),
         count: object({ count: t.Integer() }),
         exists: object({ exists: t.Boolean() }),
+        bulkCreate: object({ items: t.Array(rowSchemaLoose) }),
+        bulkUpdate: object({ items: t.Array(rowSchemaLoose) }),
+        bulkDelete: object({ count: t.Integer() }),
       };
       const prepared = new WeakMap<object, Map<string, any>>();
       const executeQuery = async (
@@ -586,13 +618,537 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
         typeof (options.access as { scope?: unknown } | undefined)?.scope ===
           "function";
       const crudHasAuthorize = !crudIsPublic;
-      for (const operation of Object.keys(methods) as Operation[]) {
-        if (options.operations && options.operations[operation] === false)
+      const eventContext = (ctx: any) => ({
+        traceId: ctx.traceId,
+        source: `${service.name}.${resource.name}`,
+      });
+      const perform = async (
+        operation: Operation,
+        input: any,
+        ctx: any,
+        error: any,
+        outer?: { tx: any; record?: EventRecorder },
+      ): Promise<any> => {
+        if (options.access !== "public") {
+          const accessConfig = options.access;
+          if (
+            !accessConfig?.authorize ||
+            !(await accessConfig.authorize(
+              // inputs[operation] validated this value before execute.
+              { operation, input, ctx } as CrudAuthorizeArgs<F>,
+            ))
+          )
+            throw new ActionExecutionError(
+              ctx.user == null ? "UNAUTHORIZED" : "FORBIDDEN",
+              "Access denied",
+              ctx.user == null ? 401 : 403,
+            );
+        }
+        const db: any = outer?.tx ?? ctx.db ?? service.getDb();
+        if (!db) throw new Error("CRUD requires a configured database");
+        const eventName = `${resource.name}.${operation}`;
+        const recording =
+          !outer &&
+          options.events !== false &&
+          (operation === "create" ||
+            operation === "update" ||
+            operation === "delete") &&
+          service.events?.wants(eventName)
+            ? service.events
+            : undefined;
+        const readableEventRow = (row: Record<string, unknown>) =>
+          Object.fromEntries(
+            readable.map((field) => [field, jsonValue(row[field])]),
+          );
+        const eventId = (row: Record<string, unknown>) =>
+          jsonValue(row[resource.idField]);
+        const scope =
+          options.access === "public"
+            ? undefined
+            : await options.access?.scope?.({ operation, ctx });
+        const cacheable =
+          !scope &&
+          !!db.$client?.prepare &&
+          !Object.values(columns).some(
+            (column) => column.defaultFn || column.onUpdateFn,
+          );
+        const params: Record<string, unknown> = {};
+        let parameter = 0;
+        const bind = (value: unknown): any => {
+          if (!cacheable) return value;
+          const key = `p${parameter++}`;
+          params[key] = value;
+          return sql.placeholder(key);
+        };
+        const shape: unknown[] = [];
+        const condition = (node: any, depth = 0): SQL => {
+          if (depth > MAX_WHERE_DEPTH)
+            invalid(`Filter nesting exceeds ${MAX_WHERE_DEPTH} levels`);
+          if (node.and) {
+            shape.push("and", node.and.length);
+            return and(...node.and.map((n: any) => condition(n, depth + 1)))!;
+          }
+          if (node.or) {
+            shape.push("or", node.or.length);
+            return or(...node.or.map((n: any) => condition(n, depth + 1)))!;
+          }
+          const col = columns[node.field];
+          shape.push(node.field, node.op);
+          switch (node.op as FilterOperator) {
+            case "eq":
+              return eq(col, bind(databaseValue(col, node.value)));
+            case "ne":
+              return ne(col, bind(databaseValue(col, node.value)));
+            case "gt":
+              return gt(col, bind(databaseValue(col, node.value)));
+            case "gte":
+              return gte(col, bind(databaseValue(col, node.value)));
+            case "lt":
+              return lt(col, bind(databaseValue(col, node.value)));
+            case "lte":
+              return lte(col, bind(databaseValue(col, node.value)));
+            case "in":
+              shape.push(node.value.length);
+              return inArray(
+                col,
+                node.value.map((value: unknown) =>
+                  bind(databaseValue(col, value)),
+                ),
+              );
+            case "notIn":
+              shape.push(node.value.length);
+              return notInArray(
+                col,
+                node.value.map((value: unknown) =>
+                  bind(databaseValue(col, value)),
+                ),
+              );
+            case "between":
+              return between(
+                col,
+                bind(databaseValue(col, node.value[0])),
+                bind(databaseValue(col, node.value[1])),
+              );
+            case "isNull":
+              return isNull(col);
+            case "isNotNull":
+              return isNotNull(col);
+            case "contains":
+            case "startsWith":
+            case "endsWith": {
+              const escaped = String(node.value).replace(/[\\%_]/g, "\\$&");
+              const pattern =
+                node.op === "contains"
+                  ? `%${escaped}%`
+                  : node.op === "startsWith"
+                    ? `${escaped}%`
+                    : `%${escaped}`;
+              return sql`${col} LIKE ${bind(pattern)} ESCAPE '\\'`;
+            }
+            default:
+              return invalid("Unknown filter operator");
+          }
+        };
+        const where = and(
+          scope,
+          input.where ? condition(input.where) : undefined,
+          ["get", "update", "delete"].includes(operation)
+            ? eq(idColumn, bind(databaseValue(idColumn, input.id)))
+            : undefined,
+        );
+        const derived: string[] = input.include ?? [];
+        const selected: string[] = [...(input.select ?? readable), ...derived];
+        const selectedProjection = Object.fromEntries(
+          selected
+            .filter((key) => !fields[key].resolve)
+            .map((key) => [key, columns[key]]),
+        );
+        // A sentinel permits resources with no readable fields without exposing the ID.
+        const dbProjection = derived.length
+          ? columns
+          : Object.keys(selectedProjection).length
+            ? selectedProjection
+            : { __brickSentinel: idColumn };
+        const resolveRows = async (rows: Record<string, unknown>[]) => {
+          if (!rows.length) return rows;
+          const resolved = rows.map((row) => ({ ...row }));
+          for (const key of derived) {
+            const values = await fields[key].resolve!({ rows, ctx });
+            if (values.length !== rows.length)
+              throw new Error(
+                `Derived CRUD field '${key}' returned an incorrect number of values`,
+              );
+            for (let index = 0; index < rows.length; index++)
+              resolved[index][key] = values[index];
+          }
+          return resolved;
+        };
+        const scrub = async (row: Record<string, unknown>) => {
+          const result: Record<string, unknown> = {};
+          for (const key of selected)
+            result[key] = fields[key].scrub
+              ? await fields[key].scrub!({
+                  value: jsonValue(row[key]),
+                  ctx,
+                })
+              : jsonValue(row[key]);
+          return result;
+        };
+        const key = (suffix: string) =>
+          JSON.stringify([operation, suffix, shape, selected, input.orderBy]);
+        if (["list", "findOne", "get"].includes(operation)) {
+          const limit =
+            operation === "list" ? (input.limit ?? defaultLimit) : 1;
+          const offset = input.offset ?? 0;
+          const ordering = (input.orderBy ?? []).map((sort: any) =>
+            sort.direction === "desc"
+              ? desc(columns[sort.field])
+              : asc(columns[sort.field]),
+          );
+          const boundLimit = bind(limit),
+            boundOffset = bind(offset);
+          const rows = await resolveRows(
+            await executeQuery(
+              db,
+              key("rows"),
+              () =>
+                db
+                  .select(dbProjection)
+                  .from(resource.table)
+                  .where(where)
+                  .orderBy(...ordering)
+                  .limit(boundLimit)
+                  .offset(boundOffset),
+              params,
+              cacheable,
+            ),
+          );
+          if (operation === "get") {
+            if (!rows[0])
+              throw new ActionExecutionError(
+                "NOT_FOUND",
+                "Resource not found",
+                404,
+              );
+            return scrub(rows[0]);
+          }
+          if (operation === "findOne") return rows[0] ? scrub(rows[0]) : null;
+          const result: any = {
+            items: await Promise.all(rows.map(scrub)),
+            limit,
+            offset,
+          };
+          if (input.includeTotal) {
+            const counts = await executeQuery(
+              db,
+              key("total"),
+              () =>
+                db
+                  .select({ count: sql<number>`count(*)`.mapWith(Number) })
+                  .from(resource.table)
+                  .where(where),
+              params,
+              cacheable,
+            );
+            result.total = counts[0].count;
+          }
+          return result;
+        }
+        if (operation === "count") {
+          const rows = await executeQuery(
+            db,
+            key("count"),
+            () =>
+              db
+                .select({ count: sql<number>`count(*)`.mapWith(Number) })
+                .from(resource.table)
+                .where(where),
+            params,
+            cacheable,
+          );
+          return { count: rows[0].count };
+        }
+        if (operation === "exists") {
+          const rows = await executeQuery(
+            db,
+            key("exists"),
+            () =>
+              db
+                .select({ id: idColumn })
+                .from(resource.table)
+                .where(where)
+                .limit(1),
+            params,
+            cacheable,
+          );
+          return { exists: rows.length > 0 };
+        }
+        const hooks = options.hooks ?? {};
+        // Hooks get the transaction; a bulk call passes its own in `outer`.
+        const inTransaction = <R>(
+          fn: (tx: any, record?: EventRecorder) => Promise<R>,
+        ): Promise<R> =>
+          outer
+            ? fn(outer.tx, outer.record)
+            : recording
+              ? recording.transaction(db, eventContext(ctx), fn)
+              : (
+                    operation === "create"
+                      ? hooks.beforeCreate || hooks.afterCreate
+                      : operation === "update"
+                        ? hooks.beforeUpdate || hooks.afterUpdate
+                        : hooks.beforeDelete || hooks.afterDelete
+                  )
+                ? runInTransaction(db, (tx) => fn(tx))
+                : fn(db);
+        const committed = (
+          args:
+            | { operation: "create" | "update"; row: Record<string, unknown> }
+            | { operation: "delete" },
+        ) =>
+          hooks.afterCommit &&
+          onTransactionCommit(db, async () => {
+            try {
+              await hooks.afterCommit!({
+                ...args,
+                id: "row" in args ? args.row[resource.idField] : input.id,
+                ctx,
+              });
+            } catch (cause) {
+              // The write is committed: report the failure, keep the result.
+              ctx.logger?.error?.(
+                `${resource.name} afterCommit hook failed`,
+                cause,
+              );
+            }
+          });
+        if (operation === "delete") {
+          await inTransaction(async (target, record) => {
+            await hooks.beforeDelete?.({
+              id: input.id,
+              ctx,
+              error,
+              tx: target,
+            });
+            const rows = await executeQuery(
+              target,
+              key(record ? "delete-row" : "delete"),
+              () =>
+                target
+                  .delete(resource.table)
+                  .where(where)
+                  .returning(record ? columns : { id: idColumn }),
+              params,
+              cacheable,
+            );
+            if (!rows.length)
+              throw new ActionExecutionError(
+                "NOT_FOUND",
+                "Resource not found",
+                404,
+              );
+            if (record)
+              await record(eventName, {
+                id: eventId(rows[0]),
+                row: readableEventRow(rows[0]),
+              });
+            await hooks.afterDelete?.({ id: input.id, ctx, error, tx: target });
+          });
+          await committed({ operation: "delete" });
+          return { success: true };
+        }
+        // Create scope cannot be enforced with INSERT WHERE: require explicit authorization.
+        if (operation === "create" && scope)
+          throw new ActionExecutionError(
+            "FORBIDDEN",
+            "Row-scoped creation requires an explicit create policy",
+            403,
+          );
+        const rows = await inTransaction(async (target, record) => {
+          const data = { ...(operation === "create" ? input : input.data) };
+          if (operation === "create")
+            await hooks.beforeCreate?.({ data, ctx, error, tx: target });
+          else
+            await hooks.beforeUpdate?.({
+              id: input.id,
+              data,
+              ctx,
+              error,
+              tx: target,
+            });
+          // Hooks are trusted and may set internal columns, but must use real table keys.
+          for (const field of Object.keys(data))
+            if (!own(columns, field))
+              throw new Error(`Write hook supplied unknown field '${field}'`);
+          if (operation === "update" && !Object.keys(data).length)
+            invalid("Update requires at least one field");
+          const writeFields = Object.keys(data).sort((a, b) =>
+            a < b ? -1 : 1,
+          );
+          const boundData = Object.fromEntries(
+            writeFields.map((field) => [
+              field,
+              bind(databaseValue(columns[field], data[field])),
+            ]),
+          );
+          shape.push(writeFields);
+          const safeCache =
+            cacheable &&
+            !writeFields.some(
+              (field) => columns[field].defaultFn || columns[field].onUpdateFn,
+            ) &&
+            !Object.values(columns).some(
+              (column) => column.defaultFn || column.onUpdateFn,
+            );
+          const before =
+            record && operation === "update"
+              ? ((
+                  await executeQuery(
+                    target,
+                    key("before"),
+                    () => {
+                      const query = target
+                        .select(columns)
+                        .from(resource.table)
+                        .where(where)
+                        .limit(1);
+                      return typeof query.for === "function"
+                        ? query.for("update")
+                        : query;
+                    },
+                    params,
+                    cacheable,
+                  )
+                )[0] as Record<string, unknown> | undefined)
+              : undefined;
+          const written = await executeQuery(
+            target,
+            key("write"),
+            () =>
+              operation === "create"
+                ? target
+                    .insert(resource.table)
+                    .values(boundData)
+                    .returning(columns)
+                : target
+                    .update(resource.table)
+                    .set(boundData)
+                    .where(where)
+                    .returning(columns),
+            params,
+            safeCache,
+          ).catch((cause: unknown) => {
+            if (uniqueViolation(cause))
+              throw new ActionExecutionError(
+                "CONFLICT",
+                "Resource already exists",
+                409,
+              );
+            throw cause;
+          });
+          if (!written[0])
+            throw new ActionExecutionError(
+              "NOT_FOUND",
+              "Resource not found",
+              404,
+            );
+          if (record)
+            await record(
+              eventName,
+              operation === "create"
+                ? {
+                    id: eventId(written[0]),
+                    row: readableEventRow(written[0]),
+                  }
+                : {
+                    id: eventId(written[0]),
+                    before: readableEventRow(before ?? {}),
+                    after: readableEventRow(written[0]),
+                  },
+            );
+          if (operation === "create")
+            await hooks.afterCreate?.({
+              row: written[0],
+              ctx,
+              error,
+              tx: target,
+            });
+          else
+            await hooks.afterUpdate?.({
+              id: input.id,
+              row: written[0],
+              ctx,
+              error,
+              tx: target,
+            });
+          return written;
+        });
+        await committed({
+          operation: operation as "create" | "update",
+          row: rows[0],
+        });
+        return scrub((await resolveRows(rows))[0]);
+      };
+      // One transaction for the whole batch: every item goes through the
+      // single-row path (authorize, scope, hooks, events) or nothing is kept.
+      const performBulk = async (
+        operation: BulkOperation,
+        input: any,
+        ctx: any,
+        error: any,
+      ) => {
+        const single = bulkOperations[operation];
+        const items: any[] =
+          single === "delete"
+            ? input.ids.map((id: unknown) => ({ id }))
+            : input.items;
+        const db: any = ctx.db ?? service.getDb();
+        if (!db) throw new Error("CRUD requires a configured database");
+        const run = async (tx: any, record?: EventRecorder) => {
+          const results: unknown[] = [];
+          for (const [index, item] of items.entries())
+            results.push(
+              await perform(single, item, ctx, error, { tx, record }).catch(
+                (cause: unknown) => {
+                  if (!(cause instanceof ActionExecutionError)) throw cause;
+                  throw new ActionExecutionError(
+                    cause.code,
+                    `Item ${index}: ${cause.message}`,
+                    cause.status,
+                    { index, code: cause.code, message: cause.message },
+                    { cause },
+                  );
+                },
+              ),
+            );
+          return results;
+        };
+        const results =
+          options.events !== false &&
+          service.events?.wants(`${resource.name}.${single}`)
+            ? await service.events.transaction(db, eventContext(ctx), run)
+            : await runInTransaction(db, (tx) => run(tx));
+        return single === "delete"
+          ? { count: results.length }
+          : { items: results };
+      };
+      for (const operation of Object.keys(methods) as (
+        | Operation
+        | BulkOperation
+      )[]) {
+        if (
+          operation in bulkOperations
+            ? !options.operations || options.operations[operation] !== true
+            : options.operations && options.operations[operation] === false
+        )
           continue;
         // Per-operation metadata: `create` never runs row-scoped (its scope
         // is always undefined, and a nonempty create scope is rejected with
         // FORBIDDEN), so it reports authorized rather than scoped.
-        const opHasScope = crudHasScopeFn && operation !== "create";
+        const opHasScope =
+          crudHasScopeFn &&
+          operation !== "create" &&
+          operation !== "bulkCreate";
         const crudAccess = {
           hasAuthorize: crudHasAuthorize,
           hasScope: opHasScope,
@@ -607,440 +1163,10 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
           ...methods[operation],
           input: inputs[operation],
           output: outputs[operation],
-          execute: async ({ input: validatedInput, ctx, error }) => {
-            const input: any = validatedInput;
-            if (options.access !== "public") {
-              const accessConfig = options.access;
-              if (
-                !accessConfig?.authorize ||
-                !(await accessConfig.authorize(
-                  // inputs[operation] validated this value before execute.
-                  { operation, input, ctx } as CrudAuthorizeArgs<F>,
-                ))
-              )
-                throw new ActionExecutionError(
-                  ctx.user == null ? "UNAUTHORIZED" : "FORBIDDEN",
-                  "Access denied",
-                  ctx.user == null ? 401 : 403,
-                );
-            }
-            const db: any = ctx.db ?? service.getDb();
-            if (!db) throw new Error("CRUD requires a configured database");
-            const eventName = `${resource.name}.${operation}`;
-            const recording =
-              options.events !== false &&
-              (operation === "create" ||
-                operation === "update" ||
-                operation === "delete") &&
-              service.events?.wants(eventName)
-                ? service.events
-                : undefined;
-            const eventContext = {
-              traceId: ctx.traceId,
-              source: `${service.name}.${resource.name}`,
-            };
-            const readableEventRow = (row: Record<string, unknown>) =>
-              Object.fromEntries(
-                readable.map((field) => [field, jsonValue(row[field])]),
-              );
-            const eventId = (row: Record<string, unknown>) =>
-              jsonValue(row[resource.idField]);
-            const scope =
-              options.access === "public"
-                ? undefined
-                : await options.access?.scope?.({ operation, ctx });
-            const cacheable =
-              !scope &&
-              !!db.$client?.prepare &&
-              !Object.values(columns).some(
-                (column) => column.defaultFn || column.onUpdateFn,
-              );
-            const params: Record<string, unknown> = {};
-            let parameter = 0;
-            const bind = (value: unknown): any => {
-              if (!cacheable) return value;
-              const key = `p${parameter++}`;
-              params[key] = value;
-              return sql.placeholder(key);
-            };
-            const shape: unknown[] = [];
-            const condition = (node: any, depth = 0): SQL => {
-              if (depth > MAX_WHERE_DEPTH)
-                invalid(`Filter nesting exceeds ${MAX_WHERE_DEPTH} levels`);
-              if (node.and) {
-                shape.push("and", node.and.length);
-                return and(
-                  ...node.and.map((n: any) => condition(n, depth + 1)),
-                )!;
-              }
-              if (node.or) {
-                shape.push("or", node.or.length);
-                return or(...node.or.map((n: any) => condition(n, depth + 1)))!;
-              }
-              const col = columns[node.field];
-              shape.push(node.field, node.op);
-              switch (node.op as FilterOperator) {
-                case "eq":
-                  return eq(col, bind(databaseValue(col, node.value)));
-                case "ne":
-                  return ne(col, bind(databaseValue(col, node.value)));
-                case "gt":
-                  return gt(col, bind(databaseValue(col, node.value)));
-                case "gte":
-                  return gte(col, bind(databaseValue(col, node.value)));
-                case "lt":
-                  return lt(col, bind(databaseValue(col, node.value)));
-                case "lte":
-                  return lte(col, bind(databaseValue(col, node.value)));
-                case "in":
-                  shape.push(node.value.length);
-                  return inArray(
-                    col,
-                    node.value.map((value: unknown) =>
-                      bind(databaseValue(col, value)),
-                    ),
-                  );
-                case "notIn":
-                  shape.push(node.value.length);
-                  return notInArray(
-                    col,
-                    node.value.map((value: unknown) =>
-                      bind(databaseValue(col, value)),
-                    ),
-                  );
-                case "between":
-                  return between(
-                    col,
-                    bind(databaseValue(col, node.value[0])),
-                    bind(databaseValue(col, node.value[1])),
-                  );
-                case "isNull":
-                  return isNull(col);
-                case "isNotNull":
-                  return isNotNull(col);
-                case "contains":
-                case "startsWith":
-                case "endsWith": {
-                  const escaped = String(node.value).replace(/[\\%_]/g, "\\$&");
-                  const pattern =
-                    node.op === "contains"
-                      ? `%${escaped}%`
-                      : node.op === "startsWith"
-                        ? `${escaped}%`
-                        : `%${escaped}`;
-                  return sql`${col} LIKE ${bind(pattern)} ESCAPE '\\'`;
-                }
-                default:
-                  return invalid("Unknown filter operator");
-              }
-            };
-            const where = and(
-              scope,
-              input.where ? condition(input.where) : undefined,
-              ["get", "update", "delete"].includes(operation)
-                ? eq(idColumn, bind(databaseValue(idColumn, input.id)))
-                : undefined,
-            );
-            const derived: string[] = input.include ?? [];
-            const selected: string[] = [
-              ...(input.select ?? readable),
-              ...derived,
-            ];
-            const selectedProjection = Object.fromEntries(
-              selected
-                .filter((key) => !fields[key].resolve)
-                .map((key) => [key, columns[key]]),
-            );
-            // A sentinel permits resources with no readable fields without exposing the ID.
-            const dbProjection = derived.length
-              ? columns
-              : Object.keys(selectedProjection).length
-                ? selectedProjection
-                : { __brickSentinel: idColumn };
-            const resolveRows = async (rows: Record<string, unknown>[]) => {
-              if (!rows.length) return rows;
-              const resolved = rows.map((row) => ({ ...row }));
-              for (const key of derived) {
-                const values = await fields[key].resolve!({ rows, ctx });
-                if (values.length !== rows.length)
-                  throw new Error(
-                    `Derived CRUD field '${key}' returned an incorrect number of values`,
-                  );
-                for (let index = 0; index < rows.length; index++)
-                  resolved[index][key] = values[index];
-              }
-              return resolved;
-            };
-            const scrub = async (row: Record<string, unknown>) => {
-              const result: Record<string, unknown> = {};
-              for (const key of selected)
-                result[key] = fields[key].scrub
-                  ? await fields[key].scrub!({
-                      value: jsonValue(row[key]),
-                      ctx,
-                    })
-                  : jsonValue(row[key]);
-              return result;
-            };
-            const key = (suffix: string) =>
-              JSON.stringify([
-                operation,
-                suffix,
-                shape,
-                selected,
-                input.orderBy,
-              ]);
-            if (["list", "findOne", "get"].includes(operation)) {
-              const limit =
-                operation === "list" ? (input.limit ?? defaultLimit) : 1;
-              const offset = input.offset ?? 0;
-              const ordering = (input.orderBy ?? []).map((sort: any) =>
-                sort.direction === "desc"
-                  ? desc(columns[sort.field])
-                  : asc(columns[sort.field]),
-              );
-              const boundLimit = bind(limit),
-                boundOffset = bind(offset);
-              const rows = await resolveRows(
-                await executeQuery(
-                  db,
-                  key("rows"),
-                  () =>
-                    db
-                      .select(dbProjection)
-                      .from(resource.table)
-                      .where(where)
-                      .orderBy(...ordering)
-                      .limit(boundLimit)
-                      .offset(boundOffset),
-                  params,
-                  cacheable,
-                ),
-              );
-              if (operation === "get") {
-                if (!rows[0])
-                  throw new ActionExecutionError(
-                    "NOT_FOUND",
-                    "Resource not found",
-                    404,
-                  );
-                return scrub(rows[0]);
-              }
-              if (operation === "findOne")
-                return rows[0] ? scrub(rows[0]) : null;
-              const result: any = {
-                items: await Promise.all(rows.map(scrub)),
-                limit,
-                offset,
-              };
-              if (input.includeTotal) {
-                const counts = await executeQuery(
-                  db,
-                  key("total"),
-                  () =>
-                    db
-                      .select({ count: sql<number>`count(*)`.mapWith(Number) })
-                      .from(resource.table)
-                      .where(where),
-                  params,
-                  cacheable,
-                );
-                result.total = counts[0].count;
-              }
-              return result;
-            }
-            if (operation === "count") {
-              const rows = await executeQuery(
-                db,
-                key("count"),
-                () =>
-                  db
-                    .select({ count: sql<number>`count(*)`.mapWith(Number) })
-                    .from(resource.table)
-                    .where(where),
-                params,
-                cacheable,
-              );
-              return { count: rows[0].count };
-            }
-            if (operation === "exists") {
-              const rows = await executeQuery(
-                db,
-                key("exists"),
-                () =>
-                  db
-                    .select({ id: idColumn })
-                    .from(resource.table)
-                    .where(where)
-                    .limit(1),
-                params,
-                cacheable,
-              );
-              return { exists: rows.length > 0 };
-            }
-            if (operation === "delete") {
-              await options.hooks?.beforeDelete?.({ id: input.id, ctx, error });
-              const remove = async (target: any, record?: EventRecorder) => {
-                const rows = await executeQuery(
-                  target,
-                  key(record ? "delete-row" : "delete"),
-                  () =>
-                    target
-                      .delete(resource.table)
-                      .where(where)
-                      .returning(record ? columns : { id: idColumn }),
-                  params,
-                  cacheable,
-                );
-                if (!rows.length)
-                  throw new ActionExecutionError(
-                    "NOT_FOUND",
-                    "Resource not found",
-                    404,
-                  );
-                if (record)
-                  await record(eventName, {
-                    id: eventId(rows[0]),
-                    row: readableEventRow(rows[0]),
-                  });
-              };
-              if (recording)
-                await recording.transaction(db, eventContext, (tx, record) =>
-                  remove(tx, record),
-                );
-              else await remove(db);
-              await options.hooks?.afterDelete?.({ id: input.id, ctx, error });
-              return { success: true };
-            }
-            const data = { ...(operation === "create" ? input : input.data) };
-            if (operation === "create")
-              await options.hooks?.beforeCreate?.({ data, ctx, error });
-            else
-              await options.hooks?.beforeUpdate?.({
-                id: input.id,
-                data,
-                ctx,
-                error,
-              });
-            // Hooks are trusted and may set internal columns, but must use real table keys.
-            for (const field of Object.keys(data))
-              if (!own(columns, field))
-                throw new Error(`Write hook supplied unknown field '${field}'`);
-            if (operation === "update" && !Object.keys(data).length)
-              invalid("Update requires at least one field");
-            // Create scope cannot be enforced with INSERT WHERE: require explicit authorization.
-            if (operation === "create" && scope)
-              throw new ActionExecutionError(
-                "FORBIDDEN",
-                "Row-scoped creation requires an explicit create policy",
-                403,
-              );
-            const writeFields = Object.keys(data).sort((a, b) =>
-              a < b ? -1 : 1,
-            );
-            const boundData = Object.fromEntries(
-              writeFields.map((field) => [
-                field,
-                bind(databaseValue(columns[field], data[field])),
-              ]),
-            );
-            shape.push(writeFields);
-            const safeCache =
-              cacheable &&
-              !writeFields.some(
-                (field) =>
-                  columns[field].defaultFn || columns[field].onUpdateFn,
-              ) &&
-              !Object.values(columns).some(
-                (column) => column.defaultFn || column.onUpdateFn,
-              );
-            const readRowBeforeUpdate = async (target: any) =>
-              (
-                await executeQuery(
-                  target,
-                  key("before"),
-                  () => {
-                    const query = target
-                      .select(columns)
-                      .from(resource.table)
-                      .where(where)
-                      .limit(1);
-                    return typeof query.for === "function"
-                      ? query.for("update")
-                      : query;
-                  },
-                  params,
-                  cacheable,
-                )
-              )[0] as Record<string, unknown> | undefined;
-            const write = async (target: any, record?: EventRecorder) => {
-              const before =
-                record && operation === "update"
-                  ? await readRowBeforeUpdate(target)
-                  : undefined;
-              const written = await executeQuery(
-                target,
-                key("write"),
-                () =>
-                  operation === "create"
-                    ? target
-                        .insert(resource.table)
-                        .values(boundData)
-                        .returning(columns)
-                    : target
-                        .update(resource.table)
-                        .set(boundData)
-                        .where(where)
-                        .returning(columns),
-                params,
-                safeCache,
-              ).catch((cause: unknown) => {
-                if (uniqueViolation(cause))
-                  throw new ActionExecutionError(
-                    "CONFLICT",
-                    "Resource already exists",
-                    409,
-                  );
-                throw cause;
-              });
-              if (!written[0])
-                throw new ActionExecutionError(
-                  "NOT_FOUND",
-                  "Resource not found",
-                  404,
-                );
-              if (record)
-                await record(
-                  eventName,
-                  operation === "create"
-                    ? {
-                        id: eventId(written[0]),
-                        row: readableEventRow(written[0]),
-                      }
-                    : {
-                        id: eventId(written[0]),
-                        before: readableEventRow(before ?? {}),
-                        after: readableEventRow(written[0]),
-                      },
-                );
-              return written;
-            };
-            const rows = recording
-              ? await recording.transaction(db, eventContext, (tx, record) =>
-                  write(tx, record),
-                )
-              : await write(db);
-            if (operation === "create")
-              await options.hooks?.afterCreate?.({ row: rows[0], ctx, error });
-            else
-              await options.hooks?.afterUpdate?.({
-                id: input.id,
-                row: rows[0],
-                ctx,
-                error,
-              });
-            return scrub((await resolveRows(rows))[0]);
-          },
+          execute: ({ input, ctx, error }) =>
+            operation in bulkOperations
+              ? performBulk(operation as BulkOperation, input, ctx, error)
+              : perform(operation as Operation, input, ctx, error),
         });
         // Pre-validation depth guard: action input validation runs before
         // execute()/condition(), so reject over-nested `where` here instead
@@ -1073,13 +1199,13 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
           inputs: Object.fromEntries(
             Object.keys(api).map((operation) => [
               operation,
-              inputs[operation as Operation],
+              inputs[operation as Operation | BulkOperation],
             ]),
           ),
           outputs: Object.fromEntries(
             Object.keys(api).map((operation) => [
               operation,
-              outputs[operation as Operation],
+              outputs[operation as Operation | BulkOperation],
             ]),
           ),
           defaultLimit,

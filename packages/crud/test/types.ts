@@ -219,3 +219,39 @@ async function derivedTypes() {
   return label;
 }
 void derivedTypes;
+
+// @ts-expect-error bulk operations are off unless enabled
+void resource.bulkCreate;
+const bulk = service.resource({ name: "bulk", table, id: table.id }).use(
+  crud({
+    access: "public",
+    fields: {
+      id: { read: true },
+      name: { read: true, create: true, update: true },
+    },
+    operations: { bulkCreate: true, bulkUpdate: true, bulkDelete: true },
+    hooks: {
+      afterCreate: async ({ tx, row }) =>
+        void (await tx.insert(table).values({ name: String(row.name) })),
+      afterCommit: (args) => {
+        if (args.operation === "delete") {
+          // @ts-expect-error a deleted row is gone
+          void args.row.name;
+        } else void args.row.name;
+      },
+    },
+  }),
+);
+bulk.bulkCreate.run({ items: [{ name: "A" }] }).then((out) => {
+  const name: string = out.items[0].name;
+  void name;
+});
+bulk.bulkUpdate.run({ items: [{ id: 1, data: { name: "B" } }] });
+bulk.bulkDelete.run({ ids: [1] }).then((out) => {
+  const count: number = out.count;
+  void count;
+});
+// @ts-expect-error bulk items use the create allow-list
+bulk.bulkCreate.run({ items: [{ name: "A", secret: "hidden" }] });
+// @ts-expect-error numeric IDs
+bulk.bulkDelete.run({ ids: ["1"] });
