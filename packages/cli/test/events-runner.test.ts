@@ -30,6 +30,14 @@ function createNote(port: number) {
   });
 }
 
+// Fixed ports fall in Linux's ephemeral range, where CI sockets may hold them.
+function freePort() {
+  const listener = Bun.serve({ port: 0, fetch: () => new Response() });
+  const port = listener.port!;
+  listener.stop(true);
+  return port;
+}
+
 const handlers = (signal: "SIGINT" | "SIGTERM") => process.listeners(signal);
 let servers: { stop(): unknown }[] = [];
 
@@ -41,15 +49,16 @@ describe("event delivery in the runner", () => {
   it("brick start delivers an event after an HTTP write, and exits after finishing deliveries", async () => {
     resetGlobalRegistry();
     const before = { int: handlers("SIGINT"), term: handlers("SIGTERM") };
+    const port = freePort();
     const app: any = await startProdServer({
       entry: fixture("events-prod"),
-      port: 45131,
+      port,
     });
     servers.push({ stop: () => app.stop() }, { stop: () => app.events.stop() });
     const { received } = await import(fixture("events-prod"));
 
     try {
-      const response = await createNote(45131);
+      const response = await createNote(port);
       expect(response.status).toBe(200);
       expect(
         await waitFor(() => received.some((payload: any) => payload.row)),
@@ -87,9 +96,10 @@ describe("event delivery in the runner", () => {
     const { seedPending, received } = await import(fixture("events-prod"));
     seedPending();
     const before = { int: handlers("SIGINT"), term: handlers("SIGTERM") };
+    const port = freePort();
     const app: any = await startProdServer({
       entry: fixture("events-prod"),
-      port: 45133,
+      port,
     });
     servers.push({ stop: () => app.stop() }, { stop: () => app.events.stop() });
     try {
@@ -136,9 +146,10 @@ describe("event delivery in the runner", () => {
     resetGlobalRegistry();
     const { seedPending, received } = await import(fixture("events-dev"));
     seedPending();
+    const port = freePort();
     const app: any = await startDevApplication({
       entry: fixture("events-dev"),
-      port: 45134,
+      port,
     });
     servers.push({ stop: () => app.stop() }, { stop: () => app.events.stop() });
     expect(
@@ -148,14 +159,15 @@ describe("event delivery in the runner", () => {
 
   it("brick dev delivers an event after an HTTP write", async () => {
     resetGlobalRegistry();
+    const port = freePort();
     const app: any = await startDevApplication({
       entry: fixture("events-dev"),
-      port: 45132,
+      port,
     });
     servers.push({ stop: () => app.stop() }, { stop: () => app.events.stop() });
     const { received } = await import(fixture("events-dev"));
 
-    const response = await createNote(45132);
+    const response = await createNote(port);
     expect(response.status).toBe(200);
     expect(
       await waitFor(() => received.some((payload: any) => payload.row)),
