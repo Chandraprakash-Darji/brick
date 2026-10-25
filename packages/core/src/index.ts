@@ -83,6 +83,7 @@ export {
   outboxTable,
   isOutboxTable,
   runInTransaction,
+  onTransactionCommit,
   resolveWorkflowPaths,
   EventsHub,
   stopAllEvents,
