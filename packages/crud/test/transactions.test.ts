@@ -6,6 +6,7 @@ import {
   defineDatabase,
   defineService,
   generateOpenApiSpec,
+  runInTransaction,
 } from "@brickkit/core";
 import { createBrickClient } from "@brickkit/core/client";
 import { eq } from "drizzle-orm";
@@ -402,6 +403,45 @@ test("the typed client calls bulk operations over HTTP", async () => {
       count: 2,
     });
     expect(f.names()).toEqual([]);
+  } finally {
+    f.sqlite.close();
+  }
+});
+
+test("a parent and its child rows commit or roll back together", async () => {
+  const committed: unknown[] = [];
+  const f = fixture({
+    hooks: { afterCommit: ({ id }) => void committed.push(id) },
+  });
+  const notes: any = f.service
+    .resource({ name: "child", table: audit, id: audit.id })
+    .use(
+      crud({
+        access: "public",
+        fields: { id: { read: true }, note: { read: true, create: true } },
+        operations: { bulkCreate: true },
+      }),
+    );
+  const save = (name: string, children: string[]) =>
+    runInTransaction(f.db, async (tx) => {
+      const joined = { db: tx };
+      const parent = await f.resource.create.run({ name }, joined);
+      await notes.bulkCreate.run(
+        { items: children.map((note) => ({ note: `${parent.id}:${note}` })) },
+        joined,
+      );
+      expect(committed).toEqual([]);
+      return parent;
+    });
+  try {
+    await save("a", ["x", "y"]);
+    expect(committed).toEqual([1]);
+    // A failing parent keeps no children; failing children keep no parent.
+    await expect(save("a", ["z"])).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(save("c", [])).rejects.toMatchObject({ status: 400 });
+    expect(f.names()).toEqual(["a"]);
+    expect(f.notesWritten()).toEqual(["1:x", "1:y"]);
+    expect(committed).toEqual([1]);
   } finally {
     f.sqlite.close();
   }
