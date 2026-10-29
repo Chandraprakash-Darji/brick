@@ -1,0 +1,156 @@
+---
+title: Lint
+description: Check a Brick app against the project structure and its bug and security rules with @brickkit/lint and brick lint.
+---
+
+`@brickkit/lint` is a rule set that makes every Brick app follow the same [project structure](/docs/project-structure) and avoid the common bugs. It ships as an ESLint flat-config plugin, which oxlint loads through its JS plugin support, plus the `brick lint` command.
+
+```bash
+bun add -d @brickkit/lint oxlint
+brick lint
+```
+
+Rules come in two kinds:
+
+- **File rules** need one file. They run in the editor through ESLint or oxlint, and in `brick lint`.
+- **App rules** need the whole app: which service owns which table, whether every emitted event is declared, whether a test exists. Only `brick lint` runs them. It loads the app the same way `brick gen client` does and checks the real service graph, instead of guessing from imports.
+
+## `brick lint`
+
+```bash
+brick lint [entry] [--config <path>]
+```
+
+`brick lint` reads presets, rules and ignores from [`brick.config.ts`](/docs/brick-cli/config), runs the file rules through oxlint, then loads the app and runs the app rules. It prints one line per problem and exits with 1 when any is an error:
+
+```text
+src/services/billing/actions/charge.action.ts:3:1  error  Service "billing" imports orders.table.ts from orders/; call that service's actions or listen to its events instead.  brick/no-cross-service-tables
+src/services/billing/actions/charge.action.ts:6:9  error  Set access on this action: authorize, or access: "public" when anyone may call it.  brick/explicit-access
+
+✖ 2 problems (2 errors, 0 warnings)
+```
+
+It needs `@brickkit/lint` and `oxlint` in the project, and Node.js 22.18 or later on the `PATH` (oxlint runs JS plugins in Node).
+
+## Presets
+
+| Preset        | Holds                                                                      |
+| :------------ | :------------------------------------------------------------------------- |
+| `recommended` | The bug and security rules. On by default.                                 |
+| `layout`      | The file-structure rules.                                                  |
+| `strict`      | `recommended`, plus style, docs and test rules.                            |
+| `plugin`      | Rules for plugin packages: the manifest, explicit access and descriptions. |
+
+```ts title="brick.config.ts"
+export default defineConfig({
+  lint: {
+    presets: ["recommended", "layout"],
+    rules: { "brick/test-colocated": "warn", "brick/naming": "off" },
+    ignore: ["src/legacy/**"],
+  },
+});
+```
+
+`lint.rules` sets a rule to `"error"`, `"warn"` or `"off"`, whether or not a preset turns it on. `brick/no-cross-service-tables` is always an error: setting it to anything else fails.
+
+## Rules
+
+### Layout
+
+| Rule                  | Enforces                                                                                                                                                                                                       | Preset      | Kind |
+| :-------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :---------- | :--- |
+| `one-action-per-file` | A `*.action.ts` file defines exactly one action, and actions are defined nowhere else.                                                                                                                         | layout      | file |
+| `file-suffixes`       | Each kind of definition goes in a file with its suffix: `.service`, `.action`, `.command`, `.tool`, `.socket`, `.listener`, `.resource`, `.table`.                                                             | layout      | file |
+| `kind-folders`        | Files sit in their kind's folder: `actions/`, `tools/`, `sockets/`, `listeners/`, `workflows/`, `tables/` at service level; the resource and its table, `actions/` and `commands/` inside `resources/<name>/`. | layout      | file |
+| `resource-folder`     | Each `.resource.ts` is alone in `resources/<name>/`, named after the resource. Resource actions and commands attach to their folder's resource; commands exist only in a resource folder.                      | layout      | file |
+| `file-name-matches`   | The file name is the kebab-case of the definition's name, without its owner: `get-summary.action.ts` defines `getSummary`.                                                                                     | layout      | file |
+| `service-folder`      | One `defineService` per `*.service.ts`, inside `services/<name>/`, named after the service.                                                                                                                    | layout      | file |
+| `colocate-in-service` | Everything under `services/<name>/` attaches to that service or one of its resources.                                                                                                                          | layout      | file |
+| `single-app-entry`    | Exactly one `brick()` call, in the configured entry file.                                                                                                                                                      | layout      | app  |
+| `workflow-directive`  | `*.workflow.ts` files use `"use workflow"`, step files `"use step"`, and the directives appear nowhere else. Fix: inserts the directive.                                                                       | recommended | file |
+
+### Boundaries
+
+| Rule                      | Enforces                                                                                                | Preset      | Kind |
+| :------------------------ | :------------------------------------------------------------------------------------------------------ | :---------- | :--- |
+| `no-cross-service-tables` | No service imports another service's tables, even when services share one database. Always an error.    | recommended | app  |
+| `unique-names`            | Action, socket and resource names don't share a URL segment within a service; service names are unique. | recommended | app  |
+| `no-server-in-client`     | Browser code (`web/`) imports only `@brickkit/core/client` and the generated contract.                  | recommended | file |
+| `no-global-context`       | No module-level mutable singletons set from a function (the `setOrdersContext` pattern).                | strict      | file |
+| `no-env-outside-secrets`  | `process.env`, `Bun.env` and `import.meta.env` are read only in `secrets.ts` and config files.          | strict      | file |
+
+### Correctness
+
+| Rule                     | Enforces                                                                                                                   | Preset      | Kind |
+| :----------------------- | :------------------------------------------------------------------------------------------------------------------------- | :---------- | :--- |
+| `action-schemas`         | Every action, command and tool declares `input` and `output`.                                                              | recommended | file |
+| `declared-errors`        | Every `error.X()` names an entry in that action's `errors` or a built-in error.                                            | recommended | file |
+| `return-error`           | Error helpers are returned (`return error.NOT_FOUND()`). Fix: adds `return`.                                               | recommended | file |
+| `path-params-in-input`   | Each `:param` in `path` is a field of `input`.                                                                             | recommended | file |
+| `get-is-read-only`       | GET actions don't insert, update, delete or emit.                                                                          | recommended | file |
+| `emit-in-transaction`    | `emitEvent` or `live.emit` inside a transaction callback passes `{ tx }` or `{ after: tx }`. Fix: adds it.                 | recommended | file |
+| `declared-events`        | Emitted event names exist in the service's event catalog.                                                                  | recommended | app  |
+| `deterministic-workflow` | No `Date.now`, `new Date()`, `Math.random`, `fetch` or database access in a workflow function outside steps.               | recommended | file |
+| `idempotent-listener`    | Listener writes use `deliveryId` or `onConflictDoNothing`, since delivery is at least once. Warning.                       | recommended | file |
+| `socket-schemas`         | Socket schemas have no format or transforms, and input event names don't start with `$`.                                   | recommended | file |
+| `no-unregistered-format` | A TypeBox format is used only when registered with `FormatRegistry` in the file, or listed in the rule's `formats` option. | recommended | file |
+| `no-floating-calls`      | Promises from service calls (`useService`) and `emitEvent` are awaited. Fix: adds `await`.                                 | recommended | file |
+
+### Security
+
+| Rule                  | Enforces                                                                                 | Preset      | Kind |
+| :-------------------- | :--------------------------------------------------------------------------------------- | :---------- | :--- |
+| `explicit-access`     | Every action and command sets `authorize` or `access`, and every `crud()` sets `access`. | recommended | file |
+| `socket-authorize`    | Sockets declare `authorize` and `join`, or are marked `public: true`.                    | recommended | file |
+| `no-wildcard-origins` | No `"*"` in `allowedOrigins` or `trustedOrigins`.                                        | recommended | file |
+| `strict-input`        | Input objects set `additionalProperties: false`. Fix: adds it.                           | strict      | file |
+
+### Docs and style
+
+| Rule                   | Enforces                                                                                                              | Preset | Kind |
+| :--------------------- | :-------------------------------------------------------------------------------------------------------------------- | :----- | :--- |
+| `description-required` | Actions, commands, tools, sockets and catalog events have a description.                                              | strict | file |
+| `naming`               | Actions are camelCase verbs (`getUser`), events are `resource.pastTense` (`order.shipped`), rooms are `prefix:value`. | strict | file |
+| `no-console`           | Handlers log through `ctx.logger`, so lines carry the request and trace ids.                                          | strict | file |
+| `test-colocated`       | Every `*.action.ts` and `*.command.ts` has a sibling `*.test.ts`.                                                     | strict | app  |
+
+### Plugins
+
+| Rule              | Enforces                                                                                                        | Preset | Kind |
+| :---------------- | :-------------------------------------------------------------------------------------------------------------- | :----- | :--- |
+| `plugin-manifest` | `definePlugin` has a scoped name, a `brick` version range and declared `options`, and its setup is synchronous. | plugin | file |
+
+## Editor setup
+
+The plugin reads `brick.config.ts` through `brick.configs.fromProject()`, so presets, rules, ignores and paths stay in one place.
+
+### ESLint
+
+ESLint needs a TypeScript parser, such as `typescript-eslint`:
+
+```js title="eslint.config.js"
+import tseslint from "typescript-eslint";
+import brick from "@brickkit/lint";
+
+export default [
+  ...tseslint.configs.recommended,
+  ...(await brick.configs.fromProject()),
+];
+```
+
+Without a config file, use a preset directly: `brick.configs.recommended`, `brick.configs.layout`, `brick.configs.strict` or `brick.configs.plugin`.
+
+### oxlint
+
+oxlint loads the same plugin through `jsPlugins` (alpha in oxlint). Its TypeScript config file runs in Node:
+
+```ts title="oxlint.config.ts"
+import { defineConfig } from "oxlint";
+import brick from "@brickkit/lint";
+
+export default defineConfig(
+  await brick.configs.fromProject({ linter: "oxlint" }),
+);
+```
+
+oxlint applies `lint.ignore` to all its rules, not only Brick's.

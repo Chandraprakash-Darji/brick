@@ -57,7 +57,11 @@ Run commands with `bunx brick` or add them to your `package.json` scripts:
 | `brick build`                   | `<entry> [--outdir <dir>] [--port <number>] [--no-aot]`                                                                                     | Compile a default-exported `BrickApp` into a standalone Bun server bundle.             |
 | `brick gen openapi`             | `<entry> [--output <file>]`                                                                                                                 | Generate OpenAPI 3.1 JSON specification from services.                                 |
 | `brick gen client`              | `<entry> [--output <file>]`                                                                                                                 | Generate typed browser client contract file (`_brick/contract.ts`).                    |
+| `brick gen manifest`            | `[--config <path>]`                                                                                                                         | Write `_brick/services.gen.ts`, which imports every definition file.                   |
+| `brick lint`                    | `[entry] [--config <path>]`                                                                                                                 | Check the project against the `@brickkit/lint` file and app rules.                     |
 | `brick info` / `brick services` | `<entry>`                                                                                                                                   | Export the complete runtime architecture JSON schema (`ArchitectureSchema`).           |
+
+Every command takes `--config <path>`. With a [`brick.config.ts`](/docs/brick-cli/config), the entry and most flags come from the config file, so the scripts become `brick dev`, `brick build`, `brick gen` and `brick lint`.
 
 ## Port Resolution Rules
 
@@ -65,7 +69,8 @@ For `dev` and `start`, the listening port is resolved in strict precedence order
 
 1. **CLI Flag**: `--port <number>` (e.g. `brick dev --port 5000`)
 2. **Environment Variable**: `PORT` (e.g. `PORT=3000 brick dev`)
-3. **Default**: `4000`
+3. **Config file**: `dev.port` in `brick.config.ts` (`brick dev` only)
+4. **Default**: `4000`
 
 Port values must be valid integers between `1` and `65535`. Out-of-range values or non-numeric strings cause the CLI to exit immediately with an error.
 

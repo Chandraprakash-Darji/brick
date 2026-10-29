@@ -37,3 +37,12 @@ export type {
 } from "./dashboard-extension";
 export { generateClientContract } from "./client-contract";
 export { emitCompiledApplication, emitHandlerFactory } from "./compiler/emit";
+export {
+  defineConfig,
+  loadConfig,
+  type BrickConfig,
+  type LintPreset,
+  type LintSeverity,
+  type LoadedConfig,
+} from "./config";
+export { renderManifest, writeServiceManifest } from "./manifest";

@@ -22,6 +22,7 @@ import { DocsHost } from "./dev-docs";
 import { DEFAULT_HISTORY_DAYS, openHistory } from "./dev-history";
 import { DevTelemetryStore } from "./dev-telemetry-store";
 import { parsePort } from "./port-utils";
+import { writeServiceManifest } from "./manifest";
 import { buildAppWorkflows, registerWorkflowTransform } from "./workflows";
 import { startProductionDashboard } from "./production-dashboard";
 import type {
@@ -48,6 +49,11 @@ export interface DevServerOptions {
   dashboard?:
     | ({ port?: number; historyDays?: number } & DashboardExtensionOptions)
     | false;
+  /**
+   * Keep `<generated>/services.gen.ts` importing every definition file under
+   * `services`: written before the app starts and again when files change.
+   */
+  manifest?: { services: string; generated: string };
 }
 
 async function createServer(
@@ -349,6 +355,8 @@ export async function startDevServer(options: DevServerOptions = {}) {
       options.port === undefined ? undefined : String(options.port),
       process.env.PORT,
     );
+  const manifest = options.manifest;
+  if (manifest) await writeServiceManifest(manifest);
   const history = options.dashboard
     ? await openHistory({
         directory: process.cwd(),
@@ -548,7 +556,12 @@ export async function startDevServer(options: DevServerOptions = {}) {
   }
   let child = launch();
   const watchDirs = [
-    ...new Set([resolve("src"), resolve("app"), resolve(resolvedEntry, "..")]),
+    ...new Set([
+      resolve("src"),
+      resolve("app"),
+      resolve(resolvedEntry, ".."),
+      ...(manifest ? [manifest.services] : []),
+    ]),
   ].filter(existsSync);
   let pending: ReturnType<typeof setTimeout> | undefined;
   let restarting = false;
@@ -607,6 +620,15 @@ export async function startDevServer(options: DevServerOptions = {}) {
           !dependencyFiles.has(file))
       )
         return;
+      // A definition file was added or removed: refresh the import list first.
+      if (manifest && file.startsWith(manifest.services + sep)) {
+        void writeServiceManifest(manifest)
+          .catch((error: unknown) =>
+            console.error("[Brick-TS] Could not write services.gen.ts:", error),
+          )
+          .finally(scheduleRestart);
+        return;
+      }
       scheduleRestart();
     }),
   );

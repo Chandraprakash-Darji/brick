@@ -1,0 +1,60 @@
+{
+  "name": "@brickkit/lint",
+  "version": "0.10.0",
+  "description": "ESLint and oxlint rules for the Brick project structure",
+  "homepage": "https://brickkit.dev",
+  "keywords": [
+    "typescript",
+    "bun",
+    "eslint",
+    "eslintplugin",
+    "eslint-plugin",
+    "oxlint",
+    "lint",
+    "brick"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/get-brickkit/brick.git",
+    "directory": "packages/lint"
+  },
+  "type": "module",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "bun test"
+  },
+  "peerDependencies": {
+    "eslint": ">=9.0.0",
+    "oxlint": ">=1.88.0"
+  },
+  "peerDependenciesMeta": {
+    "eslint": {
+      "optional": true
+    },
+    "oxlint": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.3",
+    "oxlint": "^1.88.0",
+    "tsdown": "^0.23.1",
+    "typescript": "^5.7.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

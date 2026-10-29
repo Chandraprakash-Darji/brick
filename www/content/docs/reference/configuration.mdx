@@ -5,6 +5,8 @@ description: Complete configuration reference for brick() server options, enviro
 
 This reference documents all configuration options for the `brick()` HTTP server runtime, CLI environment variables, and secrets management.
 
+Project and tooling settings (entry, paths, dev, build, gen and lint) live in [`brick.config.ts`](/docs/brick-cli/config); runtime behaviour stays in `brick()`.
+
 ## `CreateServerOptions` for `brick()`
 
 When constructing the server gateway via `brick(options)`, configure the following settings:
@@ -39,7 +41,7 @@ The framework and CLI inspect the following environment variables:
 ### `PORT`
 
 - **Used by**: `brick dev`, `brick start`, and compiled bundles (`dist/brick/server.js`). `brick()` itself does not read `PORT`.
-- **Precedence**: For `dev`/`start`, an explicit `--port <number>` flag wins over `PORT`, which wins over the default `4000`. Compiled bundles use `PORT`, falling back to the `--port` value given to `brick build` (default `4000`).
+- **Precedence**: For `dev`/`start`, an explicit `--port <number>` flag wins over `PORT`, which wins over `dev.port` in `brick.config.ts` (`brick dev` only), which wins over the default `4000`. Compiled bundles use `PORT`, falling back to the `--port` value given to `brick build` (default `4000`).
 - **Constraints**: Must be an integer between `1` and `65535`. Out-of-range values or non-numeric strings make the process exit with an error.
 
 ## Secrets Management (`@brickkit/core`)

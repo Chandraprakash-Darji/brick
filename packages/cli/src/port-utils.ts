@@ -18,3 +18,14 @@ export function parsePort(
   }
   return port;
 }
+
+/** The dev port: CLI flag, then PORT, then the config file, then 4000. */
+export function resolveDevPort(
+  cliPort: number | undefined,
+  configPort?: number,
+  envPort = process.env.PORT,
+): number {
+  if (cliPort !== undefined) return cliPort;
+  if (configPort !== undefined && !envPort) return configPort;
+  return parsePort(undefined, envPort);
+}
