@@ -9,6 +9,7 @@ import {
   serializeSocketSchema,
   isSocketEnvelope,
   isSocketRoom,
+  isSocketSeq,
   SOCKET_MAX_BYTES,
   SOCKET_BUFFER_BYTES,
 } from "./socket-schema";
@@ -21,6 +22,7 @@ import type {
   SocketBrokerMessage,
   SocketEmitArgs,
   SocketPayloads,
+  SocketReplay,
   SocketSchemas,
 } from "./socket-types";
 
@@ -44,6 +46,7 @@ export interface RegisteredSocket {
   allowedOrigins?: readonly string[];
   allowMissingOrigin?: boolean;
   maxRooms: number;
+  replay?: SocketReplay;
   /** Brokers of the apps this socket is mounted in. */
   brokers: Set<SocketBroker>;
   handle: BrickSocketHandle<any>;
@@ -76,9 +79,63 @@ function outputFrame(
 /** Delivers within this process. The default broker of every app. */
 export function localBroker(): SocketBroker {
   const topics = new Map<string, Set<(message: SocketBrokerMessage) => void>>();
+  // Replay history: one rising counter per process, prefixed with its start so a restart reads as a gap.
+  const epoch = Date.now();
+  let counter = 0;
+  /** Rooms dropped from `kept` once idle, at counter values up to this. */
+  let swept = 0;
+  const kept = new Map<
+    string,
+    {
+      entries: { n: number; at: number; message: SocketBrokerMessage }[];
+      /** The highest n no longer kept. */
+      trimmed: number;
+      maxAgeMs: number;
+    }
+  >();
+  const prune = (names: Iterable<string>) => {
+    for (const topic of names) {
+      const room = kept.get(topic);
+      if (!room) continue;
+      const oldest = Date.now() - room.maxAgeMs;
+      while (room.entries[0] && room.entries[0].at < oldest)
+        room.trimmed = room.entries.shift()!.n;
+      if (!room.entries.length) {
+        kept.delete(topic);
+        swept = counter;
+      }
+    }
+  };
   return {
-    publish(message) {
+    publish(message, replay) {
+      if (message.type === "emit" && replay) {
+        const n = ++counter;
+        message = { ...message, seq: `${epoch}-${n}` };
+        const room = kept.get(message.topic) ?? {
+          entries: [],
+          trimmed: 0,
+          maxAgeMs: replay.maxAgeMs,
+        };
+        kept.set(message.topic, room);
+        room.entries.push({ n, at: Date.now(), message });
+        if (room.entries.length > replay.keep)
+          room.trimmed = room.entries.shift()!.n;
+        // shortcut: idle rooms are swept every 1000 emits, not on a timer; fine while emits keep coming.
+        if (n % 1000 === 0) prune([...kept.keys()]);
+      }
       for (const deliver of topics.get(message.topic) ?? []) deliver(message);
+    },
+    head: () => `${epoch}-${counter}`,
+    history(topic, since) {
+      const [from, n] = since.split("-").map(Number) as [number, number];
+      if (from !== epoch || n > counter) return undefined;
+      prune([topic]);
+      const room = kept.get(topic);
+      if (!room) return n >= swept ? [] : undefined;
+      if (n < room.trimmed) return undefined;
+      return room.entries
+        .filter((entry) => entry.n > n)
+        .map((entry) => entry.message);
     },
     subscribe(topic, deliver) {
       const listeners = topics.get(topic) ?? new Set();
@@ -135,6 +192,19 @@ export function defineServiceSocket<
   const maxRooms = config.maxRooms ?? 100;
   if (!Number.isInteger(maxRooms) || maxRooms < 1)
     throw new Error("Socket maxRooms must be a positive integer");
+  const replay = config.replay && { ...config.replay };
+  if (
+    replay &&
+    !(
+      Number.isInteger(replay.keep) &&
+      replay.keep > 0 &&
+      replay.maxAgeMs > 0 &&
+      Number.isFinite(replay.maxAgeMs)
+    )
+  )
+    throw new Error(
+      "Socket replay needs a positive integer keep and a positive finite maxAgeMs",
+    );
   for (const schema of [...Object.values(input), ...Object.values(output)]) {
     serializeSocketSchema(schema);
     getCompiledCheck(schema);
@@ -156,7 +226,7 @@ export function defineServiceSocket<
   const publish = (messages: SocketBrokerMessage[], after: unknown) => {
     const send = () => {
       for (const broker of brokers)
-        for (const message of messages) broker.publish(message);
+        for (const message of messages) broker.publish(message, replay);
     };
     if (after === undefined) return send();
     if (!inTransaction(after))
@@ -181,6 +251,7 @@ export function defineServiceSocket<
       : undefined,
     allowMissingOrigin: config.allowMissingOrigin,
     maxRooms,
+    replay,
     brokers,
     topicPrefix,
     topic,
@@ -191,6 +262,9 @@ export function defineServiceSocket<
           ...new Set(typeof rooms === "string" ? [rooms] : rooms),
         ].map(topic);
         const frame = outputFrame(output, event, payload);
+        // Room and sequence are added to each replayed frame on delivery.
+        if (replay && bytes(frame) > SOCKET_MAX_BYTES - 300)
+          throw new Error("Socket output too large");
         publish(
           topics.map((topic) => ({ type: "emit", topic, frame })),
           options?.after,
@@ -324,6 +398,11 @@ export function mountSockets(
   sockets: { service: string; path: string; definition: RegisteredSocket }[],
   broker: SocketBroker,
 ): void {
+  if (
+    sockets.some(({ definition }) => definition.replay) &&
+    !(broker.head && broker.history)
+  )
+    throw new Error("Brick: the socket broker does not support replay");
   for (const { definition } of sockets) definition.brokers.add(broker);
   app.cleanup(async () => {
     for (const { definition } of sockets) definition.brokers.delete(broker);
@@ -382,11 +461,15 @@ export function mountSockets(
     const control = (ws: Peer, event: string, data: unknown) => {
       if (ws.readyState === 1) ws.send(JSON.stringify({ event, data }));
     };
-    /** Joins a room; resolves once the broker delivers its messages here. */
-    const enter = async (connection: Connection, topic: string) => {
+    /** Joins a room; resolves once the broker delivers its messages here. `live: false` holds the room without receiving yet. */
+    const enter = async (
+      connection: Connection,
+      topic: string,
+      live = true,
+    ) => {
       if (connection.rooms.has(topic)) return;
       connection.rooms.add(topic);
-      connection.ws.subscribe(topic);
+      if (live) connection.ws.subscribe(topic);
       let holder = holders.get(topic);
       if (!holder) {
         holder = {
@@ -409,9 +492,14 @@ export function mountSockets(
       holders.delete(topic);
       holder.unsubscribe();
     };
+    /** A replayable emit carries its room and sequence. */
+    const frameOf = (message: SocketBrokerMessage & { type: "emit" }) =>
+      message.seq === undefined
+        ? message.frame
+        : `${message.frame.slice(0, -1)},"room":${JSON.stringify(roomOf(message.topic))},"seq":${JSON.stringify(message.seq)}}`;
     const deliver = (message: SocketBrokerMessage) => {
       if (message.type === "emit") {
-        app.server?.publish(message.topic, message.frame);
+        app.server?.publish(message.topic, frameOf(message));
         return;
       }
       for (const connection of holders.get(message.topic)?.connections ?? []) {
@@ -429,28 +517,53 @@ export function mountSockets(
       event: string,
       data: unknown,
     ) => {
-      const name =
-        data && typeof data === "object" && "room" in data
-          ? data.room
-          : undefined;
-      if (!isSocketRoom(name)) throw new SocketDenied();
+      const fields = (data && typeof data === "object" ? data : {}) as Record<
+        string,
+        unknown
+      >;
+      const { room: name, since } = fields;
+      if (!isSocketRoom(name) || (since !== undefined && !isSocketSeq(since)))
+        throw new SocketDenied();
       const topic = definition.topic(name);
       if (event === "$leave") {
         if (connection.requested.has(topic)) exit(connection, topic);
         control(connection.ws, "$leave", { room: name });
         return;
       }
+      const isOpen = () => !connection.closed && connection.ws.readyState === 1;
       const ok =
         connection.rooms.has(topic) ||
         (connection.rooms.size < definition.maxRooms &&
           (await connection.session.join(name)));
-      if (connection.closed || connection.ws.readyState !== 1) return;
+      if (!isOpen()) return;
+      const replay = definition.replay;
+      let seq: string | undefined;
       if (ok && !connection.rooms.has(topic)) {
-        const entered = enter(connection, topic);
+        const entered = enter(connection, topic, !replay);
         connection.requested.add(topic);
         await entered;
+        if (replay && connection.rooms.has(topic)) {
+          // Held in this process before reading history, so later emits are either in it or arrive live.
+          const start = since ?? (await broker.head!(topic));
+          const missed = await broker.history!(topic, start, replay);
+          const restart = missed ? undefined : await broker.head!(topic);
+          if (!isOpen()) return;
+          if (connection.rooms.has(topic)) {
+            connection.ws.subscribe(topic);
+            if (since === undefined) seq = start;
+            for (const message of missed ?? [])
+              if (message.type === "emit") connection.ws.send(frameOf(message));
+            if (restart !== undefined)
+              control(connection.ws, "$gap", { room: name, seq: restart });
+          }
+        }
       }
-      control(connection.ws, "$join", { room: name, ok });
+      // A kick while joining wins.
+      control(connection.ws, "$join", {
+        room: name,
+        ok: ok && connection.rooms.has(topic),
+        ...(seq !== undefined ? { seq } : {}),
+      });
     };
     const fail = (ws: Peer, error: unknown) => {
       if (!(error instanceof SocketDenied))

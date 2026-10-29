@@ -36,6 +36,8 @@ export interface BrickSocketConfig<
   join?: (params: { ctx: Ctx; room: string }) => boolean | Promise<boolean>;
   /** Rooms one connection can be in at once (default 100). */
   maxRooms?: number;
+  /** Keep recent emits per room so a reconnecting client gets what it missed. Off by default. */
+  replay?: SocketReplay;
   handlers: {
     [K in keyof I]: (params: {
       input: Static<I[K]>;
@@ -79,14 +81,36 @@ export interface BrickSocketHandle<Output> {
   kick(room: string, options?: { also?: string; reason?: string }): void;
 }
 
+export interface SocketReplay {
+  /** Emits kept per room. */
+  keep: number;
+  /** How long a room's history lasts without new emits. */
+  maxAgeMs: number;
+}
+
 export type SocketBrokerMessage =
-  | { type: "emit"; topic: string; frame: string }
+  /** `seq` is set by the broker for sockets with replay: `<number>-<number>`, rising per room. */
+  | { type: "emit"; topic: string; frame: string; seq?: string }
   | { type: "kick"; topic: string; also?: string; reason?: string };
 
 /** Carries emits and kicks between processes. Topics are `<service>.<socket>:<room>`. */
 export interface SocketBroker {
-  /** Sends to every subscriber of `message.topic`, in every process, this one included. */
-  publish(message: SocketBrokerMessage): void;
+  /**
+   * Sends to every subscriber of `message.topic`, in every process, this one
+   * included. With `replay`, also keeps the emit and gives it a `seq`.
+   */
+  publish(message: SocketBrokerMessage, replay?: SocketReplay): void;
+  /** The current position of a room, below every later `seq`. Needed for replay. */
+  head?(topic: string): string | Promise<string>;
+  /** Kept emits after `since`, or undefined when the history no longer covers it. Needed for replay. */
+  history?(
+    topic: string,
+    since: string,
+    replay: SocketReplay,
+  ):
+    | SocketBrokerMessage[]
+    | undefined
+    | Promise<SocketBrokerMessage[] | undefined>;
   /** Called once per local holder of a topic; returns its unsubscribe. */
   subscribe(
     topic: string,
@@ -152,6 +176,8 @@ export interface BrickSocketClient<
   leave(room: string): void;
   /** The server removed this connection from a room. */
   onLeave(listener: (room: string, reason?: string) => void): () => void;
+  /** Replay could not cover what this client missed in a room while away: refetch it. */
+  onGap(listener: (room: string) => void): () => void;
   onError(listener: (error: BrickSocketError) => void): () => void;
   onClose(
     listener: (info: { code: number; reason: string }) => void,

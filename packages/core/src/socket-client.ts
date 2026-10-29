@@ -1,7 +1,9 @@
 import { Check } from "@sinclair/typebox/value";
 import {
   isSocketEnvelope,
+  compareSocketSeq,
   isSocketRoom,
+  isSocketSeq,
   restoreSocketSchema,
   SOCKET_BUFFER_BYTES,
   SOCKET_MAX_BYTES,
@@ -70,6 +72,9 @@ export function connectSocket(
   const leaves = new Set<(room: string, reason?: string) => void>();
   const statuses = new Set<(status: BrickSocketStatus) => void>();
   const reconnects = new Set<() => void>();
+  const gaps = new Set<(room: string) => void>();
+  /** The last sequence seen per room, for sockets with replay. */
+  const seqs = new Map<string, string>();
   /** Rooms the server accepted for this client, rejoined after a reconnect. */
   const rooms = new Set<string>();
   const joins = new Map<string, ((result: boolean | Error) => void)[]>();
@@ -131,7 +136,14 @@ export function connectSocket(
       for (const listener of closes) listener(info);
     } finally {
       events.clear();
-      for (const listeners of [errors, closes, leaves, statuses, reconnects])
+      for (const listeners of [
+        errors,
+        closes,
+        leaves,
+        statuses,
+        reconnects,
+        gaps,
+      ])
         listeners.clear();
     }
   };
@@ -256,7 +268,14 @@ export function connectSocket(
         ready.resolve();
         return;
       }
-      for (const room of rooms) void request(room).catch(() => {});
+      for (const room of rooms)
+        void request(room, seqs.get(room)).catch(() => {});
+      // Server rooms come back with the connection, without what was missed.
+      for (const room of seqs.keys())
+        if (!rooms.has(room)) {
+          seqs.delete(room);
+          notifyGap(room);
+        }
       for (const listener of reconnects) listener();
     };
     ws.onerror = () => failed("Socket connection failed");
@@ -273,9 +292,9 @@ export function connectSocket(
       throw new BrickSocketError("connection", "Socket is not open");
     ws.send(JSON.stringify({ event, data }));
   };
-  const request = (room: string) =>
+  const request = (room: string, since?: string) =>
     new Promise<void>((resolve, reject) => {
-      write("$join", { room });
+      write("$join", since === undefined ? { room } : { room, since });
       joins.set(room, [
         ...(joins.get(room) ?? []),
         (result) =>
@@ -288,13 +307,18 @@ export function connectSocket(
       ]);
     });
   const notifyLeave = (room: string, reason?: string) => {
+    seqs.delete(room);
     for (const listener of leaves) listener(room, reason);
+  };
+  const notifyGap = (room: string) => {
+    for (const listener of gaps) listener(room);
   };
   /** Checks a room acknowledgement or removal; returns the work to run once it passed. */
   const control = (event: string, data: unknown): (() => void) => {
     const fields = (data ?? {}) as Record<string, unknown>;
-    const room = fields.room;
-    if (!isSocketRoom(room)) throw new Error("Invalid control message");
+    const { room, seq } = fields;
+    if (!isSocketRoom(room) || (seq !== undefined && !isSocketSeq(seq)))
+      throw new Error("Invalid control message");
     if (event === "$join" && typeof fields.ok === "boolean") {
       const ok = fields.ok;
       return () => {
@@ -303,6 +327,7 @@ export function connectSocket(
         joins.delete(room);
         if (ok) rooms.add(room);
         else if (rooms.delete(room)) notifyLeave(room, "join refused");
+        if (ok && seq !== undefined && !seqs.has(room)) seqs.set(room, seq);
         for (const settle of pending) settle(ok);
       };
     }
@@ -314,24 +339,49 @@ export function connectSocket(
         notifyLeave(room, reason);
       };
     }
+    if (event === "$gap" && seq !== undefined)
+      return () => {
+        seqs.set(room, seq);
+        notifyGap(room);
+      };
     if (event === "$leave") return () => {};
     throw new Error("Unknown control message");
   };
   const receive = ({ data }: MessageEvent<unknown>) => {
     let message: unknown;
     let action: (() => void) | undefined;
+    let room: unknown;
+    let seq: unknown;
     try {
       if (
         typeof data !== "string" ||
         new TextEncoder().encode(data).byteLength > SOCKET_MAX_BYTES
       )
         throw new Error("Expected JSON text under 64 KiB");
-      message = JSON.parse(data);
+      const parsed: unknown = JSON.parse(data);
+      // Emits of sockets with replay also carry their room and sequence.
+      const fields = (
+        parsed && typeof parsed === "object" && !Array.isArray(parsed)
+          ? parsed
+          : {}
+      ) as Record<string, unknown>;
+      ({ room, seq } = fields);
+      message = Object.fromEntries(
+        Object.entries(fields).filter(
+          ([key]) => key !== "room" && key !== "seq",
+        ),
+      );
+      if (
+        (room !== undefined || seq !== undefined) &&
+        !(isSocketRoom(room) && isSocketSeq(seq))
+      )
+        throw new Error("Invalid socket sequence");
       if (!isSocketEnvelope(message))
         throw new Error("Invalid socket envelope");
-      if (message.event.startsWith("$"))
+      if (message.event.startsWith("$")) {
+        if (seq !== undefined) throw new Error("Invalid control message");
         action = control(message.event, message.data);
-      else {
+      } else {
         const schema = schemas.get(message.event);
         if (!schema || !Check(schema, message.data))
           throw new Error("Invalid socket output");
@@ -348,8 +398,14 @@ export function connectSocket(
       );
       return;
     }
-    if (action) action();
-    else if (isSocketEnvelope(message))
+    if (action) return action();
+    if (isSocketRoom(room) && isSocketSeq(seq)) {
+      const last = seqs.get(room);
+      // A replayed emit can also arrive live; deliver it once.
+      if (last !== undefined && compareSocketSeq(seq, last) <= 0) return;
+      seqs.set(room, seq);
+    }
+    if (isSocketEnvelope(message))
       for (const listener of events.get(message.event) ?? [])
         listener(message.data);
   };
@@ -379,6 +435,7 @@ export function connectSocket(
     },
     leave(room) {
       rooms.delete(room);
+      seqs.delete(room);
       for (const settle of joins.get(room) ?? [])
         settle(new BrickSocketError("refused", `Left before joining: ${room}`));
       joins.delete(room);
@@ -421,6 +478,7 @@ export function connectSocket(
       };
     },
     onLeave: (listener) => listen(leaves, listener),
+    onGap: (listener) => listen(gaps, listener),
     onStatus: (listener) => listen(statuses, listener),
     onReconnect: (listener) => listen(reconnects, listener),
     onError: (listener) => listen(errors, listener),

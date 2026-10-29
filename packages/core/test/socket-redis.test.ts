@@ -6,6 +6,7 @@ import {
   resetGlobalRegistry,
   t,
 } from "../src";
+import { replayScenario } from "./socket-replay";
 
 const url = process.env.REDIS_URL ?? "redis://localhost:6379";
 const probe = new Bun.RedisClient(url, {
@@ -102,6 +103,10 @@ describe.skipIf(!reachable)("redis broker", () => {
     const a = process_();
     const user = `user-${crypto.randomUUID()}`;
     const client = await connect(a.url, user);
+    for (let i = 0; i < 40 && !client.received.length; i++) {
+      a.live.emit(`user:${user}`, "message", "before");
+      await Bun.sleep(25);
+    }
     const admin = new Bun.RedisClient(url);
     try {
       expect(
@@ -110,10 +115,18 @@ describe.skipIf(!reachable)("redis broker", () => {
     } finally {
       admin.close();
     }
-    for (let i = 0; i < 40 && !client.received.length; i++) {
+    const back = { event: "message", data: "back" };
+    for (
+      let i = 0;
+      i < 40 && !Bun.deepEquals(client.received.at(-1), back);
+      i++
+    ) {
       a.live.emit(`user:${user}`, "message", "back");
       await Bun.sleep(100);
     }
-    expect(client.received[0]).toEqual({ event: "message", data: "back" });
+    expect(client.received.at(-1)).toEqual(back);
   });
+
+  it("replays missed emits from the Redis stream", () =>
+    replayScenario((app) => apps.push(app), redisBroker({ url })));
 });

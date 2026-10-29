@@ -83,3 +83,11 @@ createBrickClient({
   baseUrl: "https://example.test",
   contract,
 }).chat.live.connect({ reconnect: false });
+mobile.onGap((room: string) => void room);
+service.socket({
+  name: "replayed",
+  input: {},
+  output: {},
+  replay: { keep: 100, maxAgeMs: 60_000 },
+  handlers: {},
+});

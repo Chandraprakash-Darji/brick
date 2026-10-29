@@ -17,6 +17,7 @@ import {
 import { serializeSocketSchema } from "../src/socket-schema";
 import { restoreSocketSchema } from "../src/socket-schema";
 import { Check } from "@sinclair/typebox/value";
+import { replayScenario } from "./socket-replay";
 
 const apps: ReturnType<typeof brick>[] = [];
 const peers: WebSocket[] = [];
@@ -821,4 +822,22 @@ it("stops on policy closes and when reconnect is off", async () => {
   once.send("crash", null);
   expect(await onceClose).toBe(1011);
   expect(once.status).toBe("closed");
+});
+
+it("replays what a reconnecting client missed and reports gaps", () =>
+  replayScenario((app) => apps.push(app)));
+
+it("checks replay settings and broker support", () => {
+  const service = defineService("chat");
+  const config = { name: "live", input: {}, output: {}, handlers: {} };
+  expect(() =>
+    service.socket({ ...config, replay: { keep: 0, maxAgeMs: 1000 } }),
+  ).toThrow("replay");
+  service.socket({ ...config, replay: { keep: 10, maxAgeMs: 1000 } });
+  expect(() =>
+    brick({
+      services: [service],
+      sockets: { broker: { publish() {}, subscribe: () => () => {} } },
+    }),
+  ).toThrow("does not support replay");
 });

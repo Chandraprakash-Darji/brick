@@ -81,6 +81,7 @@ export type {
   SocketEmitArgs,
   SocketEmitOptions,
   SocketEventArgs,
+  SocketReplay,
   SocketPayloads,
   SocketSchemas,
 } from "./socket-types";

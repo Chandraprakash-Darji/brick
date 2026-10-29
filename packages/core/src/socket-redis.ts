@@ -1,4 +1,5 @@
 import type { RedisClient } from "bun";
+import { compareSocketSeq } from "./socket-schema";
 import type { SocketBroker, SocketBrokerMessage } from "./socket-types";
 
 export interface RedisBrokerOptions {
@@ -86,7 +87,14 @@ export function redisBroker(options: RedisBrokerOptions = {}): SocketBroker {
     Set<(message: SocketBrokerMessage) => void>
   >();
   const pending = new Map<string, Promise<unknown>>();
-  const queue: [string, string][] = [];
+  const stream = (topic: string) => `brick:socket:stream:${topic}`;
+  const queue: ((redis: RedisClient) => void)[] = [];
+  const send = (work: (redis: RedisClient) => void) => {
+    const redis = publisher.get();
+    if (redis) return work(redis);
+    queue.push(work);
+    if (queue.length > limit) queue.shift();
+  };
   const receive = (payload: string, name: string) => {
     let message: SocketBrokerMessage;
     try {
@@ -104,23 +112,76 @@ export function redisBroker(options: RedisBrokerOptions = {}): SocketBroker {
     });
   };
   const publisher = connection(options.url, (redis) => {
-    for (const [name, payload] of queue.splice(0))
-      void redis.publish(name, payload).catch(() => {});
+    for (const work of queue.splice(0)) work(redis);
   });
   const subscriber = connection(options.url, (redis) => {
     for (const name of listeners.keys()) subscribe(redis, name);
   });
   return {
-    publish(message) {
+    publish(message, replay) {
       const name = channel(message.topic);
-      const payload = JSON.stringify(message);
-      const redis = publisher.get();
-      if (redis) {
-        void redis.publish(name, payload).catch(() => {});
-        return;
+      if (message.type !== "emit" || !replay)
+        return send(
+          (redis) =>
+            void redis.publish(name, JSON.stringify(message)).catch(() => {}),
+        );
+      const key = stream(message.topic);
+      send((redis) => {
+        // Replies come back in order, so each PUBLISH follows its XADD in emit order.
+        void redis
+          .send("XADD", [
+            key,
+            "MAXLEN",
+            "~",
+            String(replay.keep),
+            "*",
+            "m",
+            message.frame,
+          ])
+          .then((seq: string) => {
+            void redis
+              .send("PEXPIRE", [key, String(replay.maxAgeMs)])
+              .catch(() => {});
+            return redis.publish(name, JSON.stringify({ ...message, seq }));
+          })
+          .catch(() => {});
+      });
+    },
+    async head() {
+      try {
+        await publisher.opened(1000);
+        const [seconds, micros] = (await publisher.get()!.send("TIME", [])) as [
+          string,
+          string,
+        ];
+        return `${Number(seconds) * 1000 + Math.floor(Number(micros) / 1000) - 1}-0`;
+      } catch {
+        return `${Date.now() - 1}-0`;
       }
-      queue.push([name, payload]);
-      if (queue.length > limit) queue.shift();
+    },
+    async history(topic, since, replay) {
+      let raw: [string, string[]][];
+      try {
+        await publisher.opened(1000);
+        raw = await publisher.get()!.send("XRANGE", [stream(topic), "-", "+"]);
+      } catch {
+        return undefined;
+      }
+      const ms = (seq: string) => Number(seq.split("-")[0]);
+      const after = raw.filter(([id]) => compareSocketSeq(id, since) > 0);
+      // Nothing kept at or before `since`: entries after it may have been trimmed or expired.
+      if (
+        after.length === raw.length &&
+        (raw.length >= replay.keep ||
+          (raw[0] ? ms(raw[0][0]) : Date.now()) - ms(since) >= replay.maxAgeMs)
+      )
+        return undefined;
+      return after.map(([seq, fields]) => ({
+        type: "emit" as const,
+        topic,
+        frame: fields[fields.indexOf("m") + 1]!,
+        seq,
+      }));
     },
     subscribe(topic, deliver) {
       const name = channel(topic);

@@ -129,7 +129,7 @@ export default brick({
 
 It is built on Bun's built-in Redis client, so it needs no extra package. Each room topic (`<service>.<socket>:<room>`) has its own Redis channel. A process subscribes when its first local connection enters a room and unsubscribes when the last one leaves, so it only receives traffic for rooms it holds. A join is acknowledged once the subscription is in place.
 
-An emit is a single `PUBLISH`. The emitting process does not deliver locally: it receives its own message back from Redis like every other process and delivers it once. Each process uses two Redis connections, one to publish and one to subscribe, reconnects after a drop, and then resubscribes to every room it holds. While Redis is unreachable, the newest emits wait in a bounded queue (`queue`, default 1000) and older ones are dropped. Use one broker per app; the app closes it on stop. A custom broker implements `SocketBroker`: `publish`, `subscribe`, and optionally `ready` and `close`.
+An emit is a single `PUBLISH`. The emitting process does not deliver locally: it receives its own message back from Redis like every other process and delivers it once. Each process uses two Redis connections, one to publish and one to subscribe, reconnects after a drop, and then resubscribes to every room it holds. While Redis is unreachable, the newest emits wait in a bounded queue (`queue`, default 1000) and older ones are dropped. Use one broker per app; the app closes it on stop. A custom broker implements `SocketBroker`: `publish`, `subscribe`, and optionally `ready`, `close`, and `head` with `history` for replay.
 
 ## Connect from the browser
 
@@ -223,6 +223,25 @@ live.onReconnect(() => refetchOpenDocs()); // messages sent while offline are no
 Browsers do not expose why a handshake failed, so a refused upgrade (such as an expired token) is retried with backoff and a fresh token. Backoff resets once a connection has stayed open for 10 seconds. While `navigator.onLine` is false the client waits, and it retries at once on the `online` event or when the page becomes visible. A room the server kicked the client from is not rejoined; if a rejoin is refused, `onLeave(room, "join refused")` runs.
 
 `onClose` runs on every close, including the ones that are retried; check `status === "closed"` for the final one. `send` while reconnecting throws: there is no hidden buffer that could resend an action twice. Pass `reconnect: false` to end the client at the first close, as in v0.10.
+
+## Missed-message replay
+
+With `replay`, a reconnecting client gets what it missed in each room it joined instead of refetching everything:
+
+```ts
+const live = desk.socket({
+  // …
+  replay: { keep: 200, maxAgeMs: 5 * 60_000 },
+});
+
+socket.onGap((room) => refetch(room)); // history no longer covers what was missed
+```
+
+Every emit then gets a per-room sequence number, carried in the frame next to `event` and `data` as `room` and `seq`. The client remembers the last sequence it saw in each room and rejoins with `$join { room, since }`. The server replays the newer emits in order, then continues live; a replayed emit that also arrives live is delivered once. If `since` is older than the kept history, the server sends `$gap { room }` instead and `onGap(room)` runs.
+
+The in-process broker keeps the last `keep` emits per room for up to `maxAgeMs`. The Redis broker writes each emit to a stream per room with `XADD … MAXLEN ~ keep`, uses the stream entry id as the sequence, expires the stream after `maxAgeMs` without emits, and replays with one `XRANGE`. `~` trims approximately, so Redis may keep more than `keep`.
+
+Replay covers rooms the client joined with `join()`. Rooms from the socket's `rooms` come back with the new connection; for those the client calls `onGap` after a reconnect. Replay is opt-in per socket, since kept emits cost memory or Redis storage, and it needs a broker with `head` and `history`. Without it, reconnect behaves as described above.
 
 ## Lifecycle and cancellation
 
