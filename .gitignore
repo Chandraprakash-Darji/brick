@@ -70,3 +70,5 @@ inspector-dist/
 # Workflow SDK build output and SWC cache
 .well-known/workflow/
 .swc/
+
+.hallmark/
