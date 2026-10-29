@@ -92,6 +92,8 @@ export interface SocketBroker {
     topic: string,
     deliver: (message: SocketBrokerMessage) => void,
   ): () => void;
+  /** Resolves once messages for a topic just subscribed reach this process. */
+  ready?(topic: string): Promise<void>;
   close?(): void | Promise<void>;
 }
 

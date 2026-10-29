@@ -85,6 +85,7 @@ export type {
   SocketSchemas,
 } from "./socket-types";
 export { serializeSocketSchema } from "./socket-schema";
+export { redisBroker, type RedisBrokerOptions } from "./socket-redis";
 export { getActionAccess, setActionAccess, ACTION_ACCESS_KEY } from "./access";
 export type { ActionAccessInfo } from "./access";
 export { defineAction, buildErrorHelpers } from "./action";

@@ -382,7 +382,8 @@ export function mountSockets(
     const control = (ws: Peer, event: string, data: unknown) => {
       if (ws.readyState === 1) ws.send(JSON.stringify({ event, data }));
     };
-    const enter = (connection: Connection, topic: string) => {
+    /** Joins a room; resolves once the broker delivers its messages here. */
+    const enter = async (connection: Connection, topic: string) => {
       if (connection.rooms.has(topic)) return;
       connection.rooms.add(topic);
       connection.ws.subscribe(topic);
@@ -396,6 +397,7 @@ export function mountSockets(
         holder.unsubscribe = broker.subscribe(topic, deliver);
       }
       holder.connections.add(connection);
+      await broker.ready?.(topic).catch(() => {});
     };
     const exit = (connection: Connection, topic: string) => {
       if (!connection.rooms.delete(topic)) return;
@@ -444,8 +446,9 @@ export function mountSockets(
           (await connection.session.join(name)));
       if (connection.closed || connection.ws.readyState !== 1) return;
       if (ok && !connection.rooms.has(topic)) {
-        enter(connection, topic);
+        const entered = enter(connection, topic);
         connection.requested.add(topic);
+        await entered;
       }
       control(connection.ws, "$join", { room: name, ok });
     };
@@ -525,9 +528,10 @@ export function mountSockets(
             requested: new Set(),
           };
           connections.set(ws.request, state);
-          for (const room of session.rooms)
-            enter(state, definition.topic(room));
           try {
+            await Promise.all(
+              session.rooms.map((room) => enter(state, definition.topic(room))),
+            );
             await session.open(sender);
           } catch (error) {
             fail(ws, error);

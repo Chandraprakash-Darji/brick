@@ -114,6 +114,23 @@ live.kick("team:7", { also: "user:42", reason: "removed from team" });
 
 `also` selects connections that are also in that room. The client receives `$left { room, reason }` and `onLeave(room, reason)` runs.
 
+## Fan-out across processes
+
+A broker carries emits and kicks between processes. The default broker delivers within the process. When you run more than one API process, use the Redis broker:
+
+```ts title="src/api/app.ts"
+import { brick, redisBroker } from "@brickkit/core";
+
+export default brick({
+  services,
+  sockets: { broker: redisBroker({ url: process.env.REDIS_URL }) },
+});
+```
+
+It is built on Bun's built-in Redis client, so it needs no extra package. Each room topic (`<service>.<socket>:<room>`) has its own Redis channel. A process subscribes when its first local connection enters a room and unsubscribes when the last one leaves, so it only receives traffic for rooms it holds. A join is acknowledged once the subscription is in place.
+
+An emit is a single `PUBLISH`. The emitting process does not deliver locally: it receives its own message back from Redis like every other process and delivers it once. Each process uses two Redis connections, one to publish and one to subscribe, reconnects after a drop, and then resubscribes to every room it holds. While Redis is unreachable, the newest emits wait in a bounded queue (`queue`, default 1000) and older ones are dropped. Use one broker per app; the app closes it on stop. A custom broker implements `SocketBroker`: `publish`, `subscribe`, and optionally `ready` and `close`.
+
 ## Connect from the browser
 
 Generate the [browser contract](/docs/typed-client) with the Vite plugin or the CLI:
