@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, rename, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { compileBrickApplication, emitCompiledApplication } from "./compiler";
-import { aot } from "elysia/plugin/aot/bun";
+import { brickAot } from "./compiler/aot";
 import { loadBrickApp } from "./app-entry";
 import { buildAppWorkflows, workflowTransformPlugin } from "./workflows";
 
@@ -87,7 +87,12 @@ if (import.meta.main) {
       plugins: [
         ...(options.aot === false
           ? []
-          : [aot(join(staging, "entry.ts"), { target: "bun", strip: true })]),
+          : [
+              brickAot(
+                join(staging, "entry.ts"),
+                app.definition.sockets.length > 0,
+              ),
+            ]),
         ...(workflows ? [workflows] : []),
       ],
     });

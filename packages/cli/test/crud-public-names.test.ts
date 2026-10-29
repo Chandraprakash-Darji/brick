@@ -39,7 +39,9 @@ it("plugin client contract, OpenAPI and IR use public names (issue #27)", () => 
   );
   expect(resource.list.name).toBe("page.list");
 
-  const fakeApp: any = { definition: { services: [service], prefix: "/api" } };
+  const fakeApp: any = {
+    definition: { services: [service], prefix: "/api", sockets: [] },
+  };
   const source = generateClientContract(fakeApp);
   const serialized = source.match(
     /export const contract: AppContract = JSON.parse\((.+)\);/,

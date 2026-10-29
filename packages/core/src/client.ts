@@ -1,6 +1,20 @@
 import type { Static, TSchema } from "@sinclair/typebox";
 import type { Action, ActionErrorDefinition } from "./types";
 import { ActionExecutionError, ValidationError } from "./types";
+import { connectSocket } from "./socket-client";
+import type {
+  BrickClientSocket,
+  BrickSocketClient,
+  BrickSocketConnectOptions,
+} from "./socket-types";
+export { BrickSocketError } from "./socket-types";
+export type {
+  BrickClientSocket,
+  BrickSocketClient,
+  BrickSocketConnectOptions,
+  BrickSocketSender,
+  SocketEventArgs,
+} from "./socket-types";
 
 /**
  * Eden/tRPC-style typed HTTP client inferred from Brick-TS application contracts.
@@ -268,15 +282,16 @@ export type BrickActionCaller<A> =
       ) => Promise<InferActionOutput<A>>;
 
 /** Recursively maps action leaves and their namespaces to browser callers. */
-export type BrickClient<T> = T extends
-  | BrickClientAction<any, any, any>
-  | Action<any, any, any, any>
-  ? BrickActionCaller<T>
-  : T extends (...args: any[]) => any
-    ? BrickActionCaller<T>
-    : T extends object
-      ? { [K in keyof T]: BrickClient<T[K]> }
-      : T;
+export type BrickClient<T> =
+  T extends BrickClientSocket<infer I, infer O>
+    ? { connect(options?: BrickSocketConnectOptions): BrickSocketClient<I, O> }
+    : T extends BrickClientAction<any, any, any> | Action<any, any, any, any>
+      ? BrickActionCaller<T>
+      : T extends (...args: any[]) => any
+        ? BrickActionCaller<T>
+        : T extends object
+          ? { [K in keyof T]: BrickClient<T[K]> }
+          : T;
 
 interface ResolvedClientOptions {
   baseUrl: string;
@@ -557,6 +572,19 @@ function createNamespace(
       // Never masquerade as a thenable: awaiting a namespace must not dispatch.
       if (prop === "then" || prop === "catch" || prop === "finally")
         return undefined;
+      if (
+        prop === "connect" &&
+        node &&
+        typeof node === "object" &&
+        "kind" in node &&
+        node.kind === "socket"
+      ) {
+        return (options?: BrickSocketConnectOptions) =>
+          connectSocket(resolved.baseUrl, node as BrickClientSocket, {
+            signal: options?.signal ?? resolved.signal,
+            timeoutMs: options?.timeoutMs ?? resolved.timeoutMs,
+          });
+      }
       return createNamespace(resolved, [...path, prop], childNode(node, prop));
     },
     apply(_target, _thisArg, args: unknown[]) {

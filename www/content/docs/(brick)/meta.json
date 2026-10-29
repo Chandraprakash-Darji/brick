@@ -22,6 +22,7 @@
     "primary-keys",
     "relations",
     "typed-client",
+    "websockets",
     "tanstack-query",
     "tools-and-mcp",
     "openapi",

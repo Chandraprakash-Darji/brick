@@ -295,7 +295,13 @@ export function buildServiceGraph(
       caption: activity.calls ? plural(activity.calls, "call") : "no traffic",
       metric: formatMetric(average(activity)),
       detail: schema
-        ? `${plural(schema.actions.length, "action")} · ${plural(schema.tools?.length ?? 0, "tool")}`
+        ? [
+            plural(schema.actions.length, "action"),
+            plural(schema.tools?.length ?? 0, "tool"),
+            ...(schema.sockets?.length
+              ? [plural(schema.sockets.length, "socket")]
+              : []),
+          ].join(" · ")
         : "Seen in requests",
       health: healthOf(activity),
       calls: activity.calls,

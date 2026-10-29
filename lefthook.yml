@@ -12,7 +12,7 @@ pre-commit:
       glob: "**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json,jsonc,yml,yaml,md,mdx,css,html}"
       run: bunx --no-install oxfmt --check {staged_files}
     packages:
-      run: bun run check
+      run: unset $(git rev-parse --local-env-vars) && bun run check
     website:
       glob:
         - "www/**"

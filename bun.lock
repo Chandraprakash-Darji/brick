@@ -112,6 +112,18 @@
         "oxlint": "^1.88.0",
       },
     },
+    "examples/websocket": {
+      "name": "brick-websocket-example",
+      "dependencies": {
+        "@brickkit/cli": "workspace:*",
+        "@brickkit/core": "workspace:*",
+        "@fingerprintjs/fingerprintjs": "^5.3.0",
+      },
+      "devDependencies": {
+        "typescript": "^5.7.0",
+        "vite": "^8.3.4",
+      },
+    },
     "packages/bullmq-world": {
       "name": "@brickkit/bullmq-world",
       "version": "0.9.1",
@@ -614,6 +626,8 @@
     "@esbuild/win32-ia32": ["@esbuild/win32-ia32@0.28.2", "", { "os": "win32", "cpu": "ia32" }, "sha512-YmJbfTlvU7Sdn9BB+4PRES4oB6pxgS37MAONj+hBr/cpXS1aBPKXxNnDbu+QCWPj0o9dgyxeq79g6c5P8KeuYA=="],
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.28.2", "", { "os": "win32", "cpu": "x64" }, "sha512-5ebpxr3nWMzrL/rnUI755Jkuee0bHL/Gq0WTF9lvcpv73wAp5eu8MfBUgWK9bhWvZjj7yX8etf/8tI8Ney695g=="],
+
+    "@fingerprintjs/fingerprintjs": ["@fingerprintjs/fingerprintjs@5.3.0", "", {}, "sha512-goxeuSCF/LR8E/lcsCh/YTjhlFW7AOhj4A9RQ5GHpBOKwkX/OG3z8mY5ADR1xGVRB5bSEJB66WNh5eBwehx2nQ=="],
 
     "@floating-ui/core": ["@floating-ui/core@1.8.0", "", { "dependencies": { "@floating-ui/utils": "^0.2.12" } }, "sha512-0CIZ5itps/8x7BG8dEIhs53BvCUH2PCoogtakwRTut+Arm58sJooJ0AuZhLw2HJYIR5cMLNPBSS728sPho2khQ=="],
 
@@ -1710,6 +1724,8 @@
     "brick-extensions-example": ["brick-extensions-example@workspace:examples/extensions"],
 
     "brick-showcase": ["brick-showcase@workspace:examples/showcase"],
+
+    "brick-websocket-example": ["brick-websocket-example@workspace:examples/websocket"],
 
     "browserslist": ["browserslist@4.29.3", "", { "dependencies": { "baseline-browser-mapping": "^2.11.26", "caniuse-lite": "^1.0.30001813", "electron-to-chromium": "^1.5.439", "node-releases": "^2.0.57", "update-browserslist-db": "^1.3.3" }, "bin": { "browserslist": "cli.js" } }, "sha512-1R4kiYKXGViqEN0CnoDrXc1StD9niAwu+j2dukWzrD4bJgsD4lDmEp0CRbc6E/vYJIfTHwPmwyaKtVSudICdPA=="],
 

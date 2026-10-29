@@ -34,6 +34,8 @@ import type { ServiceEvents } from "./events/types";
 import { getActionAccess } from "./access";
 import { pickContextEnvelope } from "./context";
 import { createLogger, DEFAULT_LOG_PREFIXES } from "./logger";
+import { defineServiceSocket, type RegisteredSocket } from "./socket";
+import type { BrickSocketConfig, SocketSchemas } from "./socket-types";
 
 const defaultLogger: Logger = createLogger(DEFAULT_LOG_PREFIXES);
 
@@ -54,6 +56,7 @@ export class ServiceImpl<
   readonly actions = new Map<string, Action<any, any, any, any>>();
   readonly tools = new Map<string, Tool<any, any, any, any>>();
   readonly tables = new Map<string, any>();
+  private readonly sockets = new Map<string, RegisteredSocket>();
   readonly resources = new Map<
     string,
     Resource<any, BaseContext<TDb> & TServiceContext>
@@ -287,6 +290,27 @@ export class ServiceImpl<
     return this.tools.get(name);
   }
 
+  socket<const I extends SocketSchemas, const O extends SocketSchemas>(
+    config: BrickSocketConfig<I, O, BaseContext<TDb> & TServiceContext>,
+  ): this {
+    if (this._isBuilt)
+      throw new Error("Sockets must be declared before service build");
+    if (this.sockets.has(config.name))
+      throw new Error(`Duplicate socket: ${config.name}`);
+    this.sockets.set(
+      config.name,
+      defineServiceSocket(config, (request) =>
+        resolveServiceContext(this, { request }),
+      ),
+    );
+    getGlobalRegistry().touch();
+    return this;
+  }
+
+  listSockets(): RegisteredSocket[] {
+    return [...this.sockets.values()];
+  }
+
   listTools(): Tool<any, any, any, any>[] {
     return Array.from(this.tools.values());
   }
@@ -351,6 +375,7 @@ export class ServiceImpl<
       name: this.name,
       options,
       hasDatabase: Boolean(this.database),
+      sockets: this.listSockets().map((socket) => socket.schema),
       databaseConfig,
       actions: this.listActions().map((act) => {
         const access = getActionAccess(act);
@@ -387,7 +412,7 @@ async function resolveServiceContext<
   TServiceContext extends Record<string, any>,
 >(
   service: ServiceImpl<TDb, TServiceContext>,
-  callCtx?: Partial<BaseContext<TDb> & TServiceContext>,
+  callCtx?: Partial<BaseContext<TDb>> & { user?: unknown },
 ): Promise<BaseContext<TDb> & TServiceContext> {
   // Only a context this service resolved itself is accepted as it is.
   if ((callCtx as any)?.[RESOLVED_SYMBOL] === service) {

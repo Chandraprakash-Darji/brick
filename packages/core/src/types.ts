@@ -5,6 +5,12 @@ import type { DatabaseHandle } from "./db/define";
 import type { OutboxTable } from "./events/outbox";
 import type { ServiceEvents } from "./events/types";
 import type { EventsDefinition } from "./events/hub";
+import type {
+  BrickSocketConfig,
+  BrickSocketSchema,
+  SocketSchemas,
+} from "./socket-types";
+import type { RegisteredSocket } from "./socket";
 
 /**
  * The logger on action, tool, and endpoint contexts. While a dashboard is on
@@ -512,6 +518,7 @@ export interface ServiceSchema {
     tables: string[];
   };
   actions: ActionSchema[];
+  sockets?: BrickSocketSchema[];
   /** MCP tools. A tool with an HTTP route is also listed under `actions`. */
   tools?: { name: string }[];
   resources?: { name: string }[];
@@ -576,6 +583,11 @@ export interface Service<
   use<A>(plugin: ServicePlugin<this, A>): A;
 
   build(): this;
+
+  socket<const I extends SocketSchemas, const O extends SocketSchemas>(
+    config: BrickSocketConfig<I, O, BaseContext<TDb> & TServiceContext>,
+  ): this;
+  listSockets(): RegisteredSocket[];
 
   action<
     TIn extends TSchema | undefined = undefined,

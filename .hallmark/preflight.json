@@ -1,0 +1,37 @@
+{
+  "scope": "app",
+  "entry": "examples/websocket/index.html",
+  "material": "Working typed WebSocket chat with SQLite history, browser fingerprint identities, live connection counts, and server-confirmed shared messages",
+  "audience": "Developers trying Brick WebSockets in two browsers",
+  "use": "Join and exchange messages across browser sessions",
+  "tone": "Utilitarian, native, dark only",
+  "systemSource": "User-provided Attio-native design spec; exact dark colour tokens, system font, labelled actions, 44px targets",
+  "preserved": [
+    "Generated contract",
+    "Join/leave and send handlers",
+    "Presence and server-confirmed messages",
+    "Auth and Vite proxy"
+  ],
+  "introduced": [
+    "Dark token stylesheet",
+    "Focused room header",
+    "Hugeicons",
+    "Responsive composer and explicit connection states",
+    "SQLite history and sessions",
+    "Browser fingerprint user identity"
+  ],
+  "files": [
+    "examples/websocket/index.html",
+    "examples/websocket/web/style.css",
+    "examples/websocket/web/tokens.css",
+    "examples/websocket/web/base.css",
+    "examples/websocket/web/main.ts",
+    "examples/websocket/web/icons.ts"
+  ],
+  "absent": [
+    "AI integration",
+    "Invented message history",
+    "Decorative photographs",
+    "Marketing metrics"
+  ]
+}

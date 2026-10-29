@@ -1,11 +1,13 @@
 import type { Service, ArchitectureSchema } from "./types";
 import { analyzeDeclaredApplication, type RouteIR } from "./compiler/ir";
 import type { EventsDefinition } from "./events/hub";
+import type { BrickSocketSchema } from "./socket-types";
 
 export interface ArchitectureApplication {
   services: readonly Service[];
   routes: readonly RouteIR[];
   events?: EventsDefinition;
+  sockets?: readonly (BrickSocketSchema & { service: string; path: string })[];
 }
 
 export class ServiceRegistry {
@@ -77,6 +79,13 @@ export class ServiceRegistry {
         const schema = service.introspect();
         return {
           ...schema,
+          ...(application?.sockets
+            ? {
+                sockets: application.sockets.filter(
+                  (socket) => socket.service === service.name,
+                ),
+              }
+            : {}),
           actions: schema.actions.map((action) => {
             const route = byAction.get(action.name);
             return route
