@@ -71,6 +71,15 @@ export { compilerRuntime } from "./compiler/runtime";
 
 // Core Primitives
 export { defineService, ServiceImpl } from "./service";
+export type {
+  BrickSocketConfig,
+  BrickSocketSchema,
+  BrickSocketSender,
+  SocketEventArgs,
+  SocketPayloads,
+  SocketSchemas,
+} from "./socket-types";
+export { serializeSocketSchema } from "./socket-schema";
 export { getActionAccess, setActionAccess, ACTION_ACCESS_KEY } from "./access";
 export type { ActionAccessInfo } from "./access";
 export { defineAction, buildErrorHelpers } from "./action";

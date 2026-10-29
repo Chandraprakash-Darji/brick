@@ -33,6 +33,7 @@ import { instrumentDatabase, traceHttpRequest, withSpan } from "./telemetry";
 import { EventsHub } from "./events/hub";
 import { WEBHOOK_ROUTE } from "./events/workflows";
 import type { EventsOptions } from "./events/types";
+import { mountSockets, socketPath } from "./socket";
 
 export interface CreateServerOptions {
   port?: number;
@@ -262,6 +263,21 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
   if (referencePath !== undefined)
     registeredRoutes.set(routeKey("GET", referencePath), false);
 
+  const sockets = services.flatMap((service) =>
+    service.listSockets().map((definition) => ({
+      service: service.name,
+      path: socketPath(prefix, service.name, definition),
+      definition,
+    })),
+  );
+  const socketRoutes = new Set<string>();
+  for (const socket of sockets) {
+    const key = routeKey("GET", socket.path);
+    if (registeredRoutes.has(key) || socketRoutes.has(key))
+      throw new Error(`Brick: duplicate socket route '${socket.path}'`);
+    socketRoutes.add(key);
+  }
+
   const mountRoute = (
     method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
     path: string,
@@ -269,6 +285,10 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
     plugin = false,
   ) => {
     const key = routeKey(method, path);
+    if (socketRoutes.has(key))
+      throw new Error(
+        `Brick: route '${method} ${path}' conflicts with a socket`,
+      );
     if (registeredRoutes.has(key)) {
       if (plugin || registeredRoutes.get(key))
         throw new Error(`Brick: duplicate plugin route '${method} ${path}'`);
@@ -401,10 +421,18 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
     if (mounted) mountedRoutes.push(route.ir);
   }
 
+  mountSockets(app, sockets);
   const definition = Object.freeze({
     services: Object.freeze([...services]),
     prefix,
     routes: Object.freeze(mountedRoutes),
+    sockets: Object.freeze(
+      sockets.map(({ service, path, definition }) => ({
+        ...definition.schema,
+        service,
+        path,
+      })),
+    ),
     telemetry,
     documentation: normalizeDocumentation(options.documentation),
     dashboard,

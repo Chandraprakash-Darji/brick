@@ -5,6 +5,8 @@ description: Define modular backend services and typed actions with runtime sche
 
 Services structure backend domains in Brick-TS, while actions provide typed business logic executable both in-process and over HTTP.
 
+For bidirectional JSON messages, declare a [typed WebSocket](/docs/websockets) with `service.socket()`. Socket handlers use the owning service's context and appear in the generated browser client.
+
 ## Minimal Example
 
 Define a service, register an action with TypeBox input/output schemas, and invoke it either directly in TypeScript or through HTTP:

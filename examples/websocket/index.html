@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <meta
+      name="description"
+      content="A shared conversation across browsers, built with Brick's typed WebSockets."
+    />
+    <title>Brick chat</title>
+    <link rel="stylesheet" href="./web/style.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="chat-header">
+        <div class="header-title">
+          <a class="brand" href="/" aria-label="Brick chat home"
+            ><span data-icon="bubble-chat" aria-hidden="true"></span
+          ></a>
+          <div>
+            <h1>The common room</h1>
+            <p class="header-subtitle">
+              A shared conversation, built with Brick.
+            </p>
+          </div>
+        </div>
+        <div class="connection-controls">
+          <span id="connection" class="connection" role="status"
+            ><span></span>Offline</span
+          ><button
+            id="invite"
+            class="invite"
+            type="button"
+            title="Open another window"
+            aria-label="Open another window"
+          >
+            <span
+              data-icon="arrow-up-right-01"
+              aria-hidden="true"
+            ></span></button
+          ><button id="join" class="primary" type="button">
+            Join conversation</button
+          ><button id="leave" class="secondary" type="button" hidden>
+            Leave
+          </button>
+        </div>
+      </header>
+      <section class="chat" aria-label="Chat room">
+        <div
+          class="conversation"
+          id="conversation"
+          role="log"
+          aria-label="Shared conversation"
+          aria-live="polite"
+        >
+          <div class="day-divider"><span>Recent conversation</span></div>
+          <section class="welcome" id="welcome">
+            <span
+              class="welcome-icon"
+              data-icon="bubble-chat"
+              aria-hidden="true"
+            ></span>
+            <h2>Start a conversation</h2>
+            <p>Send a message. See it arrive in another browser.</p>
+            <div class="suggestions">
+              <button data-prompt="Hello from this browser" type="button">
+                Say hello</button
+              ><button data-prompt="Can you see this message?" type="button">
+                Test the connection
+              </button>
+            </div>
+          </section>
+          <div id="messages" class="messages"></div>
+        </div>
+        <div class="composer-area">
+          <div class="room-context">
+            <span id="presence" class="presence" hidden></span>
+            <p id="status" class="status" role="status">
+              Join the room to start chatting.
+            </p>
+          </div>
+          <form id="composer" class="composer">
+            <textarea
+              id="message"
+              name="message"
+              autocomplete="off"
+              aria-label="Message"
+              placeholder="Message the room…"
+              maxlength="2000"
+              rows="1"
+              disabled
+            ></textarea
+            ><button id="send" class="primary send" type="submit" disabled>
+              <span>Send</span
+              ><span data-icon="arrow-up-02" aria-hidden="true"></span>
+            </button>
+          </form>
+          <div class="composer-footer">
+            <span
+              ><span id="transport-dot" hidden></span
+              ><span id="transport"
+                >Messages are saved automatically.</span
+              ></span
+            ><span>Enter to send <kbd>↵</kbd></span>
+          </div>
+        </div>
+      </section>
+      <noscript
+        >This chat needs JavaScript to connect. Enable it and reload to join the
+        room.</noscript
+      >
+    </main>
+    <script type="module" src="/web/main.ts"></script>
+  </body>
+</html>

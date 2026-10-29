@@ -5,6 +5,8 @@ description: Call backend actions through a typed HTTP client with automatically
 
 The Brick-TS client SDK uses a generated browser contract to infer action inputs and outputs and preserve exact HTTP routes. Use [TanStack Query options](/docs/tanstack-query) for query hooks, mutations, and typed cache keys.
 
+The same client connects to [typed WebSockets](/docs/websockets) with `api.<service>.<socket>.connect()`. Socket declarations contribute their event types, route, and validation schemas to the generated contract.
+
 ## Minimal Example
 
 The client is typed by a generated contract: browser-safe route metadata and transport types derived from your app. Your app entry must default-export a `BrickApp` created by `brick()` (without calling `.listen()`).

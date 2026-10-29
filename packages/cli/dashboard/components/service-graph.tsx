@@ -21,24 +21,28 @@ import type {
 // Edges use the same colors as the span types they come from.
 const EDGE_STROKE: Record<EdgeKind, string> = {
   request: "stroke-span-request",
+  websocket: "stroke-span-request",
   rpc: "stroke-span-rpc",
   sql: "stroke-span-sql",
   event: "stroke-span-event",
 };
 const EDGE_FILL: Record<EdgeKind, string> = {
   request: "fill-span-request",
+  websocket: "fill-span-request",
   rpc: "fill-span-rpc",
   sql: "fill-span-sql",
   event: "fill-span-event",
 };
 const EDGE_LABEL: Record<EdgeKind, string> = {
   request: "Request",
+  websocket: "WebSocket",
   rpc: "Service call",
   sql: "SQL",
   event: "Event",
 };
 const KIND_ACCENT: Record<GraphKind, string> = {
   client: "border-l-span-request",
+  socket: "border-l-span-request",
   service: "border-l-span-action",
   database: "border-l-span-sql",
   events: "border-l-span-event",
@@ -46,6 +50,7 @@ const KIND_ACCENT: Record<GraphKind, string> = {
 };
 const KIND_LABEL: Record<GraphKind, string> = {
   client: "Client",
+  socket: "WebSocket",
   service: "Service",
   database: "Database",
   events: "Events",
@@ -94,6 +99,7 @@ function useFitScale(width: number) {
 
 function describe(node: PlacedNode): string {
   const parts = [node.label, node.detail];
+  if (node.kind === "socket") parts.push(node.caption);
   if (node.calls > 0) {
     parts.push(node.caption);
     if (node.failures > 0) {
@@ -106,7 +112,7 @@ function describe(node: PlacedNode): string {
 }
 
 /**
- * The running app as a left-to-right graph: clients, the services they call,
+ * The running app as a left-to-right graph: clients, sockets, their services,
  * calls between services, and databases. Calls and health come from the recent
  * requests, so the graph fills in as traffic arrives.
  */
@@ -142,7 +148,7 @@ export function ServiceGraphPanel({
         <div>
           <h2 className="text-base leading-6 font-semibold">Service graph</h2>
           <p className="text-xs text-muted-foreground">
-            Clients, services, and databases, and the calls seen between them
+            Clients, WebSockets, services, databases, and observed calls
           </p>
         </div>
         <div className="flex flex-col items-end gap-1 text-xs text-muted-foreground">

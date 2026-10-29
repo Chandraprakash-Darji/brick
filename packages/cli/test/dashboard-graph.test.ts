@@ -69,6 +69,7 @@ function architecture(
     name: string;
     routes?: boolean;
     tools?: number;
+    sockets?: ArchitectureSnapshot["schema"]["services"][number]["sockets"];
     database?: { name?: string; engine?: "sqlite" | "postgres" };
   }>,
 ): ArchitectureSnapshot {
@@ -77,8 +78,9 @@ function architecture(
     schema: {
       version: "1",
       services: services.map(
-        ({ name, routes = true, tools = 0, database }) => ({
+        ({ name, routes = true, tools = 0, sockets, database }) => ({
           name,
+          sockets,
           options: {},
           hasDatabase: database !== undefined,
           databaseConfig: database && {
@@ -104,6 +106,108 @@ function architecture(
     } as ArchitectureSnapshot["schema"],
   };
 }
+
+describe("buildServiceGraph with sockets", () => {
+  const live = {
+    name: "live",
+    path: "/api/chat/live",
+    input: ["say"],
+    output: ["connected", "history", "message", "presence"],
+    hasAuthorize: true,
+  };
+
+  it("connects clients through a declared socket to its owner before any traffic", () => {
+    const graph = buildServiceGraph(
+      architecture([{ name: "chat", routes: false, sockets: [live] }]),
+      [],
+    );
+    expect(graph.nodes.find((node) => node.id === "socket:chat/live")).toEqual({
+      id: "socket:chat/live",
+      kind: "socket",
+      label: "chat.live",
+      detail: "/api/chat/live",
+      caption: "in: say · out: connected, history, message, presence",
+      metric: "",
+      health: "idle",
+      calls: 0,
+      failures: 0,
+      avgMs: undefined,
+    });
+    expect(graph.edges).toEqual([
+      {
+        id: "client->socket:chat/live",
+        kind: "websocket",
+        from: "client",
+        to: "socket:chat/live",
+        calls: 0,
+        avgMs: undefined,
+      },
+      {
+        id: "socket:chat/live->service:chat",
+        kind: "websocket",
+        from: "socket:chat/live",
+        to: "service:chat",
+        calls: 0,
+        avgMs: undefined,
+      },
+    ]);
+  });
+
+  it("keeps HTTP calls and same-named sockets on different services distinct", () => {
+    const graph = buildServiceGraph(
+      architecture([
+        { name: "chat", sockets: [live] },
+        { name: "support", sockets: [{ ...live, path: "/help/live" }] },
+      ]),
+      [trace(0, [action("a", "chat")])],
+    );
+    expect(
+      graph.nodes
+        .filter((node) => node.kind === "socket")
+        .map((node) => node.id),
+    ).toEqual(["socket:chat/live", "socket:support/live"]);
+    expect(
+      graph.edges.find((edge) => edge.id === "client->service:chat"),
+    ).toMatchObject({ kind: "request", calls: 1 });
+    expect(
+      graph.edges.filter((edge) => edge.kind === "websocket"),
+    ).toHaveLength(4);
+    expect(
+      graph.edges
+        .filter((edge) => edge.kind === "websocket")
+        .every((edge) => edge.calls === 0),
+    ).toBe(true);
+  });
+
+  it("lays out clients, sockets, their service, and its database in order", () => {
+    const layout = layoutGraph(
+      buildServiceGraph(
+        architecture([
+          {
+            name: "chat",
+            sockets: [live, { ...live, name: "alerts" }],
+            database: { name: "chat history" },
+          },
+        ]),
+        [],
+      ),
+    );
+    expect(
+      Object.fromEntries(layout.nodes.map((node) => [node.id, node.column])),
+    ).toEqual({
+      client: 0,
+      "socket:chat/live": 1,
+      "socket:chat/alerts": 1,
+      "service:chat": 2,
+      "db:chat history": 3,
+    });
+    const sockets = layout.nodes.filter((node) => node.kind === "socket");
+    expect(Math.abs(sockets[0]!.y - sockets[1]!.y)).toBeGreaterThanOrEqual(
+      NODE_HEIGHT,
+    );
+    expect(layout.edges).toHaveLength(6);
+  });
+});
 
 describe("buildServiceGraph with events", () => {
   const withEvents = (events: unknown): ArchitectureSnapshot => {

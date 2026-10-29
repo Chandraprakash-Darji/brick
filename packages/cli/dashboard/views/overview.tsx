@@ -32,6 +32,12 @@ export function OverviewView({
   traces: TraceSummary[];
 }) {
   const services = architecture?.schema.services ?? [];
+  const sockets = services.flatMap((service) =>
+    (service.sockets ?? []).map((socket) => ({
+      ...socket,
+      service: service.name,
+    })),
+  );
   const rows = useMemo<RouteRow[]>(() => {
     const result: RouteRow[] = [];
     for (const service of services) {
@@ -109,6 +115,55 @@ export function OverviewView({
               </Table>
             )}
           </Panel>
+          {sockets.length > 0 && (
+            <>
+              <h2 className="mt-2 -mb-1 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                WebSockets
+              </h2>
+              <Panel>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="px-4">Socket route</TableHead>
+                      <TableHead>Client sends</TableHead>
+                      <TableHead>Server sends</TableHead>
+                      <TableHead className="px-4">Authorization</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sockets.map((socket) => (
+                      <TableRow key={`${socket.service}.${socket.name}`}>
+                        <TableCell className="px-4">
+                          <div className="font-mono text-xs">
+                            WS {socket.path ?? socket.name}
+                          </div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {socket.service}.{socket.name}
+                          </div>
+                          {socket.description && (
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              {socket.description}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {socket.input.join(", ") || "none"}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {socket.output.join(", ") || "none"}
+                        </TableCell>
+                        <TableCell className="px-4 text-muted-foreground">
+                          {socket.hasAuthorize
+                            ? "Checked on connect and messages"
+                            : "No authorize hook"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Panel>
+            </>
+          )}
           <h2 className="mt-2 -mb-1 text-xs font-medium tracking-wider text-muted-foreground uppercase">
             Services
           </h2>
@@ -133,6 +188,11 @@ export function OverviewView({
                   <div className="text-muted-foreground">
                     Actions: {service.actions.length}
                   </div>
+                  {service.sockets && service.sockets.length > 0 && (
+                    <div className="text-muted-foreground">
+                      WebSockets: {service.sockets.length}
+                    </div>
+                  )}
                 </div>
               </Panel>
             ))}

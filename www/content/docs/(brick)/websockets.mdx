@@ -1,0 +1,138 @@
+---
+title: Typed WebSockets
+description: Declare WebSocket events with TypeBox and connect through Brick's generated browser client.
+---
+
+Use `service.socket()` for bidirectional JSON messages. Brick infers each event's payload, validates messages, resolves service context, and checks authorization. This release serves sockets through Brick's Bun/Elysia server.
+
+## Declare a socket
+
+```ts title="src/api/chat.ts"
+import { defineService, t } from "@brickkit/core";
+
+export const chat = defineService("chat", {
+  context: async ({ request }) => ({
+    user: await readSessionUser(request),
+  }),
+});
+
+chat.socket({
+  name: "live",
+  input: {
+    say: t.Object({ text: t.String({ minLength: 1, maxLength: 2000 }) }),
+  },
+  output: {
+    message: t.Object({ text: t.String() }),
+  },
+  authorize: ({ ctx }) => ctx.user != null,
+  handlers: {
+    say: ({ input, socket }) => {
+      socket.send("message", { text: input.text });
+    },
+  },
+});
+```
+
+`readSessionUser` belongs to your application. It reads the session from the upgrade request. Mount the service as usual:
+
+```ts title="src/api/app.ts"
+import { brick } from "@brickkit/core";
+import { chat } from "./chat";
+
+export default brick({ services: [chat] });
+```
+
+The default route is `/api/chat/live`. `brick({ prefix: "/v2" })` changes the prefix. Set a static `path` on the socket declaration to override the complete route. Declare sockets before `brick()` builds the service. Duplicate socket routes and conflicting GET routes fail at startup.
+
+`input` lists events the client sends. Every input event requires a handler. `output` lists events the server sends. Handlers receive their inferred `input`, the owning service's `ctx`, and a typed `socket`. `socket.send()` checks the event name and payload in TypeScript and validates the payload at runtime.
+
+## Connect from the browser
+
+Generate the [browser contract](/docs/typed-client) with the Vite plugin or the CLI:
+
+```sh
+brick gen client src/api/app.ts
+```
+
+```ts title="src/live.ts"
+import { createBrickClient } from "@brickkit/core/client";
+import { contract } from "../_brick/contract";
+
+const api = createBrickClient({ baseUrl: location.origin, contract });
+const live = api.chat.live.connect({ timeoutMs: 5000 });
+
+const unsubscribe = live.on("message", ({ text }) => {
+  console.log(text);
+});
+live.onError((error) => console.error(error.kind, error.message));
+live.onClose(({ code, reason }) => console.log(code, reason));
+
+await live.ready;
+live.send("say", { text: "Hello" });
+
+// When the view unmounts:
+unsubscribe();
+live.close();
+```
+
+Register listeners before awaiting `ready` so you receive messages sent by the server's `open` hook. `ready` rejects if the connection fails or closes before opening. Event and lifecycle listeners return unsubscribe functions. Closing a connection removes its listeners and timers.
+
+Socket connections require the runtime `contract` option. A type-only contract cannot supply socket routes or runtime validation schemas. HTTP action calls continue to use the same client.
+
+Unknown events, incorrect payloads, and reversed message directions fail TypeScript checking. Incoming server messages are also validated before listeners receive them.
+
+## Authorization and origins
+
+Brick resolves context and runs `authorize` before upgrading, then repeats both before every message handler. A resolver that checks the current session store can reject a revoked session on the next message. The request headers remain those of the original handshake, so reconnect when credentials change.
+
+Browsers send applicable cookies during the handshake. The HTTP client's `headers` and `fetch` options do not attach authorization headers to a browser WebSocket. A failed browser handshake reports a connection error without exposing the HTTP response body or status.
+
+Brick accepts same-origin browser connections by default. Behind a reverse proxy that terminates TLS, Brick compares against `X-Forwarded-Proto` and `X-Forwarded-Host` when the proxy sets them. For a separate frontend origin, configure an explicit list on the declaration:
+
+```ts
+allowedOrigins: ["http://localhost:5178", "https://app.example.com"],
+```
+
+Clients that omit `Origin`, including Bun clients, require `allowMissingOrigin: true`. Origin checks and authorization are separate. Set `authorize` for private sockets even when an origin is allowed.
+
+## Lifecycle and cancellation
+
+Use optional `open({ ctx, socket })` and `close({ ctx, socket, code, reason })` hooks for setup and cleanup. The close hook receives the connection's initial context and runs once. Cleanup starts when the connection closes, without waiting for a blocked message handler. Release application subscriptions or cancel application work in this hook. Messages queued after closure do not execute, and sends after closure fail.
+
+Pass `connect({ signal })` to cancel opening or close an established connection. An abort before opening rejects `ready` with the signal's reason. `timeoutMs` limits opening only. These options inherit the client's defaults, and connection options override them.
+
+`BrickSocketError` is exported from `@brickkit/core/client`. Its `kind` is `connection`, `protocol`, or `backpressure`. Expected connection failures reach `onError`. A remote close reaches `onClose` with its code and reason. Each `close()` call is safe to repeat.
+
+## Message limits and delivery
+
+Brick processes message handlers in arrival order within each connection. Separate connections run independently. The initial limits are:
+
+- 64 KiB per frame.
+- 32 pending handlers per connection.
+- 1 MiB of pending message data per connection and a bounded native outgoing buffer.
+
+Only JSON-compatible TypeBox schemas are supported. Transforms, custom formats, non-JSON types such as `Date`, and unresolved schema references fail during declaration or generation. Use strings for dates and encode application values before sending them. Self-contained recursive schemas retain their validation metadata in generated contracts.
+
+Unknown input events and invalid payloads close with `1008`. Malformed JSON closes with `1007`, binary frames with `1003`, and overloaded queues with `1013`. Oversized messages close with `1009` when Brick detects them; frames rejected by the native transport can appear as an abnormal `1006` close. Unexpected handler errors and invalid server output close with `1011`; detailed errors stay in server logs. The browser client closes invalid server messages with the application code `4000` and reports a protocol error.
+
+`send()` means the local connection accepted the message. It does not acknowledge remote processing. Sending before `ready` or after closure throws. Brick does not reconnect, retry, buffer disconnected messages, or replay them automatically. Room membership and broadcast policy belong to the application. There is no built-in room API or distributed messaging in this release.
+
+## Development and deployment
+
+`brick dev`, `brick start`, and compiled builds mount socket declarations. CLI and Vite contract generation include socket metadata. The dev dashboard's Overview shows socket routes, event directions, and whether authorization runs. Its service graph renders each socket between clients and its owning service. Select a socket to see its full route and input and output event names. Socket nodes show declarations; they do not report live connection counts or message traffic.
+
+For a Vite frontend, run a separate Bun backend and configure Vite's WebSocket proxy. Contract generation alone does not install an upgrade handler into Vite, a Fetch mount, or a serverless platform. Production reverse proxies must forward WebSocket upgrades to the Bun server. Node adapters are not supported by this release.
+
+The [WebSocket example](https://github.com/Chandraprakash-Darji/brick/tree/main/examples/websocket) includes a dark chat interface, SQLite storage, anonymous Better Auth guests, contract generation, and a Vite proxy. Open it in two browser sessions, click **Join conversation** in each, then send a message. Both receive it, and the connection count updates when someone joins or leaves. Refresh and join again to restore the conversation.
+
+The example stores Better Auth users, sessions, and messages in `.brick/chat.sqlite` relative to the example directory. Better Auth's anonymous plugin signs each browser in as a guest, and the socket resolves that session from the handshake cookie. The application commits each message before broadcasting and sends the latest 50 stored messages on join in bounded chunks. Its history and broadcast logic are application code; the transport itself does not persist or replay messages. Run it from a repository checkout:
+
+```sh
+bun install
+bun run build
+bun run --cwd examples/websocket dev
+```
+
+Set `BRICK_CHAT_DB` to choose another SQLite file. The example is a shared public room; replace the demo identity endpoint with your own authentication for a private application.
+
+WebSocket messages are transient. Brick's [durable events](/docs/events) use database transactions and delivery workers. Connecting a socket does not subscribe it to durable events or provide their delivery guarantees.

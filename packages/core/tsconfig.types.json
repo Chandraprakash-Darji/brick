@@ -4,6 +4,7 @@
     "noEmit": true
   },
   "include": [
+    "test/socket.types.ts",
     "test/resource-types.test.ts",
     "test/tool.test.ts",
     "test/plugin.test.ts",

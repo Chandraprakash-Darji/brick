@@ -8,6 +8,7 @@ import type { EventsDefinition, EventsHub } from "./events/hub";
 import { toErrorResponse } from "./error-response";
 import { createLogger } from "./logger";
 import { ActionExecutionError, ValidationError } from "./types";
+import type { BrickSocketSchema } from "./socket-types";
 
 export type EndpointMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -177,6 +178,10 @@ export type BrickApp = Elysia<any, any, any, any, any, any, any> & {
   /** Service definitions, prefix, and telemetry setting chosen at construction. */
   readonly definition: {
     readonly routes: readonly RouteIR[];
+    readonly sockets: readonly (BrickSocketSchema & {
+      service: string;
+      path: string;
+    })[];
     readonly services: readonly Service<any, any>[];
     readonly prefix: string;
     readonly telemetry: boolean;

@@ -7,11 +7,12 @@ import { formatCount, formatDuration, spanKind } from "./format";
 
 export type GraphKind =
   | "client"
+  | "socket"
   | "service"
   | "database"
   | "events"
   | "listener";
-export type EdgeKind = "request" | "rpc" | "sql" | "event";
+export type EdgeKind = "request" | "websocket" | "rpc" | "sql" | "event";
 export type Health = "ok" | "failing" | "idle";
 
 export interface GraphNode {
@@ -114,7 +115,7 @@ const plural = (count: number, word: string) =>
   `${formatCount(count)} ${word}${count === 1 ? "" : "s"}`;
 
 /**
- * The shape of the running app: HTTP clients, the services they call, the
+ * The shape of the running app: clients, sockets, the services they call, the
  * calls between services, and each service's database. Structure comes from the
  * architecture; calls, durations, and health come from the recent traces.
  */
@@ -123,6 +124,13 @@ export function buildServiceGraph(
   traces: TraceSummary[],
 ): ServiceGraph {
   const services = architecture?.schema.services ?? [];
+  const sockets = services.flatMap((service) =>
+    (service.sockets ?? []).map((socket) => ({
+      ...socket,
+      service: service.name,
+      id: `socket:${service.name}/${socket.name}`,
+    })),
+  );
   const serviceNames = services.map((service) => service.name);
   const databases = new Map<
     string,
@@ -179,6 +187,11 @@ export function buildServiceGraph(
     }
     const database = databaseOf.get(service.name);
     if (database) edge("sql", `service:${service.name}`, database);
+  }
+  // Socket declarations show the transport and owner without claiming traffic.
+  for (const socket of sockets) {
+    edge("websocket", "client", socket.id);
+    edge("websocket", socket.id, `service:${socket.service}`);
   }
 
   // Events are structure only: nothing times a delivery yet, so no traffic shows.
@@ -278,11 +291,25 @@ export function buildServiceGraph(
         ? plural(clientActivity.calls, "request")
         : "no traffic",
       metric: formatMetric(average(clientActivity)),
-      detail: "HTTP clients",
+      detail: sockets.length ? "HTTP and WebSocket clients" : "HTTP clients",
       health: healthOf(clientActivity),
       calls: clientActivity.calls,
       failures: clientActivity.failures,
       avgMs: average(clientActivity),
+    });
+  }
+  for (const socket of sockets) {
+    nodes.push({
+      id: socket.id,
+      kind: "socket",
+      label: `${socket.service}.${socket.name}`,
+      detail: socket.path ?? "WebSocket route",
+      caption: `in: ${socket.input.join(", ") || "none"} · out: ${socket.output.join(", ") || "none"}`,
+      metric: "",
+      health: "idle",
+      calls: 0,
+      failures: 0,
+      avgMs: undefined,
     });
   }
   for (const name of serviceNames) {
@@ -295,7 +322,13 @@ export function buildServiceGraph(
       caption: activity.calls ? plural(activity.calls, "call") : "no traffic",
       metric: formatMetric(average(activity)),
       detail: schema
-        ? `${plural(schema.actions.length, "action")} · ${plural(schema.tools?.length ?? 0, "tool")}`
+        ? [
+            plural(schema.actions.length, "action"),
+            plural(schema.tools?.length ?? 0, "tool"),
+            ...(schema.sockets?.length
+              ? [plural(schema.sockets.length, "socket")]
+              : []),
+          ].join(" · ")
         : "Seen in requests",
       health: healthOf(activity),
       calls: activity.calls,

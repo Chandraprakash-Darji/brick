@@ -1,0 +1,22 @@
+{
+  "name": "brick-websocket-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test test",
+    "dev": "brick dev src/app.ts --client _brick/contract.ts --frontend 'vite --host localhost --port 5178 --strictPort'",
+    "contract": "brick gen client src/app.ts",
+    "build": "bun run contract && vite build",
+    "typecheck": "bun run contract && tsc --noEmit"
+  },
+  "dependencies": {
+    "@better-auth/drizzle-adapter": "^1.7.7",
+    "@brickkit/cli": "workspace:*",
+    "@brickkit/core": "workspace:*",
+    "better-auth": "^1.7.7"
+  },
+  "devDependencies": {
+    "vite": "^8.3.4",
+    "typescript": "^5.7.0"
+  }
+}
