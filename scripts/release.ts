@@ -12,7 +12,7 @@
 //   - target tag(s) don't already exist on origin
 //   - `gh` authenticated (for GitHub access)
 //   - npm trust mappings configured per package (one-time, browser):
-//     npmjs.com package Settings -> Trusted Publisher -> Chandraprakash-Darji/brick
+//     npmjs.com package Settings -> Trusted Publisher -> get-brickkit/brick
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -203,7 +203,7 @@ if (!PREPARE) {
     "run",
     "publish-npm.yml",
     "--repo",
-    "Chandraprakash-Darji/brick",
+    "get-brickkit/brick",
     "--ref",
     releaseBranch,
     "-f",

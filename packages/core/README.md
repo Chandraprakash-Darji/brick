@@ -115,7 +115,7 @@ Tools use action validation, authorization, and service context. They are stored
 
 The registry accepts `services` and/or an explicit `tools` array, rejects duplicate names, and reads annotations directly from definitions. The handler is a stateless POST JSON-RPC helper for initialize, ping, tools/list, and tools/call; notifications receive an empty 202 response. Authentication and mounting remain in your app. Its default protocol version is `2025-06-18`, following the [MCP tools specification](https://modelcontextprotocol.io/specification/2025-06-18/server/tools).
 
-Source: <https://github.com/Chandraprakash-Darji/brick>.
+Source: <https://github.com/get-brickkit/brick>.
 
 ## Tracing
 

@@ -36,7 +36,7 @@ export function InstallOptions() {
         command={
           audience === "you"
             ? "bun add @brickkit/core @brickkit/cli"
-            : "npx skills add Chandraprakash-Darji/brick --skill brick"
+            : "npx skills add get-brickkit/brick --skill brick"
         }
       />
       <Link
