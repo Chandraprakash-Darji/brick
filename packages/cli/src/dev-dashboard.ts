@@ -20,7 +20,8 @@ import type { DashboardAuth } from "@brickkit/core";
 import { createAccess, isLoopbackHost } from "./dashboard-access";
 import {
   assetsDirectory,
-  DashboardExtensionHost,
+  DashboardExtensions,
+  type PluginDashboard,
   themeCss,
   type DashboardExtensionOptions,
 } from "./dashboard-extension";
@@ -130,6 +131,8 @@ export interface DevDashboardOptions {
 
 export interface DevDashboard {
   readonly port: number;
+  /** Build and serve the dashboard extensions the app's plugins ship (dev only). */
+  setPluginExtensions(plugins: readonly PluginDashboard[]): Promise<void>;
   stop(): void;
 }
 
@@ -159,11 +162,13 @@ export function startDevDashboard(
   } catch (error) {
     return Promise.reject(error);
   }
-  const extension = options.dashboard?.extension
-    ? new DashboardExtensionHost(options.dashboard.extension, (message) =>
-        console.warn(message),
-      )
-    : undefined;
+  // In dev, plugins' extensions can join later (`setPluginExtensions`).
+  const extension =
+    options.dashboard?.extension || !production
+      ? new DashboardExtensions(options.dashboard?.extension, (message) =>
+          console.warn(message),
+        )
+      : undefined;
   const access = options.auth
     ? createAccess(options.auth, (error) =>
         console.error("[Brick-TS] The dashboard sign-in check failed:", error),
@@ -208,7 +213,7 @@ export function startDevDashboard(
     }
     if (
       production &&
-      !isMonitoringRoute(request.method, pathname, Boolean(extension))
+      !isMonitoringRoute(request.method, pathname, Boolean(extension?.active))
     ) {
       send(response, 404, "Not found");
       return;
@@ -252,11 +257,13 @@ export function startDevDashboard(
         response,
         200,
         dashboardShell({
-          extension: extension && {
-            revision: extension.revision,
-            js: Boolean(extension.built),
-            css: Boolean(extension.built?.css),
-          },
+          extension: extension?.active
+            ? {
+                revision: extension.revision,
+                js: Boolean(extension.built),
+                css: Boolean(extension.built?.css),
+              }
+            : undefined,
           theme: theme !== "",
         }),
         {
@@ -269,14 +276,7 @@ export function startDevDashboard(
     if (request.method === "GET" && pathname.startsWith("/assets/")) {
       const name = pathname.slice("/assets/".length);
       // The project's own files, kept in memory beside the dashboard's.
-      const own =
-        name === "brick-theme.css"
-          ? theme
-          : name === "extension.js"
-            ? extension?.built?.js
-            : name === "extension.css"
-              ? extension?.built?.css
-              : undefined;
+      const own = name === "brick-theme.css" ? theme : extension?.asset(name);
       if (own !== undefined)
         send(response, 200, own, {
           "content-type": ASSET_TYPES[extname(name)]!,
@@ -359,7 +359,7 @@ export function startDevDashboard(
       canRestart: Boolean(options.restart),
       historyDays: options.history?.days ?? 0,
       mode: production ? "production" : "dev",
-      extension: extension
+      extension: extension?.active
         ? { revision: extension.revision, error: extension.error }
         : null,
     };
@@ -733,6 +733,8 @@ export function startDevDashboard(
         if (!production) extension?.watch();
         resolve({
           port,
+          setPluginExtensions: (plugins) =>
+            extension?.setPlugins(plugins) ?? Promise.resolve(),
           stop() {
             extension?.close();
             server.close();

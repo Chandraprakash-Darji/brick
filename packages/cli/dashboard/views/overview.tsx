@@ -72,7 +72,8 @@ export function OverviewView({
         );
         result.push({
           key,
-          action: `${service.name}.${action.name}`,
+          // Labelled with the plugin that contributed it.
+          action: `${service.name}.${action.name}${action.plugin ? ` · ${action.plugin}` : ""}`,
           requests: matching.length,
           failures: matching.filter(isFailure).length,
         });
@@ -214,6 +215,12 @@ export function OverviewView({
                       <TableRow key={event.name}>
                         <TableCell className="px-4 font-mono text-xs">
                           {event.name}
+                          {event.plugin && (
+                            <span className="text-muted-foreground">
+                              {" "}
+                              · {event.plugin}
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell className="font-mono text-xs">
                           {event.fields.join(", ") || "none"}
@@ -239,7 +246,13 @@ export function OverviewView({
                   <div className="text-muted-foreground">
                     {service.databaseConfig
                       ? `${service.databaseConfig.engine} · tables: ${
-                          service.databaseConfig.tables.join(", ") || "none"
+                          service.databaseConfig.tables
+                            .map((table) => {
+                              const plugin =
+                                service.databaseConfig?.plugins?.[table];
+                              return plugin ? `${table} (${plugin})` : table;
+                            })
+                            .join(", ") || "none"
                         }`
                       : "No database"}
                   </div>

@@ -832,13 +832,15 @@ export interface ServiceSchema {
     name?: string;
     engine: "sqlite" | "postgres";
     tables: string[];
+    /** The plugin that owns each table it contributed, by table key. */
+    plugins?: Record<string, string>;
   };
   actions: ActionSchema[];
   sockets?: BrickSocketSchema[];
   /** MCP tools. A tool with an HTTP route is also listed under `actions`. */
   tools?: { name: string }[];
   /** The event catalog: each event's wire name and payload JSON Schema. */
-  events?: { name: string; schema: unknown }[];
+  events?: { name: string; schema: unknown; plugin?: string }[];
   resources?: { name: string }[];
 }
 
@@ -847,6 +849,8 @@ export interface ArchitectureSchema {
   services: ServiceSchema[];
   /** Present when the app has an `events` option. */
   events?: EventsDefinition;
+  /** Every `definePlugin` installation, with its dashboard extension. */
+  plugins?: import("./define-plugin").InstalledPlugin[];
 }
 
 export interface CompiledRoutePlan {
@@ -1024,6 +1028,8 @@ export interface Service<
   ): Resource<any, BaseContext<TDb> & TServiceContext> | undefined;
   listResources(): Resource<any, BaseContext<TDb> & TServiceContext>[];
   getDb(): TDb | undefined;
+  /** The handle from `defineDatabase`, without connecting. */
+  getDatabaseHandle?(): DatabaseHandle<TDb> | undefined;
   setDb(database: DatabaseHandle<TDb>): void;
   /** The outbox table of this service's database, if it holds one (see `outboxTable`). */
   getOutbox?(): OutboxTable | undefined;

@@ -450,13 +450,18 @@ const CASES: Record<string, Case[]> = {
   "plugin-manifest": [
     {
       file: "src/a.ts",
-      code: `definePlugin({ name: "@acme/brick-comments", brick: "^0.11.0", options: t.Object({}), app: () => {} });\n`,
+      code: `definePlugin({ name: "@acme/brick-comments", brick: "^0.11.0", options: t.Object({ maxLength: t.Integer({ default: 2000, description: "Longest comment" }) }), app: ({ on }) => { let client; on("start", async () => { client = new RedisClient(); await client.connect(); }); } });\n`,
       errors: 0,
     },
     {
       file: "src/b.ts",
       code: `definePlugin({ name: "comments", app: async () => {} });\n`,
       errors: 4,
+    },
+    {
+      file: "src/c.ts",
+      code: `definePlugin({ name: "@acme/brick-cache", brick: "^0.11.0", options: t.Object({ ttl: t.Integer({ default: 60 }) }), tables: async () => ({}), app: () => { const client = createClient(); } });\n`,
+      errors: 3,
     },
   ],
 };

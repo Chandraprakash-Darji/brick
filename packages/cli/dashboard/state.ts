@@ -63,8 +63,8 @@ function followExtension(build: ExtensionBuild | null | undefined) {
   const served = document
     .querySelector('meta[name="brick-extension"]')
     ?.getAttribute("data-revision");
-  if (build && served != null && served !== String(build.revision))
-    location.reload();
+  // A page served without an extension reloads when one appears (a plugin's).
+  if (build && served !== String(build.revision)) location.reload();
 }
 
 type Action =

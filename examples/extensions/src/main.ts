@@ -83,6 +83,26 @@ assert.deepEqual(
     count: 0,
   },
 );
+
+// maxLength comes from the plugin's options (500 in app.ts).
+const tooLong = await request("/api/pages/page-comment", "POST", {
+  targetId: "page-1",
+  body: "x".repeat(501),
+});
+assert.equal(tooLong.status, 400);
+
+// Deleting a page deletes its comments: the plugin's hook on the host's CRUD.
+await request("/api/pages/page-comment", "POST", {
+  targetId: "page-2",
+  body: "Goes with its page",
+});
+assert.equal((await request("/api/pages/page/page-2", "DELETE")).status, 200);
+assert.deepEqual(
+  await page.comments.count({
+    input: { where: { field: "targetId", op: "eq", value: "page-2" } },
+  }),
+  { count: 0 },
+);
 console.log(
-  "Comments extension: create, trim, count, reject blank input, update and delete passed.",
+  "Comments extension: create, trim, count, reject blank and long input, update, delete and cascade passed.",
 );

@@ -108,14 +108,21 @@ export type ResourcePluginAPI<P, T, C, R = unknown> = P extends {
       readonly context: C;
       readonly resource: R;
     })["api"]
-  : P extends ResourcePlugin<any, any, infer A>
+  : P extends import("./define-plugin").PluginInstance<
+        infer A extends object,
+        any
+      >
     ? A
-    : never;
+    : P extends ResourcePlugin<any, any, infer A>
+      ? A
+      : never;
 
 // Process-global like actionBindingKey, so descriptors survive a second core copy.
 const pluginKind: unique symbol = Symbol.for("brickkit.plugin.kind");
+/** `definePlugin` instances install on either host; see `define-plugin.ts`. */
+export const pluginFinish: unique symbol = Symbol.for("brickkit.plugin.finish");
 export interface ServicePlugin<S extends Service<any, any>, A> {
-  readonly [pluginKind]: "service";
+  readonly [pluginKind]: "service" | "plugin";
   readonly name: string;
   readonly routes?: PluginRoutes<"app" | "service">;
   readonly setup: (context: ServicePluginContext<S>) => A;
@@ -125,7 +132,7 @@ export interface ResourcePlugin<
   R extends Resource<any, any, any>,
   A extends object,
 > {
-  readonly [pluginKind]: "resource";
+  readonly [pluginKind]: "resource" | "plugin";
   readonly name: string;
   readonly routes?: PluginRoutes;
   readonly setup: (context: ResourcePluginContext<S, R>) => A;
@@ -370,6 +377,7 @@ export function getPluginEndpoints(
       legacyPath: legacyPathOf(binding, prefix),
       method: binding.method,
       service,
+      plugin: binding.plugin,
       summary: binding.summary,
       description: binding.description,
       tags: binding.tags,
@@ -389,7 +397,10 @@ export function installPlugin(
 ) {
   if (service.isBuilt)
     throw new Error("Plugins must be installed before service build");
-  if (descriptor[pluginKind] !== (resource ? "resource" : "service"))
+  if (
+    descriptor[pluginKind] !== (resource ? "resource" : "service") &&
+    descriptor[pluginKind] !== "plugin"
+  )
     throw new Error("Plugin does not support this installation host");
   const state = stateOf(service);
   const host = resource ?? service;
@@ -567,9 +578,11 @@ export function installPlugin(
       status: "installed",
       api,
     });
+    finish(descriptor, true);
     getGlobalRegistry().touch();
     return resource ?? api;
   } catch (error) {
+    finish(descriptor, false);
     for (const action of state.actions.keys())
       if (!snapshots.bindings.has(action)) {
         actionBindings.delete(action);
@@ -593,6 +606,30 @@ export function installPlugin(
   } finally {
     active = false;
   }
+}
+function finish(descriptor: object, installed: boolean) {
+  (descriptor as { [pluginFinish]?: (installed: boolean) => void })[
+    pluginFinish
+  ]?.(installed);
+}
+/** Whether a plugin named `name` is installed on `host` (the service or a resource). */
+export function hasPlugin(
+  service: Service<any, any>,
+  host: object,
+  name: string,
+): boolean {
+  return (
+    states.get(service)?.hosts.get(host)?.get(name)?.status === "installed"
+  );
+}
+/** Every descriptor installed on the service or its resources, in install order per host. */
+export function installedPlugins(service: Service<any, any>): object[] {
+  return [...(states.get(service)?.hosts.values() ?? [])].flatMap(
+    (installations) =>
+      [...installations.values()]
+        .filter((item) => item.status === "installed")
+        .map((item) => item.descriptor),
+  );
 }
 function restoreMap<K, V>(target: Map<K, V>, snapshot: Map<K, V>) {
   target.clear();

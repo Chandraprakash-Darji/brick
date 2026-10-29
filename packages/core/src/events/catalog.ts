@@ -13,6 +13,8 @@ export interface EventRef<TPayload = unknown> {
   readonly name: string;
   readonly service: string;
   readonly schema: TSchema;
+  /** The plugin that declared it, for events a `definePlugin` adds. */
+  readonly plugin?: string;
   /** Type-level only: the payload this event carries. */
   readonly __payload?: TPayload;
 }

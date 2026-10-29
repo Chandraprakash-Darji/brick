@@ -340,7 +340,11 @@ export function generateOpenApiSpec(
         (service as { events?: Record<string, EventRef> }).events ?? {},
       ).map((ref) => [
         ref.name,
-        { service: service.name, payload: ref.schema },
+        {
+          service: service.name,
+          payload: ref.schema,
+          ...(ref.plugin ? { "x-brick-plugin": ref.plugin } : {}),
+        },
       ]),
     ),
   );

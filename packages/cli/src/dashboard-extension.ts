@@ -320,3 +320,180 @@ export class DashboardExtensionHost {
     this.#listeners.clear();
   }
 }
+
+/** A plugin's dashboard extension, as `app.definition.plugins` lists it. */
+export interface PluginDashboard {
+  name: string;
+  dashboard?: string;
+}
+
+/**
+ * The module the page loads when several extensions take part: it imports
+ * each one apart, so one that throws leaves the others, and merges them. The
+ * app's own comes first and keeps its slots; pages whose id is taken are
+ * skipped; roots nest in order; a plugin's pages without a place go under a
+ * section named after it.
+ */
+export function extensionLoader(
+  parts: readonly { name: string; src: string; plugin: boolean }[],
+): string {
+  return `const parts = ${JSON.stringify(parts)};
+const loaded = await Promise.allSettled(parts.map((part) => import(part.src)));
+const merged = { pages: [], sidebar: [], slots: {} };
+const roots = [];
+loaded.forEach((result, index) => {
+  const { name, plugin } = parts[index];
+  const extension = result.status === "fulfilled" ? result.value.default : undefined;
+  if (!extension || typeof extension !== "object") {
+    console.error("[Brick dashboard] Extension " + name + " failed to load:", result.status === "rejected" ? result.reason : "it must default-export defineDashboard({ ... })");
+    return;
+  }
+  for (const page of extension.pages ?? []) {
+    if (merged.pages.some((item) => item.id === page.id)) {
+      console.error("[Brick dashboard] Extension " + name + ": page id " + page.id + " is taken; skipped.");
+      continue;
+    }
+    merged.pages.push(plugin && !page.after && !page.section ? { ...page, section: name } : page);
+  }
+  merged.sidebar.push(...(extension.sidebar ?? []));
+  for (const [slot, value] of Object.entries(extension.slots ?? {})) {
+    if (slot === "request.drawer.tabs") merged.slots[slot] = [...(merged.slots[slot] ?? []), ...value];
+    else if (!(slot in merged.slots)) merged.slots[slot] = value;
+  }
+  if (extension.root) roots.push(extension.root);
+});
+if (roots.length) {
+  const { createElement } = await import("react");
+  merged.root = ({ children }) => roots.reduceRight((inner, Root) => createElement(Root, null, inner), children);
+}
+export default merged;
+`;
+}
+
+/**
+ * The app's extension and those of its plugins, served as one. With only the
+ * app's, it is served as it is; with plugins, each is built apart (a failed
+ * build leaves the others) and `extension.js` loads them all.
+ */
+export class DashboardExtensions {
+  readonly #warn: (message: string) => void;
+  readonly #listeners = new Set<() => void>();
+  readonly #parts: {
+    name: string;
+    path: string;
+    host: DashboardExtensionHost;
+  }[] = [];
+  readonly #own: boolean;
+  revision = 0;
+
+  constructor(path: string | undefined, warn: (message: string) => void) {
+    this.#warn = warn;
+    this.#own = path !== undefined;
+    if (path) this.#add("app", path);
+  }
+
+  #add(name: string, path: string) {
+    const host = new DashboardExtensionHost(path, this.#warn);
+    host.onChange(() => this.#changed());
+    this.#parts.push({ name, path: resolve(path), host });
+    return host;
+  }
+
+  #changed() {
+    this.revision++;
+    for (const listener of this.#listeners) listener();
+  }
+
+  /** Whether any extension takes part. */
+  get active(): boolean {
+    return this.#parts.length > 0;
+  }
+
+  get built(): BuiltExtension | undefined {
+    const built = this.#parts.filter((part) => part.host.built);
+    if (!built.length) return undefined;
+    if (this.#own && this.#parts.length === 1) return built[0]!.host.built;
+    return {
+      js: extensionLoader(
+        this.#parts.flatMap((part, index) =>
+          part.host.built
+            ? [
+                {
+                  name: part.name,
+                  src: `./extension-${index}.js?v=${this.revision}`,
+                  plugin: !(this.#own && index === 0),
+                },
+              ]
+            : [],
+        ),
+      ),
+      css: built.map((part) => part.host.built!.css).join(""),
+    };
+  }
+
+  get error(): string | undefined {
+    const errors = this.#parts.flatMap((part) =>
+      part.host.error
+        ? [
+            this.#own && this.#parts.length === 1
+              ? part.host.error
+              : `${part.name}: ${part.host.error}`,
+          ]
+        : [],
+    );
+    return errors.length ? errors.join("\n") : undefined;
+  }
+
+  /** A file under `/assets/` this serves, or undefined. */
+  asset(name: string): string | undefined {
+    if (name === "extension.js") return this.built?.js;
+    if (name === "extension.css") return this.built?.css;
+    const match = /^extension-(\d+)\.js$/.exec(name);
+    return match ? this.#parts[Number(match[1])]?.host.built?.js : undefined;
+  }
+
+  /** Follow the app's plugins: build the extensions they ship, drop the rest. */
+  async setPlugins(plugins: readonly PluginDashboard[]): Promise<void> {
+    const wanted = new Map<string, string>();
+    for (const plugin of plugins)
+      if (plugin.dashboard && !wanted.has(resolve(plugin.dashboard)))
+        wanted.set(resolve(plugin.dashboard), plugin.name);
+    const start = this.#own ? 1 : 0;
+    const current = this.#parts.slice(start);
+    if (
+      current.length === wanted.size &&
+      current.every((part) => wanted.get(part.path) === part.name)
+    )
+      return;
+    for (const part of current) part.host.close();
+    this.#parts.splice(start);
+    const loads = [...wanted].map(([path, name]) =>
+      this.#add(name, path).load(),
+    );
+    await Promise.all(loads);
+    this.#changed();
+  }
+
+  load(): Promise<void> {
+    return Promise.all(this.#parts.map((part) => part.host.load())).then(
+      () => undefined,
+    );
+  }
+
+  /** Rebuild the app's own as its folder changes; plugins' are packages. */
+  watch(): void {
+    if (this.#own) this.#parts[0]!.host.watch();
+  }
+
+  onChange(listener: () => void): () => void {
+    this.#listeners.add(listener);
+    return () => {
+      this.#listeners.delete(listener);
+    };
+  }
+
+  close(): void {
+    for (const part of this.#parts) part.host.close();
+    this.#listeners.clear();
+  }
+}

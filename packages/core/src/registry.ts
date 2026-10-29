@@ -1,3 +1,4 @@
+import type { InstalledPlugin } from "./define-plugin";
 import type { Service, ArchitectureSchema } from "./types";
 import { analyzeDeclaredApplication, type RouteIR } from "./compiler/ir";
 import type { EventsDefinition } from "./events/hub";
@@ -59,6 +60,7 @@ export interface ArchitectureApplication {
   routes: readonly RouteIR[];
   events?: EventsDefinition;
   sockets?: readonly (BrickSocketSchema & { service: string; path: string })[];
+  plugins?: readonly InstalledPlugin[];
 }
 
 export class ServiceRegistry {
@@ -120,6 +122,9 @@ export class ServiceRegistry {
     return {
       version: "1.0.0",
       ...(application?.events ? { events: application.events } : {}),
+      ...(application?.plugins?.length
+        ? { plugins: [...application.plugins] }
+        : {}),
       services: (application?.services ?? this.list()).map((service) => {
         const routes = application
           ? application.routes.filter((route) => route.service === service.name)

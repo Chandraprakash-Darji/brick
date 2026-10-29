@@ -5,6 +5,7 @@ import {
   createServiceProxy,
   defineDatabase,
   defineListener,
+  definePlugin,
   defineService,
   outboxTable,
   port,
@@ -229,5 +230,65 @@ describe("useService", () => {
       charge(input: { cents: number }): Promise<{ caller: string }>;
     }>("billing", { from: "orders" });
     expect((await billing.charge({ cents: 1 })).caller).toBe("orders");
+  });
+});
+
+describe("plugins with deps", () => {
+  it("runs plugin actions with ctx.deps through useService, and plugin listeners with useDeps()", async () => {
+    const items = sqliteTable("dep_plugin_items", {
+      id: integer("id").primaryKey(),
+    });
+    const outbox = outboxTable("sqlite");
+    const database = defineDatabase({ tables: { items, outbox } });
+    syncSchema([items, outbox], database.getDb() as any);
+    const service = defineService("shipping", {
+      database,
+      deps: { carrier: port<Carrier>() },
+    });
+    const item = service.resource({ name: "item", table: items, id: items.id });
+    const seen: string[] = [];
+    const tracking = definePlugin({
+      name: "@acme/tracking",
+      resource: ({ routes }) => ({
+        tracking: {
+          book: routes.action({
+            name: "book",
+            path: "/book",
+            method: "POST",
+            input: t.Object({ id: t.String() }),
+            output: t.String(),
+            execute: ({ input, ctx }) =>
+              (ctx as any).deps.carrier.book(input.id),
+          }),
+        },
+      }),
+      app: ({ listeners }) =>
+        listeners(
+          defineListener({
+            name: "plugin-book",
+            on: "item.create",
+            run: ({ payload }) =>
+              void seen.push(
+                useDeps<{ carrier: Carrier }>().carrier.book(payload),
+              ),
+          }),
+        ),
+    });
+    item.use(tracking());
+    const app = brick({
+      services: [service],
+      deps: { carrier: carrier("p") },
+      events: { dispatch: { timer: false } },
+      requestLogging: false,
+      docs: false,
+    });
+    apps.push(app);
+    const shipping = useService(service) as any;
+    expect(await shipping.item.tracking.book({ id: "o1" })).toBe("p_o1");
+    await service.recorder!.transaction(database.getDb(), {}, (_tx, record) =>
+      record("item.create", "x"),
+    );
+    await app.events!.drain();
+    expect(seen).toEqual(["p_x"]);
   });
 });

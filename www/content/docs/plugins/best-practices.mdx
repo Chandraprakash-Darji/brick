@@ -1,73 +1,74 @@
 ---
 title: Plugin Best Practices
-description: Architectural guidelines for building maintainable, safe, and isolated plugins.
+description: Guidelines for plugins that install safely, behave the same on every host and say what they need.
 ---
 
-Adhering to plugin best practices ensures your extensions maintain high performance, avoid naming collisions, and preserve security boundaries.
+Most of these are checked by the `plugin` preset of [`brick lint`](/docs/brick-cli/lint): a scoped name, a `brick` range, declared options with descriptions, synchronous setup, no connections outside `on("start")`, explicit access and a description on every route.
 
-## 1. Keep Setup Synchronous
+## 1. Declare the manifest
 
-The `setup()` function must be completely synchronous:
+Give the plugin its npm name (`@acme/brick-comments`), the Brick versions it supports (`brick: "^0.11.0"`) and the plugins it needs on the same host (`requires: ["@brickkit/crud"]`). Brick checks all three at install, so a user gets a clear error instead of a broken route.
 
-```ts title="src/plugins/bad-practice.ts"
-// ❌ Anti-pattern: Async setup functions throw an error at runtime
-setup: async ({ service }) => {
-  await fetchRemoteConfig();
-}
+## 2. Type the options, describe them
 
-// ✅ Correct: Synchronous registration of declarations
-setup: ({ service, routes }) => {
-  routes.action({ ... });
-}
+Declare `options` as a TypeBox schema with defaults and a `description` on each one. Brick fills the defaults, checks the values at install and names the plugin and option in the error. Do not read options from `process.env`: use `secrets` with `defineSecret`, so the app checks them at boot and the dashboard can list them.
+
+```ts
+options: t.Object({
+  maxLength: t.Integer({ default: 2000, minimum: 1, description: "Longest comment." }),
+}),
 ```
 
-Never initiate database migrations, connect to external network endpoints, or execute queries during `setup()`. Plugin installation occurs when defining services before the server boots.
+## 3. Keep setup synchronous; connect in `on("start")`
 
-## 2. Depend on Runtime Context (`ctx.db`)
+The `resource`, `service`, `app` and `tables` parts run while the app is defined, before it serves. They must be synchronous and must not open connections or run queries.
 
-Plugins should not instantiate their own database connections or cache clients:
+```ts
+// ❌ Opens a client while the plugin installs
+app: () => {
+  const client = createClient(url);
+},
 
-```ts title="src/plugins/good-practice.ts"
-// ✅ Correct: Use ctx.db injected from the host service
-execute: async ({ input, ctx }) => {
-  const db = ctx.db;
-  return db.select().from(table);
-};
+// ✅ Opens it when the app starts, closes it when it stops
+app: ({ on }) => {
+  let client: Client | undefined;
+  on("start", async ({ secrets }) => {
+    client = await createClient(secrets.url.require()).connect();
+  });
+  on("stop", () => client?.close());
+},
 ```
 
-Using `ctx.db` guarantees that plugins respect transaction boundaries, tenant routing, and context isolation.
+## 4. Own your tables with `tables`
 
-## 3. Explicit Access and Validation
+Declare the tables in `tables` and use the builders it receives. Brick builds them for the host's engine, prefixes their names so two installs do not clash, and adds them to the host's database, where schema sync and migrations find them. Do not ask users to create or pass in your tables.
 
-When registering actions inside a plugin via `routes.action()`, always specify:
+## 5. Use the host's transaction
 
-- TypeBox `input` and `output` schemas.
-- Explicit `method` and `path`.
-- An authorization check or clear documentation indicating the action is public.
+In hooks, write through `tx`, so your rows commit or roll back with the user's write. In actions, use `ctx.db`, the host service's database, so tenant routing and context stay intact. Side effects outside the database (email, webhooks) belong in `afterCommit` or in a listener.
 
-## 4. Avoid Property Collisions on Host Resources
+## 6. Subscribe with `hooks`; do not ask for wiring
 
-Resource plugins return objects that are assigned directly to the host resource. Never return keys that conflict with core resource properties:
+An audit or cascade plugin subscribes to the host's CRUD writes with `hooks.after*` itself. Users install it with one `use()` call.
 
-- Reserved resource keys: `name`, `serviceName`, `table`, `id`, `idField`, `config`, `use`.
-- Avoid prototype keys: `__proto__`, `prototype`, `constructor`.
+## 7. Explicit access and validation on routes
 
-Brick checks for collisions during plugin installation and throws an immediate error if a collision is detected.
+Every action a plugin registers with `routes.action()` needs TypeBox `input` and `output`, an explicit `method` and `path`, a `description`, and an access decision: `authorize`, or a documented `access: "public"`.
 
-## 5. Structured Error Handling
+## 8. Avoid property collisions on host resources
 
-When rejecting operations in plugins or hooks, throw `ActionExecutionError` with standard HTTP error codes:
+What a `resource` part returns is attached to the host resource. Do not return keys that the resource already has (`name`, `serviceName`, `table`, `id`, `idField`, `config`, `use`, `action`, `command`) or `__proto__`, `prototype` and `constructor`. Brick refuses a collision at install.
 
-```ts title="src/plugins/error-handling.ts"
+## 9. Structured errors
+
+Reject operations with `ActionExecutionError` and a standard code and status, so typed clients get the JSON error envelope:
+
+```ts
 import { ActionExecutionError } from "@brickkit/core";
 
-if (!isValid) {
-  throw new ActionExecutionError(
-    "BAD_REQUEST",
-    "Invalid plugin parameter",
-    400,
-  );
-}
+throw new ActionExecutionError(
+  "BAD_REQUEST",
+  "Comment body cannot be blank",
+  400,
+);
 ```
-
-This ensures errors format into the standard Brick-TS JSON envelope expected by typed clients.

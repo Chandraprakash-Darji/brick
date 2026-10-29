@@ -116,9 +116,9 @@ export default defineConfig({
 
 ### Plugins
 
-| Rule              | Enforces                                                                                                        | Preset | Kind |
-| :---------------- | :-------------------------------------------------------------------------------------------------------------- | :----- | :--- |
-| `plugin-manifest` | `definePlugin` has a scoped name, a `brick` version range and declared `options`, and its setup is synchronous. | plugin | file |
+| Rule              | Enforces                                                                                                                                                                                                                          | Preset | Kind |
+| :---------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----- | :--- |
+| `plugin-manifest` | `definePlugin` has a scoped name, a `brick` version range and declared `options` with a `description` on each; its `resource`, `service`, `app` and `tables` parts are synchronous and open no connections outside `on("start")`. | plugin | file |
 
 ## Editor setup
 

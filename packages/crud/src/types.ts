@@ -305,7 +305,7 @@ type Callable<I, R, C> = Action<
   Record<string, never>,
   C extends ActionContext ? C : ActionContext
 >;
-interface QueryAction<
+export interface QueryAction<
   T extends Table,
   F,
   C,
@@ -379,7 +379,7 @@ interface QueryAction<
       : Selected<T, F, S, I> | null
   >;
 }
-interface GetAction<T extends Table, F, C, ID> extends Omit<
+export interface GetAction<T extends Table, F, C, ID> extends Omit<
   Callable<
     {
       id: ID;

@@ -152,6 +152,10 @@ bunx drizzle-kit migrate
 
 This workflow gives you full version control, rollback inspection, and zero runtime lock-in.
 
+### Tables owned by plugins
+
+A plugin made with `definePlugin` can own tables (such as `page_comments`). Brick adds them to the host service's database, so `syncSchema` creates them and `database.tables` lists them. For Drizzle Kit, export them by name from a schema file that imports your services, and run it with Bun: `bunx --bun drizzle-kit generate`. See [Owned tables](/docs/plugins/build-plugin#owned-tables).
+
 ## Secondary Indexes and Search Optimizations
 
 Brick-TS provides explicit opt-in helpers for secondary indexes and search

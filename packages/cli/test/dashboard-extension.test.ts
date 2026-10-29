@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   mergeNav,
   type DashboardExtension,
@@ -18,6 +19,7 @@ import { parseRoute } from "../dashboard/state";
 import { buildApplication } from "../src/build";
 import {
   buildDashboardExtension,
+  extensionLoader,
   THEME_TOKENS,
   themeCss,
 } from "../src/dashboard-extension";
@@ -420,5 +422,124 @@ describe("the dashboard server with an extension", () => {
         }
       });
     });
+  });
+});
+
+describe("plugin dashboard extensions", () => {
+  it("the loader merges extensions and isolates one that fails", async () => {
+    const folder = mkdtempSync(join(tmpdir(), "brick-plugin-ext-"));
+    try {
+      const write = (name: string, source: string) => {
+        writeFileSync(join(folder, name), source);
+        return pathToFileURL(join(folder, name)).href;
+      };
+      const app = write(
+        "app.js",
+        `export default { pages: [{ id: "queues", label: "Queues", after: "overview" }], slots: { "topbar.end": "app", "request.drawer.tabs": [{ id: "a" }] } };`,
+      );
+      const plugin = write(
+        "plugin.js",
+        `export default { pages: [{ id: "comments", label: "Comments" }, { id: "queues", label: "Dup" }], slots: { "topbar.end": "plugin", "request.drawer.tabs": [{ id: "b" }] }, sidebar: [{ label: "Docs", href: "https://x" }] };`,
+      );
+      const broken = write("broken.js", `throw new Error("boom");`);
+      const loader = write(
+        "loader.js",
+        extensionLoader([
+          { name: "app", src: app, plugin: false },
+          { name: "@acme/brick-comments", src: plugin, plugin: true },
+          { name: "@acme/broken", src: broken, plugin: true },
+        ]),
+      );
+      const errors: unknown[][] = [];
+      const original = console.error;
+      console.error = (...args: unknown[]) => void errors.push(args);
+      let merged: DashboardExtension;
+      try {
+        merged = (await import(loader)).default;
+      } finally {
+        console.error = original;
+      }
+      expect(merged.pages?.map((page) => [page.id, page.section])).toEqual([
+        ["queues", undefined],
+        ["comments", "@acme/brick-comments"],
+      ]);
+      expect(merged.slots?.["topbar.end"]).toBe("app" as never);
+      expect(merged.slots?.["request.drawer.tabs"]?.map((t) => t.id)).toEqual([
+        "a",
+        "b",
+      ]);
+      expect(merged.sidebar).toHaveLength(1);
+      expect(String(errors.map((args) => args[0]))).toContain("@acme/broken");
+      expect(String(errors.map((args) => args[0]))).toContain(
+        "page id queues is taken",
+      );
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
+  });
+
+  it("brick dev serves the app's extension with its plugins', and keeps going when one fails", async () => {
+    const store = new DevTelemetryStore();
+    const dashboard = await startDevDashboard({
+      port: 0,
+      store,
+      dashboard: { extension: entry },
+    });
+    const base = `http://localhost:${dashboard.port}`;
+    try {
+      await dashboard.setPluginExtensions([
+        {
+          name: "@acme/brick-comments",
+          dashboard: join(
+            import.meta.dir,
+            "fixtures/plugin-dashboard/index.tsx",
+          ),
+        },
+        { name: "@acme/no-dashboard" },
+        { name: "@acme/broken", dashboard: join(fixture, "missing.tsx") },
+      ]);
+      const loader = await (await fetch(`${base}/assets/extension.js`)).text();
+      expect(loader).toContain('"name":"app"');
+      expect(loader).toContain('"name":"@acme/brick-comments"');
+      expect(loader).not.toContain("@acme/broken");
+      expect(
+        await (await fetch(`${base}/assets/extension-1.js`)).text(),
+      ).toContain("From a plugin");
+      const state = await (await fetch(`${base}/api/state`)).json();
+      expect(state.extension.error).toContain("@acme/broken:");
+      const page = await (await fetch(`${base}/`)).text();
+      expect(page).toContain(`data-revision="${state.extension.revision}"`);
+    } finally {
+      dashboard.stop();
+    }
+  });
+
+  it("serves a plugin's extension when the app has none", async () => {
+    const store = new DevTelemetryStore();
+    const dashboard = await startDevDashboard({ port: 0, store });
+    const base = `http://localhost:${dashboard.port}`;
+    try {
+      expect((await (await fetch(`${base}/api/state`)).json()).extension).toBe(
+        null,
+      );
+      await dashboard.setPluginExtensions([
+        {
+          name: "@acme/brick-comments",
+          dashboard: join(
+            import.meta.dir,
+            "fixtures/plugin-dashboard/index.tsx",
+          ),
+        },
+      ]);
+      const loader = await (await fetch(`${base}/assets/extension.js`)).text();
+      expect(loader).toContain('"plugin":true');
+      expect(
+        (await (await fetch(`${base}/api/state`)).json()).extension,
+      ).toEqual({
+        revision: expect.any(Number),
+      });
+    } finally {
+      dashboard.stop();
+    }
   });
 });

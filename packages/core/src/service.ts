@@ -39,6 +39,7 @@ import {
   type EventRef,
 } from "./events/catalog";
 import { getActionAccess } from "./access";
+import { pluginOwner } from "./define-plugin";
 import { pickContextEnvelope } from "./context";
 import type { DepsOf, Ports } from "./deps";
 import type { NamedService } from "./rpc";
@@ -360,6 +361,11 @@ export class ServiceImpl<
     return this.database?.getDb();
   }
 
+  /** The handle from `defineDatabase`, without connecting. */
+  getDatabaseHandle(): DatabaseHandle<TDb> | undefined {
+    return this.database;
+  }
+
   /** What a write needs to record events. Set by `brick({ events })`. */
   recorder?: ServiceEvents;
 
@@ -412,6 +418,7 @@ export class ServiceImpl<
           name: this.database.name,
           engine: this.database.engine,
           tables: Object.keys(this.database.tables),
+          ...pluginTables(this.database.tables),
         }
       : undefined;
     // The schema is data. A function among the options (context, an auth policy,
@@ -450,11 +457,12 @@ export class ServiceImpl<
         };
       }),
       tools: this.listTools().map((tool) => ({ name: tool.name })),
-      ...(this.hasCatalog
+      ...(this.hasCatalog || Object.keys(this.events).length
         ? {
             events: Object.values(this.events).map((ref) => ({
               name: ref.name,
               schema: JSON.parse(JSON.stringify(ref.schema)),
+              ...(ref.plugin ? { plugin: ref.plugin } : {}),
             })),
           }
         : {}),
@@ -463,6 +471,15 @@ export class ServiceImpl<
       })),
     };
   }
+}
+
+/** `plugins`: which plugin owns each table it contributed, by table key. */
+function pluginTables(tables: Record<string, unknown>) {
+  const owners = Object.entries(tables).flatMap(([key, table]) => {
+    const plugin = pluginOwner(table);
+    return plugin ? [[key, plugin] as const] : [];
+  });
+  return owners.length ? { plugins: Object.fromEntries(owners) } : {};
 }
 
 async function resolveServiceContext<

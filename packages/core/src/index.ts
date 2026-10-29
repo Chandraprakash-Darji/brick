@@ -18,6 +18,25 @@ export type {
   PluginRouteMethod,
   PluginEndpointContext,
 } from "./plugin";
+export {
+  definePlugin,
+  satisfiesRange,
+  brickVersion,
+  isPluginInstance,
+} from "./define-plugin";
+export type {
+  PluginManifest,
+  PluginFactory,
+  PluginInstance,
+  PluginInfo,
+  PluginInstallOptions,
+  PluginSetupContext,
+  PluginAppContext,
+  PluginLifecycleContext,
+  PluginHooks,
+  PluginTableBuilders,
+  InstalledPlugin,
+} from "./define-plugin";
 // HTTP Runtime (Elysia app): bundled to user apps, never the CLI.
 export { brick, type CreateServerOptions } from "./server";
 export {

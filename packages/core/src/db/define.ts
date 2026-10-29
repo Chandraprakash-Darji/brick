@@ -60,6 +60,11 @@ export interface DatabaseHandle<
   readonly engine: "sqlite" | "postgres";
   readonly tables: Readonly<Record<string, Table>>;
   readonly schema: TSchema;
+  /**
+   * Add a table after definition, as `definePlugin` does for the tables a
+   * plugin owns. Before `getDb()` it also joins the relational schema.
+   */
+  addTable?(key: string, table: Table): void;
   getDb(): TDb;
   close?(): void | Promise<void>;
 }
@@ -147,6 +152,7 @@ export function defineDatabase(
     ? Object.fromEntries(declared.map((table) => [getTableName(table), table]))
     : { ...declared };
   const schema = options.schema ?? tables;
+  let frozen = Object.freeze({ ...tables });
   let db: unknown;
   let closeClient: (() => void | Promise<void>) | undefined;
   let closed = false;
@@ -156,8 +162,23 @@ export function defineDatabase(
     kind: "brick-database",
     name: options.name,
     engine,
-    tables: Object.freeze(tables),
+    get tables() {
+      return frozen;
+    },
     schema,
+    addTable(key, table) {
+      const name = getTableName(table);
+      if (
+        Object.hasOwn(tables, key) ||
+        Object.values(tables).some((item) => getTableName(item) === name)
+      )
+        throw new Error(
+          `Database already has a table "${key}" or one named "${name}"`,
+        );
+      // Also joins `schema` when that is `tables` itself (no `schema` given).
+      tables[key] = table;
+      frozen = Object.freeze({ ...tables });
+    },
     close() {
       if (closed) return closing;
       closed = true;

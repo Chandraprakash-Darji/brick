@@ -6,7 +6,16 @@ import {
 } from "./compiler";
 import type { Service } from "./types";
 import { getGlobalRegistry } from "./registry";
-import { getPluginActionRoute, getPluginEndpoints } from "./plugin";
+import {
+  getPluginActionRoute,
+  getPluginEndpoints,
+  installedPlugins,
+} from "./plugin";
+import {
+  pluginLifecycle,
+  setupAppPlugins,
+  type PluginInstance,
+} from "./define-plugin";
 import { getActionRoute } from "./routes";
 import { generateOpenApiSpec } from "./openapi";
 import { resolveSecrets, type SecretSource } from "./secrets";
@@ -115,6 +124,12 @@ export interface CreateServerOptions {
    * them as `ctx.deps`, listeners and workflow steps with `useDeps()`.
    */
   deps?: Record<string, unknown>;
+  /**
+   * App-wide plugins from `definePlugin`, in install order: their `app` part
+   * adds start/stop lifecycle, middleware and listeners. Plugins installed with
+   * `service.use()` or `resource.use()` take part too, before these.
+   */
+  plugins?: readonly PluginInstance<any, any>[];
 }
 
 export {
@@ -173,6 +188,13 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
     resolveSecrets({ source: options.secrets?.source });
   }
 
+  const services = options.services ?? getGlobalRegistry().list();
+  const plugins = setupAppPlugins(
+    services.flatMap((service) => installedPlugins(service)),
+    options.plugins ?? [],
+  );
+  for (const handler of plugins.middleware) app.request(handler);
+
   // Diagnostics & health
   app.get("/_health", () => ({
     status: "ok",
@@ -209,7 +231,6 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
     else registerReferenceRoute(app, settings);
   }
 
-  const services = options.services ?? getGlobalRegistry().list();
   const byName = new Map<string, unknown>();
   for (const service of services) {
     if ((byName.get(service.name) ?? service) !== service)
@@ -217,8 +238,14 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
     byName.set(service.name, service);
   }
   bindDeps(services, options.deps);
-  const events = options.events
-    ? new EventsHub(options.events, options.deps).attach(services)
+  const eventsOptions = plugins.listeners.length
+    ? {
+        ...options.events,
+        listeners: [...(options.events?.listeners ?? []), ...plugins.listeners],
+      }
+    : options.events;
+  const events = eventsOptions
+    ? new EventsHub(eventsOptions, options.deps).attach(services)
     : undefined;
   if (events?.workflows)
     app.all(WEBHOOK_ROUTE, ({ request }) => events.webhook(request));
@@ -547,9 +574,30 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
     documentation: normalizeDocumentation(options.documentation),
     dashboard,
     ...(events ? { events: events.describe() } : {}),
+    plugins: Object.freeze(plugins.plugins),
   });
   Object.defineProperty(brickApp, "definition", { value: definition });
   Object.defineProperty(brickApp, "events", { value: events });
+  // Plugin lifecycle: start before serving, stop after the server stops.
+  const lifecycle = pluginLifecycle(plugins.lifecycles);
+  const listen = app.listen.bind(app);
+  const stop = app.stop.bind(app);
+  Object.defineProperty(brickApp, "start", { value: lifecycle.start });
+  brickApp.listen = ((...args: Parameters<typeof listen>) => {
+    lifecycle
+      .start()
+      .catch((error) =>
+        console.error("[Brick-TS] A plugin failed to start:", error),
+      );
+    return listen(...args);
+  }) as typeof brickApp.listen;
+  brickApp.stop = (async (closeActiveConnections?: boolean) => {
+    try {
+      await stop(closeActiveConnections);
+    } finally {
+      await lifecycle.stop();
+    }
+  }) as typeof brickApp.stop;
   getGlobalRegistry().setApplicationRoutes(definition);
 
   // Serialize stable metadata once; registry changes invalidate the snapshot.

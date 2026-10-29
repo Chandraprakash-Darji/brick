@@ -1,11 +1,11 @@
 {
-  "title": "Resource plugin",
-  "description": "A comments plugin built with defineResourcePlugin that attaches a typed comments namespace and CRUD routes to a parent resource.",
+  "title": "Comments plugin",
+  "description": "A comments plugin built with definePlugin: it owns its table, checks typed options, hooks into the host resource's CRUD writes and ships a dashboard extension.",
   "tags": ["Plugins", "CRUD", "SQLite"],
   "features": [
-    "defineResourcePlugin and resource extensions",
-    "Write hooks that trim and validate input",
-    "Compiled HTTP routes for list, count, update and delete"
+    "definePlugin with owned tables and typed options",
+    "Host CRUD hooks: deleting a page deletes its comments",
+    "Catalog event comments.added and a dashboard extension"
   ],
   "entry": "src/app.ts",
   "run": [

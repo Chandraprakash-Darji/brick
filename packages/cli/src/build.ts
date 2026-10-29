@@ -72,6 +72,7 @@ export const app = await loadCompiledBrickApp(() => import(${JSON.stringify(entr
 if (import.meta.main) {
   const port = Number(process.env.PORT ?? ${port});
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Invalid PORT: must be between 1 and 65535");
+  await app.start?.();
   app.listen(port);
   app.events?.start();
   console.log("Brick compiled server listening on http://localhost:" + app.server.port);

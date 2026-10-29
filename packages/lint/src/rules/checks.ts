@@ -87,6 +87,10 @@ put cut hit quit split spread cast cost let upset rebuilt resent undone withdraw
     /\s+/,
   ),
 );
+/** definePlugin's parts that run while the plugin installs. */
+const SETUP_PARTS = ["app", "service", "resource", "tables"];
+const CONNECTION_CLASS = /(Client|Pool|Redis|Connection|Socket)$/;
+const CONNECTION_CALL = /^(connect|createClient|createPool|createConnection)$/;
 const isPastTense = (word: string) =>
   word.endsWith("ed") || IRREGULAR_PAST.has(word);
 const lastWord = (name: string) =>
@@ -818,11 +822,40 @@ export const checkRules: Record<string, Rule> = {
   ),
 
   "plugin-manifest": rule(
-    "definePlugin has a scoped name, a brick range and declared options, and its setup functions are synchronous.",
+    'definePlugin has a scoped name, a brick range and declared options with descriptions; its setup functions are synchronous and open no connections outside on("start").',
     (context) => {
       if (skip(context)) return {};
+      const connection = (node: Node) => {
+        const opens =
+          node.type === "NewExpression"
+            ? node.callee.type === "Identifier" &&
+              CONNECTION_CLASS.test(node.callee.name)
+            : CONNECTION_CALL.test(memberCall(node)?.property ?? "");
+        if (!opens) return;
+        // Inside on("start", ...) is the place; inside a setup part is not.
+        for (let current = node.parent; current; current = current.parent) {
+          const call = memberCall(current);
+          if (
+            call?.property === "on" &&
+            stringValue(current.arguments[0]) === "start"
+          )
+            return;
+          if (
+            current.type === "Property" &&
+            SETUP_PARTS.includes(propertyName(current) ?? "") &&
+            definitionOf(current.parent?.parent)?.kind === "plugin"
+          )
+            return context.report({
+              node,
+              message:
+                'Open connections in on("start") (and close them in on("stop")), not while the plugin installs.',
+            });
+        }
+      };
       return {
+        NewExpression: connection,
         CallExpression(node: Node) {
+          connection(node);
           const definition = definitionOf(node);
           if (definition?.kind !== "plugin") return;
           const config = definition.config;
@@ -838,13 +871,29 @@ export const checkRules: Record<string, Rule> = {
               message:
                 'Declare the Brick versions this plugin supports: brick: "^0.11.0".',
             });
-          if (!getProperty(config, "options"))
+          const options = getProperty(config, "options")?.value;
+          if (!options)
             context.report({
               node: node.callee,
               message:
                 "Declare the plugin's options as a TypeBox schema (options: t.Object({ ... })).",
             });
-          for (const key of ["setup", "app", "service", "resource"]) {
+          else if (
+            isSchemaCall(options, "Object") &&
+            options.arguments[0]?.type === "ObjectExpression"
+          )
+            for (const option of options.arguments[0].properties) {
+              const schema = option.value;
+              const settings = isSchemaCall(schema)
+                ? schema.arguments.at(-1)
+                : undefined;
+              if (!getProperty(settings, "description"))
+                context.report({
+                  node: option,
+                  message: `Describe option "${propertyName(option) ?? "?"}": add { description: "..." } to its schema.`,
+                });
+            }
+          for (const key of ["setup", ...SETUP_PARTS]) {
             const setup = getProperty(config, key)?.value;
             if (isFunction(setup) && setup.async)
               context.report({

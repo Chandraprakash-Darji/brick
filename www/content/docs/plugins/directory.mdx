@@ -1,0 +1,62 @@
+---
+title: Plugin Directory
+description: How published Brick plugins are found, and the manifest fields the directory reads.
+---
+
+Brick plugins are npm packages. The directory lists every package published with the `brick-plugin` keyword, with the Brick versions it supports and its capabilities, read from its `definePlugin` manifest.
+
+## Publishing a plugin
+
+1. Name the package with a scope, and use the same name in the manifest: `@acme/brick-comments`.
+2. Add `brick-plugin` to `keywords` in `package.json`, so the directory and `npm search keywords:brick-plugin` find it.
+3. Declare `@brickkit/core` as a peer dependency with the same range as the manifest's `brick`.
+4. Export the factory that `definePlugin` returns.
+
+```json title="package.json"
+{
+  "name": "@acme/brick-comments",
+  "version": "1.0.0",
+  "type": "module",
+  "keywords": ["brick-plugin"],
+  "exports": { ".": "./dist/index.js" },
+  "peerDependencies": {
+    "@brickkit/core": "^0.11.0",
+    "@brickkit/crud": "^0.11.0"
+  }
+}
+```
+
+Lint the package with the `plugin` preset of [`brick lint`](/docs/brick-cli/lint) before publishing.
+
+## What the directory shows
+
+Every factory carries its manifest as `info`, so a directory, a script or a test can read it without installing the plugin:
+
+```ts
+import { comments } from "@acme/brick-comments";
+
+comments.info;
+// {
+//   name: "@acme/brick-comments",
+//   description: "Comments on any resource.",
+//   brick: "^0.11.0",
+//   requires: ["@brickkit/crud"],
+//   options: { type: "object", properties: { maxLength: { ... } } },
+//   secrets: ["ACME_MODERATION_KEY"],
+//   capabilities: ["tables", "events", "resource", "app", "dashboard"],
+// }
+```
+
+| Field          | From the manifest | Shown as                                                                                                      |
+| -------------- | ----------------- | ------------------------------------------------------------------------------------------------------------- |
+| `name`         | `name`            | The package, linked to npm.                                                                                   |
+| `description`  | `description`     | One line under the name.                                                                                      |
+| `brick`        | `brick`           | The supported Brick range. Brick refuses to install the plugin outside it.                                    |
+| `requires`     | `requires`        | Plugins to install first, on the same host.                                                                   |
+| `options`      | `options`         | Each option with its type, default and description.                                                           |
+| `secrets`      | `secrets`         | Environment variables the plugin reads.                                                                       |
+| `capabilities` | the parts given   | `tables`, `events`, `resource`, `service`, `app` and `dashboard`: what the plugin adds and where it installs. |
+
+## Installed plugins
+
+In an app, `app.definition.plugins` lists each installation: the plugin's name and `brick` range, its scope (`app`, `service` or `resource`), the service and resource it is installed on, and its dashboard extension. `brick dev` shows the same in the dashboard, where the routes, tables and events a plugin added carry its name.

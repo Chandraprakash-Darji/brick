@@ -83,6 +83,8 @@ async function createServer(
     });
 
   await buildAppWorkflows(app, { reuse: label === "Development" });
+  // Plugins open their connections before the first request.
+  await app.start?.();
   await app.listen({ port });
   app.events?.start();
 
@@ -194,11 +196,16 @@ export async function startProdServer(options: DevServerOptions = {}) {
     appPort: port,
     dashboard: options.dashboard || undefined,
   });
+  await app.start?.();
   app.listen(port);
-  if (app.events) {
-    app.events.start();
-    finishDeliveriesOnSignal(app.events);
-  }
+  app.events?.start();
+  // Finish deliveries, then stop the server and the plugins (reverse order).
+  finishDeliveriesOnSignal({
+    stop: async () => {
+      await app.events?.stop();
+      await app.stop();
+    },
+  });
 
   console.log(`\n⚡ API Gateway running on: http://localhost:${port}`);
   console.log(`🩺 Health check:        http://localhost:${port}/_health`);
@@ -253,8 +260,15 @@ export async function startWorker(options: { entry: string }) {
       "Brick: this app only records events (events.dispatch is false), so a worker would deliver nothing. Enable dispatch for the worker process.",
     );
   await buildAppWorkflows(app);
-  app.events.start();
-  finishDeliveriesOnSignal(app.events);
+  const events = app.events;
+  await app.start?.();
+  events.start();
+  finishDeliveriesOnSignal({
+    stop: async () => {
+      await events.stop();
+      await app.stop();
+    },
+  });
   const listeners = app.events.describe().listeners;
   console.log(`\n🧱 Brick-TS Worker`);
   console.log(
@@ -434,6 +448,9 @@ export async function startDevServer(options: DevServerOptions = {}) {
             telemetry.setArchitecture(
               message.architecture as ArchitectureSchema,
               generation,
+            );
+            void dashboard?.setPluginExtensions(
+              (message.architecture as ArchitectureSchema).plugins ?? [],
             );
           }
           if (
