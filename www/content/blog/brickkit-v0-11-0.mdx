@@ -1,0 +1,339 @@
+---
+title: "BrickKit v0.11.0: realtime rooms, commands, plugins you can ship, and one URL scheme"
+description: "Rooms and fan-out for typed sockets, a home for business rules, declared dependencies, definePlugin, dashboard extensions, brick.config.ts and @brickkit/lint, plus every breaking change."
+date: "2026-10-30"
+category: release
+version: "0.11.0"
+---
+
+v0.11 is the biggest BrickKit release so far. It started from three things we kept running into while building real apps on Brick:
+
+- **Realtime needed rooms.** Sockets in v0.10 could only answer the connection in front of them.
+- **Business rules had no home.** They ended up in listeners, casts and module globals.
+- **Every app was laid out differently.** Routes followed three different rules.
+
+This release fixes all three. It also gives plugins and the dev dashboard real extension points.
+
+| Item             | Value                                                                       |
+| ---------------- | --------------------------------------------------------------------------- |
+| Previous release | `v0.10.0`                                                                   |
+| Current release  | `v0.11.0`                                                                   |
+| Packages         | `@brickkit/core`, `@brickkit/crud`, `@brickkit/cli`, `@brickkit/lint` (new) |
+
+There are breaking changes. They're all listed at the [end of this post](#every-breaking-change), each with what to do.
+
+## 1. Realtime: rooms, emit, fan-out, reconnect and mobile auth
+
+### Rooms
+
+A socket declares the rooms the server puts a connection in, and a rule for the rooms a client may ask to join:
+
+```ts
+const live = desk.socket({
+  name: "live",
+  input: { typing: t.Object({ doc: t.String() }) },
+  output: { updated: DocChange, notify: Notice },
+  authorize: ({ ctx }) => ctx.user != null,
+  rooms: ({ ctx }) => [
+    `user:${ctx.user.id}`,
+    ...ctx.user.teams.map((team) => `team:${team}`),
+  ],
+  join: ({ ctx, room }) =>
+    room.startsWith("doc:") && canRead(ctx.user, room.slice(4)),
+  handlers: {
+    typing: ({ input, socket }) => {
+      /* … */
+    },
+  },
+});
+```
+
+On the client, `await socket.join("doc:Sales Invoice/SINV-0042")` resolves once the server accepts it. If the server refuses, it rejects with a `BrickSocketError` of kind `"refused"`. Rooms use Bun's native pub/sub. Each connection can be in at most 100 rooms by default (set with `maxRooms`), and room names look like `prefix:value`.
+
+### Emit from anywhere, kick when access changes
+
+`service.socket()` now returns a handle. You can emit from an action, a listener, a hook or a workflow step:
+
+```ts
+live.emit("doc:Sales Invoice/SINV-0042", "updated", { name, modified });
+live.emit(["user:42", "team:7"], "notify", { text: "Invoice submitted" });
+
+// only after the transaction commits; dropped on rollback
+await runInTransaction(db, async (tx) => {
+  await tx
+    .update(invoices)
+    .set({ status: "submitted" })
+    .where(eq(invoices.id, id));
+  live.emit(`doc:Sales Invoice/${id}`, "updated", change, { after: tx });
+});
+
+live.kick("team:7", { also: "user:42", reason: "removed from team" });
+```
+
+The payload is checked against the socket's output schema once and serialized once, however many connections receive it. A kick selects connections by the rooms they're in: `{ also: "user:42" }` means "connections in this room that are also in `user:42`". The client hears about a kick through `onLeave` and doesn't rejoin that room on reconnect.
+
+### Fan-out across processes
+
+```ts
+import { brick, redisBroker } from "@brickkit/core";
+
+brick({
+  services,
+  sockets: { broker: redisBroker({ url: process.env.REDIS_URL }) },
+});
+```
+
+The Redis broker is built on Bun's built-in Redis client, so it adds no dependency. A process subscribes to a room's channel only while it has a connection in that room. An emit is a single `PUBLISH`, and every process, the sender included, delivers it once. Kicks travel through the broker as well. If Redis drops, the broker resubscribes. While it's down, emits wait in a bounded queue.
+
+### Reconnect and replay
+
+The client now survives flaky Wi-Fi:
+
+```ts
+const socket = api.desk.live.connect({ token: () => auth.getToken() });
+socket.onStatus((status) => badge.set(status)); // connecting | open | reconnecting | closed
+socket.onReconnect(() => refetchOpenDocs());
+```
+
+Reconnect is on by default, with backoff and jitter. The client stops on normal closes, policy, auth and protocol errors, and retries on everything else. Listeners survive the drop, and rooms the client joined are joined again. Sockets that opt into `replay: { keep, maxAgeMs }` go further: each emit carries a per-room sequence number, a rejoining client asks for what it missed, and it gets those messages in order. If the gap is older than the kept history, `onGap(room)` tells it to refetch.
+
+### Auth that works on mobile
+
+Browsers authenticate with the session cookie. React Native and other clients can now pass a token, which travels in the WebSocket subprotocol header, so nothing goes in the URL. The server hands it to your context resolver as an ordinary `Authorization: Bearer` header, so existing bearer-based resolvers work unchanged. A handshake that authenticates with a token may omit `Origin`, because cross-site hijacking depends on cookies the browser sends automatically.
+
+## 2. One URL scheme, and actions on resources
+
+Every route now follows its owner:
+
+```
+POST   /api/orders/get-summary              service action
+POST   /api/orders/order/query              CRUD (was /api/order/query)
+GET    /api/orders/order/:id                CRUD get / update / delete
+POST   /api/orders/order/import-csv         resource action
+POST   /api/orders/order/:id/archive        record action
+POST   /api/orders/order/:id/ship           command
+GET    /api/orders/live                     socket
+```
+
+Segments are the kebab-case of your names. An explicit `path` is now relative to its owner, so it no longer repeats the prefix. Resources can have their own actions:
+
+```ts
+order.action({
+  name: "archive",
+  record: true, // adds :id and loads the row
+  input: t.Object({ reason: t.String() }),
+  output: OrderRow,
+  execute: async ({ row, input, ctx }) => {
+    /* row is already loaded */
+  },
+});
+```
+
+With `record: true`, Brick loads the row through the resource's own access rules: crud's `authorize` and `scope`, or the action's `access` when there's no crud. It answers 404 when the row is missing or hidden, so a record action can never reach a row CRUD would hide. The typed client follows the same tree: `api.orders.order.archive({ id, reason })`.
+
+Mobile apps can't all update the day your server does. So `brick({ legacyRoutes: true })` keeps the v0.10 paths answering for one release, with `Deprecation` and `Link` headers, and the dev dashboard counts how many calls still use them.
+
+## 3. Commands and a typed event catalog
+
+Business rules finally have a place. A service declares the events it publishes:
+
+```ts
+const orders = defineService("orders", {
+  database,
+  events: {
+    shipped: t.Object({ id: t.String(), trackingId: t.String() }),
+  },
+});
+
+defineListener({
+  name: "shipping",
+  on: orders.events.shipped,
+  run: ({ payload }) => payload.trackingId, // typed, no casts
+});
+```
+
+A command is an action with a name that says what it does, its rules first, and its write and events in one transaction:
+
+```ts
+order.command("ship", {
+  input: t.Object({ trackingId: t.String() }),
+  errors: { NOT_PAID: { status: 409, message: "Only paid orders can ship" } },
+  decide: (row, input, { error }) =>
+    row.status !== "paid"
+      ? error.NOT_PAID()
+      : {
+          set: { status: "shipped" },
+          emit: { shipped: { id: row.id, trackingId: input.trackingId } },
+        },
+});
+```
+
+Brick loads the row and runs `decide`, a pure function. It then writes the change and records the events in the same transaction. A rejection writes nothing, and an event can't be lost between the write and the emit. Commands also work with child tables: `load: { children: ["items"] }` hands `decide` the rows, and it returns `insert`, `update` and `delete` lists for them. Because `decide` is pure, `command.decide(row, input)` can be called in a test without a database.
+
+## 4. Declared dependencies and typed service calls
+
+Services declare what they need, and the app provides it:
+
+```ts
+const orders = defineService("orders", {
+  database,
+  deps: { carrier: port<Carrier>() },
+});
+brick({ services: [orders], deps: { carrier: createCarrier() } });
+// actions: ctx.deps.carrier  ·  listeners and workflow steps: useDeps(ordersDeps).carrier
+```
+
+A missing or extra dependency fails at startup. Tests pass fakes, and two apps in one process keep their own. Calls between services are typed too:
+
+```ts
+const billing = useService(billingService, { from: "orders" });
+await billing.invoice.close({ id });
+```
+
+`useService` gets its types from the contract `brick dev` generates, so renaming an action breaks the build instead of production. `createServiceProxy` still works but is deprecated.
+
+## 5. Plugins you can ship
+
+`definePlugin` gives plugins a manifest Brick can check, and a place for each thing they do:
+
+```ts
+export const comments = definePlugin({
+  name: "@acme/brick-comments",
+  brick: "^0.11.0",
+  requires: ["@brickkit/crud"],
+  options: t.Object({
+    maxLength: t.Integer({ default: 2000, description: "Longest comment" }),
+  }),
+  tables: ({ table, text, timestamp }) => ({
+    comments: table("comments", {
+      id: text("id").primaryKey(),
+      targetId: text("target_id").notNull(),
+      body: text("body").notNull(),
+      createdAt: timestamp("created_at").notNull(),
+    }),
+  }),
+  events: { added: t.Object({ id: t.String(), targetId: t.String() }) },
+  resource: ({ tables, hooks }) => {
+    // runs inside the delete's transaction, so both commit or neither does
+    hooks.afterDelete(async ({ id, tx }) =>
+      tx.delete(tables.comments).where(eq(tables.comments.targetId, id)),
+    );
+    return {/* the plugin's API */};
+  },
+  app: ({ on }) => {
+    on("start", async () => {
+      /* connect */
+    });
+    on("stop", async () => {
+      /* close */
+    });
+  },
+  dashboard: "./dashboard.tsx",
+});
+
+page.use(comments({ maxLength: 500 }));
+```
+
+What each part does:
+
+- **`brick` and `requires`:** checked at install, with errors you can act on.
+- **`options`:** validated, with defaults applied.
+- **`tables`:** the plugin owns its tables. They're built for your database engine, named after where the plugin is installed (`page_comments`), and picked up by schema sync. You no longer wire them up by hand.
+- **`events`:** join the host's catalog as `comments.added`.
+- **`hooks`:** subscribe to the host resource's CRUD lifecycle, inside the write's transaction (`tx`). An audit plugin can now install itself.
+- **`on("start")` and `on("stop")`:** give plugins a supported place to open and close connections.
+- **Labels:** every route, table and event a plugin adds is labelled with its name in OpenAPI and the dashboard.
+
+`defineServicePlugin` and `defineResourcePlugin` keep working.
+
+## 6. Make the dev dashboard yours
+
+```ts
+// src/dashboard/index.tsx
+import { defineDashboard, Panel, Metric, useAppFetch } from "@brickkit/cli/dashboard";
+
+export default defineDashboard({
+  pages: [{ id: "queues", label: "Queues", after: "overview", component: QueuesPage }],
+  slots: { "topbar.end": () => <EnvBadge /> },
+  sidebar: [{ label: "Metrics", href: "https://grafana.internal/d/brick" }],
+});
+```
+
+- **Extensions:** add pages, sidebar links, slot contents and a root provider.
+- **Shared code:** they share the dashboard's React and UI kit, so a custom page looks like the built-in ones.
+- **Data:** your app's API is reached through the dashboard's `/app` proxy.
+- **Isolation:** a broken extension shows its error in place, and the rest of the dashboard keeps working.
+- **Theme:** colours, radius and fonts come from `brick.config.ts` with no code at all.
+- **Plugins:** they can ship their own extension.
+
+## 7. `brick.config.ts`, one project structure, and `@brickkit/lint`
+
+The flags you repeated in every script now live in one optional file:
+
+```ts
+import { defineConfig } from "@brickkit/cli";
+
+export default defineConfig({
+  entry: "src/app.ts",
+  services: "src/services",
+  client: { output: "_brick/contract.ts" },
+  dev: { frontend: "vite --port 5178" },
+  dashboard: { extension: "src/dashboard/index.tsx" },
+  lint: { presets: ["recommended", "layout"] },
+});
+```
+
+A flag still beats the environment, which beats the config. With no config, Brick behaves exactly as v0.10 did.
+
+v0.11 also settles where things go:
+
+- **One folder per service.**
+- **One folder per resource**, holding its table, actions and commands.
+- **One definition per file.** The folders mirror the URLs.
+- **A generated manifest.** `brick dev` writes `_brick/services.gen.ts`, which imports every definition file, so an action can't silently fail to register because nobody imported it.
+
+The new `@brickkit/lint` package enforces this structure, along with rules that catch real bugs:
+
+- **Errors:** undeclared errors, GET actions that write, emits outside a transaction, non-deterministic workflows, cross-service table access (always an error), and wildcard origins.
+- **How it runs:** it works as an ESLint flat-config plugin and as an oxlint JS plugin. `brick lint` also runs the rules that need the whole app.
+
+## 8. Smaller things
+
+- Duplicate names now fail at startup, naming both files. Defining the same name again from the same file still replaces it, which is how `brick dev` reloads.
+- `secret()` is now `defineSecret()`.
+- Path parameters are converted to numbers when the input schema says so. This fixes `GET /:id` for integer ids, which returned 400 before.
+- OpenAPI tags every route with its service first, then your own tags.
+
+## Upgrade checklist
+
+1. Replace `secret(` with `defineSecret(`.
+2. Regenerate the client (`brick gen client`). Web apps need nothing else for the new URLs.
+3. Turn on `legacyRoutes: true` if mobile or third-party clients call your API. Turn it off when the dashboard shows no legacy calls.
+4. Remove the prefix from any explicit action `path`: `path: "/api/users/:id"` on service `users` becomes `path: "/:id"`.
+5. Use the handle `service.socket()` returns, instead of chaining after it.
+6. Rename any socket event that starts with `$`.
+7. Replace `service.events` / `setEvents` with `service.recorder` / `setRecorder` wherever you used the event recorder directly.
+8. Run `brick lint` and fix what it reports.
+
+## Every breaking change
+
+| Change                                                                                                                                                                                | What to do                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `secret()` is removed.                                                                                                                                                                | Use `defineSecret()`. Arguments and the returned `SecretRef` are unchanged. |
+| Duplicate action, tool, socket, resource, command and event names within a service, and duplicate service names within an app, now fail at startup.                                   | Rename one of them. Redefining a name from the same file still replaces it. |
+| Every HTTP path moved to `/prefix/service/…`, and CRUD moved from `/api/page/:id` to `/api/pages/page/:id`.                                                                           | Regenerate the client, or set `legacyRoutes: true` for one release.         |
+| URL segments are kebab-case (`getSummary` → `get-summary`, `orderItem` → `order-item`).                                                                                               | Regenerate the client, or set `legacyRoutes: true` for one release.         |
+| An explicit action `path` is relative to its owner and no longer includes the prefix.                                                                                                 | Remove the prefix from the path.                                            |
+| A resource action named after a CRUD segment (`query`, `count`, `exists`, `find-one`, `bulk-*`), or an action, resource and socket sharing a segment in one service, fail at startup. | Rename one of them.                                                         |
+| The typed client contract is nested by service: `api.pages.page.list()`.                                                                                                              | Regenerate the client and update the call sites.                            |
+| OpenAPI tags list the service first, followed by custom tags (custom tags used to replace it).                                                                                        | Update tooling that reads the first tag.                                    |
+| `service.socket()` returns a socket handle instead of the service.                                                                                                                    | Stop chaining after it, and keep the handle to emit and kick.               |
+| Socket input and output event names starting with `$` are reserved.                                                                                                                   | Rename those events.                                                        |
+| The socket client reconnects by default and keeps its listeners after a drop.                                                                                                         | Check `status === "closed"` for a final close, or pass `reconnect: false`.  |
+| Token handshakes accept a missing `Origin` header by default. Cookie handshakes are unchanged.                                                                                        | Set `allowMissingOrigin: false` to refuse them.                             |
+| `service.events` is now the event catalog's handles. The recorder moved to `service.recorder` / `setRecorder`.                                                                        | Rename direct uses of the recorder.                                         |
+| A service with an event catalog refuses event names it doesn't declare, apart from its own CRUD events.                                                                               | Declare the event in the catalog.                                           |
+| `defineService` has new type parameters (`<TDb, TCtx, TEvents, TName, TPorts>`).                                                                                                      | Update code that passed explicit generics.                                  |
+| Path parameters are converted to numbers when the input schema declares a number.                                                                                                     | Nothing, unless you relied on receiving a string.                           |
+
+`createServiceProxy` is deprecated in favour of `useService` and still works in v0.11.
