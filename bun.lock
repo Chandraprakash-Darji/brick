@@ -127,7 +127,7 @@
     },
     "packages/bullmq-world": {
       "name": "@brickkit/bullmq-world",
-      "version": "0.9.1",
+      "version": "0.10.0",
       "bin": {
         "brickkit-bullmq-world-setup": "./bin/setup.js",
       },
@@ -155,12 +155,12 @@
     },
     "packages/cli": {
       "name": "@brickkit/cli",
-      "version": "0.9.1",
+      "version": "0.10.0",
       "bin": {
         "brick": "dist/bin.js",
       },
       "dependencies": {
-        "@brickkit/core": "^0.9.1",
+        "@brickkit/core": "^0.10.0",
         "@opentelemetry/api": "^1.9.1",
         "@opentelemetry/context-async-hooks": "^2.12.0",
         "@opentelemetry/core": "^2.12.0",
@@ -213,7 +213,7 @@
     },
     "packages/core": {
       "name": "@brickkit/core",
-      "version": "0.9.1",
+      "version": "0.10.0",
       "dependencies": {
         "@opentelemetry/api": "^1.9.1",
         "@sinclair/typebox": "^0.34.52",
@@ -243,7 +243,7 @@
     },
     "packages/crud": {
       "name": "@brickkit/crud",
-      "version": "0.9.1",
+      "version": "0.10.0",
       "dependencies": {
         "@sinclair/typebox": "^0.34.52",
         "drizzle-orm": "^0.45.2",
@@ -254,12 +254,12 @@
         "typescript": "^5.7.0",
       },
       "peerDependencies": {
-        "@brickkit/core": "^0.9.1",
+        "@brickkit/core": "^0.10.0",
       },
     },
     "packages/redis-world": {
       "name": "@brickkit/redis-world",
-      "version": "0.9.1",
+      "version": "0.10.0",
       "bin": {
         "brickkit-redis-world-setup": "./bin/setup.js",
       },
