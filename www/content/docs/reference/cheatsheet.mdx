@@ -80,12 +80,12 @@ A quick reference of commonly used public exports from `@brickkit/core`, `@brick
 
 ## Secrets Management (`@brickkit/core`)
 
-| Export                        | Kind     | Description                                                                                                                                   |
-| :---------------------------- | :------- | :-------------------------------------------------------------------------------------------------------------------------------------------- |
-| `secret(name, options?)`      | Function | Declares a secret reference resolved lazily from environment variables or custom sources.                                                     |
-| `SecretRef`                   | Class    | Container wrapping secret names with `.default()`, `.transform()`, `.validate()`, `.url()`, `.value()`, `.require()`, and `.isSet()` methods. |
-| `resolveSecrets(options?)`    | Function | Eagerly validates and resolves all declared secret references.                                                                                |
-| `overrideSecret(name, value)` | Function | Overrides a secret value in test environments.                                                                                                |
+| Export                         | Kind     | Description                                                                                                                                   |
+| :----------------------------- | :------- | :-------------------------------------------------------------------------------------------------------------------------------------------- |
+| `defineSecret(name, options?)` | Function | Declares a secret reference resolved lazily from environment variables or custom sources.                                                     |
+| `SecretRef`                    | Class    | Container wrapping secret names with `.default()`, `.transform()`, `.validate()`, `.url()`, `.value()`, `.require()`, and `.isSet()` methods. |
+| `resolveSecrets(options?)`     | Function | Eagerly validates and resolves all declared secret references.                                                                                |
+| `overrideSecret(name, value)`  | Function | Overrides a secret value in test environments.                                                                                                |
 
 ## CLI Commands (`@brickkit/cli`)
 

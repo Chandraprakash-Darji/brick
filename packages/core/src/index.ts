@@ -158,7 +158,7 @@ export * from "./types";
 
 // Secrets & Environment Variables
 export {
-  secret,
+  defineSecret,
   SecretRef,
   envSource,
   resolveSecrets,

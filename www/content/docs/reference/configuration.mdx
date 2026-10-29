@@ -44,15 +44,15 @@ The framework and CLI inspect the following environment variables:
 
 ## Secrets Management (`@brickkit/core`)
 
-Brick-TS includes a secret referencing utility. Each `secret()` call registers a reference; values resolve from `process.env` (or a custom `SecretSource`) when you read them. A secret without a `default` is required:
+Brick-TS includes a secret referencing utility. Each `defineSecret()` call registers a reference; values resolve from `process.env` (or a custom `SecretSource`) when you read them. A secret without a `default` is required:
 
 ```ts title="src/secrets.ts"
-import { secret, resolveSecrets } from "@brickkit/core";
+import { defineSecret, resolveSecrets } from "@brickkit/core";
 
 // 1. Declare references to environment variables:
-export const dbPassword = secret("DB_PASSWORD");
-export const apiKey = secret("STRIPE_API_KEY").default(""); // a default makes it optional
-export const port = secret("PORT").default("4000").transform(Number);
+export const dbPassword = defineSecret("DB_PASSWORD");
+export const apiKey = defineSecret("STRIPE_API_KEY").default(""); // a default makes it optional
+export const port = defineSecret("PORT").default("4000").transform(Number);
 
 // 2. Access secrets at runtime:
 const password = dbPassword.require(); // Throws if missing or invalid

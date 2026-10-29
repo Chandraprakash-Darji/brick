@@ -76,12 +76,12 @@ export const sqliteDb = defineDatabase({
 Connect to PostgreSQL using the PostgresJS driver:
 
 ```ts title="src/db/postgres.ts"
-import { defineDatabase, secret } from "@brickkit/core";
+import { defineDatabase, defineSecret } from "@brickkit/core";
 import { users, posts } from "./schema";
 
 export const postgresDb = defineDatabase({
   engine: "postgres",
-  url: secret("DATABASE_URL"), // Resolves from environment variable
+  url: defineSecret("DATABASE_URL"), // Resolves from environment variable
   ssl: process.env.NODE_ENV === "production",
   tables: { users, posts },
 });

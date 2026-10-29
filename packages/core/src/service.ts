@@ -26,7 +26,7 @@ import type {
 } from "./types";
 import { defineTool, isTool } from "./tool";
 import { defineAction } from "./action";
-import { getGlobalRegistry } from "./registry";
+import { claimName, definitionSite, getGlobalRegistry } from "./registry";
 import { getTableName, isDatabaseHandle, type DatabaseHandle } from "./db";
 import { defineResource } from "./resource";
 import { isOutboxTable, type OutboxTable } from "./events/outbox";
@@ -62,6 +62,8 @@ export class ServiceImpl<
     Resource<any, BaseContext<TDb> & TServiceContext>
   >();
   readonly preparations = new Map<string, PreparationContribution>();
+  /** Where each `kind:name` was defined, to reject duplicates from another file. */
+  private readonly sites = new Map<string, string | undefined>();
   private database?: DatabaseHandle<TDb>;
   private _isBuilt = false;
 
@@ -98,6 +100,15 @@ export class ServiceImpl<
     if (this._isBuilt) return this;
     this._isBuilt = true;
     return this;
+  }
+
+  private claim(kind: string, name: string): void {
+    claimName(
+      this.sites,
+      `${kind} "${name}" in service "${this.name}"`,
+      `${kind}:${name}`,
+      definitionSite(),
+    );
   }
 
   contributePreparation(contribution: PreparationContribution): void {
@@ -146,8 +157,7 @@ export class ServiceImpl<
   > => {
     if (this._isBuilt)
       throw new Error("Resources must be registered before service build");
-    if (this.resources.has(config.name))
-      throw new Error(`Duplicate plugin resource: ${config.name}`);
+    this.claim("resource", config.name);
     const resourceInstance = defineResource(this, config);
     this.resources.set(resourceInstance.name, resourceInstance);
     getGlobalRegistry().touch();
@@ -223,6 +233,8 @@ export class ServiceImpl<
       this.actions.get(actionInstance.name) !== actionInstance
     )
       throw new Error(`Duplicate plugin action: ${actionInstance.name}`);
+    if (this.actions.get(actionInstance.name) !== actionInstance)
+      this.claim("action", actionInstance.name);
     if (isTool(actionInstance)) actionInstance.config.http = true;
     actionInstance.serviceName = this.name;
     (actionInstance as any).service = this;
@@ -276,8 +288,7 @@ export class ServiceImpl<
   tool(toolOrConfig: any): any {
     const existing = isTool(toolOrConfig);
     const tool = existing ? toolOrConfig : defineTool(toolOrConfig);
-    if (this.tools.has(tool.name))
-      throw new Error(`Duplicate tool: ${tool.name}`);
+    this.claim("tool", tool.name);
     tool.serviceName = this.name;
     (tool as any).service = this;
     this.tools.set(tool.name, tool);
@@ -295,8 +306,7 @@ export class ServiceImpl<
   ): this {
     if (this._isBuilt)
       throw new Error("Sockets must be declared before service build");
-    if (this.sockets.has(config.name))
-      throw new Error(`Duplicate socket: ${config.name}`);
+    this.claim("socket", config.name);
     this.sockets.set(
       config.name,
       defineServiceSocket(config, (request) =>
@@ -460,8 +470,8 @@ async function resolveServiceContext<
  * resources with `service.resource(...)`, and plugins with `service.use(...)`.
  *
  * @param name - Unique name. It is the service's segment of every action route
- * (`/api/<name>/<action>`) and appears in OpenAPI and the dashboard. Defining a
- * second service with the same name replaces the first and logs a warning.
+ * (`/api/<name>/<action>`) and appears in OpenAPI and the dashboard. Defining it
+ * again from the same file (a dev reload) replaces it; from another file throws.
  * @param options - `database` (a handle from `defineDatabase`), `context` (adds
  * fields such as the signed-in user to every action's `ctx`), and `auth`,
  * `rateLimit`, `cache`, `resilience`, `telemetry`, and `lifecycle`.

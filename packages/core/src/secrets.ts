@@ -4,9 +4,9 @@
  * Declare each secret once at module scope instead of scattering untyped
  * `process.env.FOO` reads:
  *
- *   const port = secret("PORT").default("3333").transform(Number).require();
- *   const baseUrl = secret("BASE_URL").url().require();
- *   const key = secret("STRIPE_KEY").validate((v) =>
+ *   const port = defineSecret("PORT").default("3333").transform(Number).require();
+ *   const baseUrl = defineSecret("BASE_URL").url().require();
+ *   const key = defineSecret("STRIPE_KEY").validate((v) =>
  *     v.startsWith("sk_") || "must start with sk_"
  *   ).require();
  *
@@ -158,7 +158,7 @@ export class SecretRef<T = string> {
  * Declare a secret. Idempotent: re-declaring the same name returns the
  * original ref (first declaration wins) so module re-evaluation is safe.
  */
-export function secret(
+export function defineSecret(
   name: string,
   options: SecretOptions = {},
 ): SecretRef<string> {

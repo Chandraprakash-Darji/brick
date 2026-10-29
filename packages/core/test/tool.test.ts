@@ -7,6 +7,7 @@ import {
   generateOpenApiSpec,
   t,
 } from "../src";
+import { defineElsewhere } from "./fixtures/define-elsewhere";
 
 let serviceCount = 0;
 function setup() {
@@ -115,8 +116,11 @@ describe("tools", () => {
       additionalProperties: false,
     });
     expect(() =>
-      service.tool({ name: "echo", execute: () => "other" }),
-    ).toThrow("Duplicate tool");
+      defineElsewhere(service, "tool", {
+        name: "echo",
+        execute: () => "other",
+      }),
+    ).toThrow(`duplicate tool "echo"`);
     expect(() =>
       createMcpRegistry({
         services: [service],

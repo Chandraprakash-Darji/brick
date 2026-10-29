@@ -1,5 +1,6 @@
 import { afterEach, expect, it } from "bun:test";
 import { brick, defineService, resetGlobalRegistry, t } from "../src";
+import { defineElsewhere } from "./fixtures/define-elsewhere";
 import {
   createBrickClient,
   BrickSocketError,
@@ -253,7 +254,9 @@ it("rejects conflicting routes and declarations after build", () => {
     handlers: {},
   };
   service.socket(config);
-  expect(() => service.socket(config)).toThrow("Duplicate socket");
+  expect(() => defineElsewhere(service, "socket", config)).toThrow(
+    `duplicate socket "live" in service "chat"`,
+  );
   expect(() => brick({ services: [service] })).toThrow(
     "duplicate socket route",
   );

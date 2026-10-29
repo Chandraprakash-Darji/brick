@@ -7,6 +7,7 @@ import {
   text,
   integer,
 } from "../src";
+import { defineElsewhere } from "./fixtures/define-elsewhere";
 const rows = sqliteTable("generic_rows", {
   key: text("key").primaryKey(),
   label: text("label"),
@@ -33,9 +34,9 @@ describe("resource declarations", () => {
   it("rejects duplicate declarations and declarations after build", () => {
     const service = defineService("declaration_lifecycle");
     service.resource({ name: "row", table: rows });
-    expect(() => service.resource({ name: "row", table: rows })).toThrow(
-      "Duplicate",
-    );
+    expect(() =>
+      defineElsewhere(service, "resource", { name: "row", table: rows }),
+    ).toThrow(`duplicate resource "row"`);
     service.build();
     expect(() => service.resource({ name: "late", table: rows })).toThrow(
       "before service build",

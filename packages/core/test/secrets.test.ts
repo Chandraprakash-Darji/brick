@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import {
-  secret,
+  defineSecret,
   resolveSecrets,
   listSecrets,
   overrideSecret,
@@ -28,9 +28,9 @@ afterEach(() => {
   resetSecrets();
 });
 
-describe("secret() type-safe env loading", () => {
+describe("defineSecret() type-safe env loading", () => {
   it("returns the default when env is unset", () => {
-    const s = secret("BRICK_TEST_OPT", { default: "fallback" });
+    const s = defineSecret("BRICK_TEST_OPT", { default: "fallback" });
     expect(s.value()).toBe("fallback");
     expect(s.require()).toBe("fallback");
     expect(s.isSet()).toBe(true);
@@ -38,13 +38,13 @@ describe("secret() type-safe env loading", () => {
 
   it("prefers env over the default", () => {
     process.env.BRICK_TEST_OPT = "from-env";
-    const s = secret("BRICK_TEST_OPT", { default: "fallback" });
+    const s = defineSecret("BRICK_TEST_OPT", { default: "fallback" });
     expect(s.value()).toBe("from-env");
     expect(s.require()).toBe("from-env");
   });
 
   it("require() throws naming the missing secret", () => {
-    const s = secret("BRICK_TEST_MISSING");
+    const s = defineSecret("BRICK_TEST_MISSING");
     expect(s.value()).toBeUndefined();
     expect(s.isSet()).toBe(false);
     expect(() => s.require()).toThrow(
@@ -53,16 +53,16 @@ describe("secret() type-safe env loading", () => {
   });
 
   it("re-declaring the same name returns the original ref", () => {
-    const a = secret("BRICK_TEST_REQ");
-    const b = secret("BRICK_TEST_REQ", { default: "late" });
+    const a = defineSecret("BRICK_TEST_REQ");
+    const b = defineSecret("BRICK_TEST_REQ", { default: "late" });
     expect(b).toBe(a);
     expect(b.value()).toBeUndefined();
   });
 
   it("resolveSecrets() throws listing all missing required secrets", () => {
-    secret("BRICK_TEST_REQ");
-    secret("BRICK_TEST_MISSING");
-    secret("BRICK_TEST_OPT", { default: "fallback" });
+    defineSecret("BRICK_TEST_REQ");
+    defineSecret("BRICK_TEST_MISSING");
+    defineSecret("BRICK_TEST_OPT", { default: "fallback" });
     expect(() => resolveSecrets()).toThrow(
       "Missing required secrets: BRICK_TEST_REQ, BRICK_TEST_MISSING",
     );
@@ -70,8 +70,8 @@ describe("secret() type-safe env loading", () => {
 
   it("resolveSecrets() passes when everything is set and returns values", () => {
     process.env.BRICK_TEST_REQ = "req-val";
-    secret("BRICK_TEST_REQ");
-    secret("BRICK_TEST_OPT", { default: "fallback" });
+    defineSecret("BRICK_TEST_REQ");
+    defineSecret("BRICK_TEST_OPT", { default: "fallback" });
     expect(resolveSecrets()).toEqual({
       BRICK_TEST_OPT: "fallback",
       BRICK_TEST_REQ: "req-val",
@@ -84,7 +84,7 @@ describe("secret() type-safe env loading", () => {
 
   it("overrides win over env and defaults", () => {
     process.env.BRICK_TEST_OPT = "from-env";
-    const s = secret("BRICK_TEST_OPT", { default: "fallback" });
+    const s = defineSecret("BRICK_TEST_OPT", { default: "fallback" });
     overrideSecret("BRICK_TEST_OPT", "override");
     expect(s.value()).toBe("override");
     overrideSecrets({ BRICK_TEST_OPT: undefined });
@@ -95,16 +95,16 @@ describe("secret() type-safe env loading", () => {
     const staticSource: SecretSource = {
       get: (name) => (name === "BRICK_TEST_REQ" ? "from-source" : undefined),
     };
-    const s = secret("BRICK_TEST_REQ");
+    const s = defineSecret("BRICK_TEST_REQ");
     expect(s.value(staticSource)).toBe("from-source");
     expect(resolveSecrets({ source: staticSource })).toEqual({
       BRICK_TEST_REQ: "from-source",
     });
   });
 
-  describe("secret() fluent chain", () => {
+  describe("defineSecret() fluent chain", () => {
     it("default().transform().require() converts types", () => {
-      const portRef = secret("BRICK_TEST_REQ")
+      const portRef = defineSecret("BRICK_TEST_REQ")
         .default("3333")
         .transform(Number);
       expect(portRef.require()).toBe(3333);
@@ -114,17 +114,17 @@ describe("secret() type-safe env loading", () => {
 
     it("transform failure names the secret", () => {
       process.env.BRICK_TEST_REQ = "raw";
-      secret("BRICK_TEST_REQ").transform(() => {
+      defineSecret("BRICK_TEST_REQ").transform(() => {
         throw new Error("boom");
       });
-      expect(() => secret("BRICK_TEST_REQ").require()).toThrow(
+      expect(() => defineSecret("BRICK_TEST_REQ").require()).toThrow(
         'Invalid value for secret "BRICK_TEST_REQ": transform failed (boom)',
       );
     });
 
     it("validate() accepts, rejects with reason, and propagates throws", () => {
       process.env.BRICK_TEST_REQ = "sk_live_1";
-      const key = secret("BRICK_TEST_REQ").validate(
+      const key = defineSecret("BRICK_TEST_REQ").validate(
         (v) => v.startsWith("sk_") || "must start with sk_",
       );
       expect(key.require()).toBe("sk_live_1");
@@ -134,7 +134,7 @@ describe("secret() type-safe env loading", () => {
         'Invalid value for secret "BRICK_TEST_REQ": must start with sk_',
       );
 
-      const throwing = secret("BRICK_TEST_OPT").validate(() => {
+      const throwing = defineSecret("BRICK_TEST_OPT").validate(() => {
         throw new Error("custom check");
       });
       process.env.BRICK_TEST_OPT = "x";
@@ -142,7 +142,9 @@ describe("secret() type-safe env loading", () => {
         'Invalid value for secret "BRICK_TEST_OPT": custom check',
       );
 
-      const boolCheck = secret("BRICK_TEST_MISSING").validate(() => false);
+      const boolCheck = defineSecret("BRICK_TEST_MISSING").validate(
+        () => false,
+      );
       overrideSecret("BRICK_TEST_MISSING", "x");
       expect(() => boolCheck.require()).toThrow(
         'Invalid value for secret "BRICK_TEST_MISSING": validation failed',
@@ -151,17 +153,17 @@ describe("secret() type-safe env loading", () => {
 
     it("url() validates URL shape", () => {
       process.env.BRICK_TEST_REQ = "http://localhost:3333";
-      expect(secret("BRICK_TEST_REQ").url().require()).toBe(
+      expect(defineSecret("BRICK_TEST_REQ").url().require()).toBe(
         "http://localhost:3333",
       );
       process.env.BRICK_TEST_REQ = "not a url";
-      expect(() => secret("BRICK_TEST_REQ").require()).toThrow(
+      expect(() => defineSecret("BRICK_TEST_REQ").require()).toThrow(
         'Invalid value for secret "BRICK_TEST_REQ": must be a valid URL',
       );
     });
 
     it("validators run on defaults too", () => {
-      const s = secret("BRICK_TEST_OPT").default("not a url").url();
+      const s = defineSecret("BRICK_TEST_OPT").default("not a url").url();
       expect(() => s.require()).toThrow(
         'Invalid value for secret "BRICK_TEST_OPT"',
       );
@@ -170,9 +172,9 @@ describe("secret() type-safe env loading", () => {
 
   it("listSecrets() exposes metadata without values", () => {
     process.env.BRICK_TEST_REQ = "req-val";
-    secret("BRICK_TEST_REQ");
-    secret("BRICK_TEST_OPT", { default: "fallback" });
-    secret("BRICK_TEST_MISSING");
+    defineSecret("BRICK_TEST_REQ");
+    defineSecret("BRICK_TEST_OPT", { default: "fallback" });
+    defineSecret("BRICK_TEST_MISSING");
     expect(listSecrets()).toEqual([
       { hasDefault: false, isSet: true, name: "BRICK_TEST_REQ" },
       { hasDefault: true, isSet: true, name: "BRICK_TEST_OPT" },

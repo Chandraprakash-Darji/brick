@@ -3,7 +3,7 @@
 ```ts
 const appDb = defineDatabase({
   engine: "sqlite",
-  path: secret("DB_PATH").default("./data/app.db"),
+  path: defineSecret("DB_PATH").default("./data/app.db"),
   tables: { pagesTable, user, session, account, verification },
 });
 

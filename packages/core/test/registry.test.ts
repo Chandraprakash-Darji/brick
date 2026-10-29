@@ -8,6 +8,10 @@ import {
   sqliteTable,
   text,
 } from "../src";
+import {
+  defineElsewhere,
+  defineServiceElsewhere,
+} from "./fixtures/define-elsewhere";
 
 beforeEach(resetGlobalRegistry);
 
@@ -127,4 +131,42 @@ it("keeps declarations open when exporting before app construction", () => {
   expect(service.isBuilt).toBe(false);
   brick({ services: [service], requestLogging: false });
   expect(service.isBuilt).toBe(true);
+});
+
+it("throws on a duplicate action from another file and names both sites", () => {
+  const service = defineService("orders");
+  service.action({ name: "ship", execute: () => 1 });
+  let message = "";
+  try {
+    defineElsewhere(service, "action", { name: "ship", execute: () => 2 });
+  } catch (error) {
+    message = (error as Error).message;
+  }
+  const [title, first, second] = message.split("\n");
+  expect(title).toBe('Brick: duplicate action "ship" in service "orders"');
+  expect(first).toMatch(/registry\.test\.ts:\d+$/);
+  expect(second).toMatch(/define-elsewhere\.ts:\d+$/);
+});
+
+it("replaces an action defined again from the same file", async () => {
+  const service = defineService("orders");
+  for (const value of [1, 2])
+    service.action({ name: "ship", execute: () => value });
+  expect(service.listActions()).toHaveLength(1);
+  expect(await service.getAction("ship")!({})).toBe(2);
+});
+
+it("throws on a duplicate service name from another file", () => {
+  defineService("orders");
+  expect(() => defineServiceElsewhere("orders")).toThrow(
+    'Brick: duplicate service "orders"',
+  );
+});
+
+it("throws on two services with the same name in one app", () => {
+  const first = defineService("orders");
+  const second = defineService("orders");
+  expect(() => brick({ services: [first, second] })).toThrow(
+    'Brick: duplicate service "orders" in brick()',
+  );
 });

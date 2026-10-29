@@ -182,6 +182,12 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
   }
 
   const services = options.services ?? getGlobalRegistry().list();
+  const byName = new Map<string, unknown>();
+  for (const service of services) {
+    if ((byName.get(service.name) ?? service) !== service)
+      throw new Error(`Brick: duplicate service "${service.name}" in brick()`);
+    byName.set(service.name, service);
+  }
   const events = options.events
     ? new EventsHub(options.events).attach(services)
     : undefined;

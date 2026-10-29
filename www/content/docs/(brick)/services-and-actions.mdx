@@ -79,6 +79,18 @@ export const ordersService = defineService("orders", {
 | `database` | `DatabaseHandle`                            | Database handle created via `defineDatabase()`. Accessible in actions as `ctx.db`.        |
 | `context`  | `(baseCtx: BaseContext) => Promise<T> \| T` | Context resolver function. Injects user, session, or tenant properties into every action. |
 
+### Duplicate names
+
+Names must be unique. A service name is unique within the app. Action, tool, socket and resource names are unique within their service, and resource actions such as `page.list` count as action names. A duplicate fails at startup, and the error names both files:
+
+```txt
+Brick: duplicate action "ship" in service "orders"
+  src/services/orders/ship.ts:12
+  src/services/orders/legacy.ts:30
+```
+
+The same name defined again from the same file replaces the old definition. That is how `brick dev` reloads an edited file.
+
 `ServiceOptions` also declares `auth`, `rateLimit`, `cache`, `resilience`, `telemetry`, and `lifecycle`. The runtime doesn't act on them today: no lifecycle hooks run and no rate limits or auth defaults are enforced. They're only echoed in the service's introspection output (`/_brick/services`). Enforce access with `authorize` on actions and `access` on CRUD resources.
 
 ## Actions (`service.action` / `defineAction`)
