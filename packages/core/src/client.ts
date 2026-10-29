@@ -13,7 +13,9 @@ export type {
   BrickClientSocket,
   BrickSocketClient,
   BrickSocketConnectOptions,
+  BrickSocketReconnectOptions,
   BrickSocketSender,
+  BrickSocketStatus,
   SocketEventArgs,
 } from "./socket-types";
 
@@ -587,6 +589,7 @@ function createNamespace(
       ) {
         return (options?: BrickSocketConnectOptions) =>
           connectSocket(resolved.baseUrl, node as BrickClientSocket, {
+            ...options,
             signal: options?.signal ?? resolved.signal,
             timeoutMs: options?.timeoutMs ?? resolved.timeoutMs,
           });

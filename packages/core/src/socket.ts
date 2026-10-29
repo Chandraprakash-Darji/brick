@@ -288,6 +288,36 @@ function publicOrigin(request: Request): string {
   return `${proto ? `${proto}:` : url.protocol}//${forwarded("x-forwarded-host") ?? url.host}`;
 }
 
+const TOKEN_PROTOCOL = "brick.token.";
+const protocols = (request: Request) =>
+  (request.headers.get("sec-websocket-protocol") ?? "")
+    .split(",")
+    .map((protocol) => protocol.trim())
+    .filter(Boolean);
+
+/** Moves a `brick.token.<token>` subprotocol into `Authorization: Bearer` for the context resolver. */
+function tokenRequest(request: Request): {
+  token: boolean;
+  request: Request;
+} {
+  const offered = protocols(request);
+  const token = offered
+    .find((protocol) => protocol.startsWith(TOKEN_PROTOCOL))
+    ?.slice(TOKEN_PROTOCOL.length);
+  if (!token) return { token: false, request };
+  const headers = new Headers(request.headers);
+  headers.set("authorization", `Bearer ${token}`);
+  const rest = offered.filter(
+    (protocol) => !protocol.startsWith(TOKEN_PROTOCOL),
+  );
+  if (rest.length) headers.set("sec-websocket-protocol", rest.join(", "));
+  else headers.delete("sec-websocket-protocol");
+  return {
+    token: true,
+    request: new Request(request.url, { method: request.method, headers }),
+  };
+}
+
 /** Mounts native adapters. Each connection owns its queue and service session. */
 export function mountSockets(
   app: Elysia,
@@ -434,17 +464,19 @@ export function mountSockets(
       app.ws(path, {
         async beforeHandle({ request }) {
           if (sessions.has(request)) return;
+          const { token, request: resolved } = tokenRequest(request);
           const origin = request.headers.get("origin");
           if (
             origin
               ? !(
                   definition.allowedOrigins ?? [publicOrigin(request)]
                 ).includes(origin)
-              : !definition.allowMissingOrigin
+              : // Without cookies a missing Origin is no hijacking risk.
+                !(definition.allowMissingOrigin ?? token)
           )
             return new Response("Socket origin refused", { status: 403 });
           try {
-            sessions.set(request, await definition.connect(request));
+            sessions.set(request, await definition.connect(resolved));
           } catch (error) {
             if (!(error instanceof SocketDenied))
               logger.error({ error, service, socket: definition.schema.name });
@@ -453,6 +485,10 @@ export function mountSockets(
             });
           }
         },
+        upgrade: ({ request }: { request: Request }) =>
+          protocols(request).includes("brick.v1")
+            ? { "Sec-WebSocket-Protocol": "brick.v1" }
+            : undefined,
         async open(ws) {
           const session = sessions.get(ws.request);
           if (!session) {

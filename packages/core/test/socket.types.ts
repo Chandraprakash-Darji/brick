@@ -68,3 +68,18 @@ declare const union: "say" | "count";
 live.send(union, "hello");
 void live.join("doc:1").then(() => live.leave("doc:1"));
 live.onLeave((room: string, reason?: string) => void [room, reason]);
+const mobile = createBrickClient({
+  baseUrl: "https://example.test",
+  contract,
+}).chat.live.connect({
+  token: async () => "jwt",
+  reconnect: { minDelayMs: 100 },
+});
+const status: "connecting" | "open" | "reconnecting" | "closed" = mobile.status;
+void status;
+mobile.onStatus((next) => void next);
+mobile.onReconnect(() => {});
+createBrickClient({
+  baseUrl: "https://example.test",
+  contract,
+}).chat.live.connect({ reconnect: false });

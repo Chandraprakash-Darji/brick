@@ -467,7 +467,7 @@ it("times out a pending handshake", async () => {
     const live = createBrickClient({
       baseUrl: `http://localhost:${server.port}`,
       contract,
-    }).chat.live.connect({ timeoutMs: 5 });
+    }).chat.live.connect({ timeoutMs: 5, reconnect: false });
     await expect(live.ready).rejects.toThrow("timed out");
     live.close();
   } finally {
@@ -677,4 +677,148 @@ it("emits { after: tx } on commit and drops it on rollback", async () => {
   live.emit("user:anon", "message", "last");
   await Bun.sleep(20);
   expect(received).toEqual(["committed", "last"]);
+});
+
+function tokenApp() {
+  const seen: { auth: string | null; protocol: string | null }[] = [];
+  const service = defineService("chat", {
+    context: ({ request }) => {
+      seen.push({
+        auth: request.headers.get("authorization"),
+        protocol: request.headers.get("sec-websocket-protocol"),
+      });
+      return { user: request.headers.get("authorization")?.slice(7) ?? null };
+    },
+  });
+  const live = service.socket({
+    name: "live",
+    input: { say: t.String(), crash: t.Null() },
+    output: { message: t.String() },
+    authorize: ({ ctx }) => ctx.user != null,
+    rooms: ({ ctx }) => [`user:${ctx.user}`],
+    join: () => true,
+    handlers: {
+      say: ({ input, ctx, socket }) =>
+        socket.send("message", `${ctx.user}:${input}`),
+      crash: () => {
+        throw new Error("crash");
+      },
+    },
+  });
+  const url = start(service);
+  const api = createBrickClient({
+    baseUrl: url,
+    contract: {
+      chat: {
+        live: contract.chat.live as BrickClientSocket<
+          { say: string; crash: null },
+          { message: string }
+        >,
+      },
+    },
+  });
+  return { live, seen, api, url };
+}
+
+it("moves a subprotocol token into a bearer header and echoes brick.v1", async () => {
+  const { seen, api, url } = tokenApp();
+  const ws = new WebSocket(url.replace(/^http/, "ws") + "/v2/chat/live", [
+    "brick.v1",
+    "brick.token.abc",
+  ]);
+  peers.push(ws);
+  await new Promise((resolve, reject) => {
+    ws.onopen = resolve;
+    ws.onerror = reject;
+  });
+  expect(ws.protocol).toBe("brick.v1");
+  expect(seen[0]).toEqual({ auth: "Bearer abc", protocol: "brick.v1" });
+  // Without a token, a missing Origin keeps the strict default.
+  await expect(open(url + "/v2/chat/live")).rejects.toBeDefined();
+
+  const live = api.chat.live.connect({ token: () => "eyJ.part-1_x" });
+  const reply = new Promise((resolve) => live.on("message", resolve));
+  await live.ready;
+  live.send("say", "hi");
+  expect(await reply).toBe("eyJ.part-1_x:hi");
+  live.close();
+
+  const padded = api.chat.live.connect({ token: async () => "abc=" });
+  await expect(padded.ready).rejects.toThrow("RFC 6455");
+  expect(padded.status).toBe("closed");
+});
+
+it("reconnects with a fresh token, keeps listeners and rejoins requested rooms", async () => {
+  const { live, api } = tokenApp();
+  let tokens = 0;
+  const socket = api.chat.live.connect({
+    token: async () => {
+      tokens++;
+      return "u1";
+    },
+    reconnect: { minDelayMs: 5, maxDelayMs: 20 },
+  });
+  const statuses: string[] = [];
+  let sendWhileReconnecting: unknown;
+  socket.onStatus((status) => {
+    statuses.push(status);
+    if (status === "reconnecting")
+      try {
+        socket.send("say", "offline");
+      } catch (error) {
+        sendWhileReconnecting = error;
+      }
+  });
+  const received: string[] = [];
+  socket.on("message", (text) => received.push(text));
+  await socket.ready;
+  await socket.join("doc:1");
+  await socket.join("doc:2");
+  const left = new Promise((resolve) => socket.onLeave(resolve));
+  live.kick("doc:2");
+  expect(await left).toBe("doc:2");
+  const reconnected = new Promise<void>((resolve) =>
+    socket.onReconnect(resolve),
+  );
+  socket.send("crash", null);
+  await reconnected;
+  const replied = new Promise((resolve) => {
+    const off = socket.on("message", (text) => {
+      off();
+      resolve(text);
+    });
+  });
+  socket.send("say", "after");
+  expect(await replied).toBe("u1:after");
+  live.emit("doc:1", "message", "doc1");
+  live.emit("doc:2", "message", "doc2");
+  live.emit("user:u1", "message", "end");
+  await Bun.sleep(30);
+  expect(received).toEqual(["u1:after", "doc1", "end"]);
+  expect(tokens).toBe(2);
+  expect(statuses).toEqual(["open", "reconnecting", "open"]);
+  expect(sendWhileReconnecting).toBeInstanceOf(BrickSocketError);
+  socket.close();
+  expect(socket.status).toBe("closed");
+});
+
+it("stops on policy closes and when reconnect is off", async () => {
+  const { api } = tokenApp();
+  const refused = api.chat.live.connect({ token: () => "u1" });
+  const refusedClose = new Promise((resolve) =>
+    refused.onClose(({ code }) => resolve(code)),
+  );
+  await refused.ready;
+  refused.send("say", 42 as never);
+  expect(await refusedClose).toBe(1008);
+  expect(refused.status).toBe("closed");
+
+  const once = api.chat.live.connect({ token: () => "u1", reconnect: false });
+  const onceClose = new Promise((resolve) =>
+    once.onClose(({ code }) => resolve(code)),
+  );
+  await once.ready;
+  once.send("crash", null);
+  expect(await onceClose).toBe(1011);
+  expect(once.status).toBe("closed");
 });

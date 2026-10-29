@@ -95,9 +95,29 @@ export interface SocketBroker {
   close?(): void | Promise<void>;
 }
 
+export interface BrickSocketReconnectOptions {
+  /** Default 500. */
+  minDelayMs?: number;
+  /** Default 30 000. */
+  maxDelayMs?: number;
+  /** Random spread around each delay, 0 to 1. Default 0.2. */
+  jitter?: number;
+}
+
+export type BrickSocketStatus =
+  | "connecting"
+  | "open"
+  | "reconnecting"
+  | "closed";
+
 export interface BrickSocketConnectOptions {
   signal?: AbortSignal;
+  /** Limits each opening attempt. */
   timeoutMs?: number;
+  /** Called on every connect and reconnect; sent as the `brick.token.<token>` subprotocol. */
+  token?: () => string | Promise<string>;
+  /** On by default. `false` ends the client at the first close. */
+  reconnect?: false | BrickSocketReconnectOptions;
 }
 
 export class BrickSocketError extends Error {
@@ -115,7 +135,12 @@ export interface BrickSocketClient<
   Input,
   Output,
 > extends BrickSocketSender<Input> {
+  /** Resolves on the first open; rejects if the client closes before it. */
   readonly ready: Promise<void>;
+  readonly status: BrickSocketStatus;
+  onStatus(listener: (status: BrickSocketStatus) => void): () => void;
+  /** After each reconnect. Messages sent while offline are not replayed. */
+  onReconnect(listener: () => void): () => void;
   on<K extends keyof Output & string>(
     event: K,
     listener: (payload: Output[K]) => void,

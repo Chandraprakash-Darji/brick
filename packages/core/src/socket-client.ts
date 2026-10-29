@@ -11,7 +11,13 @@ import {
   type BrickClientSocket,
   type BrickSocketClient,
   type BrickSocketConnectOptions,
+  type BrickSocketStatus,
 } from "./socket-types";
+
+/** Normal close, policy and auth refusals, protocol errors: retrying would not help. */
+const STOP_CODES = new Set([1000, 1003, 1007, 1008, 1009, 4000, 4401, 4403]);
+/** RFC 6455 subprotocols are RFC 7230 tokens. */
+const TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
 export function connectSocket(
   baseUrl: string,
@@ -25,6 +31,33 @@ export function connectSocket(
     url.protocol === "https:" || url.protocol === "wss:" ? "wss:" : "ws:";
   if (url.search || url.hash)
     throw new Error("Socket base URL must not contain a query or fragment");
+  if (
+    options.timeoutMs !== undefined &&
+    (!Number.isFinite(options.timeoutMs) || options.timeoutMs < 0)
+  )
+    throw new Error("Socket timeoutMs must be a finite nonnegative number");
+  const backoff =
+    options.reconnect === false
+      ? undefined
+      : {
+          minDelayMs: 500,
+          maxDelayMs: 30_000,
+          jitter: 0.2,
+          ...options.reconnect,
+        };
+  if (
+    backoff &&
+    !(
+      backoff.minDelayMs >= 0 &&
+      backoff.maxDelayMs >= backoff.minDelayMs &&
+      Number.isFinite(backoff.maxDelayMs) &&
+      backoff.jitter >= 0 &&
+      backoff.jitter <= 1
+    )
+  )
+    throw new Error(
+      "Socket reconnect needs 0 <= minDelayMs <= maxDelayMs and jitter from 0 to 1",
+    );
   const schemas = new Map(
     Object.entries(contract.output).map(([name, schema]) => [
       name,
@@ -35,55 +68,75 @@ export function connectSocket(
   const errors = new Set<(error: BrickSocketError) => void>();
   const closes = new Set<(info: { code: number; reason: string }) => void>();
   const leaves = new Set<(room: string, reason?: string) => void>();
-  const joins = new Map<string, PromiseWithResolvers<void>[]>();
-  let resolveReady!: () => void;
-  let rejectReady!: (reason: unknown) => void;
-  const ready = new Promise<void>((resolve, reject) => {
-    resolveReady = resolve;
-    rejectReady = reject;
-  });
+  const statuses = new Set<(status: BrickSocketStatus) => void>();
+  const reconnects = new Set<() => void>();
+  /** Rooms the server accepted for this client, rejoined after a reconnect. */
+  const rooms = new Set<string>();
+  const joins = new Map<string, ((result: boolean | Error) => void)[]>();
+  const ready = Promise.withResolvers<void>();
   // Consumers can register lifecycle listeners without awaiting ready.
-  void ready.catch(() => {});
+  void ready.promise.catch(() => {});
+  let status: BrickSocketStatus = "connecting";
   let opened = false;
-  let finished = false;
+  let openedAt = 0;
+  let attempts = 0;
+  let attempting = false;
   let ws: WebSocket | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let retry: ReturnType<typeof setTimeout> | undefined;
   const signal = options.signal;
+  const page = (
+    globalThis as {
+      document?: EventTarget & { visibilityState?: string };
+    }
+  ).document;
   const report = (error: BrickSocketError) => {
     for (const listener of errors) listener(error);
   };
-  const finish = (info: { code: number; reason: string }, error?: unknown) => {
-    if (finished) return;
-    finished = true;
+  const setStatus = (next: BrickSocketStatus) => {
+    if (status === next) return;
+    status = next;
+    for (const listener of statuses) listener(next);
+  };
+  const settleJoins = (error: Error) => {
+    for (const settle of [...joins.values()].flat()) settle(error);
+    joins.clear();
+  };
+  const detach = () => {
     clearTimeout(timer);
+    if (!ws) return;
+    ws.onopen = null;
+    ws.onerror = null;
+    ws.onmessage = null;
+    ws.onclose = null;
+  };
+  /** Ends the client for good. */
+  const finish = (info: { code: number; reason: string }, error?: unknown) => {
+    if (status === "closed") return;
+    detach();
+    clearTimeout(retry);
     signal?.removeEventListener("abort", abort);
-    if (ws) {
-      ws.onopen = null;
-      ws.onerror = null;
-      ws.onmessage = null;
-      ws.onclose = null;
-    }
+    globalThis.removeEventListener?.("online", wake);
+    page?.removeEventListener("visibilitychange", wake);
     if (!opened)
-      rejectReady(
+      ready.reject(
         error ??
           new BrickSocketError("connection", "Socket closed before opening"),
       );
-    for (const pending of [...joins.values()].flat())
-      pending.reject(
-        new BrickSocketError("connection", "Socket closed before joining"),
-      );
-    joins.clear();
+    settleJoins(
+      new BrickSocketError("connection", "Socket closed before joining"),
+    );
     try {
+      setStatus("closed");
       for (const listener of closes) listener(info);
     } finally {
       events.clear();
-      errors.clear();
-      closes.clear();
-      leaves.clear();
+      for (const listeners of [errors, closes, leaves, statuses, reconnects])
+        listeners.clear();
     }
   };
   const stop = (error?: unknown, code = 1000, reason = "") => {
-    if (finished) return;
+    if (status === "closed") return;
     try {
       if (error instanceof BrickSocketError) report(error);
     } finally {
@@ -94,144 +147,177 @@ export function connectSocket(
       }
     }
   };
+  /** The connection ended without `close()`: retry unless the code says not to. */
+  const dropped = (
+    info: { code: number; reason: string },
+    error?: BrickSocketError,
+  ) => {
+    if (status === "closed") return;
+    detach();
+    ws = undefined;
+    if (error) report(error);
+    if (!backoff || STOP_CODES.has(info.code)) return finish(info, error);
+    settleJoins(
+      new BrickSocketError("connection", "Socket closed before joining"),
+    );
+    if (openedAt && Date.now() - openedAt >= 10_000) attempts = 0;
+    openedAt = 0;
+    setStatus("reconnecting");
+    for (const listener of closes) listener(info);
+    schedule();
+  };
+  const schedule = () => {
+    if (status !== "reconnecting" || attempting || retry !== undefined) return;
+    // Offline: wait for the online event instead of spending attempts.
+    if (
+      (globalThis as { navigator?: { onLine?: boolean } }).navigator?.onLine ===
+      false
+    )
+      return;
+    const delay = Math.min(
+      backoff!.maxDelayMs,
+      backoff!.minDelayMs * 2 ** attempts++,
+    );
+    retry = setTimeout(
+      () => {
+        retry = undefined;
+        void attempt();
+      },
+      delay * (1 + backoff!.jitter * (Math.random() * 2 - 1)),
+    );
+  };
+  function wake() {
+    if (
+      status !== "reconnecting" ||
+      attempting ||
+      ws ||
+      page?.visibilityState === "hidden"
+    )
+      return;
+    clearTimeout(retry);
+    retry = undefined;
+    void attempt();
+  }
+  const attempt = async () => {
+    attempting = true;
+    let protocols: string[] | undefined;
+    try {
+      if (options.token) {
+        let token: string;
+        try {
+          token = await options.token();
+        } catch (cause) {
+          attempting = false;
+          return dropped(
+            { code: 1006, reason: "" },
+            new BrickSocketError("connection", "Socket token failed", {
+              cause,
+            }),
+          );
+        }
+        if (status === "closed") return;
+        if (typeof token !== "string" || !TOKEN.test(token))
+          return stop(
+            new BrickSocketError(
+              "protocol",
+              "Socket token must use RFC 6455 token characters, such as a JWT or base64url without = padding",
+            ),
+          );
+        protocols = ["brick.v1", `brick.token.${token}`];
+      }
+      try {
+        ws = protocols ? new WebSocket(url, protocols) : new WebSocket(url);
+      } catch (cause) {
+        attempting = false;
+        return dropped(
+          { code: 1006, reason: "" },
+          new BrickSocketError("connection", "Socket connection failed", {
+            cause,
+          }),
+        );
+      }
+    } finally {
+      attempting = false;
+    }
+    const failed = (message: string) => {
+      const socket = ws;
+      dropped(
+        { code: 1006, reason: "" },
+        new BrickSocketError("connection", message),
+      );
+      socket?.close();
+    };
+    ws.onopen = () => {
+      clearTimeout(timer);
+      openedAt = Date.now();
+      setStatus("open");
+      if (!opened) {
+        opened = true;
+        ready.resolve();
+        return;
+      }
+      for (const room of rooms) void request(room).catch(() => {});
+      for (const listener of reconnects) listener();
+    };
+    ws.onerror = () => failed("Socket connection failed");
+    ws.onclose = ({ code, reason }) => dropped({ code, reason });
+    ws.onmessage = receive;
+    if (options.timeoutMs !== undefined)
+      timer = setTimeout(
+        () => failed("Socket connection timed out"),
+        options.timeoutMs,
+      );
+  };
+  const write = (event: string, data: unknown) => {
+    if (!ws || status !== "open" || ws.readyState !== 1)
+      throw new BrickSocketError("connection", "Socket is not open");
+    ws.send(JSON.stringify({ event, data }));
+  };
+  const request = (room: string) =>
+    new Promise<void>((resolve, reject) => {
+      write("$join", { room });
+      joins.set(room, [
+        ...(joins.get(room) ?? []),
+        (result) =>
+          result === true
+            ? resolve()
+            : reject(
+                result ||
+                  new BrickSocketError("refused", `Join refused: ${room}`),
+              ),
+      ]);
+    });
+  const notifyLeave = (room: string, reason?: string) => {
+    for (const listener of leaves) listener(room, reason);
+  };
   /** Checks a room acknowledgement or removal; returns the work to run once it passed. */
   const control = (event: string, data: unknown): (() => void) => {
     const fields = (data ?? {}) as Record<string, unknown>;
     const room = fields.room;
     if (!isSocketRoom(room)) throw new Error("Invalid control message");
-    if (event === "$join" && typeof fields.ok === "boolean")
+    if (event === "$join" && typeof fields.ok === "boolean") {
+      const ok = fields.ok;
       return () => {
-        const pending = joins.get(room) ?? [];
+        const pending = joins.get(room);
+        if (!pending) return;
         joins.delete(room);
-        for (const { resolve, reject } of pending)
-          if (fields.ok) resolve();
-          else reject(new BrickSocketError("refused", `Join refused: ${room}`));
+        if (ok) rooms.add(room);
+        else if (rooms.delete(room)) notifyLeave(room, "join refused");
+        for (const settle of pending) settle(ok);
       };
+    }
     if (event === "$left") {
       const reason =
         typeof fields.reason === "string" ? fields.reason : undefined;
       return () => {
-        for (const listener of leaves) listener(room, reason);
+        rooms.delete(room);
+        notifyLeave(room, reason);
       };
     }
     if (event === "$leave") return () => {};
     throw new Error("Unknown control message");
   };
-  const abort = () =>
-    stop(signal?.reason ?? new DOMException("Aborted", "AbortError"));
-  const write = (event: string, data: unknown) => {
-    if (!ws || !opened || finished || ws.readyState !== 1)
-      throw new BrickSocketError("connection", "Socket is not open");
-    ws.send(JSON.stringify({ event, data }));
-  };
-  const api: BrickSocketClient<
-    Record<string, unknown>,
-    Record<string, unknown>
-  > = {
-    ready,
-    join(room) {
-      if (!isSocketRoom(room))
-        return Promise.reject(
-          new BrickSocketError("protocol", `Invalid room: ${String(room)}`),
-        );
-      const pending = Promise.withResolvers<void>();
-      try {
-        write("$join", { room });
-      } catch (error) {
-        return Promise.reject(error);
-      }
-      joins.set(room, [...(joins.get(room) ?? []), pending]);
-      return pending.promise;
-    },
-    leave(room) {
-      if (isSocketRoom(room) && ws?.readyState === 1 && !finished)
-        write("$leave", { room });
-    },
-    onLeave(listener) {
-      if (!finished) leaves.add(listener);
-      return () => {
-        leaves.delete(listener);
-      };
-    },
-    send(event, data) {
-      if (!ws || !opened || finished || ws.readyState !== 1)
-        throw new BrickSocketError("connection", "Socket is not open");
-      if (event.startsWith("$"))
-        throw new BrickSocketError("protocol", "Reserved socket event");
-      const frame = JSON.stringify({ event, data });
-      const bytes = new TextEncoder().encode(frame).byteLength;
-      if (!isSocketEnvelope(JSON.parse(frame)) || bytes > SOCKET_MAX_BYTES)
-        throw new BrickSocketError(
-          "protocol",
-          "Message must be a JSON payload under 64 KiB",
-        );
-      if (ws.bufferedAmount + bytes > SOCKET_BUFFER_BYTES) {
-        const error = new BrickSocketError(
-          "backpressure",
-          "Socket buffer full",
-        );
-        stop(error, 4001, "Socket buffer full");
-        throw error;
-      }
-      ws.send(frame);
-    },
-    close() {
-      stop();
-    },
-    on(event, listener) {
-      if (finished) return () => {};
-      const listeners = events.get(event) ?? new Set();
-      listeners.add(listener);
-      events.set(event, listeners);
-      return () => {
-        listeners.delete(listener);
-        if (!listeners.size) events.delete(event);
-      };
-    },
-    onError(listener) {
-      if (!finished) errors.add(listener);
-      return () => {
-        errors.delete(listener);
-      };
-    },
-    onClose(listener) {
-      if (!finished) closes.add(listener);
-      return () => {
-        closes.delete(listener);
-      };
-    },
-  };
-  if (
-    options.timeoutMs !== undefined &&
-    (!Number.isFinite(options.timeoutMs) || options.timeoutMs < 0)
-  )
-    throw new Error("Socket timeoutMs must be a finite nonnegative number");
-  if (signal?.aborted) {
-    queueMicrotask(abort);
-    return api;
-  }
-  try {
-    ws = new WebSocket(url);
-  } catch (cause) {
-    queueMicrotask(() =>
-      stop(
-        new BrickSocketError("connection", "Socket connection failed", {
-          cause,
-        }),
-      ),
-    );
-    return api;
-  }
-  ws.onopen = () => {
-    if (finished) return;
-    opened = true;
-    clearTimeout(timer);
-    resolveReady();
-  };
-  ws.onerror = () =>
-    stop(new BrickSocketError("connection", "Socket connection failed"));
-  ws.onclose = ({ code, reason }) => finish({ code, reason });
-  ws.onmessage = ({ data }: MessageEvent<unknown>) => {
+  const receive = ({ data }: MessageEvent<unknown>) => {
     let message: unknown;
     let action: (() => void) | undefined;
     try {
@@ -267,13 +353,88 @@ export function connectSocket(
       for (const listener of events.get(message.event) ?? [])
         listener(message.data);
   };
+  function abort() {
+    stop(signal?.reason ?? new DOMException("Aborted", "AbortError"));
+  }
+  const listen = <T>(listeners: Set<T>, listener: T) => {
+    if (status !== "closed") listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  };
+  const api: BrickSocketClient<
+    Record<string, unknown>,
+    Record<string, unknown>
+  > = {
+    ready: ready.promise,
+    get status() {
+      return status;
+    },
+    join(room) {
+      if (!isSocketRoom(room))
+        return Promise.reject(
+          new BrickSocketError("protocol", `Invalid room: ${String(room)}`),
+        );
+      return request(room);
+    },
+    leave(room) {
+      rooms.delete(room);
+      for (const settle of joins.get(room) ?? [])
+        settle(new BrickSocketError("refused", `Left before joining: ${room}`));
+      joins.delete(room);
+      if (isSocketRoom(room) && status === "open" && ws?.readyState === 1)
+        write("$leave", { room });
+    },
+    send(event, data) {
+      if (!ws || status !== "open" || ws.readyState !== 1)
+        throw new BrickSocketError("connection", "Socket is not open");
+      if (event.startsWith("$"))
+        throw new BrickSocketError("protocol", "Reserved socket event");
+      const frame = JSON.stringify({ event, data });
+      const bytes = new TextEncoder().encode(frame).byteLength;
+      if (!isSocketEnvelope(JSON.parse(frame)) || bytes > SOCKET_MAX_BYTES)
+        throw new BrickSocketError(
+          "protocol",
+          "Message must be a JSON payload under 64 KiB",
+        );
+      if (ws.bufferedAmount + bytes > SOCKET_BUFFER_BYTES) {
+        const error = new BrickSocketError(
+          "backpressure",
+          "Socket buffer full",
+        );
+        stop(error, 4001, "Socket buffer full");
+        throw error;
+      }
+      ws.send(frame);
+    },
+    close() {
+      stop();
+    },
+    on(event, listener) {
+      if (status === "closed") return () => {};
+      const listeners = events.get(event) ?? new Set();
+      listeners.add(listener);
+      events.set(event, listeners);
+      return () => {
+        listeners.delete(listener);
+        if (!listeners.size) events.delete(event);
+      };
+    },
+    onLeave: (listener) => listen(leaves, listener),
+    onStatus: (listener) => listen(statuses, listener),
+    onReconnect: (listener) => listen(reconnects, listener),
+    onError: (listener) => listen(errors, listener),
+    onClose: (listener) => listen(closes, listener),
+  };
+  if (signal?.aborted) {
+    queueMicrotask(abort);
+    return api;
+  }
   signal?.addEventListener("abort", abort, { once: true });
-  if (signal?.aborted) abort();
-  if (!finished && options.timeoutMs !== undefined)
-    timer = setTimeout(
-      () =>
-        stop(new BrickSocketError("connection", "Socket connection timed out")),
-      options.timeoutMs,
-    );
+  if (backoff) {
+    globalThis.addEventListener?.("online", wake);
+    page?.addEventListener("visibilitychange", wake);
+  }
+  void attempt();
   return api;
 }

@@ -143,7 +143,7 @@ unsubscribe();
 live.close();
 ```
 
-Register listeners before awaiting `ready` so you receive messages sent by the server's `open` hook. `ready` rejects if the connection fails or closes before opening. Event and lifecycle listeners return unsubscribe functions. Closing a connection removes its listeners and timers.
+Register listeners before awaiting `ready` so you receive messages sent by the server's `open` hook. `ready` resolves on the first open and rejects only if the client closes for good before that. Event and lifecycle listeners return unsubscribe functions. `close()` removes the listeners and timers.
 
 Socket connections require the runtime `contract` option. A type-only contract cannot supply socket routes or runtime validation schemas. HTTP action calls continue to use the same client.
 
@@ -151,7 +151,7 @@ Unknown events, incorrect payloads, and reversed message directions fail TypeScr
 
 ## Authorization and origins
 
-Brick resolves context and runs `authorize` before upgrading, then repeats both before every message handler. A resolver that checks the current session store can reject a revoked session on the next message. The request headers remain those of the original handshake, so reconnect when credentials change.
+Brick resolves context and runs `authorize` before upgrading, then repeats both before every message handler. A resolver that checks the current session store can reject a revoked session on the next message. The request headers remain those of the original handshake; a reconnect sends fresh ones.
 
 Browsers send applicable cookies during the handshake. The HTTP client's `headers` and `fetch` options do not attach authorization headers to a browser WebSocket. A failed browser handshake reports a connection error without exposing the HTTP response body or status.
 
@@ -161,13 +161,57 @@ Brick accepts same-origin browser connections by default. Behind a reverse proxy
 allowedOrigins: ["http://localhost:5178", "https://app.example.com"],
 ```
 
-Clients that omit `Origin`, including Bun clients, require `allowMissingOrigin: true`. Origin checks and authorization are separate. Set `authorize` for private sockets even when an origin is allowed.
+Clients that omit `Origin`, including Bun clients, require `allowMissingOrigin: true`, except on token handshakes. Origin checks and authorization are separate. Set `authorize` for private sockets even when an origin is allowed.
+
+## Mobile and token auth
+
+React Native and other non-browser clients have no session cookie. Pass a `token` function instead. It runs on every connect and reconnect, so a refreshed token is used:
+
+```ts
+const live = api.chat.live.connect({ token: () => session.accessToken });
+// sends: Sec-WebSocket-Protocol: brick.v1, brick.token.<token>
+```
+
+The server picks `brick.v1` and echoes it, as browsers require. Before calling the context resolver, Brick moves the token into an `Authorization: Bearer <token>` header and removes it from the protocol list, so bearer-based resolvers, including Better Auth's bearer plugin, work unchanged:
+
+```ts
+context: async ({ request }) => ({
+  user: await auth.api.getSession({ headers: request.headers }),
+}),
+```
+
+The token must use RFC 6455 token characters. JWTs and base64url work; padded base64 (`=`) does not, and the client throws a protocol error for it. Cross-site WebSocket hijacking relies on cookies the browser attaches by itself, so a token handshake without `Origin` is accepted unless `allowMissingOrigin: false`; cookie handshakes keep the strict default. A token handshake that sends `Origin` still passes the origin check. Proxies may log the `Sec-WebSocket-Protocol` header, so use short-lived tokens.
+
+## Reconnect
+
+The client reconnects by default. It retries with exponential backoff and jitter, asks `token` for a fresh token, rejoins the rooms it joined, and keeps its listeners:
+
+```ts
+const live = api.desk.live.connect({
+  token: () => auth.getToken(),
+  reconnect: { minDelayMs: 500, maxDelayMs: 30_000, jitter: 0.2 }, // the defaults
+});
+live.status; // "connecting" | "open" | "reconnecting" | "closed"
+live.onStatus((status) => badge.set(status));
+live.onReconnect(() => refetchOpenDocs()); // messages sent while offline are not replayed
+```
+
+| Retries after                                | Stops after                                            |
+| -------------------------------------------- | ------------------------------------------------------ |
+| Network loss and abnormal close (`1006`)     | Normal close by either side (`1000`)                   |
+| Server error or restart (`1011`, `1012`)     | Policy refusal (`1008`), auth refusal (`4401`, `4403`) |
+| Try again later (`1013`)                     | Protocol errors (`1003`, `1007`, `1009`, `4000`)       |
+| Handshake failure (timeout, refused upgrade) | `close()` or an aborted `signal`                       |
+
+Browsers do not expose why a handshake failed, so a refused upgrade (such as an expired token) is retried with backoff and a fresh token. Backoff resets once a connection has stayed open for 10 seconds. While `navigator.onLine` is false the client waits, and it retries at once on the `online` event or when the page becomes visible. A room the server kicked the client from is not rejoined; if a rejoin is refused, `onLeave(room, "join refused")` runs.
+
+`onClose` runs on every close, including the ones that are retried; check `status === "closed"` for the final one. `send` while reconnecting throws: there is no hidden buffer that could resend an action twice. Pass `reconnect: false` to end the client at the first close, as in v0.10.
 
 ## Lifecycle and cancellation
 
 Use optional `open({ ctx, socket })` and `close({ ctx, socket, code, reason })` hooks for setup and cleanup. The close hook receives the connection's initial context and runs once. Cleanup starts when the connection closes, without waiting for a blocked message handler. Release application subscriptions or cancel application work in this hook. Messages queued after closure do not execute, and sends after closure fail.
 
-Pass `connect({ signal })` to cancel opening or close an established connection. An abort before opening rejects `ready` with the signal's reason. `timeoutMs` limits opening only. These options inherit the client's defaults, and connection options override them.
+Pass `connect({ signal })` to cancel opening or close an established connection. An abort before opening rejects `ready` with the signal's reason. `timeoutMs` limits each opening attempt. These options inherit the client's defaults, and connection options override them.
 
 `BrickSocketError` is exported from `@brickkit/core/client`. Its `kind` is `connection`, `protocol`, `backpressure`, or `refused` (a refused `join`). Expected connection failures reach `onError`. A remote close reaches `onClose` with its code and reason. Each `close()` call is safe to repeat.
 
@@ -183,7 +227,7 @@ Only JSON-compatible TypeBox schemas are supported. Transforms, custom formats, 
 
 Unknown input events and invalid payloads close with `1008`. Malformed JSON closes with `1007`, binary frames with `1003`, and overloaded queues with `1013`. Oversized messages close with `1009` when Brick detects them; frames rejected by the native transport can appear as an abnormal `1006` close. Unexpected handler errors and invalid server output close with `1011`; detailed errors stay in server logs. The browser client closes invalid server messages with the application code `4000` and reports a protocol error.
 
-`send()` means the local connection accepted the message. It does not acknowledge remote processing. Sending before `ready` or after closure throws. Brick does not reconnect, retry, buffer disconnected messages, or replay them automatically.
+`send()` means the local connection accepted the message. It does not acknowledge remote processing. Sending before `ready`, while reconnecting, or after closure throws. Brick does not buffer messages sent while disconnected.
 
 ## Development and deployment
 
