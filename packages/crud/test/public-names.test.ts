@@ -66,8 +66,9 @@ test("crud actions export under public names (issue #27)", () => {
 
   const route = getPluginActionRoute(resource.list);
   expect(route).toMatchObject({
-    path: "/api/page/query",
-    clientPath: ["page", "list"],
+    path: "/api/pages/page/query",
+    legacyPath: "/api/page/query",
+    clientPath: ["pages", "page", "list"],
     plugin: "@brickkit/crud",
     resource: "page",
   });

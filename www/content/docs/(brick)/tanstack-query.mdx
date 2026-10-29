@@ -26,7 +26,7 @@ export const api = createBrickQueryClient({
 });
 ```
 
-The examples below assume your app exposes a CRUD resource named `page`. Custom actions use `api.<service>.<action>`, with dotted action names mapped to nested namespaces. The generated contract supplies input and output types and exact HTTP routes, including plugin actions.
+The examples below assume your app exposes a CRUD resource named `page` on a service named `pages`, so its client namespace is `api.pages.page`. Custom actions use `api.<service>.<action>`, with dotted action names mapped to nested namespaces. The generated contract supplies input and output types and exact HTTP routes, including plugin actions.
 
 Wrap React consumers in TanStack Query's `QueryClientProvider`. The Brick Query client builds request options; your TanStack `QueryClient` owns the cache.
 
@@ -40,7 +40,7 @@ import { api } from "../lib/api";
 
 export function usePages(page: number) {
   return useQuery({
-    ...api.page.list.queryOptions({
+    ...api.pages.page.list.queryOptions({
       input: { offset: page * 20, limit: 20 },
     }),
     placeholderData: keepPreviousData,
@@ -54,7 +54,7 @@ export function usePages(page: number) {
 
 Both query and mutation helpers are available on every action. Choose a helper by how you use the action. Calling `queryOptions` for a POST action sends POST. Brick preserves GET, POST, PUT, PATCH, DELETE, custom paths, and URL-encoded path parameters. It uses its existing HTTP protocol.
 
-Direct calls such as `await api.page.list({ limit: 20 })` also work.
+Direct calls such as `await api.pages.page.list({ limit: 20 })` also work.
 
 ## Mutate and invalidate related queries
 
@@ -67,9 +67,11 @@ import { api } from "../lib/api";
 export function useCreatePage() {
   const queryClient = useQueryClient();
   return useMutation({
-    ...api.page.create.mutationOptions(),
+    ...api.pages.page.create.mutationOptions(),
     onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: api.page.list.queryKey() }),
+      queryClient.invalidateQueries({
+        queryKey: api.pages.page.list.queryKey(),
+      }),
   });
 }
 ```
@@ -80,7 +82,7 @@ To target one input, include it in the key:
 
 ```ts
 await queryClient.invalidateQueries({
-  queryKey: api.page.get.queryKey({ input: { id: pageId } }),
+  queryKey: api.pages.page.get.queryKey({ input: { id: pageId } }),
   exact: true,
 });
 ```
@@ -92,7 +94,7 @@ Keys contain the server URL, prefix, action namespace path, contract method and 
 The same options work outside React hooks:
 
 ```ts
-const options = api.page.get.queryOptions({ input: { id: pageId } });
+const options = api.pages.page.get.queryOptions({ input: { id: pageId } });
 const page = await queryClient.ensureQueryData(options);
 await queryClient.prefetchQuery(options);
 const cached = queryClient.getQueryData(options.queryKey);
@@ -109,7 +111,7 @@ import { api } from "../../lib/api";
 export const Route = createFileRoute("/pages/$id")({
   loader: ({ context, params }) =>
     context.queryClient.ensureQueryData(
-      api.page.get.queryOptions({ input: { id: params.id } }),
+      api.pages.page.get.queryOptions({ input: { id: params.id } }),
     ),
 });
 ```
@@ -120,7 +122,7 @@ TanStack Query's cancellation signal reaches fetch. You can also supply per-requ
 
 ```ts
 const controller = new AbortController();
-const options = api.page.list.queryOptions({
+const options = api.pages.page.list.queryOptions({
   input: { limit: 20 },
   request: {
     signal: controller.signal,
@@ -150,7 +152,7 @@ import { queryClient } from "./query-client";
 
 export const pages = createCollection(
   queryCollectionOptions({
-    ...api.page.list.queryOptions({ input: { limit: 100 } }),
+    ...api.pages.page.list.queryOptions({ input: { limit: 100 } }),
     queryClient,
     getKey: (page) => page.id,
     select: (response) => response.items,

@@ -7,6 +7,7 @@ import {
 import type { Service } from "./types";
 import { getGlobalRegistry } from "./registry";
 import { getPluginActionRoute, getPluginEndpoints } from "./plugin";
+import { getActionRoute } from "./routes";
 import { generateOpenApiSpec } from "./openapi";
 import { resolveSecrets, type SecretSource } from "./secrets";
 import {
@@ -33,7 +34,7 @@ import { instrumentDatabase, traceHttpRequest, withSpan } from "./telemetry";
 import { EventsHub } from "./events/hub";
 import { WEBHOOK_ROUTE } from "./events/workflows";
 import type { EventsOptions } from "./events/types";
-import { mountSockets, socketPath } from "./socket";
+import { legacySocketPath, mountSockets, socketPath } from "./socket";
 
 export interface CreateServerOptions {
   port?: number;
@@ -87,6 +88,15 @@ export interface CreateServerOptions {
    * and an app without this option behaves exactly as before. See `EventsOptions`.
    */
   events?: EventsOptions;
+  /**
+   * Also serve the v0.10 paths (CRUD at `${prefix}/${resource}/...`, service
+   * actions and sockets at `${prefix}/${service}/${name}` as declared, and
+   * explicit paths that still start with the prefix) with the same handlers.
+   * Their responses carry `Deprecation: true` and a `Link` to the new path, and
+   * their spans `brick.legacy_route`. OpenAPI and the client describe only the
+   * new paths. Removed in v0.12.
+   */
+  legacyRoutes?: boolean;
 }
 
 export {
@@ -283,6 +293,36 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
       throw new Error(`Brick: duplicate socket route '${socket.path}'`);
     socketRoutes.add(key);
   }
+  // v0.10 socket routes, where they are free; the upgrade carries no headers.
+  const legacySockets = options.legacyRoutes
+    ? services.flatMap((service) =>
+        service.listSockets().flatMap((definition) => {
+          const path = legacySocketPath(prefix, service.name, definition);
+          if (path === undefined) return [];
+          const key = routeKey("GET", path);
+          if (registeredRoutes.has(key) || socketRoutes.has(key)) return [];
+          socketRoutes.add(key);
+          return [{ service: service.name, path, definition }];
+        }),
+      )
+    : [];
+
+  // v0.10 paths, mounted after every current route so they never take one.
+  const legacyRoutes: {
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+    path: string;
+    successor: string;
+    handler: (context: any) => unknown;
+  }[] = [];
+  const addLegacy = (
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
+    path: string | undefined,
+    successor: string,
+    handler: (context: any) => unknown,
+  ) => {
+    if (options.legacyRoutes && path !== undefined && path !== successor)
+      legacyRoutes.push({ method, path, successor, handler });
+  };
 
   const mountRoute = (
     method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
@@ -322,8 +362,13 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
   };
 
   // Raw endpoints (outside the JSON action mesh).
-  const mountEndpoint = (def: EndpointDefinition, plugin = false) => {
+  const mountEndpoint = (
+    def: EndpointDefinition,
+    plugin = false,
+    legacyPath?: string,
+  ) => {
     const handler = createEndpointHandler(def, services);
+    addLegacy(def.method, legacyPath, def.path, handler);
     mountRoute(
       def.method,
       def.path,
@@ -341,7 +386,7 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
 
   for (const service of services) {
     for (const def of getPluginEndpoints(service, prefix))
-      mountEndpoint(def, true);
+      mountEndpoint(def, true, def.legacyPath);
   }
 
   for (const def of options.endpoints ?? []) {
@@ -424,10 +469,46 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
         : invoke,
       getPluginActionRoute(action, prefix) !== undefined,
     );
-    if (mounted) mountedRoutes.push(route.ir);
+    if (mounted) {
+      mountedRoutes.push(route.ir);
+      const current = getActionRoute(action, prefix);
+      if (current)
+        addLegacy(route.ir.method, current.legacyPath, route.ir.path, invoke);
+    }
   }
 
-  mountSockets(app, sockets);
+  for (const legacy of legacyRoutes) {
+    const key = routeKey(legacy.method, legacy.path);
+    // A current route or socket owns the path: the old one is not served.
+    if (registeredRoutes.has(key) || socketRoutes.has(key)) continue;
+    const handle = (context: any) => {
+      context.set.headers["deprecation"] = "true";
+      context.set.headers["link"] = `<${legacy.successor.replace(
+        /:([^/]+)/g,
+        (match, name: string) =>
+          context.params?.[name] === undefined
+            ? match
+            : encodeURIComponent(context.params[name]),
+      )}>; rel="successor-version"`;
+      return legacy.handler(context);
+    };
+    mountRoute(
+      legacy.method,
+      legacy.path,
+      telemetry
+        ? (context: any) =>
+            traceHttpRequest(
+              context,
+              legacy.method,
+              legacy.path,
+              () => handle(context),
+              { "brick.legacy_route": true },
+            )
+        : handle,
+    );
+  }
+
+  mountSockets(app, [...sockets, ...legacySockets]);
   const definition = Object.freeze({
     services: Object.freeze([...services]),
     prefix,

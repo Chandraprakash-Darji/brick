@@ -67,8 +67,8 @@ function fixture(name: string, compiler: boolean) {
   });
   return { app, db, compilation };
 }
-const query = (input: unknown) =>
-  new Request("http://localhost/api/item/query", {
+const query = (input: unknown, service = "compiled") =>
+  new Request(`http://localhost/api/${service}/item/query`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -102,7 +102,7 @@ it("preserves query projection, filters, scope and live rows in specialized and 
     ];
     for (const input of inputs) {
       const ra = await a.app.handle(query(input)),
-        rb = await b.app.handle(query(input));
+        rb = await b.app.handle(query(input, "generic"));
       expect(ra.status).toBe(rb.status);
       expect(await ra.json()).toEqual(await rb.json());
     }
@@ -115,10 +115,13 @@ it("preserves query projection, filters, scope and live rows in specialized and 
     expect(value.total).toBe(2);
     expect(value.items[0].secret).toBeUndefined();
     a.db.update(table).set({ title: "Changed" }).where(eq(table.id, "a")).run();
-    const one = await a.app.handle(new Request("http://localhost/api/item/a"));
+    const one = await a.app.handle(
+      new Request("http://localhost/api/compiled/item/a"),
+    );
     expect((await one.json()).title).toBe("Changed");
     expect(
-      (await a.app.handle(new Request("http://localhost/api/item/b"))).status,
+      (await a.app.handle(new Request("http://localhost/api/compiled/item/b")))
+        .status,
     ).toBe(404);
   } finally {
     a.db.$client.close();
@@ -164,7 +167,10 @@ it("reuses a prepared query shape with new filter values and observes fresh data
   try {
     const first = await (
       await app.handle(
-        query({ where: { field: "id", op: "eq", value: "one" } }),
+        query(
+          { where: { field: "id", op: "eq", value: "one" } },
+          "cached_reads",
+        ),
       )
     ).json();
     expect(first.items).toEqual([{ id: "one", title: "First" }]);
@@ -173,7 +179,10 @@ it("reuses a prepared query shape with new filter values and observes fresh data
     db.update(table).set({ title: "Fresh" }).where(eq(table.id, "two")).run();
     const second = await (
       await app.handle(
-        query({ where: { field: "id", op: "eq", value: "two" } }),
+        query(
+          { where: { field: "id", op: "eq", value: "two" } },
+          "cached_reads",
+        ),
       )
     ).json();
     expect(second.items).toEqual([{ id: "two", title: "Fresh" }]);

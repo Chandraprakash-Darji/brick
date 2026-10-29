@@ -15,7 +15,7 @@ export const api = createBrickQueryClient({
   fetch: (input, init) => fetch(input, { ...init, credentials: "include" }),
 });
 
-export const pageApi = api.page;
+export const pageApi = api.pages.page;
 export type Page = Awaited<ReturnType<typeof pageApi.get>>;
 export type PageCreateInput = Parameters<typeof pageApi.create>[0];
 export type PageUpdateInput = Parameters<typeof pageApi.update>[0]["data"];

@@ -41,7 +41,7 @@ it("generates and runs a typed, browser-safe socket contract alongside HTTP acti
     const source = generateClientContract(app);
     await Bun.write(join(dir, "contract.ts"), source);
     const { contract } = await import(join(dir, "contract.ts"));
-    expect(contract.chat.room.live.config.path).toBe("/custom/live");
+    expect(contract.chat.room.live.config.path).toBe("/v3/chat/custom/live");
     expect(contract.chat.ping.kind).toBe("action");
     const api = createBrickClient({
       baseUrl: `http://localhost:${app.server!.port}`,
@@ -64,7 +64,7 @@ it("generates and runs a typed, browser-safe socket contract alongside HTTP acti
       {
         name: "room.live",
         service: "chat",
-        path: "/custom/live",
+        path: "/v3/chat/custom/live",
         description: "Live echo",
         input: ["say"],
         output: ["message"],
@@ -140,8 +140,14 @@ live.on('say',()=>{});
 it("refuses socket/action client namespace collisions", () => {
   resetGlobalRegistry();
   const service = defineService("collision");
-  service.action({ name: "live", execute() {} });
   service.socket({ name: "live", input: {}, output: {}, handlers: {} });
+  service.action({ name: "live", execute() {} });
+  // The default routes share a URL segment, which fails first.
+  expect(() => brick({ services: [service], docs: false })).toThrow(
+    'duplicate name "live"',
+  );
+  // Distinct routes still collide in the client namespace.
+  service.action({ name: "live", path: "/other", execute() {} });
   expect(() =>
     generateClientContract(brick({ services: [service], docs: false })),
   ).toThrow("namespace collision");

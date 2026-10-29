@@ -193,11 +193,13 @@ export const page = pagesService
   .use(comments({ table: commentsTable }));
 ```
 
-This automatically mounts the standard CRUD REST endpoints for the comment resource (under the service prefix, e.g. `/api`):
+This automatically mounts the standard CRUD REST endpoints for the comment resource under its service, with the resource name in kebab-case (`pageComment` → `page-comment`, see [URL Scheme](/docs/routes)):
 
-- `POST /api/pageComment` (create)
-- `POST /api/pageComment/query` (list)
-- `POST /api/pageComment/count` and `POST /api/pageComment/exists`
-- `GET /api/pageComment/:id` (public), `PATCH /api/pageComment/:id` and `DELETE /api/pageComment/:id` (authenticated)
+- `POST /api/pages/page-comment` (create)
+- `POST /api/pages/page-comment/query` (list)
+- `POST /api/pages/page-comment/count` and `POST /api/pages/page-comment/exists`
+- `GET /api/pages/page-comment/:id` (public), `PATCH /api/pages/page-comment/:id` and `DELETE /api/pages/page-comment/:id` (authenticated)
+
+The typed client reaches them as `api.pages.pageComment.list()` and so on.
 
 The recipe has no per-comment ownership, so any authenticated user can edit or delete any comment. If comments should be editable only by their author, add an owner column to the table and return an ownership `scope` from the access policy, alongside `authorize`.

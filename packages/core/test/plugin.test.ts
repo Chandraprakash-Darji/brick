@@ -145,8 +145,9 @@ describe("plugin installation", () => {
     expect(await post.labels.label({})).toBe("post");
     expect(getPluginActionRoute(page.labels.label, "/v2")).toEqual({
       method: "GET",
-      path: "/v2/page/label",
-      clientPath: ["page", "labels", "label"],
+      path: "/v2/pages/page/label",
+      legacyPath: "/v2/page/label",
+      clientPath: ["pages", "page", "labels", "label"],
       plugin: "labels",
       resource: "page",
     });
@@ -169,6 +170,7 @@ describe("plugin installation", () => {
     expect(getPluginActionRoute(api.hello, "/v3")).toEqual({
       method: "GET",
       path: "/v3/welcome",
+      legacyPath: "/v3/welcome",
       clientPath: ["other", "hello"],
       plugin: "greeting",
       resource: undefined,

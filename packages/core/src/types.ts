@@ -1,5 +1,13 @@
 import type { ServicePlugin, ResourcePlugin } from "./plugin";
-import type { TSchema, Static } from "@sinclair/typebox";
+import type {
+  TSchema,
+  Static,
+  TIntersect,
+  TObject,
+  TNumber,
+  TString,
+  TUnion,
+} from "@sinclair/typebox";
 import type { BunSQLiteDatabase } from "./db/sqlite";
 import type { DatabaseHandle } from "./db/define";
 import type { OutboxTable } from "./events/outbox";
@@ -197,7 +205,12 @@ export interface BaseActionConfig<
 > {
   name: string;
   description?: string;
-  /** Effective HTTP path, including the prefix; replaces the default action path. */
+  /**
+   * HTTP path relative to the action's owner (`/api/<service>` for a service
+   * action, `/api/<service>/<resource>` for a resource action); replaces the
+   * default `/<action>` segment. Path parameters (`/:id/summary`) are merged
+   * into the input.
+   */
   path?: string;
   /** Single HTTP method exposed for this action (default POST). */
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -425,6 +438,103 @@ export interface Resource<
     : import("drizzle-orm").Column;
   readonly idField: string;
   readonly config: ResourceConfig<TTable, TCtx> & TOptions;
+  /**
+   * Declare an action owned by this resource, registered as
+   * `<resource>.<name>`. It mounts at `/api/<service>/<resource>/<name>`, or at
+   * `/api/<service>/<resource>/:id/<name>` with `record: true`.
+   */
+  action<
+    TIn extends TSchema | undefined = undefined,
+    TOut extends TSchema | undefined = undefined,
+    TErr extends Record<string, ActionErrorDefinition> = Record<
+      string,
+      ActionErrorDefinition
+    >,
+    const TRecord extends boolean = false,
+  >(
+    config: ResourceActionConfig<
+      TIn,
+      TOut,
+      TErr,
+      TCtx,
+      InferTableRow<TTable>,
+      TRecord
+    >,
+  ): Action<
+    TRecord extends true
+      ? TIntersect<
+          [
+            TIn extends TSchema ? TIn : TObject<{}>,
+            TObject<{ id: TUnion<[TString, TNumber]> }>,
+          ]
+        >
+      : TIn,
+    TOut,
+    TErr,
+    TCtx
+  >;
+}
+
+/**
+ * Which rows a record action may load when its resource has no `crud`:
+ * `"public"` loads any row by id, `scope` adds a SQL condition (such as the
+ * caller's tenant). With `crud` installed, its `access` always applies instead.
+ */
+export type ResourceActionAccess<TCtx = any> =
+  | "public"
+  | {
+      scope: (args: {
+        ctx: TCtx;
+      }) =>
+        | import("drizzle-orm").SQL
+        | undefined
+        | Promise<import("drizzle-orm").SQL | undefined>;
+    };
+
+/** A record action's input: its own fields and the `id` from the path. */
+export type ResourceActionInput<
+  TIn extends TSchema | undefined,
+  TRecord extends boolean,
+> = TRecord extends true
+  ? (TIn extends TSchema ? Static<TIn> : {}) & { id: string | number }
+  : TIn extends TSchema
+    ? Static<TIn>
+    : any;
+
+/** `resource.action(config)`: an action owned by a resource. */
+export interface ResourceActionConfig<
+  TIn extends TSchema | undefined = undefined,
+  TOut extends TSchema | undefined = undefined,
+  TErr extends Record<string, ActionErrorDefinition> = Record<
+    string,
+    ActionErrorDefinition
+  >,
+  TCtx extends ActionContext = ActionContext,
+  TRow = any,
+  TRecord extends boolean = false,
+> extends BaseActionConfig<TIn, TOut, TErr> {
+  /**
+   * `true` makes it a record action at `/:id/<name>`: `id` joins the input,
+   * the row loads through the resource's access, and a missing or hidden row
+   * answers 404 before `execute` runs.
+   */
+  record?: TRecord;
+  /** For a record action on a resource without `crud`: which rows it may load. */
+  access?: ResourceActionAccess<TCtx>;
+  authorize?: (params: {
+    user?: TCtx extends { user: infer U } ? U : any;
+    input: ResourceActionInput<TIn, TRecord>;
+    ctx: TCtx;
+  }) => boolean | Promise<boolean>;
+  execute: (params: {
+    input: ResourceActionInput<TIn, TRecord>;
+    ctx: TCtx;
+    error: ErrorBuilder<TErr>;
+    /** The loaded row of a record action; `undefined` otherwise. */
+    row: TRecord extends true ? TRow : undefined;
+  }) =>
+    | Promise<TOut extends TSchema ? Static<TOut> : any>
+    | (TOut extends TSchema ? Static<TOut> : any);
 }
 
 export interface ServiceAuthOptions {

@@ -28,7 +28,7 @@ export function greeting(options: GreetingOptions = {}) {
       const hello = routes.action({
         name: "hello",
         method: "GET",
-        path: `/${service.name}/hello`,
+        path: "/hello", // GET /api/<service>/hello
         input: t.Object({
           name: t.String({ minLength: 1 }),
         }),
@@ -40,7 +40,7 @@ export function greeting(options: GreetingOptions = {}) {
       routes.endpoint({
         name: "welcome",
         method: "GET",
-        path: `/${service.name}/welcome.html`,
+        path: "/welcome.html", // GET /api/<service>/welcome.html
         handler: async ({ set }) => {
           set.headers["content-type"] = "text/html; charset=utf-8";
           return `<!DOCTYPE html><html><body><h1>${salutation}!</h1></body></html>`;
@@ -56,6 +56,8 @@ export function greeting(options: GreetingOptions = {}) {
   });
 }
 ```
+
+Plugin route paths are relative to the route's `scope`. Service plugin routes default to `service` (`${prefix}/${service}`) and resource plugin routes to `resource` (`${prefix}/${service}/${resource}`); `app` mounts under `${prefix}`. See [URL Scheme](/docs/routes#plugin-route-scopes).
 
 ### Installing the Service Plugin
 

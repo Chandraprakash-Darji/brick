@@ -83,7 +83,18 @@ export { serializeSocketSchema } from "./socket-schema";
 export { getActionAccess, setActionAccess, ACTION_ACCESS_KEY } from "./access";
 export type { ActionAccessInfo } from "./access";
 export { defineAction, buildErrorHelpers } from "./action";
-export { defineResource } from "./resource";
+export {
+  defineResource,
+  loadRecord,
+  setRecordLoader,
+  type RecordLoader,
+} from "./resource";
+export {
+  getActionRoute,
+  kebabCase,
+  type ActionRoute,
+  type ResourceActionInfo,
+} from "./routes";
 export { createServiceProxy } from "./rpc";
 
 export {

@@ -90,7 +90,7 @@ In traditional frameworks, if `Service A` needs to trigger logic inside `Service
 Brick solves this with **monomorphic execution**:
 
 - An action is an HTTP route and a callable TypeScript function at the same time.
-- Calling `chargeInvoice({ input: { ... } })` executes in-process through the **exact same validation, authorization, and error handling pipeline** as an incoming HTTP `POST /api/billing/chargeInvoice` request.
+- Calling `chargeInvoice({ input: { ... } })` executes in-process through the **exact same validation, authorization, and error handling pipeline** as an incoming HTTP `POST /api/billing/charge-invoice` request.
 - Zero network serialization penalty. Zero HTTP loopback overhead. 100% guarantee that authorization rules and validation schemas are always enforced.
 
 ### 4. Deny-by-Default Declarative CRUD

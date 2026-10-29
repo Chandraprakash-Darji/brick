@@ -36,7 +36,7 @@ it("mounts plugin CRUD routes and read helpers without GET collection or PUT ali
   const app = brick({ services: [service], requestLogging: false });
   const call = (method: string, path: string, body?: unknown) =>
     app.handle(
-      new Request("http://localhost/api/note" + path, {
+      new Request("http://localhost/api/notes/note" + path, {
         method,
         headers: { "content-type": "application/json" },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -97,7 +97,7 @@ it("rejects over-nested filters over HTTP with 400 instead of hanging", async ()
   const app = brick({ services: [service], requestLogging: false });
   const postQuery = (body: unknown) =>
     app.handle(
-      new Request("http://localhost/api/note/query", {
+      new Request("http://localhost/api/notes-deep/note/query", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),

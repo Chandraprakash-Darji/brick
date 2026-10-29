@@ -11,6 +11,7 @@ import type {
 } from "./types";
 import { getGlobalRegistry } from "./registry";
 import { defineAction } from "./action";
+import { joinRoute, ownerPath } from "./routes";
 
 export type PluginRouteMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export type PluginRouteScope = "app" | "service" | "resource";
@@ -180,7 +181,7 @@ export function defineServicePlugin<
 /**
  * Define a plugin that installs onto a resource (a table and its entity) with
  * `resource.use(plugin)`. Its `setup` receives the service, the resource, and a
- * `routes` registrar, whose routes are scoped under the resource's name, and
+ * `routes` registrar, whose routes mount under `${prefix}/${service}/${resource}`, and
  * returns the typed API that `resource.use` hands back. `crud` is built this way.
  *
  * @param definition - A unique `name`, optional `routes` controls, and `setup`,
@@ -300,14 +301,24 @@ export function isInstallingPlugin(service: Service<any, any>): boolean {
 }
 
 function pathOf(binding: Binding, prefix: string) {
+  return joinRoute(
+    binding.scope === "app"
+      ? ownerPath(prefix)
+      : ownerPath(
+          prefix,
+          binding.service.name,
+          binding.scope === "resource" ? binding.resource!.name : undefined,
+        ),
+    binding.path,
+  );
+}
+/** v0.10 mounted resource scope at `${prefix}/${resource}`, with names as declared. */
+function legacyPathOf(binding: Binding, prefix: string) {
   const scope =
     binding.scope === "app"
       ? ""
       : `/${binding.scope === "resource" ? binding.resource!.name : binding.service.name}`;
-  return (
-    `${prefix.replace(/\/$/, "")}${scope}${binding.path === "/" ? "" : binding.path}` ||
-    "/"
-  );
+  return joinRoute(`${prefix.replace(/\/$/, "")}${scope}`, binding.path);
 }
 /**
  * Where a plugin mounted an action over HTTP, for the OpenAPI generator, the
@@ -317,7 +328,7 @@ function pathOf(binding: Binding, prefix: string) {
  * @param prefix - The application's route prefix (default `/api`).
  * @returns `undefined` when no plugin bound the action (it uses its own route),
  * `false` when the plugin's route was switched off, otherwise the route's
- * `path` and `method`, the `clientPath` the typed client uses, and the owning
+ * `path`, the v0.10 `legacyPath`, `method`, the `clientPath` the typed client uses, and the owning
  * `plugin` and `resource`.
  */
 export function getPluginActionRoute(
@@ -332,6 +343,7 @@ export function getPluginActionRoute(
   if (!binding.enabled) return false;
   return {
     path: pathOf(binding, prefix),
+    legacyPath: legacyPathOf(binding, prefix),
     method: binding.method,
     clientPath: binding.clientPath,
     plugin: binding.plugin,
@@ -355,6 +367,7 @@ export function getPluginEndpoints(
     .endpoints.filter((binding) => binding.enabled)
     .map((binding) => ({
       path: pathOf(binding, prefix),
+      legacyPath: legacyPathOf(binding, prefix),
       method: binding.method,
       service,
       summary: binding.summary,
@@ -524,7 +537,9 @@ export function installPlugin(
         if (binding && ownedActions.has(value as Action<any, any, any, any>)) {
           if (binding.clientPath)
             throw new Error("Plugin actions must have one returned API path");
-          binding.clientPath = [resource?.name ?? service.name, ...path];
+          binding.clientPath = resource
+            ? [service.name, resource.name, ...path]
+            : [service.name, ...path];
         }
       } else if (value && typeof value === "object" && !ancestors.has(value)) {
         const next = new Set(ancestors).add(value);

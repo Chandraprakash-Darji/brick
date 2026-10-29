@@ -2,6 +2,7 @@ import type { Static, TSchema } from "@sinclair/typebox";
 import type { Action, ActionErrorDefinition } from "./types";
 import { ActionExecutionError, ValidationError } from "./types";
 import { connectSocket } from "./socket-client";
+import { kebabCase } from "./kebab";
 import type {
   BrickClientSocket,
   BrickSocketClient,
@@ -67,8 +68,10 @@ export type {
  * | Client call | HTTP request |
  * |---|---|
  * Generated browser contracts carry each action's HTTP method and path,
- * including plugin routes and consumer overrides. Without runtime metadata,
- * callers use `POST /api/<service>/<action>` with dotted action names.
+ * including plugin routes, resource routes and consumer overrides. Without
+ * runtime metadata, callers use `POST /api/<service>/<action>` with the names
+ * in kebab-case (`getSummary` → `get-summary`); resource and plugin routes
+ * need the contract.
  * GET/DELETE input is serialized as a query string; other methods send JSON.
 
  */
@@ -400,7 +403,10 @@ function planRequest(
   const configuredPath = actionConfig?.path;
   let actionPath =
     configuredPath ??
-    `${prefix}/${encodeURIComponent(service)}/${action.split(".").map(encodeURIComponent).join(".")}`;
+    `${prefix}/${encodeURIComponent(kebabCase(service))}/${action
+      .split(".")
+      .map((part) => encodeURIComponent(kebabCase(part)))
+      .join(".")}`;
   let remaining = input;
   if (configuredPath !== undefined) {
     if (!configuredPath.startsWith("/")) {

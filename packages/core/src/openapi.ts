@@ -1,4 +1,4 @@
-import { getPluginActionRoute } from "./plugin";
+import { getActionRoute } from "./routes";
 import { getActionAccess } from "./access";
 import type { ServiceRegistry } from "./registry";
 import { getGlobalRegistry } from "./registry";
@@ -126,24 +126,17 @@ export function generateOpenApiSpec(
     (options.registry ? options.registry.list() : getGlobalRegistry().list());
 
   const paths: Record<string, any> = {};
-  const tagsSet = new Set<string>();
+  const tags = new Map<string, string>();
   let hasAnyAuthorizedAction = false;
 
   for (const service of services) {
-    tagsSet.add(service.name);
+    tags.set(service.name, `Actions exposed by '${service.name}' service`);
 
     for (const action of service.listActions()) {
-      const pluginRoute = getPluginActionRoute(action, prefix);
-      if (pluginRoute === false) continue;
-      const routePath =
-        pluginRoute?.path ??
-        action.config.path ??
-        `${prefix}/${service.name}/${action.name}`;
-      const method = (
-        pluginRoute?.method ??
-        action.config.method ??
-        "POST"
-      ).toLowerCase();
+      const route = getActionRoute(action, prefix);
+      if (route === false) continue;
+      const routePath = route.path;
+      const method = route.method.toLowerCase();
       const pathParams = [...routePath.matchAll(/:([^/]+)/g)].map(
         (match) => match[1]!,
       );
@@ -151,6 +144,15 @@ export function generateOpenApiSpec(
       if (!paths[actionPath]) paths[actionPath] = {};
       // Match the compiler's first-registration-wins policy for route collisions.
       if (paths[actionPath][method]) continue;
+
+      const resource = (action as { resource?: string }).resource;
+      // Resource routes group under `service · resource`.
+      const group = resource ? `${service.name} · ${resource}` : service.name;
+      if (resource)
+        tags.set(
+          group,
+          `Routes of resource '${resource}' in service '${service.name}'`,
+        );
 
       const hasAuth = getActionAccess(action).hasAuthorize;
       if (hasAuth) {
@@ -223,10 +225,7 @@ export function generateOpenApiSpec(
         description:
           action.config.description ??
           `Execute action '${action.name}' on service '${service.name}'`,
-        tags:
-          action.config.tags && action.config.tags.length > 0
-            ? action.config.tags
-            : [service.name],
+        tags: [...new Set([group, ...(action.config.tags ?? [])])],
         ...((action as { plugin?: string }).plugin
           ? { "x-brick-plugin": (action as { plugin?: string }).plugin }
           : {}),
@@ -289,10 +288,7 @@ export function generateOpenApiSpec(
       description,
     },
     paths,
-    tags: Array.from(tagsSet).map((name) => ({
-      name,
-      description: `Actions exposed by '${name}' service`,
-    })),
+    tags: Array.from(tags, ([name, description]) => ({ name, description })),
   };
 
   spec.components = {

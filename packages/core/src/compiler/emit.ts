@@ -29,8 +29,21 @@ export function emitHandlerFactory(route: RouteIR): string {
       }
       input.push("}");
     }
+    input.push("let coercedParams = params;");
+    const numeric = route.coercions.filter(({ type }) => type === "number");
+    if (numeric.length) {
+      // Path segments are strings; numeric ids (`/:id`) need numbers.
+      input.push("if (params) {", "coercedParams = { ...params };");
+      for (const [index, coercion] of numeric.entries()) {
+        const key = JSON.stringify(coercion.key);
+        input.push(
+          `const p${index} = params[${key}]; if (typeof p${index} === "string") { const pn${index} = Number(p${index}); if (!Number.isNaN(pn${index})) coercedParams[${key}] = pn${index}; }`,
+        );
+      }
+      input.push("}");
+    }
     input.push(
-      `input = mergeInput(${route.inputPrecedence.map((source) => (source === "query" ? "coercedQuery" : source)).join(", ")});`,
+      `input = mergeInput(${route.inputPrecedence.map((source) => (source === "query" ? "coercedQuery" : source === "params" ? "coercedParams" : source)).join(", ")});`,
     );
     if ((route.inputSchema as { type?: string } | undefined)?.type === "object")
       input.push("input ??= {};");

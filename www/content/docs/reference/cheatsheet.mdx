@@ -62,12 +62,16 @@ A quick reference of commonly used public exports from `@brickkit/core`, `@brick
 
 ## Plugins (`@brickkit/core`)
 
-| Export                                 | Kind     | Description                                                                            |
-| :------------------------------------- | :------- | :------------------------------------------------------------------------------------- |
-| `defineServicePlugin(descriptor)`      | Function | Packages reusable capabilities installed at service scope via `service.use()`.         |
-| `defineResourcePlugin(descriptor)`     | Function | Packages table-attached capabilities installed at resource scope via `resource.use()`. |
-| `getPluginActionRoute(action, prefix)` | Function | Retrieves the effective HTTP route configuration bound to a plugin action.             |
-| `getPluginEndpoints(service, prefix)`  | Function | Retrieves raw HTTP endpoints registered by service and resource plugins.               |
+| Export                                            | Kind     | Description                                                                                                      |
+| :------------------------------------------------ | :------- | :--------------------------------------------------------------------------------------------------------------- |
+| `defineServicePlugin(descriptor)`                 | Function | Packages reusable capabilities installed at service scope via `service.use()`.                                   |
+| `defineResourcePlugin(descriptor)`                | Function | Packages table-attached capabilities installed at resource scope via `resource.use()`.                           |
+| `getPluginActionRoute(action, prefix)`            | Function | Retrieves the effective HTTP route configuration bound to a plugin action.                                       |
+| `getPluginEndpoints(service, prefix)`             | Function | Retrieves raw HTTP endpoints registered by service and resource plugins.                                         |
+| `getActionRoute(action, prefix)`                  | Function | Returns the method and path any action is served at (see [URL Scheme](/docs/routes)).                            |
+| `kebabCase(name)`                                 | Function | Turns a declared name into its URL segment (`getSummary` → `get-summary`).                                       |
+| `loadRecord(resource, { id, ctx, db?, access? })` | Function | Loads one row the way [record actions](/docs/resources#resource-actions) do, through the resource's access rule. |
+| `setRecordLoader(resource, loader)`               | Function | Sets how record actions load a resource's rows. `@brickkit/crud` calls it.                                       |
 
 ## CRUD Plugin (`@brickkit/crud`)
 

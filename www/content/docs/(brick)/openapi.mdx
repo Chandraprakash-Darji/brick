@@ -18,7 +18,7 @@ usersService.action({
   name: "getUser",
   description: "Fetch user profile by ID",
   method: "GET",
-  path: "/api/users/:id",
+  path: "/:id", // GET /api/users/:id
   input: t.Object({ id: t.String() }),
   output: t.Object({ id: t.String(), name: t.String() }),
   execute: ({ input }) => ({ id: input.id, name: "Ada Lovelace" }),
@@ -118,6 +118,10 @@ You can also use the CLI generator, which imports the entry's **default export**
 ```bash
 bunx brick gen openapi src/server.ts --output openapi.json
 ```
+
+## Paths and Tags
+
+Each operation's path is the route Brick serves (see [URL Scheme](/docs/routes)), so `getUser` above is `GET /api/users/{id}`. Every operation is tagged with its service, here `users`. Resource routes (CRUD, [resource actions](/docs/resources#resource-actions) and resource plugins) are tagged `service · resource`, such as `pages · page`. An action's own `tags` are added after that tag, not in place of it. Paths kept by `legacyRoutes` are not in the spec.
 
 ## Security Requirements in OpenAPI
 

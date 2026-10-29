@@ -47,13 +47,15 @@ it("plugin client contract, OpenAPI and IR use public names (issue #27)", () => 
     /export const contract: AppContract = JSON.parse\((.+)\);/,
   )![1]!;
   const contract = JSON.parse(JSON.parse(serialized));
-  // Typed client calls api.page.list (public namespace).
-  expect(Object.keys(contract.page)).toEqual(["list"]);
-  expect(contract.page.list.name).toBe("page.list");
-  expect(contract.page.list.plugin).toBe("@brickkit/crud");
-  expect(contract.page.list.resource).toBe("page");
+  // Typed client calls api.pages.page.list (public namespace).
+  expect(Object.keys(contract.pages.page)).toEqual(["list"]);
+  expect(contract.pages.page.list.name).toBe("page.list");
+  expect(contract.pages.page.list.plugin).toBe("@brickkit/crud");
+  expect(contract.pages.page.list.resource).toBe("page");
   const namesInContract = JSON.stringify(
-    Object.values(contract.page as Record<string, any>).map((m: any) => m.name),
+    Object.values(contract.pages.page as Record<string, any>).map(
+      (m: any) => m.name,
+    ),
   );
   expect(namesInContract).not.toContain("@brickkit/crud");
 

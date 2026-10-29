@@ -55,7 +55,7 @@ function call(
 }
 
 async function place(made: OrdersApp, extra: Record<string, unknown> = {}) {
-  const response = await call(made, "/api/order", "POST", {
+  const response = await call(made, "/api/orders/order", "POST", {
     customer: "ada@example.com",
     totalCents: 4200,
     ...extra,
@@ -65,7 +65,9 @@ async function place(made: OrdersApp, extra: Record<string, unknown> = {}) {
 }
 
 const ship = (made: OrdersApp, id: string) =>
-  call(made, `/api/order/${id}`, "PATCH", { data: { status: "shipped" } });
+  call(made, `/api/orders/order/${id}`, "PATCH", {
+    data: { status: "shipped" },
+  });
 
 const rows = (made: OrdersApp, table: typeof auditLog | typeof notifications) =>
   (made.database.getDb() as any).select().from(table);
@@ -124,7 +126,7 @@ describe("events from generated writes", () => {
     const carrier = createCarrier();
     const made = open({ carrier });
     const order = await place(made);
-    await call(made, `/api/order/${order.id}`, "PATCH", {
+    await call(made, `/api/orders/order/${order.id}`, "PATCH", {
       data: { internalNote: "gift wrap" },
     });
     await made.app.events!.drain();
@@ -153,9 +155,9 @@ describe("events from generated writes", () => {
   it("a delete is audited", async () => {
     const made = open();
     const order = await place(made);
-    expect((await call(made, `/api/order/${order.id}`, "DELETE")).status).toBe(
-      200,
-    );
+    expect(
+      (await call(made, `/api/orders/order/${order.id}`, "DELETE")).status,
+    ).toBe(200);
     await made.app.events!.drain();
     expect(
       (await rows(made, auditLog)).map((row: any) => row.event).sort(),
@@ -166,8 +168,8 @@ describe("events from generated writes", () => {
     const made = open();
     const order = await place(made);
     await made.app.events!.drain();
-    await call(made, `/api/order/${order.id}`);
-    await call(made, "/api/order/query", "POST", {});
+    await call(made, `/api/orders/order/${order.id}`);
+    await call(made, "/api/orders/order/query", "POST", {});
     expect(await made.app.events!.counts()).toMatchObject({
       pending: 0,
       delivered: 2,
@@ -176,7 +178,7 @@ describe("events from generated writes", () => {
 
   it("a write that is refused records no event", async () => {
     const made = open();
-    const response = await call(made, "/api/order", "POST", {
+    const response = await call(made, "/api/orders/order", "POST", {
       customer: "ada@example.com",
     });
     expect(response.status).toBeGreaterThanOrEqual(400);
@@ -375,7 +377,7 @@ for (const worldPackage of ["redis-world", "bullmq-world"] as const)
         const carrier = createCarrier();
         const made = await open2({ carrier });
         const order = await place(made);
-        await call(made, `/api/order/${order.id}`, "PATCH", {
+        await call(made, `/api/orders/order/${order.id}`, "PATCH", {
           data: { internalNote: "gift wrap" },
         });
         await made.app.events!.drain();

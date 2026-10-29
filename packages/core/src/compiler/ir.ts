@@ -1,5 +1,6 @@
 import { type Service, type Action } from "../types";
 import { getPluginActionRoute } from "../plugin";
+import { getActionRoute, kebabCase } from "../routes";
 
 export type RouteMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export interface RouteIR {
@@ -142,20 +143,11 @@ export function analyzeDeclaredApplication(
     bindings.push({ service, action });
   };
   for (const service of services) {
+    checkSegments(service);
     for (const action of service.listActions()) {
-      const pluginRoute = getPluginActionRoute(action, prefix);
-      if (pluginRoute === false) continue;
-      const path =
-        pluginRoute?.path ??
-        action.config.path ??
-        `${prefix}/${service.name}/${action.name}`;
-      add(
-        service,
-        action,
-        pluginRoute?.method ?? action.config.method ?? "POST",
-        path,
-        "action",
-      );
+      const route = getActionRoute(action, prefix);
+      if (route === false) continue;
+      add(service, action, route.method, route.path, "action");
     }
   }
   const preparations = services.flatMap((service) =>
@@ -175,4 +167,29 @@ export function analyzeDeclaredApplication(
     diagnostics,
   });
   return { ir, bindings };
+}
+
+/** A service action, resource, and socket own the URL segment after the service. */
+function checkSegments(service: Service<any, any>) {
+  const owners = new Map<string, string>();
+  const claim = (segment: string, owner: string) => {
+    const previous = owners.get(segment);
+    if (previous)
+      throw new Error(
+        `Brick: duplicate name "${segment}" in service "${service.name}": ${previous} and ${owner} share the URL segment`,
+      );
+    owners.set(segment, owner);
+  };
+  for (const resource of service.listResources())
+    claim(kebabCase(resource.name), `resource "${resource.name}"`);
+  for (const socket of service.listSockets())
+    if (socket.schema.path === undefined)
+      claim(kebabCase(socket.schema.name), `socket "${socket.schema.name}"`);
+  for (const action of service.listActions())
+    if (
+      action.config.path === undefined &&
+      !(action as { resourceAction?: unknown }).resourceAction &&
+      getPluginActionRoute(action) === undefined
+    )
+      claim(kebabCase(action.name), `action "${action.name}"`);
 }

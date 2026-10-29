@@ -139,10 +139,10 @@ it("pages info exports effective routes matching the live server", async () => {
   });
   expect(
     pages.actions.find((action: any) => action.name === "get_public_page"),
-  ).toMatchObject({ method: "GET", path: "/api/public/pages/:slug" });
+  ).toMatchObject({ method: "GET", path: "/api/pages/public/:slug" });
   expect(
     pages.actions.find((action: any) => action.name === "page.update"),
-  ).toMatchObject({ method: "PATCH", path: "/api/page/:id" });
+  ).toMatchObject({ method: "PATCH", path: "/api/pages/page/:id" });
 
   // Use a separate process so the pages app's registry/secrets do not leak into other tests.
   const child = Bun.spawn(
@@ -193,12 +193,12 @@ it("pages info exports effective routes matching the live server", async () => {
   );
   expect(
     prefixedPages.actions.find((action: any) => action.name === "page.update"),
-  ).toMatchObject({ method: "PATCH", path: "/v9/page/:id" });
+  ).toMatchObject({ method: "PATCH", path: "/v9/pages/page/:id" });
   expect(
     prefixedPages.actions.find(
       (action: any) => action.name === "get_public_page",
     ),
-  ).toMatchObject({ method: "GET", path: "/api/public/pages/:slug" });
+  ).toMatchObject({ method: "GET", path: "/v9/pages/public/:slug" });
   for (const action of prefixedPages.actions) {
     expect(live.prefixedRoutes).toContainEqual({
       method: action.method,

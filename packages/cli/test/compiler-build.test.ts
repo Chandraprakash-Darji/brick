@@ -106,7 +106,7 @@ for (const aot of [true, false]) {
       expect(ir.prefix).toBe("/v1");
       expect(ir.services).toEqual(["built", "plain", "store"]);
       expect(
-        ir.routes.some((r: any) => r.path === "/api/public/pages/:slug"),
+        ir.routes.some((r: any) => r.path === "/v1/built/public/pages/:slug"),
       ).toBe(true);
       expect(ir.preparations[0].service).toBe("store");
       expect(await Bun.file(join(dir, "routes.js")).text()).toContain(
@@ -162,7 +162,7 @@ globalThis.Function = new Proxy(Function, {
         output += new TextDecoder().decode(chunk.value);
       }
       const base = output.match(/http:\/\/localhost:\d+/)![0];
-      const ready = await fetch(`${base}/v1/plain/getReady`);
+      const ready = await fetch(`${base}/v1/plain/get-ready`);
       expect(ready.status).toBe(200);
       expect(await ready.json()).toEqual({ ok: true });
       expect((await fetch(`${base}/v1/excluded/hello`)).status).toBe(404);
@@ -172,17 +172,17 @@ globalThis.Function = new Proxy(Function, {
       expect(await custom.json()).toEqual({
         custom: true,
       });
-      const allowed = await fetch(`${base}/api/public/pages/hello`, {
+      const allowed = await fetch(`${base}/v1/built/public/pages/hello`, {
         headers: { "x-user": "alice" },
       });
       expect(await allowed.json()).toEqual({ slug: "hello" });
       expect(allowed.headers.get("x-request-id")).toBeTruthy();
-      expect(await (await fetch(`${base}/v1/page/one`)).json()).toEqual({
+      expect(await (await fetch(`${base}/v1/store/page/one`)).json()).toEqual({
         id: "one",
         title: "Built page",
       });
       const list = (await (
-        await fetch(`${base}/v1/page/query`, {
+        await fetch(`${base}/v1/store/page/query`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ limit: 10, includeTotal: true }),
@@ -190,7 +190,7 @@ globalThis.Function = new Proxy(Function, {
       ).json()) as any;
       expect(list.total).toBe(1);
       expect(list.items).toEqual([{ id: "one", title: "Built page" }]);
-      const unfiltered = await fetch(`${base}/v1/page/query`, {
+      const unfiltered = await fetch(`${base}/v1/store/page/query`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: '{"includeTotal":true}',
@@ -200,7 +200,7 @@ globalThis.Function = new Proxy(Function, {
         total: 1,
         items: list.items,
       });
-      const createdResponse = await fetch(`${base}/v1/page`, {
+      const createdResponse = await fetch(`${base}/v1/store/page`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: '{"id":"created","title":"Created in deployed bundle"}',
@@ -208,7 +208,7 @@ globalThis.Function = new Proxy(Function, {
       expect(createdResponse.status).toBe(200);
       const created = (await createdResponse.json()) as any;
       expect(created.title).toBe("Created in deployed bundle");
-      const changed = await fetch(`${base}/v1/page/${created.id}`, {
+      const changed = await fetch(`${base}/v1/store/page/${created.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: '{"data":{"title":"Updated in deployed bundle"}}',
@@ -219,13 +219,18 @@ globalThis.Function = new Proxy(Function, {
         title: "Updated in deployed bundle",
       });
       expect(
-        (await fetch(`${base}/v1/page/${created.id}`, { method: "DELETE" }))
-          .status,
+        (
+          await fetch(`${base}/v1/store/page/${created.id}`, {
+            method: "DELETE",
+          })
+        ).status,
       ).toBe(200);
-      expect((await fetch(`${base}/api/public/pages/hello`)).status).toBe(401);
+      expect((await fetch(`${base}/v1/built/public/pages/hello`)).status).toBe(
+        401,
+      );
       expect(
         (
-          await fetch(`${base}/api/public/pages/x`, {
+          await fetch(`${base}/v1/built/public/pages/x`, {
             headers: { "x-user": "alice" },
           })
         ).status,
@@ -239,13 +244,13 @@ globalThis.Function = new Proxy(Function, {
         version: "3.2.1",
       });
       expect(spec.paths["/raw"]).toBeDefined();
-      expect(spec.paths["/v1/built/getPage"]).toBeUndefined();
-      expect(Object.keys(spec.paths["/api/public/pages/{slug}"])).toEqual([
+      expect(spec.paths["/v1/built/get-page"]).toBeUndefined();
+      expect(Object.keys(spec.paths["/v1/built/public/pages/{slug}"])).toEqual([
         "get",
       ]);
-      expect((await fetch(`${base}/v1/built/getPage`)).status).toBe(404);
+      expect((await fetch(`${base}/v1/built/get-page`)).status).toBe(404);
       expect(
-        (await fetch(`${base}/api/public/pages/hello`, { method: "POST" }))
+        (await fetch(`${base}/v1/built/public/pages/hello`, { method: "POST" }))
           .status,
       ).toBe(404);
       server.kill("SIGTERM");

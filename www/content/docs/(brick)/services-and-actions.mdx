@@ -27,7 +27,7 @@ export const getUser = usersService.action({
   name: "getUser",
   description: "Retrieve a user profile by unique ID",
   method: "GET",
-  path: "/api/users/:id",
+  path: "/:id", // GET /api/users/:id
   input: t.Object({
     id: t.String({ minLength: 1 }),
   }),
@@ -99,19 +99,19 @@ Actions are the core unit of compute in Brick-TS. Every action is registered wit
 
 ### Action Configuration Table
 
-| Property      | Type                                              | Default                          | Description                                                                                   |
-| :------------ | :------------------------------------------------ | :------------------------------- | :-------------------------------------------------------------------------------------------- |
-| `name`        | `string`                                          | _(Required)_                     | Unique name within the service (e.g. `"createOrder"`).                                        |
-| `description` | `string`                                          | `undefined`                      | Human-readable description exported to the OpenAPI 3.1 operation.                             |
-| `input`       | `TSchema`                                         | `undefined`                      | TypeBox schema for validating input payload or query parameters.                              |
-| `output`      | `TSchema`                                         | `undefined`                      | TypeBox schema for validating return data. Mismatches throw `ValidationError` (status 500).   |
-| `method`      | `"GET" \| "POST" \| "PUT" \| "PATCH" \| "DELETE"` | `"POST"`                         | HTTP method exposed on the API gateway.                                                       |
-| `path`        | `string`                                          | `${prefix}/${service}/${action}` | Full HTTP route, including the prefix (it isn't prefixed for you). Can include `/:id`.        |
-| `authorize`   | `(params) => boolean \| Promise<boolean>`         | `undefined`                      | Guard run after input validation. Returning `false` rejects with `UNAUTHORIZED` (status 403). |
-| `errors`      | `Record<string, { status?, message }>`            | `undefined`                      | Custom error catalog added to `error` helpers. `status` defaults to `400`.                    |
-| `tags`        | `string[]`                                        | `[service name]`                 | OpenAPI tags for the operation; also included in introspection.                               |
-| `emits`       | `string[]`                                        | `undefined`                      | Metadata included in introspection.                                                           |
-| `execute`     | `({ input, ctx, error }) => Promise<T> \| T`      | _(Required)_                     | Implementation function. Receives validated input, resolved context, and error helpers.       |
+| Property      | Type                                              | Default                          | Description                                                                                                                                                                                |
+| :------------ | :------------------------------------------------ | :------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`        | `string`                                          | _(Required)_                     | Unique name within the service (e.g. `"createOrder"`).                                                                                                                                     |
+| `description` | `string`                                          | `undefined`                      | Human-readable description exported to the OpenAPI 3.1 operation.                                                                                                                          |
+| `input`       | `TSchema`                                         | `undefined`                      | TypeBox schema for validating input payload or query parameters.                                                                                                                           |
+| `output`      | `TSchema`                                         | `undefined`                      | TypeBox schema for validating return data. Mismatches throw `ValidationError` (status 500).                                                                                                |
+| `method`      | `"GET" \| "POST" \| "PUT" \| "PATCH" \| "DELETE"` | `"POST"`                         | HTTP method exposed on the API gateway.                                                                                                                                                    |
+| `path`        | `string`                                          | `${prefix}/${service}/${action}` | Route relative to the service: `"/:id/summary"` on `orders` mounts at `/api/orders/:id/summary`. Don't repeat the prefix. The default uses kebab-case (`getUser` → `/api/users/get-user`). |
+| `authorize`   | `(params) => boolean \| Promise<boolean>`         | `undefined`                      | Guard run after input validation. Returning `false` rejects with `UNAUTHORIZED` (status 403).                                                                                              |
+| `errors`      | `Record<string, { status?, message }>`            | `undefined`                      | Custom error catalog added to `error` helpers. `status` defaults to `400`.                                                                                                                 |
+| `tags`        | `string[]`                                        | `[service name]`                 | Extra OpenAPI tags, added after the service tag; also included in introspection.                                                                                                           |
+| `emits`       | `string[]`                                        | `undefined`                      | Metadata included in introspection.                                                                                                                                                        |
+| `execute`     | `({ input, ctx, error }) => Promise<T> \| T`      | _(Required)_                     | Implementation function. Receives validated input, resolved context, and error helpers.                                                                                                    |
 
 ### Monomorphic Execution (In-Process vs HTTP)
 
@@ -138,13 +138,13 @@ Both invocations run the same steps in the same order: input validation, `author
 
 ## Path Parameters and Custom Routes
 
-When an action declares `path` with parameters (e.g., `/api/users/:id`), Brick merges path parameters into `input`. Declare them in the `input` schema so they're validated:
+An explicit `path` is relative to the service, so `path: "/:id"` on `users` mounts at `/api/users/:id`. When the path has parameters, Brick merges them into `input`. Declare them in the `input` schema so they're validated; a parameter the schema types as a number is coerced to one. See [URL Scheme](/docs/routes) for every route shape:
 
 ```ts title="src/services/users.ts"
 export const deleteUser = usersService.action({
   name: "deleteUser",
   method: "DELETE",
-  path: "/api/users/:id",
+  path: "/:id", // DELETE /api/users/:id
   input: t.Object({
     id: t.String(),
   }),

@@ -75,19 +75,27 @@ it("exports only registered HTTP routes and keeps each app's route table", async
     services: [service],
     prefix: "/v2",
     requestLogging: false,
-    endpoints: [{ method: "GET", path: "/raw", handler: () => true }],
+    endpoints: [
+      { method: "GET", path: "/v2/records/raw", handler: () => true },
+    ],
   });
   const registry = getGlobalRegistry();
   const architecture = registry.exportArchitecture();
   expect(
     architecture.services[0]!.actions.find((action) => action.name === "save"),
   ).toMatchObject({ method: "POST", path: "/v2/records/save" });
+  // An explicit path is relative to its service, so it can't take `/_health`.
+  expect(
+    architecture.services[0]!.actions.find(
+      (action) => action.name === "health",
+    ),
+  ).toMatchObject({ method: "GET", path: "/v2/records/_health" });
   expect(
     architecture.services[0]!.actions.some(
       (action) => action.name === "internal",
     ),
   ).toBe(false);
-  for (const name of ["shadowed", "health", "raw"]) {
+  for (const name of ["shadowed", "raw"]) {
     const action = architecture.services[0]!.actions.find(
       (action) => action.name === name,
     );

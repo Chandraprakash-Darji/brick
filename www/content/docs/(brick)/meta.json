@@ -16,6 +16,7 @@
     "services-and-actions",
     "context",
     "resources",
+    "routes",
     "access-control",
     "validation-and-errors",
     "hooks",

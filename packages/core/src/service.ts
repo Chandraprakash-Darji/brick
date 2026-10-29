@@ -28,7 +28,8 @@ import { defineTool, isTool } from "./tool";
 import { defineAction } from "./action";
 import { claimName, definitionSite, getGlobalRegistry } from "./registry";
 import { getTableName, isDatabaseHandle, type DatabaseHandle } from "./db";
-import { defineResource } from "./resource";
+import { checkRecordAccess, defineResource } from "./resource";
+import type { ResourceActionInfo } from "./routes";
 import { isOutboxTable, type OutboxTable } from "./events/outbox";
 import type { ServiceEvents } from "./events/types";
 import { getActionAccess } from "./access";
@@ -98,6 +99,12 @@ export class ServiceImpl<
     if (isInstallingPlugin(this))
       throw new Error("Cannot build a service during plugin setup");
     if (this._isBuilt) return this;
+    for (const action of this.actions.values()) {
+      const info = (action as { resourceAction?: ResourceActionInfo })
+        .resourceAction;
+      const resource = info?.record && this.resources.get(info.resource);
+      if (resource) checkRecordAccess(resource, info);
+    }
     this._isBuilt = true;
     return this;
   }

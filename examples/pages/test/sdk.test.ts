@@ -47,7 +47,7 @@ describe("local Brick SDK", () => {
       fetch: (input, init) =>
         Promise.resolve(app.fetch(new Request(input, init))),
     });
-    const created = await api.page.create({
+    const created = await api.pages.page.create({
       title: "Local SDK",
       slug: "local-sdk",
       content: "# Hello from the workspace",
@@ -56,13 +56,17 @@ describe("local Brick SDK", () => {
     });
     expect(created.userId).toBeDefined();
     expect(created.contentType).toBe("markdown");
-    expect((await api.page.list({ limit: 100 })).items).toHaveLength(1);
-    expect((await api.page.get({ id: created.id })).content).toContain(
+    expect((await api.pages.page.list({ limit: 100 })).items).toHaveLength(1);
+    expect((await api.pages.page.get({ id: created.id })).content).toContain(
       "workspace",
     );
     expect(
-      (await api.page.update({ id: created.id, data: { title: "Updated" } }))
-        .title,
+      (
+        await api.pages.page.update({
+          id: created.id,
+          data: { title: "Updated" },
+        })
+      ).title,
     ).toBe("Updated");
     expect(await api.pages.echo({ message: "local" })).toContain("Echo: local");
     const publicPage = await app.fetch(
@@ -70,8 +74,8 @@ describe("local Brick SDK", () => {
     );
     expect(publicPage.status).toBe(200);
     expect(await publicPage.text()).toContain("Hello from the workspace");
-    await api.page.delete({ id: created.id });
-    expect((await api.page.list({})).items).toHaveLength(0);
+    await api.pages.page.delete({ id: created.id });
+    expect((await api.pages.page.list({})).items).toHaveLength(0);
 
     const anonymous = createBrickClient<PagesApi>({
       contract,
@@ -79,7 +83,7 @@ describe("local Brick SDK", () => {
       fetch: (input, init) =>
         Promise.resolve(app.fetch(new Request(input, init))),
     });
-    await expect(anonymous.page.list({})).rejects.toThrow();
+    await expect(anonymous.pages.page.list({})).rejects.toThrow();
   });
 });
 
@@ -89,18 +93,18 @@ function _typeAssertions(api: ReturnType<typeof createBrickClient<PagesApi>>) {
   api.pages.echo({ message: 123 });
   // @ts-expect-error Unknown contract actions must fail compilation.
   api.pages.missing({});
-  const created = api.page.create({
+  const created = api.pages.page.create({
     title: "Typed",
     slug: "typed",
     content: "Body",
   });
   // @ts-expect-error CRUD inputs must be required.
-  api.page.create();
+  api.pages.page.create();
   // @ts-expect-error CRUD inputs must retain required columns.
-  api.page.create({ title: "Typed" });
+  api.pages.page.create({ title: "Typed" });
   // @ts-expect-error CRUD inputs must retain column types.
-  api.page.create({ title: 123, slug: "typed", content: "Body" });
-  api.page.create({
+  api.pages.page.create({ title: 123, slug: "typed", content: "Body" });
+  api.pages.page.create({
     title: "Typed",
     slug: "typed",
     content: "Body",

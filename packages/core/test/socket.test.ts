@@ -248,7 +248,6 @@ it("rejects conflicting routes and declarations after build", () => {
   const service = defineService("chat");
   const config = {
     name: "live",
-    path: "/_health",
     input: {},
     output: {},
     handlers: {},
@@ -257,10 +256,12 @@ it("rejects conflicting routes and declarations after build", () => {
   expect(() => defineElsewhere(service, "socket", config)).toThrow(
     `duplicate socket "live" in service "chat"`,
   );
+  // An explicit path is relative to the service: `/api/chat/live` again.
+  service.socket({ ...config, name: "other", path: "/live" });
   expect(() => brick({ services: [service] })).toThrow(
     "duplicate socket route",
   );
-  expect(() => service.socket({ ...config, name: "other" })).toThrow(
+  expect(() => service.socket({ ...config, name: "third" })).toThrow(
     "before service build",
   );
 });
@@ -420,7 +421,7 @@ it("rejects HTTP route conflicts and dynamic socket paths", () => {
   service.socket({ name: "live", input: {}, output: {}, handlers: {} });
   service.action({
     name: "get",
-    path: "/v2/chat/live",
+    path: "/live",
     method: "GET",
     execute() {},
   });

@@ -1,6 +1,7 @@
 import type { Elysia } from "elysia";
 import { websocket } from "elysia/websocket";
 import { createLogger } from "./logger";
+import { joinRoute, kebabCase, legacyPath, ownerPath } from "./routes";
 import type { BaseContext } from "./types";
 import { getCompiledCheck } from "./typebox";
 import {
@@ -58,7 +59,7 @@ export function defineServiceSocket<
       config.path.split("/").some((segment) => segment.startsWith(":")))
   )
     throw new Error(
-      "Socket path must be a static absolute route without a query or fragment",
+      "Socket path must be a static route (relative to its service) without a query or fragment",
     );
   const input = Object.freeze({ ...config.input });
   const output = Object.freeze({ ...config.output });
@@ -131,15 +132,25 @@ export function defineServiceSocket<
   };
 }
 
+/** `${prefix}/${service}/${socket}`; an explicit path is relative to the service. */
 export function socketPath(
   prefix: string,
   service: string,
   socket: RegisteredSocket,
 ): string {
-  return (
-    socket.schema.path ??
-    `${prefix.replace(/\/$/, "")}/${service}/${socket.schema.name}`
+  return joinRoute(
+    ownerPath(prefix, service),
+    socket.schema.path ?? `/${kebabCase(socket.schema.name)}`,
   );
+}
+
+/** The v0.10 route, served too by `brick({ legacyRoutes: true })`. */
+export function legacySocketPath(
+  prefix: string,
+  service: string,
+  socket: RegisteredSocket,
+): string | undefined {
+  return legacyPath(prefix, service, socket.schema.name, socket.schema.path);
 }
 
 /** The origin a browser saw, so TLS-terminating proxies still pass the same-origin check. */

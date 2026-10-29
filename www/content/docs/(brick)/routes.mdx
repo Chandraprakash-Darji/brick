@@ -1,0 +1,106 @@
+---
+title: URL Scheme
+description: How Brick builds the HTTP route of every action, resource, socket and plugin, and how to migrate from v0.10 paths.
+---
+
+Every route follows the owner tree: the prefix, then the service, then the resource, then the name. URL segments are the kebab-case form of the declared names. Service `orderBilling` becomes `order-billing`, action `getSummary` becomes `get-summary`, resource `orderItem` becomes `order-item`. Client namespaces and in-process names keep the declared names.
+
+## Route Table
+
+For one service `orders` with the default prefix `/api`:
+
+| Owner and name                        | Route                                                                                                  | Client                                     |
+| :------------------------------------ | :----------------------------------------------------------------------------------------------------- | :----------------------------------------- |
+| service `orders`, action `getSummary` | `POST /api/orders/get-summary`                                                                         | `api.orders.getSummary()`                  |
+| resource `order`, `list`              | `POST /api/orders/order/query`                                                                         | `api.orders.order.list()`                  |
+| `get`                                 | `GET /api/orders/order/:id`                                                                            | `api.orders.order.get({ id })`             |
+| `create`                              | `POST /api/orders/order`                                                                               | `api.orders.order.create(data)`            |
+| `update`                              | `PATCH /api/orders/order/:id`                                                                          | `api.orders.order.update({ id, data })`    |
+| `delete`                              | `DELETE /api/orders/order/:id`                                                                         | `api.orders.order.delete({ id })`          |
+| `findOne`, `count`, `exists`, bulk    | `POST /api/orders/order/find-one`, `/count`, `/exists`, `/bulk-create`, `/bulk-update`, `/bulk-delete` | `api.orders.order.count()`                 |
+| resource action `importCsv`           | `POST /api/orders/order/import-csv`                                                                    | `api.orders.order.importCsv(input)`        |
+| record action `archive`               | `POST /api/orders/order/:id/archive`                                                                   | `api.orders.order.archive({ id, reason })` |
+| child resource `orderItem`            | `POST /api/orders/order-item/query`                                                                    | `api.orders.orderItem.list()`              |
+| socket `live`                         | `GET /api/orders/live` (upgrade)                                                                       | `api.orders.live.connect()`                |
+
+CRUD routes come from [`@brickkit/crud`](/docs/resources). Resource and record actions are covered in [Resource Actions](/docs/resources#resource-actions), sockets in [Typed WebSockets](/docs/websockets).
+
+## Explicit Paths
+
+A `path` on an action, a resource action or a socket is relative to its owner. It doesn't repeat the prefix:
+
+```ts title="src/services/orders.ts"
+ordersService.action({
+  name: "getOrderSummary",
+  method: "GET",
+  path: "/:id/summary", // GET /api/orders/:id/summary
+  input: t.Object({ id: t.Integer() }),
+  execute: async ({ input }) => {
+    // input.id is a number
+  },
+});
+```
+
+On a resource action the path is relative to `/api/<service>/<resource>`. Path parameters merge into `input`; when the schema says a parameter is a number, Brick coerces it.
+
+Only raw routes take absolute paths: `endpoints`, `app.endpoint()` and webhooks.
+
+## Plugin Route Scopes
+
+A plugin route's `scope` picks its owner:
+
+| Scope      | Mounts under                       |
+| :--------- | :--------------------------------- |
+| `app`      | `${prefix}`                        |
+| `service`  | `${prefix}/${service}`             |
+| `resource` | `${prefix}/${service}/${resource}` |
+
+The typed client nests a resource plugin's API under the service: `api.<service>.<resource>.<...>`.
+
+## Reserved Names
+
+Names that would share a URL segment fail at startup:
+
+- A service action, a resource and a socket can't share a segment within a service.
+- A resource action can't be named after a CRUD route segment (`query`, `count`, `exists`, `find-one`, `bulk-create`, `bulk-update`, `bulk-delete`) or after a CRUD action on its resource, such as `list`. Names are compared in kebab-case, so `findOne` is refused too.
+
+The error reads `Brick: duplicate name "<name>" in service "<service>"…`.
+
+## OpenAPI and the Client
+
+[OpenAPI](/docs/openapi) tags every route with its service. Resource routes (CRUD, resource actions, resource plugins) are tagged `service · resource`, for example `orders · order`. An action's own `tags` are added after that tag.
+
+The [typed client](/docs/typed-client) contract describes these paths. Without a generated contract, the client calls `POST ${prefix}/<kebab service>/<kebab action>`, so resource and plugin routes need the contract.
+
+`getActionRoute(action, prefix)` and `kebabCase(name)` from `@brickkit/core` return the route Brick uses for an action and the segment it uses for a name.
+
+## Migrating From v0.10
+
+In v0.10, CRUD mounted at `${prefix}/${resource}` with no service segment (`POST /api/page/query`, `api.page.list()`), service actions used the declared names (`/api/users/getUser`), and an explicit `path` was a full URL including the prefix.
+
+To migrate:
+
+- Web apps: regenerate the client contract (Vite plugin or `brick gen client`) and update calls such as `api.page.list()` to `api.pages.page.list()`.
+- Explicit paths: rewrite them relative to the owner, so `path: "/api/orders/:id/summary"` on service `orders` becomes `path: "/:id/summary"`.
+- Other HTTP callers: switch to the new URLs, or keep the old ones working for a while with `legacyRoutes`.
+
+### `legacyRoutes`
+
+```ts title="src/app.ts"
+export default brick({ services, legacyRoutes: true });
+// GET /api/order/:id → same handler as GET /api/orders/order/:id
+```
+
+With `legacyRoutes: true`, the app also serves the v0.10 paths with the same handlers:
+
+- CRUD and resource plugin routes at `${prefix}/${resource}/...`.
+- Service plugin routes at `${prefix}/${service}/...` with names as declared.
+- Service actions and tools at `${prefix}/${service}/${action}` with names as declared.
+- An explicit path that still starts with the prefix (an un-migrated v0.10 path) at that old absolute URL.
+- Sockets at their old path.
+
+Responses on a legacy path add `Deprecation: true` and `Link: </api/orders/order/1>; rel="successor-version"`, with path parameters filled in. Socket upgrades on a legacy path get no extra headers. The request span gets `brick.legacy_route = true`, and the dev dashboard's Overview shows how many recent calls used a v0.10 path, so you can tell when clients have moved.
+
+A legacy path is skipped when a current route already owns it. OpenAPI and the typed client never describe legacy paths.
+
+<Callout type="warn">`legacyRoutes` will be removed in v0.12.</Callout>

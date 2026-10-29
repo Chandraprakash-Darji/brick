@@ -35,5 +35,5 @@ export const getPublicPageTool = pagesService.tool({
   method: "GET",
   name: "get_public_page",
   output: PageMetaSchema,
-  path: "/api/public/pages/:slug",
+  path: "/public/:slug",
 });

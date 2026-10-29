@@ -318,7 +318,7 @@ for (const compiler of [true, false]) {
         requestLogging: false,
       });
       const response = await app.handle(
-        new Request(`http://localhost/api/${service.name}/invalidOutput`, {
+        new Request(`http://localhost/api/${service.name}/invalid-output`, {
           method: "POST",
         }),
       );

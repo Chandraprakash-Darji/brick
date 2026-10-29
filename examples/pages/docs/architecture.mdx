@@ -27,9 +27,13 @@ description: One server for the UI, the API, auth, and MCP.
 
 Each action exposes one route. These are the ones the app serves:
 
-<Endpoint method="POST" path="/api/page/query" note="List the caller's pages" />
-<Endpoint method="GET" path="/api/page/{id}" note="Read one page" />
-<Endpoint method="GET" path="/api/public/pages/{slug}" note="Public metadata" />
+<Endpoint
+  method="POST"
+  path="/api/pages/page/query"
+  note="List the caller's pages"
+/>
+<Endpoint method="GET" path="/api/pages/page/{id}" note="Read one page" />
+<Endpoint method="GET" path="/api/pages/public/{slug}" note="Public metadata" />
 
 ## Starting the app
 

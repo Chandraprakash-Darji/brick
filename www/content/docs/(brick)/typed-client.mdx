@@ -41,8 +41,8 @@ export const api = createBrickClient({
   contract,
 });
 
-// CRUD resources live at the root: api.<resource>.<operation>
-const response = await api.page.list({
+// CRUD resources live under their service: api.<service>.<resource>.<operation>
+const response = await api.pages.page.list({
   where: { field: "title", op: "contains", value: "Launch" },
   limit: 5,
 });
@@ -50,21 +50,21 @@ const response = await api.page.list({
 console.log(response.items); // Typed from the resource's read fields
 ```
 
-Custom actions are grouped by service name (`api.<service>.<action>`), and dotted action names become nested namespaces. The contract carries each action's HTTP method and path, including CRUD routes and custom `path`/`method` overrides. GET and DELETE input is sent as a query string; other methods send JSON.
+Custom actions are grouped by service name (`api.<service>.<action>`), and dotted action names become nested namespaces. Resources, [resource actions](/docs/resources#resource-actions) and resource plugins nest under the service: `api.pages.page.get({ id })`, `api.orders.order.archive({ id, reason })`. Namespaces keep the declared names; only the URLs are kebab-case (see [URL Scheme](/docs/routes)). The contract carries each action's HTTP method and path, including CRUD routes and custom `path`/`method` overrides. GET and DELETE input is sent as a query string; other methods send JSON.
 
 ## Client Configuration (`createBrickClient`)
 
 The client constructor accepts the following options:
 
-| Option      | Type                                                                                          | Default            | Description                                                                                                                     |
-| :---------- | :-------------------------------------------------------------------------------------------- | :----------------- | :------------------------------------------------------------------------------------------------------------------------------ |
-| `baseUrl`   | `string`                                                                                      | _(Required)_       | Server origin (e.g. `"http://localhost:4000"`). Trailing slashes are trimmed.                                                   |
-| `contract`  | `Record<string, any>`                                                                         | `undefined`        | Generated contract. Without it, every call is `POST {prefix}/<service>/<action>`, so CRUD and custom-path routes won't resolve. |
-| `prefix`    | `string`                                                                                      | `"/api"`           | Route prefix used only for calls without contract metadata. Must match `brick({ prefix })`.                                     |
-| `headers`   | `Record<string, string> \| (() => Record<string, string> \| Promise<Record<string, string>>)` | `undefined`        | Static headers, or a function re-evaluated on every call.                                                                       |
-| `fetch`     | `(input, init) => Promise<Response>`                                                          | `globalThis.fetch` | Custom fetch implementation for tests, proxies, or `credentials: "include"`.                                                    |
-| `timeoutMs` | `number`                                                                                      | `undefined`        | Default per-call timeout in milliseconds (uses `AbortSignal.timeout`).                                                          |
-| `signal`    | `AbortSignal`                                                                                 | `undefined`        | Default abort signal for every call.                                                                                            |
+| Option      | Type                                                                                          | Default            | Description                                                                                                                                                   |
+| :---------- | :-------------------------------------------------------------------------------------------- | :----------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `baseUrl`   | `string`                                                                                      | _(Required)_       | Server origin (e.g. `"http://localhost:4000"`). Trailing slashes are trimmed.                                                                                 |
+| `contract`  | `Record<string, any>`                                                                         | `undefined`        | Generated contract. Without it, every call is `POST {prefix}/<kebab service>/<kebab action>`, so CRUD, resource, plugin and custom-path routes won't resolve. |
+| `prefix`    | `string`                                                                                      | `"/api"`           | Route prefix used only for calls without contract metadata. Must match `brick({ prefix })`.                                                                   |
+| `headers`   | `Record<string, string> \| (() => Record<string, string> \| Promise<Record<string, string>>)` | `undefined`        | Static headers, or a function re-evaluated on every call.                                                                                                     |
+| `fetch`     | `(input, init) => Promise<Response>`                                                          | `globalThis.fetch` | Custom fetch implementation for tests, proxies, or `credentials: "include"`.                                                                                  |
+| `timeoutMs` | `number`                                                                                      | `undefined`        | Default per-call timeout in milliseconds (uses `AbortSignal.timeout`).                                                                                        |
+| `signal`    | `AbortSignal`                                                                                 | `undefined`        | Default abort signal for every call.                                                                                                                          |
 
 ### Dynamic Authentication Headers
 
@@ -88,7 +88,7 @@ Every client invocation accepts an optional second argument for request-specific
 ```ts title="src/components/PageList.tsx"
 const controller = new AbortController();
 
-const pages = await api.page.list(
+const pages = await api.pages.page.list(
   { limit: 10 },
   {
     signal: controller.signal,

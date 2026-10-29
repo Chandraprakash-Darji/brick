@@ -1,13 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, relative, resolve, sep } from "node:path";
+import { getPluginActionRoute, kebabCase } from "@brickkit/core";
 import type { LintMessage, Severity } from "@brickkit/lint";
 import { loadBrickApp, type BrickApp } from "./app-entry";
 import { ConfigError, type LoadedConfig } from "./config";
 import { writeServiceManifest } from "./manifest";
 
 const posix = (path: string) => path.split(sep).join("/");
-const kebab = (name: string) =>
-  name.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
 const SOURCE = new Bun.Glob("**/*.{ts,tsx,mts,cts}");
 
 interface AppCheck {
@@ -197,10 +196,11 @@ function uniqueNames(check: AppCheck, app: BrickApp, add: Add) {
         `Two services are named "${service.name}".`,
       );
     seen.add(service.name);
-    // Actions, sockets and resources share the service's URL segments.
+    // Actions, sockets and resources share the service's URL segments;
+    // an explicit path or a resource action takes no segment of its own.
     const owners = new Map<string, string>();
     const claim = (name: string, what: string) => {
-      const segment = kebab(name);
+      const segment = kebabCase(name);
       const other = owners.get(segment);
       if (other)
         add(
@@ -211,10 +211,15 @@ function uniqueNames(check: AppCheck, app: BrickApp, add: Add) {
       else owners.set(segment, what);
     };
     for (const action of service.listActions())
-      if (!action.name.includes("."))
+      if (
+        action.config.path === undefined &&
+        !(action as { resourceAction?: unknown }).resourceAction &&
+        getPluginActionRoute(action) === undefined
+      )
         claim(action.name, `action "${action.name}"`);
     for (const socket of service.listSockets())
-      claim(socket.schema.name, `socket "${socket.schema.name}"`);
+      if (socket.schema.path === undefined)
+        claim(socket.schema.name, `socket "${socket.schema.name}"`);
     for (const resource of service.listResources())
       claim(resource.name, `resource "${resource.name}"`);
   }
@@ -245,7 +250,7 @@ function tableOwners(app: BrickApp) {
 
 function serviceOfFolder(app: BrickApp, folder: string) {
   return app.definition.services.find(
-    (service) => service.name === folder || kebab(service.name) === folder,
+    (service) => service.name === folder || kebabCase(service.name) === folder,
   )?.name;
 }
 
@@ -341,7 +346,7 @@ function declaredEvents(check: AppCheck, app: BrickApp, add: Add) {
             check.entry,
             `Action "${service.name}.${action.name}" emits "${name}", which is not in ${service.name}'s event catalog.`,
           );
-    const folder = [kebab(service.name), service.name]
+    const folder = [kebabCase(service.name), service.name]
       .map((name) => resolve(check.services, name))
       .find(existsSync);
     for (const file of folder ? sourceFiles(check, folder) : []) {

@@ -31,9 +31,9 @@ The database is `.data/orders.sqlite`. Set `DB_PATH` to move it. Set
 `CARRIER_FAILURES=2` to make the carrier fail twice before it answers.
 
 ```sh
-curl -s -X POST localhost:4000/api/order -H 'content-type: application/json' \
+curl -s -X POST localhost:4000/api/orders/order -H 'content-type: application/json' \
   -d '{"customer":"ada@example.com","totalCents":4200}'
-curl -s -X POST localhost:4000/api/notification/query -H 'content-type: application/json' -d '{}'
+curl -s -X POST localhost:4000/api/orders/notification/query -H 'content-type: application/json' -d '{}'
 ```
 
 ## Shipping as a workflow

@@ -4,7 +4,7 @@ import { resolve, dirname, basename, sep } from "path";
 import { fileURLToPath } from "node:url";
 import {
   brick,
-  getPluginActionRoute,
+  getActionRoute,
   isBrickApp,
   type ApiDocument,
   type ArchitectureSchema,
@@ -96,14 +96,9 @@ async function createServer(
     const actions = svc.listActions();
     console.log(`   • ${svc.name} (${actions.length} actions)`);
     for (const act of actions) {
-      const pluginRoute = getPluginActionRoute(act, prefix);
-      if (pluginRoute === false) continue;
-      const method = pluginRoute?.method ?? act.config.method ?? "POST";
-      const path =
-        pluginRoute?.path ??
-        act.config.path ??
-        `${prefix}/${svc.name}/${act.name}`;
-      console.log(`     -> ${method.padEnd(6)} ${path}`);
+      const route = getActionRoute(act, prefix);
+      if (route === false) continue;
+      console.log(`     -> ${route.method.padEnd(6)} ${route.path}`);
     }
   }
 
@@ -187,14 +182,9 @@ export async function startProdServer(options: DevServerOptions = {}) {
     const actions = svc.listActions();
     console.log(`   • ${svc.name} (${actions.length} actions)`);
     for (const act of actions) {
-      const pluginRoute = getPluginActionRoute(act, prefix);
-      if (pluginRoute === false) continue;
-      const method = pluginRoute?.method ?? act.config.method ?? "POST";
-      const path =
-        pluginRoute?.path ??
-        act.config.path ??
-        `${prefix}/${svc.name}/${act.name}`;
-      console.log(`     -> ${method.padEnd(6)} ${path}`);
+      const route = getActionRoute(act, prefix);
+      if (route === false) continue;
+      console.log(`     -> ${route.method.padEnd(6)} ${route.path}`);
     }
   }
 

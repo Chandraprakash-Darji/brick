@@ -89,7 +89,7 @@ it("emits the named where schemas in OpenAPI and still queries through them", as
     expect(serialized).toContain("CrudWhere:page:id");
     const call = (path: string, body?: unknown) =>
       application.handle(
-        new Request(`http://localhost/api/page${path}`, {
+        new Request(`http://localhost/api/content/page${path}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           ...(body === undefined ? {} : { body: JSON.stringify(body) }),

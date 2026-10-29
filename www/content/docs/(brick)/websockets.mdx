@@ -42,7 +42,7 @@ import { chat } from "./chat";
 export default brick({ services: [chat] });
 ```
 
-The default route is `/api/chat/live`. `brick({ prefix: "/v2" })` changes the prefix. Set a static `path` on the socket declaration to override the complete route. Declare sockets before `brick()` builds the service. Duplicate socket routes and conflicting GET routes fail at startup.
+The default route is `/api/chat/live`: the prefix, the service, then the socket name in kebab-case. `brick({ prefix: "/v2" })` changes the prefix. A static `path` on the socket declaration is relative to the service, so `path: "/stream"` mounts at `/api/chat/stream`. A socket can't share a URL segment with an action or resource of the same service (see [URL Scheme](/docs/routes)). Declare sockets before `brick()` builds the service. Duplicate socket routes and conflicting GET routes fail at startup.
 
 `input` lists events the client sends. Every input event requires a handler. `output` lists events the server sends. Handlers receive their inferred `input`, the owning service's `ctx`, and a typed `socket`. `socket.send()` checks the event name and payload in TypeScript and validates the payload at runtime.
 
