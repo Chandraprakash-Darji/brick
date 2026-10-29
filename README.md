@@ -7,14 +7,14 @@
 
 [![npm](https://img.shields.io/npm/dm/@brickkit/core?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/@brickkit/core)
 [![npm version](https://img.shields.io/npm/v/@brickkit/core.svg?style=flat&colorA=000000&colorB=000000)](https://www.npmjs.com/package/@brickkit/core)
-[![GitHub stars](https://img.shields.io/github/stars/Chandraprakash-Darji/brick?style=flat&colorA=000000&colorB=000000)](https://github.com/Chandraprakash-Darji/brick/stargazers)
+[![GitHub stars](https://img.shields.io/github/stars/get-brickkit/brick?style=flat&colorA=000000&colorB=000000)](https://github.com/get-brickkit/brick/stargazers)
 
   <p>
-    <a href="https://github.com/Chandraprakash-Darji/brick/issues">Issues</a>
+    <a href="https://github.com/get-brickkit/brick/issues">Issues</a>
     ·
     <a href="./CONTRIBUTING.md">Contributing</a>
     ·
-    <a href="https://github.com/Chandraprakash-Darji/brick/releases">Releases</a>
+    <a href="https://github.com/get-brickkit/brick/releases">Releases</a>
   </p>
 </div>
 
@@ -116,7 +116,7 @@ The local `scripts/release.ts` command dispatches this same workflow, so it also
 
 ## Star history
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Chandraprakash-Darji/brick&type=date&legend=top-left)](https://www.star-history.com/?repos=Chandraprakash-Darji%2Fbrick&type=date&legend=top-left)
+[![Star History Chart](https://api.star-history.com/svg?repos=get-brickkit/brick&type=date&legend=top-left)](https://www.star-history.com/?repos=get-brickkit%2Fbrick&type=date&legend=top-left)
 
 ## Contribute
 

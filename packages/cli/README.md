@@ -57,7 +57,7 @@ brick gen client src/app.ts
 brick info src/app.ts
 ```
 
-Source: <https://github.com/Chandraprakash-Darji/brick>.
+Source: <https://github.com/get-brickkit/brick>.
 
 ## Local dashboard
 

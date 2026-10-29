@@ -5,7 +5,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Chandraprakash-Darji/brick.git",
+    "url": "git+https://github.com/get-brickkit/brick.git",
     "directory": "packages/workflow-inspector"
   },
   "type": "module",
