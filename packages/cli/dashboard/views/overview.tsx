@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/table";
 import { isFailure } from "@/format";
 import { cn } from "@/lib/utils";
+import { Slot } from "@/extension";
 import type {
   ArchitectureSnapshot,
   TraceSummary,
@@ -67,6 +68,7 @@ export function OverviewView({
         title="Overview"
         description="Routes and services of the running app. Counts cover the recent requests kept in memory."
       />
+      <Slot name="overview.top" />
       {!architecture ? (
         <Panel>
           <Empty title="Waiting for the application to start" />

@@ -24,8 +24,24 @@ a browser reload shows the new UI without restarting `brick dev`.
   (`../test/dashboard-filters.test.ts`).
 - `history.ts`: the hooks that read `/api/history/*` for the stored requests,
   their counts, volume, and summary (`../test/dashboard-history.test.ts`).
-- `shell.tsx`: the sidebar and top bar.
-- `views/`: Requests, Overview, APIs, Docs, Workflows (a frame around the inspector the dev server proxies at `/workflows`), Errors, Reloads.
+- `shell.tsx`: the sidebar and top bar. `BUILT_IN_NAV` is the dashboard's own
+  pages; `app.tsx` merges an extension's into it.
+- `kit.ts`: `@brickkit/cli/dashboard`, what a project's dashboard extension
+  imports (`defineDashboard`, the UI kit, the data hooks). It is a second
+  entry of the Vite build (`kit.js`), sharing chunks with `app.js`, and the
+  page's import map names it, with `react.js`, `react-dom.js`,
+  `react-dom-client.js` and `react-jsx-runtime.js` (shims that
+  `scripts/build-dashboard.ts` writes over `globalThis.__brickDashboard`, set
+  in `main.tsx`). Its types are `dist/dashboard.d.ts`
+  (`tsdown.dashboard.config.ts`).
+- `extension-registry.ts`: the extension's types and `mergeNav`, which places
+  its pages (`#/x/<id>`) and links in the sidebar and refuses duplicate,
+  built-in or malformed ids (`../test/dashboard-extension.test.ts`).
+- `extension.tsx`: loading the extension (the shell's `brick-extension` meta
+  names it) before the first render, the error boundary around every page,
+  slot, drawer tab and the root, `Slot`, and the data hooks (`useAppFetch`
+  over the server's `/app` proxy, `useRequests`, `useArchitecture`).
+- `views/`: Requests, Overview, APIs, Docs, Workflows (a frame around the inspector the dev server proxies at `/workflows`), Errors, Reloads, and an extension's page (`extension-page.tsx`).
 - `components/`: `Panel`, `Metric`, `TimelineStrip`, `FacetPanel`,
   `RequestDrawer`, `Waterfall`, `ServiceGraphPanel`, `ApiReference`.
 - `components/docs/`: the Docs tab: `DocsTree`, `DocsSearch`, `DocsPageView` and
@@ -119,6 +135,20 @@ Follows Efferd's Dashboard 9. Tokens live in `styles.css` for both themes.
   `react` at `dashboard-dist/react.js`, which `scripts/build-dashboard.ts` writes
   to hand over the dashboard's own copy. The root `.gitignore` has `docs/`, so a
   folder of this name needs an exception there.
+- **Extensions:** `src/dashboard-extension.ts` bundles a project's module
+  (`bundleComponents`, the same as the docs components, with the import map's
+  modules external) and compiles its Tailwind classes, utilities only, against
+  `theme.css` (copied into `dashboard-dist`), with the project's `tailwindcss`.
+  The dashboard server keeps both in memory and serves them as
+  `/assets/extension.js` and `.css`; in dev it rebuilds as the module's folder
+  changes and sends an `extension` event, and the page reloads when the
+  revision differs from the one it was served. `dashboard.theme` becomes
+  `/assets/brick-theme.css`, token values on `:root:not(.dark)` and
+  `:root.dark` (checked against `THEME_TOKENS`, which a test keeps equal to
+  `theme.css`); the Workflows view adds it to the inspector's frame. Fonts are
+  a plain `@theme` block in `theme.css`, not inline, so they stay variables the
+  theme can set. The production dashboard shows only pages marked
+  `production: true`.
 - **Controls:** outline buttons, compact segmented toggles, and a `kbd` hint on
   the search button. Hover states stay quiet.
 

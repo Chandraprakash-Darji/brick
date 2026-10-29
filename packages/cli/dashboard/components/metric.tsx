@@ -36,9 +36,9 @@ export function Metric({
   note,
   spark,
 }: {
-  icon: ReactNode;
+  icon?: ReactNode;
   label: string;
-  value: string;
+  value: ReactNode;
   /** A line under the value. */
   note?: string;
   /** Recent values for the miniature chart; omit for none. */
@@ -53,7 +53,7 @@ export function Metric({
             {label}
           </div>
           <div className="mt-1 text-2xl font-medium tracking-tight tabular-nums">
-            {value}
+            {value ?? "—"}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
             {note}

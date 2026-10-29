@@ -1,0 +1,184 @@
+---
+title: Dashboard extensions
+description: Add pages, sidebar links, slot contents, providers and a theme to the Brick dashboard.
+---
+
+The dashboard that `brick dev` serves (and `brick start` serves in production) is a prebuilt React app. One module of your own can extend it at run time: pages, sidebar links, contents for a fixed set of slots, providers around the whole app, and a theme. The dashboard isn't rebuilt with your code. Brick bundles only your module.
+
+## An extension
+
+```tsx title="src/dashboard/index.tsx"
+import {
+  defineDashboard,
+  Panel,
+  Metric,
+  useAppFetch,
+} from "@brickkit/cli/dashboard";
+import { Boxes, LineChart } from "lucide-react";
+
+export default defineDashboard({
+  root: ({ children }) => (
+    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+  ),
+  slots: {
+    "topbar.end": () => <EnvBadge />,
+    "sidebar.footer": () => <a href="https://grafana.internal">Grafana</a>,
+  },
+  pages: [
+    {
+      id: "queues",
+      label: "Queues",
+      icon: <Boxes />,
+      after: "overview",
+      component: QueuesPage,
+    },
+  ],
+  sidebar: [
+    {
+      label: "Metrics",
+      icon: <LineChart />,
+      href: "https://grafana.internal/d/brick",
+    },
+  ],
+});
+
+function QueuesPage() {
+  const { data } = useAppFetch("/api/admin/queues"); // through the dashboard's /app proxy
+  return (
+    <Panel title="Queues">
+      <Metric label="Waiting" value={data?.waiting} />
+    </Panel>
+  );
+}
+```
+
+Point the dashboard at it. In `brick.config.ts`:
+
+```ts title="brick.config.ts"
+dashboard: {
+  extension: "src/dashboard/index.tsx",
+  theme: {
+    light: { primary: "oklch(0.55 0.2 260)" },
+    dark: { primary: "oklch(0.7 0.15 260)" },
+    radius: "0.5rem",
+  },
+},
+```
+
+Or pass the module on the command line:
+
+```bash
+brick dev src/server.ts --dashboard-extension src/dashboard/index.tsx
+brick build src/server.ts --dashboard-extension src/dashboard/index.tsx
+```
+
+The Vite plugin takes the same options: `brickClient({ entry, dashboard: { extension, theme } })`, with `extension` relative to the Vite root.
+
+## How it loads
+
+The dashboard page publishes its React, React DOM and its UI kit through an import map. Brick bundles your module with those left as imports (Bun's bundler, or Vite's under Node), so there is one React on the page. Providers from `root` reach your pages, and the hooks below work across the boundary.
+
+Install `react` and `@types/react` in your project for types. Your tsconfig needs `"jsx": "react-jsx"`. Anything else your module imports, such as `lucide-react` or React Query, is bundled into it.
+
+`brick dev` watches the module's folder. When the bundle changes, it rebuilds and reloads the dashboard over its event stream. A build error shows at the top of the dashboard, and the dashboard keeps working without the extension.
+
+## Pages
+
+A page has an `id`, a `label`, an optional `icon`, and a `component`. It lives at `#/x/<id>`, so it never clashes with a built-in page. Anything after the id reaches the component as `path`: `#/x/queues/high` gives `["high"]`.
+
+| Option       | Meaning                                                                                                                                                  |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `after`      | Place it after a page: a built-in one (`overview`, `requests`, `logs`, `apis`, `docs`, `workflows`, `errors`, `reloads`) or another extension page's id. |
+| `section`    | Place it under this heading, below the built-in pages. `after` wins when both are set.                                                                   |
+| `production` | Show it in the production dashboard too. See [Production](#production).                                                                                  |
+
+Without either, a page goes at the end of the sidebar. Ids are letters, digits and dashes. An id used twice, an id of a built-in page, or an `after` that names no page stops the extension from loading. The dashboard shows why and runs without it.
+
+### Pages in a frame
+
+A page with a `url` instead of a `component` is shown in a frame: `{ id: "admin", label: "Admin", url: "/app/admin" }`. A framed page can't fill slots, use the providers from `root`, or follow the theme. Use it when you already have the page elsewhere.
+
+## Sidebar links
+
+`sidebar` adds links: `{ label, icon?, href }`, placed with `after` and `section` like pages. A link to another site opens in a new tab.
+
+## Slots
+
+Slots are a fixed list, so the API stays the same when the dashboard's layout changes. Each slot's component receives a context: `route` (the parsed address), `theme` (`"light"` or `"dark"`, as shown), `production`, and `selectedRequestId` when a request is open.
+
+| Slot                  | Where                                        | Extra context                  |
+| --------------------- | -------------------------------------------- | ------------------------------ |
+| `topbar.start`        | After the page title in the top bar          |                                |
+| `topbar.end`          | Before the status and buttons in the top bar |                                |
+| `sidebar.header`      | Below the logo in the sidebar                | `expanded`                     |
+| `sidebar.footer`      | At the bottom of the sidebar                 | `expanded`                     |
+| `overview.top`        | Below the Overview heading                   |                                |
+| `request.drawer.tabs` | Tabs beside Details in the request drawer    | `request`, the request's spans |
+
+`request.drawer.tabs` takes a list of tabs, not a component:
+
+```tsx
+slots: {
+  "request.drawer.tabs": [
+    { id: "billing", label: "Billing", component: ({ request }) => <Billing traceId={request?.traceId} /> },
+  ],
+},
+```
+
+## Root
+
+`root` wraps the whole dashboard. Use it for providers, analytics or feature flags.
+
+## Errors stay in place
+
+Every page, slot, drawer tab and the root sits behind its own error boundary. A component that throws shows its error where it would have been, and the rest of the dashboard keeps working.
+
+## Data hooks
+
+| Export                     | Returns                                                                                                                 |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `useAppFetch(path, init?)` | `{ data, error, loading, refetch }` for `path` on your app. JSON is parsed, anything else is text. Pass `null` to wait. |
+| `appFetch(path, init?)`    | A `fetch` of `path` on your app, for writes.                                                                            |
+| `useRequests()`            | The requests the dashboard holds live, newest first.                                                                    |
+| `useArchitecture()`        | Your app's services, actions and routes, or `null` before it starts.                                                    |
+
+The dashboard server passes `/app/*` to your app, as it passes `/workflows` to the workflow inspector. `/app/api/admin/queues` reaches `/api/admin/queues`, from the dashboard's own origin, so there are no cross-origin problems. Only the dashboard's own page may use it. The dashboard's cookies, and in production the credential you signed in to the dashboard with, aren't passed on: send your app's own `authorization` header in `init` when it needs one.
+
+## UI kit
+
+`@brickkit/cli/dashboard` also exports the dashboard's components, so pages match it:
+
+- `Panel` (with an optional `title`), `Metric`, `SparkBars`, `PageHeader`, `Empty`
+- `Badge`, `Button`, `Card`, `Checkbox`, `Input`, `Kbd`, `Popover`, `Separator`, `Table`, `Toggle`, `ToggleGroup`, `Tooltip` and their parts, from `ui/*`
+- `cn`, to join class names
+
+For your own classes, Brick compiles your module's Tailwind classes against the dashboard's tokens, so `bg-primary`, `text-muted-foreground` and the rest match. This needs `tailwindcss` (v4) installed in your project. Without it, the UI kit is still styled, and Brick says once that your own classes are not compiled.
+
+## Theme
+
+`dashboard.theme` needs no extension code. It sets token values for light and dark mode, the corner radius, and the fonts:
+
+```ts
+theme: {
+  light: { primary: "oklch(0.55 0.2 260)", "chart-1": "oklch(0.8 0.1 260)" },
+  dark: { primary: "oklch(0.7 0.15 260)" },
+  radius: "0.5rem",
+  fonts: { sans: "Inter, sans-serif", mono: "JetBrains Mono, monospace" },
+},
+```
+
+`light` and `dark` take these tokens:
+
+- `background`, `foreground`, `card`, `card-foreground`, `popover`, `popover-foreground`
+- `primary`, `primary-foreground`, `secondary`, `secondary-foreground`, `muted`, `muted-foreground`, `accent`, `accent-foreground`
+- `destructive`, `destructive-foreground`, `positive`, `border`, `input`, `ring`
+- `chart-1` to `chart-5`
+- `span-request`, `span-action`, `span-rpc`, `span-sql`, `span-event`, `span-other` (the waterfall's span colours)
+
+Any other name is an error when the dashboard starts or `brick build` runs. Fonts must be ones the browser can load. The workflow inspector uses the same tokens, so it follows the theme.
+
+## Production
+
+`brick build` builds the extension into `<outdir>/dashboard` (`extension.js` and `extension.css`). The production dashboard of `brick start` takes either that folder or the source module as its extension, and needs no bundler for the folder.
+
+In production, only pages and links marked `production: true` appear. Slots and the root still apply. Extension pages stay behind the dashboard's `auth`, and so does `/app`. The production dashboard serves `/app` only when it has an extension.

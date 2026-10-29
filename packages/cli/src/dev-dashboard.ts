@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import {
   createServer,
@@ -8,7 +7,6 @@ import {
 import { extname, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { fileURLToPath } from "node:url";
 import type { DevDocs } from "./dev-docs";
 import { INSPECTOR_PATH, INSPECTOR_TOKEN_HEADER } from "./dev-inspector";
 import { parseHistoryQuery, type DevHistory } from "./dev-history";
@@ -17,9 +15,15 @@ import type {
   DevTelemetryEvent,
   DevTelemetryStore,
 } from "./dev-telemetry-store";
-import { DEV_DASHBOARD_SHELL } from "./dev-dashboard-shell";
+import { dashboardShell } from "./dev-dashboard-shell";
 import type { DashboardAuth } from "@brickkit/core";
 import { createAccess, isLoopbackHost } from "./dashboard-access";
+import {
+  assetsDirectory,
+  DashboardExtensionHost,
+  themeCss,
+  type DashboardExtensionOptions,
+} from "./dashboard-extension";
 
 export const DEFAULT_DASHBOARD_PORT = 9400;
 const KEEPALIVE_MS = 15_000;
@@ -55,15 +59,26 @@ const NOT_RETURNED = new Set([
  * What a production dashboard may show: the shell and its assets, the live
  * state and its event stream, and stored history. Nothing that changes the app
  * or reaches into it (restart, the API proxy, ingest) and nothing from the
- * project's source (documentation, OpenAPI documents).
+ * project's source (documentation, OpenAPI documents). With an extension, the
+ * `/app` proxy its pages read the app through.
  */
-const isMonitoringRoute = (method: string | undefined, pathname: string) =>
-  method === "GET" &&
-  (pathname === "/" ||
-    pathname.startsWith("/assets/") ||
-    pathname === "/api/state" ||
-    pathname === "/api/events" ||
-    pathname.startsWith("/api/history"));
+const isMonitoringRoute = (
+  method: string | undefined,
+  pathname: string,
+  extension: boolean,
+) =>
+  (extension && isAppRoute(pathname)) ||
+  (method === "GET" &&
+    (pathname === "/" ||
+      pathname.startsWith("/assets/") ||
+      pathname === "/api/state" ||
+      pathname === "/api/events" ||
+      pathname.startsWith("/api/history")));
+
+/** `/app/*` reaches the app itself, for the extension's `useAppFetch`. */
+const APP_PATH = "/app";
+const isAppRoute = (pathname: string) =>
+  pathname === APP_PATH || pathname.startsWith(`${APP_PATH}/`);
 
 const PRODUCTION_HEADERS = {
   "x-content-type-options": "nosniff",
@@ -104,6 +119,13 @@ export interface DevDashboardOptions {
   docs?: () => DevDocs | undefined;
   /** Omit when the host cannot restart the application; the page hides its button. */
   restart?: () => void;
+  /**
+   * The project's extension and theme. In dev mode the extension is rebuilt as
+   * its folder changes, and the page reloads; production serves it as built.
+   */
+  dashboard?: DashboardExtensionOptions;
+  /** Where `/app/*` goes; the app the store's API documents name otherwise. */
+  appUrl?: string;
 }
 
 export interface DevDashboard {
@@ -131,6 +153,17 @@ export function startDevDashboard(
       ),
     );
   }
+  let theme: string;
+  try {
+    theme = themeCss(options.dashboard?.theme);
+  } catch (error) {
+    return Promise.reject(error);
+  }
+  const extension = options.dashboard?.extension
+    ? new DashboardExtensionHost(options.dashboard.extension, (message) =>
+        console.warn(message),
+      )
+    : undefined;
   const access = options.auth
     ? createAccess(options.auth, (error) =>
         console.error("[Brick-TS] The dashboard sign-in check failed:", error),
@@ -173,7 +206,10 @@ export function startDevDashboard(
         return;
       }
     }
-    if (production && !isMonitoringRoute(request.method, pathname)) {
+    if (
+      production &&
+      !isMonitoringRoute(request.method, pathname, Boolean(extension))
+    ) {
       send(response, 404, "Not found");
       return;
     }
@@ -212,14 +248,45 @@ export function startDevDashboard(
   ): void {
     const { pathname } = url;
     if (request.method === "GET" && pathname === "/") {
-      send(response, 200, DEV_DASHBOARD_SHELL, {
-        "content-type": "text/html; charset=utf-8",
-        "cache-control": "no-store",
-      });
+      send(
+        response,
+        200,
+        dashboardShell({
+          extension: extension && {
+            revision: extension.revision,
+            js: Boolean(extension.built),
+            css: Boolean(extension.built?.css),
+          },
+          theme: theme !== "",
+        }),
+        {
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "no-store",
+        },
+      );
       return;
     }
     if (request.method === "GET" && pathname.startsWith("/assets/")) {
-      serveAsset(response, pathname.slice("/assets/".length));
+      const name = pathname.slice("/assets/".length);
+      // The project's own files, kept in memory beside the dashboard's.
+      const own =
+        name === "brick-theme.css"
+          ? theme
+          : name === "extension.js"
+            ? extension?.built?.js
+            : name === "extension.css"
+              ? extension?.built?.css
+              : undefined;
+      if (own !== undefined)
+        send(response, 200, own, {
+          "content-type": ASSET_TYPES[extname(name)]!,
+          "cache-control": "no-store",
+        });
+      else serveAsset(response, name);
+      return;
+    }
+    if (isAppRoute(pathname)) {
+      void app(request, response, url);
       return;
     }
     if (request.method === "GET" && pathname === "/api/state") {
@@ -292,6 +359,9 @@ export function startDevDashboard(
       canRestart: Boolean(options.restart),
       historyDays: options.history?.days ?? 0,
       mode: production ? "production" : "dev",
+      extension: extension
+        ? { revision: extension.revision, error: extension.error }
+        : null,
     };
   }
 
@@ -442,31 +512,84 @@ export function startDevDashboard(
       send(response, 403, "Forbidden");
       return;
     }
+    await forward(
+      request,
+      response,
+      `http://127.0.0.1:${target.port}${url.pathname}${url.search}`,
+      (headers) => headers.set(INSPECTOR_TOKEN_HEADER, target.token),
+      "Could not reach the workflow inspector.",
+    );
+  }
+
+  /**
+   * Pass `/app/*` to the app, so the extension's pages read it from the
+   * dashboard's own origin. Only the dashboard's page may use it, as with the
+   * API proxy. A credential for the dashboard itself is not passed on.
+   */
+  async function app(
+    request: IncomingMessage,
+    response: ServerResponse,
+    url: URL,
+  ): Promise<void> {
+    const site = request.headers["sec-fetch-site"];
+    const origin = request.headers.origin;
+    if (
+      (site !== undefined && site !== "same-origin") ||
+      (origin !== undefined && origin !== `http://${request.headers.host}`)
+    ) {
+      send(response, 403, "Forbidden");
+      return;
+    }
+    const appUrl = options.appUrl ?? options.store.apiSnapshot()?.appUrl;
+    if (!appUrl) {
+      send(response, 503, "The app is not running yet.");
+      return;
+    }
+    // Framed by an extension's iframe page, and by nothing else.
+    response.setHeader("content-security-policy", "frame-ancestors 'self'");
+    response.setHeader("x-frame-options", "SAMEORIGIN");
+    await forward(
+      request,
+      response,
+      `${new URL(appUrl).origin}${url.pathname.slice(APP_PATH.length) || "/"}${url.search}`,
+      (headers) => {
+        if (access) headers.delete("authorization");
+      },
+      "Could not reach the app.",
+    );
+  }
+
+  /** Send the request on to `target` and stream its answer back. */
+  async function forward(
+    request: IncomingMessage,
+    response: ServerResponse,
+    target: string,
+    adjust: (headers: Headers) => void,
+    unreachable: string,
+  ): Promise<void> {
+    const bodyless = request.method === "GET" || request.method === "HEAD";
     const headers = new Headers();
     for (const [name, value] of Object.entries(request.headers)) {
       if (value === undefined || NOT_FORWARDED.has(name)) continue;
       if (name.startsWith("sec-")) continue;
       headers.set(name, Array.isArray(value) ? value.join(", ") : value);
     }
-    headers.set(INSPECTOR_TOKEN_HEADER, target.token);
+    adjust(headers);
     const abort = new AbortController();
     response.on("close", () => abort.abort());
     try {
-      const upstream = await fetch(
-        `http://127.0.0.1:${target.port}${url.pathname}${url.search}`,
-        {
-          method: request.method,
-          headers,
-          redirect: "manual",
-          signal: abort.signal,
-          ...(bodyless
-            ? {}
-            : {
-                body: Readable.toWeb(request) as unknown as BodyInit,
-                duplex: "half",
-              }),
-        } as RequestInit,
-      );
+      const upstream = await fetch(target, {
+        method: request.method,
+        headers,
+        redirect: "manual",
+        signal: abort.signal,
+        ...(bodyless
+          ? {}
+          : {
+              body: Readable.toWeb(request) as unknown as BodyInit,
+              duplex: "half",
+            }),
+      } as RequestInit);
       const returned: Record<string, string> = {};
       upstream.headers.forEach((value, name) => {
         if (!NOT_RETURNED.has(name)) returned[name] = value;
@@ -479,7 +602,7 @@ export function startDevDashboard(
       await pipeline(Readable.fromWeb(upstream.body as never), response);
     } catch {
       if (response.headersSent) response.destroy();
-      else send(response, 502, "Could not reach the workflow inspector.");
+      else send(response, 502, unreachable);
     }
   }
 
@@ -564,44 +687,61 @@ export function startDevDashboard(
     const unsubscribe = options.store.subscribe((event: DevTelemetryEvent) =>
       write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`),
     );
+    // A rebuilt extension: the page reloads to run it.
+    const unwatch = extension?.onChange(() =>
+      write(
+        `event: extension\ndata: ${JSON.stringify(snapshot().extension)}\n\n`,
+      ),
+    );
     const keepalive = setInterval(() => write(": keepalive\n\n"), KEEPALIVE_MS);
     request.on("close", () => {
       clearInterval(keepalive);
       unsubscribe();
+      unwatch?.();
     });
   }
 
-  return new Promise((resolve, reject) => {
-    server.once("error", (error) => {
-      reject(
-        new Error(
-          production
-            ? `Brick: dashboard port ${options.port} is unavailable. Set dashboard.port in brick() to another.`
-            : `Brick: dashboard port ${options.port} is unavailable. Use --dashboard-port <number> or --no-dashboard.`,
-          { cause: error },
-        ),
-      );
-    });
-    server.listen(options.port, host, () => {
-      const address = server.address();
-      const port =
-        typeof address === "object" && address !== null
-          ? address.port
-          : options.port;
-      allowedHosts = new Set([
-        `127.0.0.1:${port}`,
-        `localhost:${port}`,
-        `[::1]:${port}`,
-      ]);
-      resolve({
-        port,
-        stop() {
-          server.close();
-          server.closeAllConnections();
-        },
+  // The first build finishes before the page can be asked for; a failed one
+  // is shown on the page, and does not stop the dashboard.
+  const ready = extension ? extension.load() : Promise.resolve();
+  return ready.then(() => listen());
+
+  function listen(): Promise<DevDashboard> {
+    return new Promise((resolve, reject) => {
+      server.once("error", (error) => {
+        extension?.close();
+        reject(
+          new Error(
+            production
+              ? `Brick: dashboard port ${options.port} is unavailable. Set dashboard.port in brick() to another.`
+              : `Brick: dashboard port ${options.port} is unavailable. Use --dashboard-port <number> or --no-dashboard.`,
+            { cause: error },
+          ),
+        );
+      });
+      server.listen(options.port, host, () => {
+        const address = server.address();
+        const port =
+          typeof address === "object" && address !== null
+            ? address.port
+            : options.port;
+        allowedHosts = new Set([
+          `127.0.0.1:${port}`,
+          `localhost:${port}`,
+          `[::1]:${port}`,
+        ]);
+        if (!production) extension?.watch();
+        resolve({
+          port,
+          stop() {
+            extension?.close();
+            server.close();
+            server.closeAllConnections();
+          },
+        });
       });
     });
-  });
+  }
 }
 
 /** The whole request body, or undefined when it is larger than `limit`. */
@@ -675,15 +815,6 @@ const ASSET_TYPES: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
   ".woff2": "font/woff2",
 };
-
-/** The built React app, next to `src/` in the repo and next to `dist/` when published. */
-function assetsDirectory(): string | undefined {
-  for (const relative of ["../dashboard-dist/", "../../dashboard-dist/"]) {
-    const directory = fileURLToPath(new URL(relative, import.meta.url));
-    if (existsSync(join(directory, "app.js"))) return directory;
-  }
-  return undefined;
-}
 
 function serveAsset(response: ServerResponse, name: string): void {
   // Plain file names only: no separators, so a request cannot leave the folder.

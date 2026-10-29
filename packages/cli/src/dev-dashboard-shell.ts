@@ -1,10 +1,23 @@
 /**
  * The page the dashboard serves at `/`. The React app and its styles load from
  * `/assets/`; the inline script applies the saved theme before first paint. The
- * import map lets the project's own docs components, bundled apart from the
- * dashboard, share its copy of React.
+ * import map hands the project's own modules (its docs components and its
+ * dashboard extension), bundled apart from the dashboard, the dashboard's copy
+ * of React and its UI kit, so there is one of each on the page.
+ *
+ * `extension` describes the project's extension: `revision` changes with every
+ * rebuild (the page reloads when it does), `js` and `css` say what it built.
+ * `theme` is whether `/assets/brick-theme.css` has token values to apply.
  */
-export const DEV_DASHBOARD_SHELL = `<!doctype html>
+export function dashboardShell(
+  options: {
+    extension?: { revision: number; js: boolean; css: boolean };
+    theme?: boolean;
+  } = {},
+): string {
+  const { extension, theme } = options;
+  const version = extension ? `?v=${extension.revision}` : "";
+  return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -21,8 +34,8 @@ export const DEV_DASHBOARD_SHELL = `<!doctype html>
 })();
 </script>
 <link rel="stylesheet" href="/assets/app.css">
-<script type="importmap">
-{"imports":{"react":"/assets/react.js","react/jsx-runtime":"/assets/react-jsx-runtime.js","react/jsx-dev-runtime":"/assets/react-jsx-runtime.js"}}
+${extension?.css ? `<link rel="stylesheet" href="/assets/extension.css${version}">\n` : ""}${theme ? `<link rel="stylesheet" href="/assets/brick-theme.css" data-brick-theme>\n` : ""}${extension ? `<meta name="brick-extension" data-revision="${extension.revision}"${extension.js ? ` data-src="/assets/extension.js${version}"` : ""}>\n` : ""}<script type="importmap">
+{"imports":{"react":"/assets/react.js","react/jsx-runtime":"/assets/react-jsx-runtime.js","react/jsx-dev-runtime":"/assets/react-jsx-runtime.js","react-dom":"/assets/react-dom.js","react-dom/client":"/assets/react-dom-client.js","@brickkit/cli/dashboard":"/assets/kit.js"}}
 </script>
 </head>
 <body>
@@ -31,3 +44,4 @@ export const DEV_DASHBOARD_SHELL = `<!doctype html>
 </body>
 </html>
 `;
+}

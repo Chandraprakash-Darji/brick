@@ -4,6 +4,11 @@ import { compileBrickApplication, emitCompiledApplication } from "./compiler";
 import { brickAot } from "./compiler/aot";
 import { loadBrickApp } from "./app-entry";
 import { buildAppWorkflows, workflowTransformPlugin } from "./workflows";
+import {
+  themeCss,
+  writeDashboardExtension,
+  type DashboardExtensionOptions,
+} from "./dashboard-extension";
 
 export interface BuildApplicationOptions {
   /** A module whose default export is a BrickApp, without starting a server. */
@@ -12,6 +17,11 @@ export interface BuildApplicationOptions {
   port?: number;
   /** Precompile Elysia's HTTP handlers at build time (default true). */
   aot?: boolean;
+  /**
+   * The dashboard's extension, built into `<outdir>/dashboard` for the
+   * production dashboard to serve; its theme is checked here too.
+   */
+  dashboard?: DashboardExtensionOptions;
 }
 
 /** Bundle an exported BrickApp with generated handlers and its original configuration. */
@@ -31,6 +41,14 @@ export async function buildApplication(options: BuildApplicationOptions) {
   if (!Number.isInteger(port) || port < 1 || port > 65535)
     throw new Error(
       "Brick compiler: port must be an integer between 1 and 65535",
+    );
+  themeCss(options.dashboard?.theme);
+  const extension = options.dashboard?.extension
+    ? resolve(options.dashboard.extension)
+    : undefined;
+  if (extension && !(await Bun.file(extension).exists()))
+    throw new Error(
+      `Brick compiler: dashboard extension not found: ${extension}`,
     );
   const app = await loadBrickApp(entry);
   // The bundle stays in the project, where the server finds it from the working
@@ -102,6 +120,8 @@ if (import.meta.main) {
       join(staging, "brick-ir.json"),
       JSON.stringify(compilation.ir, null, 2) + "\n",
     );
+    if (extension)
+      await writeDashboardExtension(extension, join(staging, "dashboard"));
     await mkdir(outdir, { recursive: true });
     for (const name of [
       "routes.js",
@@ -110,7 +130,18 @@ if (import.meta.main) {
       "server.js",
     ])
       await rename(join(staging, name), join(outdir, name));
-    return { outdir, entry: join(outdir, "server.js"), ir: compilation.ir };
+    const dashboard = extension ? join(outdir, "dashboard") : undefined;
+    if (dashboard) {
+      await rm(dashboard, { recursive: true, force: true });
+      await rename(join(staging, "dashboard"), dashboard);
+    }
+    return {
+      outdir,
+      entry: join(outdir, "server.js"),
+      ir: compilation.ir,
+      /** The built dashboard extension's folder, when there is one. */
+      dashboard,
+    };
   } finally {
     await rm(staging, { recursive: true, force: true });
   }

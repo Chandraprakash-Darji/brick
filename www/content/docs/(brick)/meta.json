@@ -26,6 +26,7 @@
     "tanstack-query",
     "tools-and-mcp",
     "openapi",
+    "dashboard-extensions",
     "type-inference",
     "database"
   ]

@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from "react";
+import { useContext, useState, type ReactNode } from "react";
+import { ExtensionBoundary, ExtensionContext } from "@/extension";
 import { Check, Copy, X } from "lucide-react";
 import { Waterfall } from "@/components/waterfall";
 import { Badge } from "@/components/ui/badge";
@@ -135,6 +136,12 @@ export function RequestDrawer({
   const logs = trace ? logsOfTrace(trace) : undefined;
   const label = source ? routeLabel(source) : "Request";
   const duration = source?.durationMs;
+  // The extension's tabs, beside Details.
+  const { extension, context } = useContext(ExtensionContext);
+  const tabs = extension?.slots?.["request.drawer.tabs"] ?? [];
+  const [tabId, setTabId] = useState<string>();
+  const tab = tabs.find((item) => item.id === tabId);
+  const Tab = tab?.component;
 
   return (
     <aside
@@ -170,7 +177,30 @@ export function RequestDrawer({
           <X />
         </Button>
       </header>
-      <div className="min-h-0 flex-1 overflow-auto">
+      {tabs.length > 0 && (
+        <div role="tablist" className="flex gap-1 border-b px-2">
+          {[{ id: undefined, label: "Details" }, ...tabs].map((item) => (
+            <button
+              key={item.id ?? ""}
+              type="button"
+              role="tab"
+              aria-selected={item.id === tab?.id}
+              onClick={() => setTabId(item.id)}
+              className="-mb-px border-b-2 border-transparent px-2 py-2 text-xs font-medium text-muted-foreground hover:text-foreground aria-selected:border-foreground aria-selected:text-foreground"
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {Tab && (
+        <div className="min-h-0 flex-1 overflow-auto p-3">
+          <ExtensionBoundary key={tab.id} name={`drawer tab "${tab.id}"`}>
+            <Tab {...context} request={trace} />
+          </ExtensionBoundary>
+        </div>
+      )}
+      <div className={cn("min-h-0 flex-1 overflow-auto", Tab && "hidden")}>
         {source ? (
           <>
             <div className="border-b p-3">

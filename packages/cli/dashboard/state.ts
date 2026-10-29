@@ -35,8 +35,16 @@ export interface DashboardState {
   historyDays: number;
   /** `production` is the monitoring dashboard `brick start` serves: read-only, with no APIs or Docs. */
   mode: "dev" | "production";
+  /** The project's extension as last built; null when it has none. */
+  extension: ExtensionBuild | null;
   connected: boolean;
   loaded: boolean;
+}
+
+export interface ExtensionBuild {
+  revision: number;
+  /** Why the last build failed. */
+  error?: string;
 }
 
 /** What the dashboard server adds to the store's snapshot. */
@@ -44,6 +52,19 @@ interface ServerFields {
   canRestart: boolean;
   historyDays: number;
   mode: "dev" | "production";
+  extension?: ExtensionBuild | null;
+}
+
+/**
+ * The page runs the extension it was served with. When the server has built
+ * another since, the page reloads to run that one.
+ */
+function followExtension(build: ExtensionBuild | null | undefined) {
+  const served = document
+    .querySelector('meta[name="brick-extension"]')
+    ?.getAttribute("data-revision");
+  if (build && served != null && served !== String(build.revision))
+    location.reload();
 }
 
 type Action =
@@ -71,6 +92,7 @@ export const initialState: DashboardState = {
   canRestart: false,
   historyDays: 0,
   mode: "dev",
+  extension: null,
   connected: false,
   loaded: false,
 };
@@ -90,6 +112,7 @@ export function reduce(state: DashboardState, action: Action): DashboardState {
         canRestart: action.snapshot.canRestart,
         historyDays: action.snapshot.historyDays,
         mode: action.snapshot.mode ?? "dev",
+        extension: action.snapshot.extension ?? null,
         loaded: true,
       };
     case "trace": {
@@ -138,9 +161,11 @@ export function useDashboard(): DashboardState {
       source.addEventListener(name, (event) =>
         handle(JSON.parse((event as MessageEvent<string>).data) as T),
       );
-    listen<DevTelemetrySnapshot & ServerFields>("snapshot", (snapshot) =>
-      dispatch({ type: "snapshot", snapshot }),
-    );
+    listen<DevTelemetrySnapshot & ServerFields>("snapshot", (snapshot) => {
+      followExtension(snapshot.extension);
+      dispatch({ type: "snapshot", snapshot });
+    });
+    listen<ExtensionBuild>("extension", followExtension);
     listen<{ trace: TraceSummary }>("trace", ({ trace }) =>
       dispatch({ type: "trace", trace }),
     );
@@ -178,14 +203,18 @@ export type View =
   | "docs"
   | "workflows"
   | "errors"
-  | "reloads";
+  | "reloads"
+  /** An extension's page, at `#/x/<id>/…`, so it never clashes with a built-in one. */
+  | "x";
 export interface Route {
   view: View;
   traceId?: string;
-  /** Segments after the view, for views with pages of their own (APIs, Docs). */
+  /** Segments after the view, for views with pages of their own (APIs, Docs). For `x`, after the page's id. */
   path: string[];
   /** The `#heading` after a docs page's path. */
   anchor?: string;
+  /** The extension page's id, for `x`. */
+  page?: string;
 }
 
 const VIEWS: View[] = [
@@ -216,6 +245,13 @@ export function parseRoute(hash: string): Route {
   const anchor = anchorAt >= 0 ? decode(body.slice(anchorAt + 1)) : undefined;
   const [view, ...rest] = location.split("/");
   const path = rest.filter(Boolean).map(decode);
+  if (view === "x" && path[0])
+    return {
+      view: "x",
+      page: path[0],
+      path: path.slice(1),
+      ...(anchor ? { anchor } : {}),
+    };
   return {
     // History became part of Requests; old links still land there.
     view: VIEWS.includes(view as View) ? (view as View) : "requests",

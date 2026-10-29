@@ -3,20 +3,31 @@ import {
   lazy,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
-import { Sidebar, Topbar } from "@/shell";
+import { BUILT_IN_NAV, Sidebar, Topbar } from "@/shell";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
   routeHref,
   useDashboard,
+  useMediaQuery,
   useRoute,
   useSidebar,
   useTheme,
 } from "@/state";
 import { Empty } from "@/components/page-header";
+import {
+  DashboardStateContext,
+  ExtensionBoundary,
+  ExtensionContext,
+  ExtensionError,
+  type LoadedExtension,
+} from "@/extension";
+import { mergeNav, routeKey, type SlotContext } from "@/extension-registry";
+import { ExtensionPageView } from "@/views/extension-page";
 import { LogsView } from "@/views/logs";
 import { ApisView } from "@/views/apis";
 import { ErrorsView } from "@/views/errors";
@@ -36,10 +47,11 @@ function isTyping(target: EventTarget | null): boolean {
   );
 }
 
-export function App() {
+export function App({ loaded = {} }: { loaded?: LoadedExtension }) {
   const state = useDashboard();
   const route = useRoute();
   const { theme, cycle } = useTheme();
+  const systemDark = useMediaQuery("(prefers-color-scheme: dark)");
   const sidebar = useSidebar();
   const filterRef = useRef<HTMLInputElement>(null);
   const [seenFailure, setSeenFailure] = useState(0);
@@ -49,6 +61,35 @@ export function App() {
   // The inspector loads on first visit too, then keeps the run you were reading.
   const [workflowsOpened, setWorkflowsOpened] = useState(
     route.view === "workflows",
+  );
+  // The extension's pages and links join the sidebar; a mistake in them (a
+  // duplicate id, say) drops the extension and says why.
+  const { nav, extension, extensionError } = useMemo(() => {
+    try {
+      return {
+        nav: mergeNav(BUILT_IN_NAV, loaded.extension, production),
+        extension: loaded.extension,
+        extensionError: loaded.error ?? state.extension?.error,
+      };
+    } catch (error) {
+      return {
+        nav: BUILT_IN_NAV,
+        extension: undefined,
+        extensionError: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }, [loaded, production, state.extension?.error]);
+  const current = nav.find((item) => item.key === routeKey(route));
+  const slotContext = useMemo<SlotContext>(
+    () => ({
+      route,
+      theme: theme === "system" ? (systemDark ? "dark" : "light") : theme,
+      production,
+      ...(route.view === "requests" && route.traceId
+        ? { selectedRequestId: route.traceId }
+        : {}),
+    }),
+    [route, theme, systemDark, production],
   );
   const newest = state.failures[0]?.id ?? 0;
   const onErrors = route.view === "errors";
@@ -125,11 +166,13 @@ export function App() {
     });
   }, []);
 
-  return (
+  const page = route.view === "x" ? current?.page : undefined;
+  const content = (
     <TooltipProvider>
       <div className="flex min-h-screen">
         <Sidebar
-          view={route.view}
+          nav={nav}
+          current={current?.key}
           sidebar={sidebar}
           errorCount={state.failures.length}
           hasNewErrors={hasNewErrors}
@@ -139,7 +182,7 @@ export function App() {
         />
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar
-            view={route.view}
+            current={current}
             connected={state.connected}
             hasNewErrors={hasNewErrors}
             theme={theme}
@@ -157,11 +200,28 @@ export function App() {
               // The API reference, the docs and the inspector bring their own chrome and fill the page.
               route.view === "apis" ||
                 route.view === "docs" ||
-                route.view === "workflows"
+                route.view === "workflows" ||
+                page?.url
                 ? "p-0"
                 : "p-6 max-sm:p-4",
             )}
           >
+            {extensionError && (
+              <ExtensionError name="loading" message={extensionError} />
+            )}
+            {route.view === "x" &&
+              (page ? (
+                <ExtensionPageView
+                  key={page.id}
+                  page={page}
+                  context={slotContext}
+                />
+              ) : (
+                <Empty
+                  title={`No page named "${route.page ?? ""}"`}
+                  hint="The dashboard extension does not have it, or it is not shown here."
+                />
+              ))}
             {route.view === "requests" && (
               <RequestsView
                 traces={state.traces}
@@ -212,5 +272,20 @@ export function App() {
         </div>
       </div>
     </TooltipProvider>
+  );
+  const Root = extension?.root;
+  return (
+    <DashboardStateContext.Provider value={state}>
+      <ExtensionContext.Provider value={{ extension, context: slotContext }}>
+        {Root ? (
+          // A root that fails leaves the dashboard running without it.
+          <ExtensionBoundary name="root" fallback={content}>
+            <Root>{content}</Root>
+          </ExtensionBoundary>
+        ) : (
+          content
+        )}
+      </ExtensionContext.Provider>
+    </DashboardStateContext.Provider>
   );
 }

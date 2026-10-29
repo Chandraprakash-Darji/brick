@@ -1,6 +1,6 @@
 import { existsSync } from "fs";
 import { watch } from "fs";
-import { resolve, dirname, basename } from "path";
+import { resolve, dirname, basename, sep } from "path";
 import { fileURLToPath } from "node:url";
 import {
   brick,
@@ -12,7 +12,12 @@ import {
   type DocumentationOptions,
   type EventsHub,
 } from "@brickkit/core";
-import { startDevDashboard, type DevDashboard } from "./dev-dashboard";
+import {
+  DEFAULT_DASHBOARD_PORT,
+  startDevDashboard,
+  type DevDashboard,
+} from "./dev-dashboard";
+import type { DashboardExtensionOptions } from "./dashboard-extension";
 import { DocsHost } from "./dev-docs";
 import { DEFAULT_HISTORY_DAYS, openHistory } from "./dev-history";
 import { DevTelemetryStore } from "./dev-telemetry-store";
@@ -35,10 +40,14 @@ export interface DevServerOptions {
   frontend?: string;
   /**
    * Local dashboard with live requests, traces, errors, and reloads. Needs an
-   * entry. `historyDays` is how long finished requests are kept on disk
-   * (default 90); zero keeps live data only.
+   * entry. `port` defaults to 9400. `historyDays` is how long finished
+   * requests are kept on disk (default 90); zero keeps live data only.
+   * `extension` and `theme` customise it (see `DashboardExtensionOptions`);
+   * `brick start` reads only those two, for the production dashboard.
    */
-  dashboard?: { port: number; historyDays?: number } | false;
+  dashboard?:
+    | ({ port?: number; historyDays?: number } & DashboardExtensionOptions)
+    | false;
 }
 
 async function createServer(
@@ -185,7 +194,10 @@ export async function startProdServer(options: DevServerOptions = {}) {
 
   await buildAppWorkflows(app);
   // Before listening, so the first request is already traced and its logs kept.
-  const dashboard = await startProductionDashboard(app, { appPort: port });
+  const dashboard = await startProductionDashboard(app, {
+    appPort: port,
+    dashboard: options.dashboard || undefined,
+  });
   app.listen(port);
   if (app.events) {
     app.events.start();
@@ -326,7 +338,7 @@ export async function startDevServer(options: DevServerOptions = {}) {
   if (
     options.dashboard &&
     options.port !== undefined &&
-    options.dashboard.port === options.port
+    (options.dashboard.port ?? DEFAULT_DASHBOARD_PORT) === options.port
   )
     throw new Error(
       "Brick: dashboard port must differ from the API port. Use --dashboard-port <number>.",
@@ -515,10 +527,14 @@ export async function startDevServer(options: DevServerOptions = {}) {
   const dashboard: DevDashboard | undefined =
     telemetry && options.dashboard
       ? await startDevDashboard({
-          port: options.dashboard.port,
+          port: options.dashboard.port ?? DEFAULT_DASHBOARD_PORT,
           store: telemetry,
           history,
           docs: () => docs?.current,
+          dashboard: {
+            extension: options.dashboard.extension,
+            theme: options.dashboard.theme,
+          },
           restart: () => {
             void restart("dashboard");
           },
@@ -572,13 +588,23 @@ export async function startDevServer(options: DevServerOptions = {}) {
       void restart();
     }, 100);
   }
+  const extension = options.dashboard && options.dashboard.extension;
+  const extensionDir =
+    extension && !watchDirs.includes(dirname(resolve(extension)))
+      ? `${dirname(resolve(extension))}${sep}`
+      : undefined;
   const watchers = watchDirs.map((dir) =>
     watch(dir, { recursive: true }, (_event, filename) => {
       if (!filename || filename.split(/[\\/]/).includes("node_modules")) return;
       const file = resolve(dir, filename);
       if (
         file === resolve(options.clientOutput ?? "_brick/contract.ts") ||
-        basename(file).startsWith(".brick-contract-")
+        basename(file).startsWith(".brick-contract-") ||
+        // The dashboard rebuilds its extension itself; the app restarts only
+        // for the files it imports.
+        (extensionDir !== undefined &&
+          file.startsWith(extensionDir) &&
+          !dependencyFiles.has(file))
       )
         return;
       scheduleRestart();

@@ -10,6 +10,7 @@ import {
   type DevDashboard,
 } from "./dev-dashboard";
 import { DocsHost } from "./dev-docs";
+import type { DashboardExtensionOptions } from "./dashboard-extension";
 import { DEFAULT_HISTORY_DAYS, openHistory } from "./dev-history";
 import { DevTelemetryStore } from "./dev-telemetry-store";
 
@@ -41,6 +42,8 @@ export async function startViteDashboard(options: {
   entry: string;
   /** Days of requests to keep on disk; zero for none. */
   historyDays?: number;
+  /** The extension (an absolute path) and theme. */
+  dashboard?: DashboardExtensionOptions;
   logger: DashboardLogger;
 }): Promise<ViteDashboard | undefined> {
   const history = await openHistory({
@@ -57,6 +60,7 @@ export async function startViteDashboard(options: {
       store,
       history,
       docs: () => docs.current,
+      dashboard: options.dashboard,
     });
   } catch (error) {
     history?.close();

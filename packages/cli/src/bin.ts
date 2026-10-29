@@ -16,6 +16,9 @@ const CLI_VERSION: string = cliPkg.version;
 const PORT_HELP =
   "Port to listen on (CLI --port overrides PORT env, default 4000)";
 
+const EXTENSION_HELP =
+  "Dashboard extension module (default export defineDashboard(...)), or the dashboard folder brick build wrote";
+
 const PORT_RESOLUTION_HELP = `
 Port Resolution (dev/start commands):
   - CLI --port flag takes precedence
@@ -103,6 +106,7 @@ ${PORT_RESOLUTION_HELP}`,
       parseHistoryDays,
     )
     .option("--no-dashboard", "Do not start the local dashboard")
+    .option("--dashboard-extension <file>", EXTENSION_HELP)
     .argument("[entry]", "Application entry file")
     .option("--port <number>", PORT_HELP, parsePortOption)
     .addHelpText("after", PORT_RESOLUTION_HELP)
@@ -116,6 +120,7 @@ ${PORT_RESOLUTION_HELP}`,
           dashboardPort?: number;
           historyDays?: number;
           dashboard?: boolean;
+          dashboardExtension?: string;
         },
       ) => {
         const port = resolveDevPort(opts.port);
@@ -129,6 +134,11 @@ ${PORT_RESOLUTION_HELP}`,
             "Brick: --history-days cannot be combined with --no-dashboard.",
           );
         }
+        if (opts.dashboard === false && opts.dashboardExtension) {
+          throw new Error(
+            "Brick: --dashboard-extension cannot be combined with --no-dashboard.",
+          );
+        }
         await startDevServer({
           entry,
           port,
@@ -140,6 +150,7 @@ ${PORT_RESOLUTION_HELP}`,
               ? {
                   port: opts.dashboardPort ?? DEFAULT_DASHBOARD_PORT,
                   historyDays: opts.historyDays,
+                  extension: opts.dashboardExtension,
                 }
               : false,
         });
@@ -151,11 +162,23 @@ ${PORT_RESOLUTION_HELP}`,
     .description("Start production server")
     .argument("[entry]", "Application entry file")
     .option("--port <number>", PORT_HELP, parsePortOption)
+    .option("--dashboard-extension <file>", EXTENSION_HELP)
     .addHelpText("after", PORT_RESOLUTION_HELP)
-    .action(async (entry: string | undefined, opts: { port?: number }) => {
-      const port = resolveDevPort(opts.port);
-      await startProdServer({ entry, port });
-    });
+    .action(
+      async (
+        entry: string | undefined,
+        opts: { port?: number; dashboardExtension?: string },
+      ) => {
+        const port = resolveDevPort(opts.port);
+        await startProdServer({
+          entry,
+          port,
+          dashboard: opts.dashboardExtension
+            ? { extension: opts.dashboardExtension }
+            : undefined,
+        });
+      },
+    );
 
   program
     .command("worker")
@@ -181,6 +204,10 @@ ${PORT_RESOLUTION_HELP}`,
     .option("--port <number>", "Default listening port", parsePortOption)
     .option("--no-aot", "Disable ahead-of-time compilation")
     .option(
+      "--dashboard-extension <file>",
+      "Dashboard extension module to build into <outdir>/dashboard",
+    )
+    .option(
       "--prefix <path>",
       "DEPRECATED: configure prefix in brick() app instead",
     )
@@ -197,6 +224,7 @@ ${PORT_RESOLUTION_HELP}`,
           aot?: boolean;
           prefix?: string;
           requestLogging?: boolean;
+          dashboardExtension?: string;
         },
       ) => {
         if (opts.prefix !== undefined || opts.requestLogging === false) {
@@ -209,6 +237,9 @@ ${PORT_RESOLUTION_HELP}`,
           outdir: opts.outdir,
           port: opts.port,
           aot: opts.aot,
+          dashboard: opts.dashboardExtension
+            ? { extension: opts.dashboardExtension }
+            : undefined,
         });
         for (const warning of result.ir.diagnostics)
           console.warn(`[Brick compiler] ${warning}`);
@@ -216,6 +247,8 @@ ${PORT_RESOLUTION_HELP}`,
           `Compiled ${result.ir.services.length} services / ${result.ir.routes.length} routes`,
         );
         console.log(`IR: ${result.outdir}/brick-ir.json`);
+        if (result.dashboard)
+          console.log(`Dashboard extension: ${result.dashboard}`);
         console.log(`Run: bun ${result.entry}`);
       },
     );
