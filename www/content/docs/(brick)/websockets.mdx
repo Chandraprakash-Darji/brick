@@ -119,7 +119,7 @@ Unknown input events and invalid payloads close with `1008`. Malformed JSON clos
 
 ## Development and deployment
 
-`brick dev`, `brick start`, and compiled builds mount socket declarations. CLI and Vite contract generation include socket metadata. The dev dashboard's Overview shows socket routes, event directions, and whether authorization runs.
+`brick dev`, `brick start`, and compiled builds mount socket declarations. CLI and Vite contract generation include socket metadata. The dev dashboard's Overview shows socket routes, event directions, and whether authorization runs. Its service graph renders each socket between clients and its owning service. Select a socket to see its full route and input and output event names. Socket nodes show declarations; they do not report live connection counts or message traffic.
 
 For a Vite frontend, run a separate Bun backend and configure Vite's WebSocket proxy. Contract generation alone does not install an upgrade handler into Vite, a Fetch mount, or a serverless platform. Production reverse proxies must forward WebSocket upgrades to the Bun server. Node adapters are not supported by this release.
 
