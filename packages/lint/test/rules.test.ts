@@ -497,4 +497,16 @@ describe("@brickkit/lint file rules", () => {
     );
     expect(result.messages).toEqual([]);
   });
+
+  it("points no-global-context at deps", () => {
+    const result = lintCases("no-global-context", [
+      {
+        file: `${S}/orders/context.ts`,
+        code: `export let carrier;\nexport function setCarrier(c) { carrier = c; }\n`,
+        errors: 1,
+      },
+    ]);
+    expect(result.messages[0]?.message).toContain("ctx.deps");
+    expect(result.messages[0]?.message).toContain("useDeps()");
+  });
 });

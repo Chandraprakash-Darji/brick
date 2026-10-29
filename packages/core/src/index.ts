@@ -102,7 +102,14 @@ export {
   type ActionRoute,
   type ResourceActionInfo,
 } from "./routes";
-export { createServiceProxy } from "./rpc";
+export {
+  createServiceProxy,
+  useService,
+  type ServiceClient,
+  type ServiceActionCaller,
+  type UntypedServiceClient,
+} from "./rpc";
+export { port, useDeps, type Port, type Ports, type DepsOf } from "./deps";
 
 export {
   defineListener,
@@ -151,6 +158,7 @@ export type {
   BrickClient,
   BrickClientOptions,
   BrickClientAction,
+  BrickServices,
   BrickCallOptions,
   BrickActionCaller,
   InferActionInput,

@@ -12,7 +12,9 @@ A quick reference of commonly used public exports from `@brickkit/core`, `@brick
 | `defineService(name, options)`     | Function | Creates an isolated service domain with optional database, context resolver, and lifecycle. |
 | `defineAction(config)`             | Function | Constructs a typed action with input/output validation, error helpers, and authorization.   |
 | `defineResource(service, config)`  | Function | Binds a Drizzle table to a service with explicit primary key identity.                      |
-| `createServiceProxy(serviceName)`  | Function | Creates a type-safe proxy for calling another service in-process with context isolation.    |
+| `useService(service, { from })`    | Function | Calls another service's actions in-process, typed from the service, with context isolation. |
+| `port<T>()` / `useDeps()`          | Function | Declares a service dependency (`deps` option, `ctx.deps`); reads the app's deps in steps.   |
+| `createServiceProxy(serviceName)`  | Function | Deprecated: `useService` with a hand-written type.                                          |
 | `brick(options)`                   | Function | Instantiates an Elysia HTTP server gateway precompiled with services and routes.            |
 | `t` / `Type`                       | Object   | TypeBox schema builder for declaring runtime input and output data shapes.                  |
 | `Static<typeof Schema>`            | Type     | Incurs static TypeScript compile-time types from TypeBox runtime schemas.                   |

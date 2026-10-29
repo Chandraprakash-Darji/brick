@@ -32,6 +32,7 @@ import {
 } from "./endpoints";
 import { instrumentDatabase, traceHttpRequest, withSpan } from "./telemetry";
 import { EventsHub } from "./events/hub";
+import { bindDeps } from "./deps";
 import { WEBHOOK_ROUTE } from "./events/workflows";
 import type { EventsOptions } from "./events/types";
 import {
@@ -108,6 +109,12 @@ export interface CreateServerOptions {
    * (default: this process only). See `redisBroker`. The app closes it on stop.
    */
   sockets?: { broker?: SocketBroker };
+  /**
+   * The values of the services' declared `deps` (`port<T>()`), by name. Every
+   * declared dep must be provided, and every provided one declared. Actions read
+   * them as `ctx.deps`, listeners and workflow steps with `useDeps()`.
+   */
+  deps?: Record<string, unknown>;
 }
 
 export {
@@ -130,11 +137,11 @@ export {
  * @param options - `prefix` for action routes (default `/api`), `services`,
  * `title`, `version`, and `description` for the OpenAPI document, `docs` and the
  * paths of its pages, `requestLogging`, `reference`, `endpoints`, `secrets`,
- * `telemetry`, `documentation`, and `dashboard`. See `CreateServerOptions`.
+ * `telemetry`, `documentation`, `dashboard`, and `deps`. See `CreateServerOptions`.
  * @returns The app, with `definition` (its services, prefix, and routes),
  * `endpoint()` to add raw routes, and `listEndpoints()` to list them.
- * @throws When a required secret is missing, or `documentation` or `dashboard`
- * is invalid.
+ * @throws When a required secret is missing, `documentation` or `dashboard`
+ * is invalid, or `deps` misses a dep a service declares or has one none declares.
  * @example
  * import { brick } from "@brickkit/core";
  * import { pagesService } from "./services/pages";
@@ -209,8 +216,9 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
       throw new Error(`Brick: duplicate service "${service.name}" in brick()`);
     byName.set(service.name, service);
   }
+  bindDeps(services, options.deps);
   const events = options.events
-    ? new EventsHub(options.events).attach(services)
+    ? new EventsHub(options.events, options.deps).attach(services)
     : undefined;
   if (events?.workflows)
     app.all(WEBHOOK_ROUTE, ({ request }) => events.webhook(request));

@@ -12,6 +12,7 @@ import type {
   ServiceEvents,
 } from "./types";
 import { WorkflowRuntime } from "./workflows";
+import { runWithDeps } from "../deps";
 
 interface EventsHost {
   readonly name: string;
@@ -83,7 +84,15 @@ export class EventsHub {
   private started = false;
   private stopping: Promise<void> | undefined;
 
-  constructor(options: EventsOptions) {
+  /**
+   * @param options - The `events` option.
+   * @param deps - The app's `brick({ deps })`, which `useDeps()` returns in its
+   * listeners and workflow steps.
+   */
+  constructor(
+    options: EventsOptions,
+    private readonly deps: Record<string, unknown> = {},
+  ) {
     for (const listener of options.listeners ?? []) {
       if (typeof listener.name !== "string" || !listener.name)
         throw new Error("An event listener needs a name");
@@ -116,6 +125,7 @@ export class EventsHub {
         options.world,
         options.workflows,
         workflowListeners,
+        deps,
       );
     }
     this.dispatchOptions =
@@ -314,7 +324,13 @@ export class EventsHub {
               await runtime!.startRun(listener, delivery);
             },
           }
-        : (listener as Deliverable);
+        : {
+            ...(listener.maxAttempts !== undefined
+              ? { maxAttempts: listener.maxAttempts }
+              : {}),
+            run: (delivery) =>
+              runWithDeps(this.deps, () => listener.run!(delivery)),
+          };
       this.deliverables.set(name, found);
     }
     return found;

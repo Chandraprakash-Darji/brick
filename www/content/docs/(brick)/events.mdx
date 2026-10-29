@@ -246,7 +246,7 @@ If you already run BullMQ, use `@brickkit/bullmq-world` instead: it has the same
 Write the workflow, hand it to `defineListener` as `workflow`, and give `events` a world:
 
 ```ts title="src/workflows/fulfil-order.ts"
-import type { WorkflowEvent } from "@brickkit/core";
+import { useDeps, type WorkflowEvent } from "@brickkit/core";
 import { sleep } from "workflow";
 
 export async function fulfilOrder(event: WorkflowEvent<OrderUpdated>) {
@@ -258,7 +258,8 @@ export async function fulfilOrder(event: WorkflowEvent<OrderUpdated>) {
 
 async function bookCarrier(orderId: string) {
   "use step";
-  return carrier.book(orderId);
+  // A step cannot close over the app; useDeps() returns the deps of the app running it.
+  return useDeps(ordersDeps).carrier.book(orderId);
 }
 ```
 
@@ -279,6 +280,8 @@ export default brick({
   },
 });
 ```
+
+Listeners and steps read what they need, such as the carrier, with `useDeps()`; the app provides it in `brick({ deps })`. See [Dependencies](/docs/dependencies).
 
 `brick dev` and `brick start` do the rest. Before the app loads they make the `"use workflow"` and `"use step"` files load as workflows and steps, and before events start they build the workflow bundle into `.well-known/workflow/v1` (add it to `.gitignore`). On a reload of `brick dev` the bundle is kept when nothing it was built from has changed (the workflow and step files, what they import, `package.json`, the lockfile, `tsconfig.json`), so editing a route costs nothing; adding or removing a source file, or giving one a `"use workflow"` or `"use step"` directive, rebuilds it. `brick start` and `brick build` always build. The world starts with the app's events and closes when they stop.
 

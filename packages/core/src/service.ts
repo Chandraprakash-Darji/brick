@@ -40,6 +40,8 @@ import {
 } from "./events/catalog";
 import { getActionAccess } from "./access";
 import { pickContextEnvelope } from "./context";
+import type { DepsOf, Ports } from "./deps";
+import type { NamedService } from "./rpc";
 import { createLogger, DEFAULT_LOG_PREFIXES } from "./logger";
 import { defineServiceSocket, type RegisteredSocket } from "./socket";
 import type {
@@ -54,6 +56,7 @@ const defaultLogger: Logger = createLogger(DEFAULT_LOG_PREFIXES);
 const DEFAULT_REQUEST = new Request("http://localhost");
 const EMPTY_SERVICES = Object.freeze({});
 const EMPTY_METADATA = Object.freeze({});
+const EMPTY_DEPS = Object.freeze({});
 let _ctxSeq = 0;
 
 // Symbol to tie context resolution to a specific service instance and invocation
@@ -378,6 +381,13 @@ export class ServiceImpl<
     checkEvent(this, name, payload);
   }
 
+  /** The values of this service's `deps`. Set by `brick({ deps })`. */
+  deps?: Readonly<Record<string, unknown>>;
+
+  setDeps(deps: Readonly<Record<string, unknown>>): void {
+    this.deps = deps;
+  }
+
   setDb(database: DatabaseHandle<TDb>): void {
     if (!isDatabaseHandle(database))
       throw new Error("Use defineDatabase() to set a service database");
@@ -475,6 +485,11 @@ async function resolveServiceContext<
   const requestId = callCtx?.requestId ?? `req_${seq.toString(36)}`;
   const services = callCtx?.services ?? EMPTY_SERVICES;
   const metadata = callCtx?.metadata ?? EMPTY_METADATA;
+  // The app's deps for this service; a direct call with no app (a unit test) may pass its own.
+  const deps =
+    service.deps ??
+    (callCtx as { deps?: unknown } | undefined)?.deps ??
+    EMPTY_DEPS;
 
   const fullBaseCtx: BaseContext<TDb> = {
     request: req,
@@ -494,6 +509,7 @@ async function resolveServiceContext<
   const finalCtx: any = {
     ...fullBaseCtx,
     ...resolvedExtra,
+    deps,
     [RESOLVED_SYMBOL]: service,
   };
   return finalCtx;
@@ -502,7 +518,7 @@ async function resolveServiceContext<
 /**
  * Declare a service: a named group of actions, tools, and resources with its own
  * database and request context. It is registered globally, so `brick()`, the
- * OpenAPI generator, and `createServiceProxy` find it by name.
+ * OpenAPI generator, and `useService` find it by name.
  *
  * Add actions with `service.action(...)`, tools with `service.tool(...)`,
  * resources with `service.resource(...)`, and plugins with `service.use(...)`.
@@ -510,9 +526,10 @@ async function resolveServiceContext<
  * @param name - Unique name. It is the service's segment of every action route
  * (`/api/<name>/<action>`) and appears in OpenAPI and the dashboard. Defining it
  * again from the same file (a dev reload) replaces it; from another file throws.
- * @param options - `database` (a handle from `defineDatabase`), `context` (adds
- * fields such as the signed-in user to every action's `ctx`), `events` (the
- * event catalog: a payload schema per event name, recorded as
+ * @param options - `database` (a handle from `defineDatabase`), `deps` (typed
+ * slots from `port<T>()` that `brick({ deps })` fills, read as `ctx.deps`),
+ * `context` (adds fields such as the signed-in user to every action's `ctx`),
+ * `events` (the event catalog: a payload schema per event name, recorded as
  * `<service>.<name>` and offered as `service.events.<name>`), and `auth`,
  * `rateLimit`, `cache`, `resilience`, `telemetry`, and `lifecycle`.
  * @returns The service.
@@ -539,11 +556,23 @@ export function defineService<
   TDb = BunSQLiteDatabase<Record<string, unknown>>,
   TServiceContext extends Record<string, any> = Record<string, any>,
   const TEvents extends EventCatalog = {},
+  const TName extends string = string,
+  TPorts extends Ports = {},
 >(
-  name: string,
-  options?: ServiceOptions<TServiceContext, TDb> & { events?: TEvents },
-): Service<TDb, TServiceContext, TEvents> {
+  name: TName,
+  options?: ServiceOptions<TServiceContext, TDb> & {
+    events?: TEvents;
+    deps?: TPorts;
+  },
+): Service<
+  TDb,
+  {} extends TPorts
+    ? TServiceContext
+    : TServiceContext & { deps: DepsOf<TPorts> },
+  TEvents
+> &
+  NamedService<TName> {
   const service = new ServiceImpl<TDb, TServiceContext>(name, options);
   getGlobalRegistry().register(service as any);
-  return service as unknown as Service<TDb, TServiceContext, TEvents>;
+  return service as any;
 }

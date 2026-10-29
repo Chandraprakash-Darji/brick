@@ -80,7 +80,7 @@ const requestId = (headers && headers["x-request-id"]) || "req_" + seq;
 if (set?.headers) { set.headers["x-trace-id"] = traceId; set.headers["x-request-id"] = requestId; }
 ${input.join("\n")}
 const ctx = { request: request instanceof Request ? request : defaultRequest, traceId, requestId,
-  db: cachedDb ?? service.getDb(), logger, services: emptyServices, metadata: { headers }, _resolved: true };
+  db: cachedDb ?? service.getDb(), logger, services: emptyServices, deps: service.deps ?? emptyServices, metadata: { headers }, _resolved: true };
 try {
 ${context}
 ${validation}

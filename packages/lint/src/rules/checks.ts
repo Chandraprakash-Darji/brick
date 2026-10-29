@@ -164,7 +164,7 @@ export const checkRules: Record<string, Rule> = {
           reported.add(name);
           context.report({
             node,
-            message: `Module-level "${name}" is set from a function, a global context; declare it in the service's deps instead.`,
+            message: `Module-level "${name}" is set from a function, a global context. Declare it in the service's deps (port<T>()) and read ctx.deps, or useDeps() in listeners and workflow steps.`,
           });
         },
       };

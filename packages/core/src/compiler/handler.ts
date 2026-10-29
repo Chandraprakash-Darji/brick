@@ -103,6 +103,7 @@ export function createHandlerFactory(route: RouteIR): HandlerFactory {
         db: cachedDb ?? service.getDb(),
         logger,
         services: runtime.emptyServices,
+        deps: service.deps ?? runtime.emptyServices,
         metadata: { headers },
         _resolved: true,
       };

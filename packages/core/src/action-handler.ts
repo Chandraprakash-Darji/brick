@@ -238,6 +238,7 @@ export async function executeCompiledRoute(
     db: plan.cachedDb ?? plan.service.getDb(),
     logger: plan.logger,
     services: EMPTY_SERVICES,
+    deps: plan.service.deps ?? EMPTY_SERVICES,
     metadata: { headers },
     _resolved: true,
   };

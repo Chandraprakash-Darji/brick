@@ -15,6 +15,7 @@
     "---Core Concepts---",
     "services-and-actions",
     "context",
+    "dependencies",
     "resources",
     "commands",
     "routes",

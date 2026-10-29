@@ -1,0 +1,134 @@
+---
+title: Dependencies & Service References
+description: Declare what a service needs with port<T>(), provide it in brick({ deps }), and call other services with useService.
+---
+
+A service declares the things it needs from the outside, such as a shipping carrier, a mailer or a payment client, as typed slots. The app provides them once, in `brick()`. Tests provide fakes, and two apps in one process each get their own.
+
+## Declared dependencies
+
+```ts title="src/services/orders/orders.service.ts"
+import { defineService, port } from "@brickkit/core";
+import type { Carrier } from "../../carrier";
+
+export const orders = defineService("orders", {
+  database,
+  deps: { carrier: port<Carrier>() },
+});
+```
+
+```ts title="src/app.ts"
+import { brick } from "@brickkit/core";
+import { createCarrier } from "./carrier";
+
+export default brick({
+  services: [orders],
+  deps: { carrier: createCarrier() },
+});
+```
+
+`port<T>()` declares a slot of type `T`. It holds nothing at runtime. `brick({ deps })` fills the slots by name, and fails at startup when a service declares a dep the app doesn't provide, or the app provides one no service declares:
+
+```txt
+Brick: service "orders" declares dep "carrier", but brick({ deps }) does not provide it
+Brick: brick({ deps }) provides "mailer", but no service declares it (services: orders)
+```
+
+### Reading deps
+
+Actions, resource actions, commands, tools and socket handlers read their service's deps from `ctx.deps`, typed from the ports:
+
+```ts
+orders.action({
+  name: "book",
+  input: t.Object({ orderId: t.String() }),
+  output: t.Object({ trackingId: t.String() }),
+  execute: async ({ input, ctx }) => ({
+    trackingId: await ctx.deps.carrier.book(input.orderId),
+  }),
+});
+```
+
+`ctx.deps` holds only the deps the service declared. An in-process call to another service runs with that service's deps, never the caller's.
+
+Listeners and workflow steps aren't tied to a service, and a step is a plain function the Workflow SDK calls by name, so it can't close over the app that started it. They call `useDeps()`, which returns the deps of the app that runs them. Pass the ports to type the result:
+
+```ts title="src/services/orders/deps.ts"
+export const ordersDeps = { carrier: port<Carrier>() };
+// orders.service.ts: defineService("orders", { database, deps: ordersDeps })
+```
+
+```ts title="src/services/orders/workflows/fulfil-order.workflow.ts"
+import { useDeps } from "@brickkit/core";
+import { ordersDeps } from "../deps";
+
+async function bookCarrier(orderId: string) {
+  "use step";
+  return useDeps(ordersDeps).carrier.book(orderId);
+}
+```
+
+Without ports, give the type: `useDeps<{ carrier: Carrier }>()`. `useDeps()` throws when called outside a listener or a step of a running app. This replaces module-level singletons such as a `setOrdersContext()` that the app calls at startup, which the `no-global-context` lint rule reports.
+
+### Testing
+
+Give the app fakes:
+
+```ts
+const app = brick({ services: [orders], deps: { carrier: fakeCarrier() } });
+```
+
+Or call an action directly, without an app, with deps in the call context:
+
+```ts
+await bookAction.execute({
+  input: { orderId: "o1" },
+  ctx: { deps: { carrier: fakeCarrier() } },
+});
+```
+
+Deps given by an app take precedence over deps in a call context. Each `brick()` call keeps its own deps, so two apps in one process (each with its own services) never see each other's.
+
+## Service references
+
+`useService` calls another service's actions in-process, typed from that service:
+
+```ts title="src/services/orders/actions/checkout.action.ts"
+import { useService } from "@brickkit/core";
+import { billing as billingService } from "../../billing/billing.service";
+
+const billing = useService(billingService, { from: "orders" });
+
+export default orders.action({
+  name: "checkout",
+  input: t.Object({ orderId: t.String(), amountCents: t.Integer() }),
+  output: t.Object({ ok: t.Boolean() }),
+  execute: async ({ input }) => {
+    await billing.charge({
+      orderId: input.orderId,
+      amountCents: input.amountCents,
+    });
+    // A resource's actions sit under the resource: POST /api/billing/invoice/:id/send
+    await billing.invoice.send({ id: input.orderId });
+    return { ok: true };
+  },
+});
+```
+
+Each method takes the action's input, and optionally a call context (`{ traceId, user, tenantId }`). The call runs through the target's validation and authorization, with the target's own database, context and deps, and shows as an `rpc` span in the trace. `from` becomes `ctx.caller` in the target and can't be spoofed by the call context. See [Context isolation](/docs/context#context-isolation-across-in-process-service-calls).
+
+The types come from the generated contract, `_brick/contract.ts`, which `brick dev` and `brick gen client` keep current. Renaming an action or changing its input becomes a compile error at every caller once the contract is regenerated. The contract must be part of the server's TypeScript program (include `_brick` in `tsconfig.json`). Until the contract describes the service, `useService` returns an untyped client.
+
+### Migrating from `createServiceProxy`
+
+`createServiceProxy` still works, but is deprecated: its type is written by hand and can drift from the service.
+
+```ts
+// Before
+const billing = createServiceProxy<{
+  charge(input: { orderId: string; amountCents: number }): Promise<void>;
+}>("billing", { from: "orders" });
+
+// After
+const billing = useService(billingService, { from: "orders" });
+```

@@ -153,7 +153,7 @@ let globalRegistry = new ServiceRegistry();
 
 /**
  * The registry every `defineService` adds to: it is how `brick()`, the OpenAPI
- * generator, `createServiceProxy`, and the dashboard find services by name.
+ * generator, `useService`, and the dashboard find services by name.
  *
  * @returns The current global registry.
  */

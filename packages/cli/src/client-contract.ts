@@ -67,6 +67,11 @@ import type { BrickClientAction${app.definition.sockets.length ? ", BrickClientS
 ${schemas.renderContract(namespaceType(types))}
 
 export const contract: AppContract = JSON.parse(${JSON.stringify(JSON.stringify(contract))});
+
+// Types useService(service) on the server from this contract.
+declare module "@brickkit/core/client" {
+  interface BrickServices extends AppContract {}
+}
 `;
 }
 

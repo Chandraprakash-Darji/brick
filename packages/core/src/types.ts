@@ -10,6 +10,7 @@ import type {
 } from "@sinclair/typebox";
 import type { BunSQLiteDatabase } from "./db/sqlite";
 import type { DatabaseHandle } from "./db/define";
+import type { Ports } from "./deps";
 import type { OutboxTable } from "./events/outbox";
 import type { ServiceEvents } from "./events/types";
 import type { EventCatalog, EventRefs } from "./events/catalog";
@@ -778,6 +779,11 @@ export interface ServiceOptions<
   TDb = any,
 > {
   database?: DatabaseHandle<TDb>;
+  /**
+   * What the service needs from the app, as typed slots: `{ carrier: port<Carrier>() }`.
+   * `brick({ deps })` provides the values, and actions read them as `ctx.deps`.
+   */
+  deps?: Ports;
   context?: (
     baseCtx: BaseContext<TDb> & { user?: unknown },
   ) => Promise<TServiceContext> | TServiceContext;
@@ -1024,6 +1030,9 @@ export interface Service<
   /** What a write needs to record events. Set by `brick({ events })`; absent otherwise. */
   readonly recorder?: ServiceEvents;
   setRecorder?(recorder: ServiceEvents | undefined): void;
+  /** The values of this service's `deps`. Set by `brick({ deps })`. */
+  readonly deps?: Readonly<Record<string, unknown>>;
+  setDeps?(deps: Readonly<Record<string, unknown>>): void;
   resolveContext(
     callCtx?: Partial<BaseContext<TDb> & TServiceContext>,
   ): Promise<BaseContext<TDb> & TServiceContext>;

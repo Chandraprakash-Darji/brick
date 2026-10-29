@@ -76,7 +76,7 @@ export default defineConfig({
 | `no-cross-service-tables` | No service imports another service's tables, even when services share one database. Always an error.    | recommended | app  |
 | `unique-names`            | Action, socket and resource names don't share a URL segment within a service; service names are unique. | recommended | app  |
 | `no-server-in-client`     | Browser code (`web/`) imports only `@brickkit/core/client` and the generated contract.                  | recommended | file |
-| `no-global-context`       | No module-level mutable singletons set from a function (the `setOrdersContext` pattern).                | strict      | file |
+| `no-global-context`       | No module-level mutable singletons set from a function (the `setOrdersContext` pattern); use `deps`.    | strict      | file |
 | `no-env-outside-secrets`  | `process.env`, `Bun.env` and `import.meta.env` are read only in `secrets.ts` and config files.          | strict      | file |
 
 ### Correctness
