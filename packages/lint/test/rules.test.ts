@@ -333,8 +333,8 @@ const CASES: Record<string, Case[]> = {
     },
     {
       file: "src/b.ts",
-      code: `s.socket({ name: "live", input: { $join: t.Object({}), at: t.String({ format: "date-time" }) }, output: {} });\n`,
-      errors: 2,
+      code: `s.socket({ name: "live", input: { $join: t.Object({}), at: t.String({ format: "date-time" }) }, output: { $left: t.Object({}) } });\n`,
+      errors: 3,
     },
   ],
   "no-unregistered-format": [

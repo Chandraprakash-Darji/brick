@@ -36,7 +36,12 @@ import { getActionAccess } from "./access";
 import { pickContextEnvelope } from "./context";
 import { createLogger, DEFAULT_LOG_PREFIXES } from "./logger";
 import { defineServiceSocket, type RegisteredSocket } from "./socket";
-import type { BrickSocketConfig, SocketSchemas } from "./socket-types";
+import type {
+  BrickSocketConfig,
+  BrickSocketHandle,
+  SocketPayloads,
+  SocketSchemas,
+} from "./socket-types";
 
 const defaultLogger: Logger = createLogger(DEFAULT_LOG_PREFIXES);
 
@@ -310,18 +315,16 @@ export class ServiceImpl<
 
   socket<const I extends SocketSchemas, const O extends SocketSchemas>(
     config: BrickSocketConfig<I, O, BaseContext<TDb> & TServiceContext>,
-  ): this {
+  ): BrickSocketHandle<SocketPayloads<O>> {
     if (this._isBuilt)
       throw new Error("Sockets must be declared before service build");
     this.claim("socket", config.name);
-    this.sockets.set(
-      config.name,
-      defineServiceSocket(config, (request) =>
-        resolveServiceContext(this, { request }),
-      ),
+    const socket = defineServiceSocket(this.name, config, (request) =>
+      resolveServiceContext(this, { request }),
     );
+    this.sockets.set(config.name, socket);
     getGlobalRegistry().touch();
-    return this;
+    return socket.handle;
   }
 
   listSockets(): RegisteredSocket[] {

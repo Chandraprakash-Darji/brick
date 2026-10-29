@@ -34,7 +34,13 @@ import { instrumentDatabase, traceHttpRequest, withSpan } from "./telemetry";
 import { EventsHub } from "./events/hub";
 import { WEBHOOK_ROUTE } from "./events/workflows";
 import type { EventsOptions } from "./events/types";
-import { legacySocketPath, mountSockets, socketPath } from "./socket";
+import {
+  legacySocketPath,
+  localBroker,
+  mountSockets,
+  socketPath,
+} from "./socket";
+import type { SocketBroker } from "./socket-types";
 
 export interface CreateServerOptions {
   port?: number;
@@ -97,6 +103,11 @@ export interface CreateServerOptions {
    * new paths. Removed in v0.12.
    */
   legacyRoutes?: boolean;
+  /**
+   * Socket fan-out. `broker` carries emits and kicks between processes
+   * (default: this process only). See `redisBroker`. The app closes it on stop.
+   */
+  sockets?: { broker?: SocketBroker };
 }
 
 export {
@@ -508,7 +519,11 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
     );
   }
 
-  mountSockets(app, [...sockets, ...legacySockets]);
+  mountSockets(
+    app,
+    [...sockets, ...legacySockets],
+    options.sockets?.broker ?? localBroker(),
+  );
   const definition = Object.freeze({
     services: Object.freeze([...services]),
     prefix,

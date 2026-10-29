@@ -4,16 +4,22 @@ import { createLogger } from "./logger";
 import { joinRoute, kebabCase, legacyPath, ownerPath } from "./routes";
 import type { BaseContext } from "./types";
 import { getCompiledCheck } from "./typebox";
+import { inTransaction, onTransactionCommit } from "./events/transaction";
 import {
   serializeSocketSchema,
   isSocketEnvelope,
+  isSocketRoom,
   SOCKET_MAX_BYTES,
   SOCKET_BUFFER_BYTES,
 } from "./socket-schema";
 import type {
   BrickSocketConfig,
+  BrickSocketHandle,
   BrickSocketSchema,
   BrickSocketSender,
+  SocketBroker,
+  SocketBrokerMessage,
+  SocketEmitArgs,
   SocketPayloads,
   SocketSchemas,
 } from "./socket-types";
@@ -24,8 +30,11 @@ interface SocketSender {
   close(): void;
 }
 interface SocketSession {
+  /** Server rooms, resolved from the handshake context. */
+  rooms: readonly string[];
   open(socket: SocketSender): Promise<void>;
   message(event: string, data: unknown, socket: SocketSender): Promise<void>;
+  join(room: string): Promise<boolean>;
   close(socket: SocketSender, code: number, reason: string): Promise<void>;
 }
 export interface RegisteredSocket {
@@ -34,16 +43,61 @@ export interface RegisteredSocket {
   output: SocketSchemas;
   allowedOrigins?: readonly string[];
   allowMissingOrigin?: boolean;
+  maxRooms: number;
+  /** Brokers of the apps this socket is mounted in. */
+  brokers: Set<SocketBroker>;
+  handle: BrickSocketHandle<any>;
+  topicPrefix: string;
+  topic(room: string): string;
   connect(request: Request): Promise<SocketSession>;
 }
 
 class SocketDenied extends Error {}
+
+const bytes = (value: string) => new TextEncoder().encode(value).byteLength;
+
+/** Validates and serializes one output message, rechecking what survives JSON. */
+function outputFrame(
+  output: SocketSchemas,
+  event: string,
+  data: unknown,
+): string {
+  const schema = Object.hasOwn(output, event) ? output[event] : undefined;
+  if (!schema || !getCompiledCheck(schema).Check(data))
+    throw new Error("Invalid socket output");
+  const frame = JSON.stringify({ event, data });
+  if (bytes(frame) > SOCKET_MAX_BYTES)
+    throw new Error("Socket output too large");
+  if (!getCompiledCheck(schema).Check(JSON.parse(frame).data))
+    throw new Error("Socket output is not JSON-compatible");
+  return frame;
+}
+
+/** Delivers within this process. The default broker of every app. */
+export function localBroker(): SocketBroker {
+  const topics = new Map<string, Set<(message: SocketBrokerMessage) => void>>();
+  return {
+    publish(message) {
+      for (const deliver of topics.get(message.topic) ?? []) deliver(message);
+    },
+    subscribe(topic, deliver) {
+      const listeners = topics.get(topic) ?? new Set();
+      listeners.add(deliver);
+      topics.set(topic, listeners);
+      return () => {
+        listeners.delete(deliver);
+        if (!listeners.size) topics.delete(topic);
+      };
+    },
+  };
+}
 
 export function defineServiceSocket<
   I extends SocketSchemas,
   O extends SocketSchemas,
   Ctx extends BaseContext,
 >(
+  service: string,
   config: BrickSocketConfig<I, O, Ctx>,
   resolve: (request: Request) => Promise<Ctx>,
 ): RegisteredSocket {
@@ -72,6 +126,15 @@ export function defineServiceSocket<
     )
   )
     throw new Error("Every socket input event needs exactly one handler");
+  if (
+    [...Object.keys(input), ...Object.keys(output)].some((key) =>
+      key.startsWith("$"),
+    )
+  )
+    throw new Error("Socket event names starting with $ are reserved");
+  const maxRooms = config.maxRooms ?? 100;
+  if (!Number.isInteger(maxRooms) || maxRooms < 1)
+    throw new Error("Socket maxRooms must be a positive integer");
   for (const schema of [...Object.values(input), ...Object.values(output)]) {
     serializeSocketSchema(schema);
     getCompiledCheck(schema);
@@ -83,6 +146,24 @@ export function defineServiceSocket<
     if (config.authorize && !(await config.authorize({ ctx })))
       throw new SocketDenied();
     return ctx;
+  };
+  const topicPrefix = `${service}.${config.name}:`;
+  const topic = (room: string) => {
+    if (!isSocketRoom(room)) throw new Error(`Invalid socket room: ${room}`);
+    return topicPrefix + room;
+  };
+  const brokers = new Set<SocketBroker>();
+  const publish = (messages: SocketBrokerMessage[], after: unknown) => {
+    const send = () => {
+      for (const broker of brokers)
+        for (const message of messages) broker.publish(message);
+    };
+    if (after === undefined) return send();
+    if (!inTransaction(after))
+      throw new Error(
+        "Socket emit { after } needs an open transaction from runInTransaction",
+      );
+    void onTransactionCommit(after, send);
   };
   return {
     schema: {
@@ -99,9 +180,49 @@ export function defineServiceSocket<
       ? [...config.allowedOrigins]
       : undefined,
     allowMissingOrigin: config.allowMissingOrigin,
+    maxRooms,
+    brokers,
+    topicPrefix,
+    topic,
+    handle: {
+      name: config.name,
+      emit(rooms, ...[event, payload, options]: SocketEmitArgs<any>) {
+        const topics = [
+          ...new Set(typeof rooms === "string" ? [rooms] : rooms),
+        ].map(topic);
+        const frame = outputFrame(output, event, payload);
+        publish(
+          topics.map((topic) => ({ type: "emit", topic, frame })),
+          options?.after,
+        );
+      },
+      kick(room, options = {}) {
+        publish(
+          [
+            {
+              type: "kick",
+              topic: topic(room),
+              ...(options.also !== undefined
+                ? { also: topic(options.also) }
+                : {}),
+              ...(options.reason !== undefined
+                ? { reason: String(options.reason) }
+                : {}),
+            },
+          ],
+          undefined,
+        );
+      },
+    },
     async connect(request) {
       const initial = await context(request);
+      const rooms = [
+        ...new Set(config.rooms ? await config.rooms({ ctx: initial }) : []),
+      ];
+      rooms.forEach(topic);
+      if (rooms.length > maxRooms) throw new Error("Too many socket rooms");
       return {
+        rooms,
         async open(socket) {
           await config.open?.({ ctx: initial, socket: typed(socket) });
         },
@@ -118,6 +239,10 @@ export function defineServiceSocket<
             ctx,
             socket: typed(socket),
           });
+        },
+        async join(room) {
+          const ctx = await context(request);
+          return !!config.join && (await config.join({ ctx, room }));
         },
         async close(socket, code, reason) {
           await config.close?.({
@@ -167,7 +292,13 @@ function publicOrigin(request: Request): string {
 export function mountSockets(
   app: Elysia,
   sockets: { service: string; path: string; definition: RegisteredSocket }[],
+  broker: SocketBroker,
 ): void {
+  for (const { definition } of sockets) definition.brokers.add(broker);
+  app.cleanup(async () => {
+    for (const { definition } of sockets) definition.brokers.delete(broker);
+    await broker.close?.();
+  });
   if (!sockets.length) return;
   app.use(
     websocket({
@@ -176,7 +307,15 @@ export function mountSockets(
       closeOnBackpressureLimit: true,
     }),
   );
-  for (const { service, path, definition } of sockets) {
+  // A socket also served on its v0.10 path shares one set of rooms, so a
+  // broker message reaches each connection once.
+  const paths = new Map<RegisteredSocket, string[]>();
+  for (const { path, definition } of sockets)
+    paths.set(definition, [...(paths.get(definition) ?? []), path]);
+  for (const { service, definition } of sockets) {
+    const routes = paths.get(definition);
+    if (!routes) continue;
+    paths.delete(definition);
     const logger = createLogger(
       `[Brick socket ${service}.${definition.schema.name}]`,
     );
@@ -185,19 +324,101 @@ export function mountSockets(
       request: Request;
       send(data: string): number;
       close(code?: number, reason?: string): void;
+      subscribe(topic: string): void;
+      unsubscribe(topic: string): void;
+      isSubscribed(topic: string): boolean;
       readonly readyState: number;
     };
-    const connections = new WeakMap<
-      Request,
-      {
-        session: SocketSession;
-        sender: SocketSender;
-        tail: Promise<void>;
-        pending: number;
-        bytes: number;
-        closed: boolean;
-      }
+    type Connection = {
+      ws: Peer;
+      session: SocketSession;
+      sender: SocketSender;
+      tail: Promise<void>;
+      pending: number;
+      bytes: number;
+      closed: boolean;
+      /** Every room topic the connection is in. */
+      rooms: Set<string>;
+      /** The topics the client joined, which it may leave. */
+      requested: Set<string>;
+    };
+    const connections = new WeakMap<Request, Connection>();
+    const roomOf = (topic: string) =>
+      topic.slice(definition.topicPrefix.length);
+    const holders = new Map<
+      string,
+      { connections: Set<Connection>; unsubscribe: () => void }
     >();
+    const control = (ws: Peer, event: string, data: unknown) => {
+      if (ws.readyState === 1) ws.send(JSON.stringify({ event, data }));
+    };
+    const enter = (connection: Connection, topic: string) => {
+      if (connection.rooms.has(topic)) return;
+      connection.rooms.add(topic);
+      connection.ws.subscribe(topic);
+      let holder = holders.get(topic);
+      if (!holder) {
+        holder = {
+          connections: new Set(),
+          unsubscribe: () => {},
+        };
+        holders.set(topic, holder);
+        holder.unsubscribe = broker.subscribe(topic, deliver);
+      }
+      holder.connections.add(connection);
+    };
+    const exit = (connection: Connection, topic: string) => {
+      if (!connection.rooms.delete(topic)) return;
+      connection.requested.delete(topic);
+      if (connection.ws.readyState === 1) connection.ws.unsubscribe(topic);
+      const holder = holders.get(topic);
+      if (!holder?.connections.delete(connection) || holder.connections.size)
+        return;
+      holders.delete(topic);
+      holder.unsubscribe();
+    };
+    const deliver = (message: SocketBrokerMessage) => {
+      if (message.type === "emit") {
+        app.server?.publish(message.topic, message.frame);
+        return;
+      }
+      for (const connection of holders.get(message.topic)?.connections ?? []) {
+        if (message.also && !connection.ws.isSubscribed(message.also)) continue;
+        exit(connection, message.topic);
+        control(connection.ws, "$left", {
+          room: roomOf(message.topic),
+          ...(message.reason !== undefined ? { reason: message.reason } : {}),
+        });
+      }
+    };
+    /** `$join` and `$leave`, acknowledged with the same event. */
+    const room = async (
+      connection: Connection,
+      event: string,
+      data: unknown,
+    ) => {
+      const name =
+        data && typeof data === "object" && "room" in data
+          ? data.room
+          : undefined;
+      if (!isSocketRoom(name)) throw new SocketDenied();
+      const topic = definition.topic(name);
+      if (event === "$leave") {
+        if (connection.requested.has(topic)) exit(connection, topic);
+        control(connection.ws, "$leave", { room: name });
+        return;
+      }
+      const ok =
+        connection.rooms.has(topic) ||
+        (connection.rooms.size < definition.maxRooms &&
+          (await connection.session.join(name)));
+      if (connection.closed || connection.ws.readyState !== 1) return;
+      if (ok && !connection.rooms.has(topic)) {
+        enter(connection, topic);
+        connection.requested.add(topic);
+      }
+      control(connection.ws, "$join", { room: name, ok });
+    };
     const fail = (ws: Peer, error: unknown) => {
       if (!(error instanceof SocketDenied))
         logger.error({ error, service, socket: definition.schema.name });
@@ -209,131 +430,136 @@ export function mountSockets(
           : "Socket handler failed",
       );
     };
-    app.ws(path, {
-      async beforeHandle({ request }) {
-        if (sessions.has(request)) return;
-        const origin = request.headers.get("origin");
-        if (
-          origin
-            ? !(definition.allowedOrigins ?? [publicOrigin(request)]).includes(
-                origin,
-              )
-            : !definition.allowMissingOrigin
-        )
-          return new Response("Socket origin refused", { status: 403 });
-        try {
-          sessions.set(request, await definition.connect(request));
-        } catch (error) {
-          if (!(error instanceof SocketDenied))
-            logger.error({ error, service, socket: definition.schema.name });
-          return new Response("Socket connection refused", {
-            status: error instanceof SocketDenied ? 403 : 500,
-          });
-        }
-      },
-      async open(ws) {
-        const session = sessions.get(ws.request);
-        if (!session) {
-          ws.close(1011, "Missing socket session");
-          return;
-        }
-        const sender: SocketSender = {
-          get isOpen() {
-            return !state.closed && ws.readyState === 1;
-          },
-          close() {
-            ws.close(1000, "");
-          },
-          send(event, data) {
-            if (!sender.isOpen) throw new Error("Socket is closed");
-            const schema = Object.hasOwn(definition.output, event)
-              ? definition.output[event]
-              : undefined;
-            if (!schema || !getCompiledCheck(schema).Check(data))
-              throw new Error("Invalid socket output");
-            const frame = JSON.stringify({ event, data });
-            if (new TextEncoder().encode(frame).byteLength > SOCKET_MAX_BYTES)
-              throw new Error("Socket output too large");
-            // Check the JSON representation too, so values lost during serialization cannot break the contract.
-            if (!getCompiledCheck(schema).Check(JSON.parse(frame).data))
-              throw new Error("Socket output is not JSON-compatible");
-            const result = ws.send(frame);
-            if (result === 0) {
-              ws.close(1013, "Socket buffer full");
-              throw new Error("Socket buffer full");
-            }
-          },
-        };
-        const state = {
-          session,
-          sender,
-          tail: Promise.resolve(),
-          pending: 0,
-          bytes: 0,
-          closed: false,
-        };
-        connections.set(ws.request, state);
-        try {
-          await session.open(sender);
-        } catch (error) {
-          fail(ws, error);
-        }
-      },
-      message(ws, value: unknown) {
-        const state = connections.get(ws.request);
-        if (!state || state.closed || ws.readyState !== 1) return;
-        if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
-          ws.close(1003, "Only JSON text is supported");
-          return;
-        }
-        if (typeof value === "string") {
-          ws.close(1007, "Expected JSON envelope");
-          return;
-        }
-        if (!isSocketEnvelope(value)) {
-          ws.close(1008, "Invalid socket envelope");
-          return;
-        }
-        const size = new TextEncoder().encode(JSON.stringify(value)).byteLength;
-        if (size > SOCKET_MAX_BYTES) {
-          ws.close(1009, "Message too large");
-          return;
-        }
-        if (state.pending >= 32 || state.bytes + size > SOCKET_BUFFER_BYTES) {
-          ws.close(1013, "Socket queue full");
-          return;
-        }
-        state.pending++;
-        state.bytes += size;
-        state.tail = state.tail
-          .then(async () => {
-            if (state.closed || ws.readyState !== 1) return;
-            await state.session.message(value.event, value.data, state.sender);
-          })
-          .catch((error: unknown) => fail(ws, error))
-          .finally(() => {
-            state.pending--;
-            state.bytes -= size;
-          });
-        // Brick owns the queue. Returning the tail here makes native close wait on application work.
-      },
-      async close(ws, code = 1006, reason = "") {
-        const state = connections.get(ws.request);
-        sessions.delete(ws.request);
-        if (!state || state.closed) return;
-        state.closed = true;
-        try {
-          await state.session.close(state.sender, code, reason);
-        } catch (error) {
-          logger.error({
-            error,
-            service,
-            socket: definition.schema.name,
-            phase: "cleanup",
-          });
-        }
-        connections.delete(ws.request);
-      },
-    });
+    for (const path of routes)
+      app.ws(path, {
+        async beforeHandle({ request }) {
+          if (sessions.has(request)) return;
+          const origin = request.headers.get("origin");
+          if (
+            origin
+              ? !(
+                  definition.allowedOrigins ?? [publicOrigin(request)]
+                ).includes(origin)
+              : !definition.allowMissingOrigin
+          )
+            return new Response("Socket origin refused", { status: 403 });
+          try {
+            sessions.set(request, await definition.connect(request));
+          } catch (error) {
+            if (!(error instanceof SocketDenied))
+              logger.error({ error, service, socket: definition.schema.name });
+            return new Response("Socket connection refused", {
+              status: error instanceof SocketDenied ? 403 : 500,
+            });
+          }
+        },
+        async open(ws) {
+          const session = sessions.get(ws.request);
+          if (!session) {
+            ws.close(1011, "Missing socket session");
+            return;
+          }
+          const sender: SocketSender = {
+            get isOpen() {
+              return !state.closed && ws.readyState === 1;
+            },
+            close() {
+              ws.close(1000, "");
+            },
+            send(event, data) {
+              if (!sender.isOpen) throw new Error("Socket is closed");
+              const result = ws.send(
+                outputFrame(definition.output, event, data),
+              );
+              if (result === 0) {
+                ws.close(1013, "Socket buffer full");
+                throw new Error("Socket buffer full");
+              }
+            },
+          };
+          const state: Connection = {
+            ws,
+            session,
+            sender,
+            tail: Promise.resolve(),
+            pending: 0,
+            bytes: 0,
+            closed: false,
+            rooms: new Set(),
+            requested: new Set(),
+          };
+          connections.set(ws.request, state);
+          for (const room of session.rooms)
+            enter(state, definition.topic(room));
+          try {
+            await session.open(sender);
+          } catch (error) {
+            fail(ws, error);
+          }
+        },
+        message(ws, value: unknown) {
+          const state = connections.get(ws.request);
+          if (!state || state.closed || ws.readyState !== 1) return;
+          if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
+            ws.close(1003, "Only JSON text is supported");
+            return;
+          }
+          if (typeof value === "string") {
+            ws.close(1007, "Expected JSON envelope");
+            return;
+          }
+          if (!isSocketEnvelope(value)) {
+            ws.close(1008, "Invalid socket envelope");
+            return;
+          }
+          const size = bytes(JSON.stringify(value));
+          if (size > SOCKET_MAX_BYTES) {
+            ws.close(1009, "Message too large");
+            return;
+          }
+          if (state.pending >= 32 || state.bytes + size > SOCKET_BUFFER_BYTES) {
+            ws.close(1013, "Socket queue full");
+            return;
+          }
+          state.pending++;
+          state.bytes += size;
+          state.tail = state.tail
+            .then(async () => {
+              if (state.closed || ws.readyState !== 1) return;
+              if (value.event === "$join" || value.event === "$leave")
+                await room(state, value.event, value.data);
+              else
+                await state.session.message(
+                  value.event,
+                  value.data,
+                  state.sender,
+                );
+            })
+            .catch((error: unknown) => fail(ws, error))
+            .finally(() => {
+              state.pending--;
+              state.bytes -= size;
+            });
+          // Brick owns the queue. Returning the tail here makes native close wait on application work.
+        },
+        async close(ws, code = 1006, reason = "") {
+          const state = connections.get(ws.request);
+          sessions.delete(ws.request);
+          if (!state || state.closed) return;
+          state.closed = true;
+          for (const topic of state.rooms) exit(state, topic);
+          try {
+            await state.session.close(state.sender, code, reason);
+          } catch (error) {
+            logger.error({
+              error,
+              service,
+              socket: definition.schema.name,
+              phase: "cleanup",
+            });
+          }
+          connections.delete(ws.request);
+        },
+      });
   }
 }

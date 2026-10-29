@@ -446,7 +446,7 @@ export const checkRules: Record<string, Rule> = {
   ),
 
   "socket-schemas": rule(
-    "Socket schemas have no format or transforms, and input event names don't start with $.",
+    "Socket schemas have no format or transforms, and event names don't start with $.",
     (context) => {
       if (skip(context)) return {};
       return {
@@ -458,10 +458,10 @@ export const checkRules: Record<string, Rule> = {
             if (schemas?.type !== "ObjectExpression") continue;
             for (const property of schemas.properties) {
               const name = propertyName(property);
-              if (key === "input" && name?.startsWith("$"))
+              if (name?.startsWith("$"))
                 context.report({
                   node: property.key,
-                  message: `Socket input event "${name}" starts with $, which is reserved for control messages.`,
+                  message: `Socket ${key} event "${name}" starts with $, which is reserved for control messages.`,
                 });
               // shortcut: a text search; a schema imported from another file is not checked.
               const text = context.sourceCode.getText(property.value);

@@ -15,7 +15,9 @@ import type { ServiceEvents } from "./events/types";
 import type { EventsDefinition } from "./events/hub";
 import type {
   BrickSocketConfig,
+  BrickSocketHandle,
   BrickSocketSchema,
+  SocketPayloads,
   SocketSchemas,
 } from "./socket-types";
 import type { RegisteredSocket } from "./socket";
@@ -696,7 +698,7 @@ export interface Service<
 
   socket<const I extends SocketSchemas, const O extends SocketSchemas>(
     config: BrickSocketConfig<I, O, BaseContext<TDb> & TServiceContext>,
-  ): this;
+  ): BrickSocketHandle<SocketPayloads<O>>;
   listSockets(): RegisteredSocket[];
 
   action<

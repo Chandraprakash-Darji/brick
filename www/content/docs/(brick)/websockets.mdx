@@ -44,7 +44,75 @@ export default brick({ services: [chat] });
 
 The default route is `/api/chat/live`: the prefix, the service, then the socket name in kebab-case. `brick({ prefix: "/v2" })` changes the prefix. A static `path` on the socket declaration is relative to the service, so `path: "/stream"` mounts at `/api/chat/stream`. A socket can't share a URL segment with an action or resource of the same service (see [URL Scheme](/docs/routes)). Declare sockets before `brick()` builds the service. Duplicate socket routes and conflicting GET routes fail at startup.
 
-`input` lists events the client sends. Every input event requires a handler. `output` lists events the server sends. Handlers receive their inferred `input`, the owning service's `ctx`, and a typed `socket`. `socket.send()` checks the event name and payload in TypeScript and validates the payload at runtime.
+`input` lists events the client sends. Every input event requires a handler. `output` lists events the server sends. Handlers receive their inferred `input`, the owning service's `ctx`, and a typed `socket`. `socket.send()` checks the event name and payload in TypeScript and validates the payload at runtime. Event names starting with `$` are reserved for Brick's control messages.
+
+`service.socket()` returns a socket handle with `name`, `emit()` and `kick()`. (Before v0.11 it returned the service, so chaining after it no longer works.)
+
+## Rooms
+
+A socket can put each connection in rooms when it opens, and decide which rooms a client may ask to join:
+
+```ts
+export const live = desk.socket({
+  name: "live",
+  input: {},
+  output: { updated: DocChange, notify: Notice },
+  authorize: ({ ctx }) => ctx.user != null,
+  rooms: ({ ctx }) => [
+    `user:${ctx.user.id}`,
+    ...ctx.user.teams.map((team) => `team:${team}`),
+  ],
+  join: ({ ctx, room }) =>
+    room.startsWith("doc:") && canRead(ctx.user, room.slice(4)),
+  handlers: {},
+});
+```
+
+`rooms` runs once with the handshake context. `join` runs for every room a client requests, with freshly resolved context, after `authorize`. Without `join`, every client request is refused. Room names have the form `prefix:value` and are at most 200 bytes. A connection can be in at most 100 rooms; set `maxRooms` to change that. Rooms are scoped to their socket, so two sockets never share a room.
+
+```ts
+const socket = api.desk.live.connect();
+await socket.join("doc:Sales Invoice/SINV-0042"); // throws BrickSocketError kind "refused"
+socket.leave("doc:Sales Invoice/SINV-0042");
+socket.onLeave((room, reason) => closeEditor(room, reason));
+```
+
+A client can leave only the rooms it joined; rooms from `rooms` stay until the connection closes or a kick removes them. On the wire, `join` and `leave` are the control messages `$join` and `$leave`, which the server acknowledges with the same event.
+
+## Emit from anywhere
+
+The handle emits to rooms from an action, a listener, a hook or a workflow step:
+
+```ts
+live.emit("doc:Sales Invoice/SINV-0042", "updated", { name, modified });
+live.emit(["user:42", "team:7"], "notify", { text: "Invoice submitted" });
+```
+
+The payload is checked against the output schema and serialized once, however many connections receive it. An invalid payload, an invalid room name, or a frame over 64 KiB throws at the call site. A connection in several of the rooms receives the message once per room. Delivery is at most once and unacknowledged: clients that need every change refetch after reconnecting.
+
+Pass `{ after: tx }` to send only once a transaction commits:
+
+```ts
+await runInTransaction(db, async (tx) => {
+  await tx
+    .update(invoices)
+    .set({ status: "submitted" })
+    .where(eq(invoices.id, id));
+  live.emit(`doc:Sales Invoice/${id}`, "updated", change, { after: tx }); // dropped on rollback
+});
+```
+
+`tx` must come from `runInTransaction` (generated CRUD writes and recorded events use it too); a nested savepoint that rolls back drops its emits. Any other value throws, because Brick cannot see when a plain Drizzle transaction commits.
+
+`kick` removes connections from a room, in every process:
+
+```ts
+live.kick("doc:Sales Invoice/SINV-0042"); // everyone in the room
+live.kick("doc:Sales Invoice/SINV-0042", { also: "user:42" }); // only user 42's connections
+live.kick("team:7", { also: "user:42", reason: "removed from team" });
+```
+
+`also` selects connections that are also in that room. The client receives `$left { room, reason }` and `onLeave(room, reason)` runs.
 
 ## Connect from the browser
 
@@ -101,7 +169,7 @@ Use optional `open({ ctx, socket })` and `close({ ctx, socket, code, reason })` 
 
 Pass `connect({ signal })` to cancel opening or close an established connection. An abort before opening rejects `ready` with the signal's reason. `timeoutMs` limits opening only. These options inherit the client's defaults, and connection options override them.
 
-`BrickSocketError` is exported from `@brickkit/core/client`. Its `kind` is `connection`, `protocol`, or `backpressure`. Expected connection failures reach `onError`. A remote close reaches `onClose` with its code and reason. Each `close()` call is safe to repeat.
+`BrickSocketError` is exported from `@brickkit/core/client`. Its `kind` is `connection`, `protocol`, `backpressure`, or `refused` (a refused `join`). Expected connection failures reach `onError`. A remote close reaches `onClose` with its code and reason. Each `close()` call is safe to repeat.
 
 ## Message limits and delivery
 
@@ -115,7 +183,7 @@ Only JSON-compatible TypeBox schemas are supported. Transforms, custom formats, 
 
 Unknown input events and invalid payloads close with `1008`. Malformed JSON closes with `1007`, binary frames with `1003`, and overloaded queues with `1013`. Oversized messages close with `1009` when Brick detects them; frames rejected by the native transport can appear as an abnormal `1006` close. Unexpected handler errors and invalid server output close with `1011`; detailed errors stay in server logs. The browser client closes invalid server messages with the application code `4000` and reports a protocol error.
 
-`send()` means the local connection accepted the message. It does not acknowledge remote processing. Sending before `ready` or after closure throws. Brick does not reconnect, retry, buffer disconnected messages, or replay them automatically. Room membership and broadcast policy belong to the application. There is no built-in room API or distributed messaging in this release.
+`send()` means the local connection accepted the message. It does not acknowledge remote processing. Sending before `ready` or after closure throws. Brick does not reconnect, retry, buffer disconnected messages, or replay them automatically.
 
 ## Development and deployment
 
@@ -125,7 +193,7 @@ For a Vite frontend, run a separate Bun backend and configure Vite's WebSocket p
 
 The [WebSocket example](https://github.com/get-brickkit/brick/tree/main/examples/websocket) includes a dark chat interface, SQLite storage, anonymous Better Auth guests, contract generation, and a Vite proxy. Open it in two browser sessions, click **Join conversation** in each, then send a message. Both receive it, and the connection count updates when someone joins or leaves. Refresh and join again to restore the conversation.
 
-The example stores Better Auth users, sessions, and messages in `.brick/chat.sqlite` relative to the example directory. Better Auth's anonymous plugin signs each browser in as a guest, and the socket resolves that session from the handshake cookie. The application commits each message before broadcasting and sends the latest 50 stored messages on join in bounded chunks. Its history and broadcast logic are application code; the transport itself does not persist or replay messages. Run it from a repository checkout:
+The example stores Better Auth users, sessions, and messages in `.brick/chat.sqlite` relative to the example directory. Better Auth's anonymous plugin signs each browser in as a guest, and the socket resolves that session from the handshake cookie. Every connection is in one room, `chat:lobby`. The application commits each message, then emits it to that room, and sends the latest 50 stored messages on join in bounded chunks. Its history is application code; the transport itself does not persist messages. Run it from a repository checkout:
 
 ```sh
 bun install

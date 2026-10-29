@@ -1,6 +1,7 @@
 import { Check } from "@sinclair/typebox/value";
 import {
   isSocketEnvelope,
+  isSocketRoom,
   restoreSocketSchema,
   SOCKET_BUFFER_BYTES,
   SOCKET_MAX_BYTES,
@@ -33,6 +34,8 @@ export function connectSocket(
   const events = new Map<string, Set<(value: unknown) => void>>();
   const errors = new Set<(error: BrickSocketError) => void>();
   const closes = new Set<(info: { code: number; reason: string }) => void>();
+  const leaves = new Set<(room: string, reason?: string) => void>();
+  const joins = new Map<string, PromiseWithResolvers<void>[]>();
   let resolveReady!: () => void;
   let rejectReady!: (reason: unknown) => void;
   const ready = new Promise<void>((resolve, reject) => {
@@ -65,12 +68,18 @@ export function connectSocket(
         error ??
           new BrickSocketError("connection", "Socket closed before opening"),
       );
+    for (const pending of [...joins.values()].flat())
+      pending.reject(
+        new BrickSocketError("connection", "Socket closed before joining"),
+      );
+    joins.clear();
     try {
       for (const listener of closes) listener(info);
     } finally {
       events.clear();
       errors.clear();
       closes.clear();
+      leaves.clear();
     }
   };
   const stop = (error?: unknown, code = 1000, reason = "") => {
@@ -85,16 +94,70 @@ export function connectSocket(
       }
     }
   };
+  /** Checks a room acknowledgement or removal; returns the work to run once it passed. */
+  const control = (event: string, data: unknown): (() => void) => {
+    const fields = (data ?? {}) as Record<string, unknown>;
+    const room = fields.room;
+    if (!isSocketRoom(room)) throw new Error("Invalid control message");
+    if (event === "$join" && typeof fields.ok === "boolean")
+      return () => {
+        const pending = joins.get(room) ?? [];
+        joins.delete(room);
+        for (const { resolve, reject } of pending)
+          if (fields.ok) resolve();
+          else reject(new BrickSocketError("refused", `Join refused: ${room}`));
+      };
+    if (event === "$left") {
+      const reason =
+        typeof fields.reason === "string" ? fields.reason : undefined;
+      return () => {
+        for (const listener of leaves) listener(room, reason);
+      };
+    }
+    if (event === "$leave") return () => {};
+    throw new Error("Unknown control message");
+  };
   const abort = () =>
     stop(signal?.reason ?? new DOMException("Aborted", "AbortError"));
+  const write = (event: string, data: unknown) => {
+    if (!ws || !opened || finished || ws.readyState !== 1)
+      throw new BrickSocketError("connection", "Socket is not open");
+    ws.send(JSON.stringify({ event, data }));
+  };
   const api: BrickSocketClient<
     Record<string, unknown>,
     Record<string, unknown>
   > = {
     ready,
+    join(room) {
+      if (!isSocketRoom(room))
+        return Promise.reject(
+          new BrickSocketError("protocol", `Invalid room: ${String(room)}`),
+        );
+      const pending = Promise.withResolvers<void>();
+      try {
+        write("$join", { room });
+      } catch (error) {
+        return Promise.reject(error);
+      }
+      joins.set(room, [...(joins.get(room) ?? []), pending]);
+      return pending.promise;
+    },
+    leave(room) {
+      if (isSocketRoom(room) && ws?.readyState === 1 && !finished)
+        write("$leave", { room });
+    },
+    onLeave(listener) {
+      if (!finished) leaves.add(listener);
+      return () => {
+        leaves.delete(listener);
+      };
+    },
     send(event, data) {
       if (!ws || !opened || finished || ws.readyState !== 1)
         throw new BrickSocketError("connection", "Socket is not open");
+      if (event.startsWith("$"))
+        throw new BrickSocketError("protocol", "Reserved socket event");
       const frame = JSON.stringify({ event, data });
       const bytes = new TextEncoder().encode(frame).byteLength;
       if (!isSocketEnvelope(JSON.parse(frame)) || bytes > SOCKET_MAX_BYTES)
@@ -170,6 +233,7 @@ export function connectSocket(
   ws.onclose = ({ code, reason }) => finish({ code, reason });
   ws.onmessage = ({ data }: MessageEvent<unknown>) => {
     let message: unknown;
+    let action: (() => void) | undefined;
     try {
       if (
         typeof data !== "string" ||
@@ -179,9 +243,13 @@ export function connectSocket(
       message = JSON.parse(data);
       if (!isSocketEnvelope(message))
         throw new Error("Invalid socket envelope");
-      const schema = schemas.get(message.event);
-      if (!schema || !Check(schema, message.data))
-        throw new Error("Invalid socket output");
+      if (message.event.startsWith("$"))
+        action = control(message.event, message.data);
+      else {
+        const schema = schemas.get(message.event);
+        if (!schema || !Check(schema, message.data))
+          throw new Error("Invalid socket output");
+      }
     } catch (cause) {
       stop(
         new BrickSocketError(
@@ -194,7 +262,8 @@ export function connectSocket(
       );
       return;
     }
-    if (isSocketEnvelope(message))
+    if (action) action();
+    else if (isSocketEnvelope(message))
       for (const listener of events.get(message.event) ?? [])
         listener(message.data);
   };

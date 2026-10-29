@@ -28,6 +28,14 @@ export interface BrickSocketConfig<
   allowedOrigins?: readonly string[];
   allowMissingOrigin?: boolean;
   authorize?: (params: { ctx: Ctx }) => boolean | Promise<boolean>;
+  /** Rooms the connection is put in when it opens. */
+  rooms?: (params: {
+    ctx: Ctx;
+  }) => readonly string[] | Promise<readonly string[]>;
+  /** Decides each room a client asks to join. Without it, client joins are refused. */
+  join?: (params: { ctx: Ctx; room: string }) => boolean | Promise<boolean>;
+  /** Rooms one connection can be in at once (default 100). */
+  maxRooms?: number;
   handlers: {
     [K in keyof I]: (params: {
       input: Static<I[K]>;
@@ -47,6 +55,46 @@ export interface BrickSocketConfig<
   }) => void | Promise<void>;
 }
 
+export interface SocketEmitOptions {
+  /** A transaction handle from `runInTransaction`: send on commit, drop on rollback. */
+  after?: unknown;
+}
+export type SocketEmitArgs<Events> = {
+  [K in keyof Events & string]: [
+    event: K,
+    payload: Events[K],
+    options?: SocketEmitOptions,
+  ];
+}[keyof Events & string];
+
+/** Returned by `service.socket()`. Emits and kicks reach every process through the app's broker. */
+export interface BrickSocketHandle<Output> {
+  readonly name: string;
+  /** Validates and serializes once, then sends to every connection in the rooms. At most once, unacknowledged. */
+  emit(
+    rooms: string | readonly string[],
+    ...args: SocketEmitArgs<Output>
+  ): void;
+  /** Removes connections from a room; `also` limits it to connections also in that room. */
+  kick(room: string, options?: { also?: string; reason?: string }): void;
+}
+
+export type SocketBrokerMessage =
+  | { type: "emit"; topic: string; frame: string }
+  | { type: "kick"; topic: string; also?: string; reason?: string };
+
+/** Carries emits and kicks between processes. Topics are `<service>.<socket>:<room>`. */
+export interface SocketBroker {
+  /** Sends to every subscriber of `message.topic`, in every process, this one included. */
+  publish(message: SocketBrokerMessage): void;
+  /** Called once per local holder of a topic; returns its unsubscribe. */
+  subscribe(
+    topic: string,
+    deliver: (message: SocketBrokerMessage) => void,
+  ): () => void;
+  close?(): void | Promise<void>;
+}
+
 export interface BrickSocketConnectOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
@@ -54,7 +102,7 @@ export interface BrickSocketConnectOptions {
 
 export class BrickSocketError extends Error {
   constructor(
-    readonly kind: "connection" | "protocol" | "backpressure",
+    readonly kind: "connection" | "protocol" | "backpressure" | "refused",
     message: string,
     options?: ErrorOptions,
   ) {
@@ -72,6 +120,11 @@ export interface BrickSocketClient<
     event: K,
     listener: (payload: Output[K]) => void,
   ): () => void;
+  /** Resolves when the server accepts the room; rejects with kind `refused` otherwise. */
+  join(room: string): Promise<void>;
+  leave(room: string): void;
+  /** The server removed this connection from a room. */
+  onLeave(listener: (room: string, reason?: string) => void): () => void;
   onError(listener: (error: BrickSocketError) => void): () => void;
   onClose(
     listener: (info: { code: number; reason: string }) => void,

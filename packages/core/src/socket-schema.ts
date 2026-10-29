@@ -82,5 +82,15 @@ export function isSocketEnvelope(
   );
 }
 
+/** `prefix:value`, at most 200 bytes, without control characters. */
+export function isSocketRoom(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    // eslint-disable-next-line no-control-regex
+    /^[A-Za-z][\w-]*:[^\u0000-\u001f\u007f]+$/.test(value) &&
+    new TextEncoder().encode(value).byteLength <= 200
+  );
+}
+
 export const SOCKET_MAX_BYTES = 64 * 1024;
 export const SOCKET_BUFFER_BYTES = 1024 * 1024;

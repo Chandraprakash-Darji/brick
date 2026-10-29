@@ -143,6 +143,11 @@ async function begin<T>(
   }
 }
 
+/** Whether `db` belongs to a transaction opened by `runInTransaction` that is still open. */
+export function inTransaction(db: unknown): boolean {
+  return joined(db) !== undefined;
+}
+
 /**
  * Run `fn` once the transaction that `db` belongs to has committed, or now when
  * `db` is not in one opened by `runInTransaction`. It never runs when that

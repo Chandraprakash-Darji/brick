@@ -1,5 +1,13 @@
 import { afterEach, expect, it } from "bun:test";
-import { brick, defineService, resetGlobalRegistry, t } from "../src";
+import { Database } from "bun:sqlite";
+import { drizzle } from "drizzle-orm/bun-sqlite";
+import {
+  brick,
+  defineService,
+  resetGlobalRegistry,
+  runInTransaction,
+  t,
+} from "../src";
 import { defineElsewhere } from "./fixtures/define-elsewhere";
 import {
   createBrickClient,
@@ -465,4 +473,208 @@ it("times out a pending handshake", async () => {
   } finally {
     await server.stop(true);
   }
+});
+
+function roomsApp(maxRooms?: number) {
+  const service = defineService("chat", {
+    context: ({ request }) => ({
+      user: request.headers.get("x-user") ?? "anon",
+    }),
+  });
+  const live = service.socket({
+    name: "live",
+    input: {},
+    output: { message: t.String() },
+    allowMissingOrigin: true,
+    maxRooms,
+    rooms: ({ ctx }) => [`user:${ctx.user}`],
+    join: ({ room }) => room.startsWith("doc:"),
+    handlers: {},
+  });
+  return { live, url: start(service) };
+}
+function next(ws: WebSocket, event: string): Promise<unknown> {
+  return new Promise((resolve) => {
+    const listener = ({ data }: MessageEvent) => {
+      const message = JSON.parse(String(data));
+      if (message.event !== event) return;
+      ws.removeEventListener("message", listener);
+      resolve(message.data);
+    };
+    ws.addEventListener("message", listener);
+  });
+}
+async function joinRaw(ws: WebSocket, room: string) {
+  const ack = next(ws, "$join");
+  ws.send(JSON.stringify({ event: "$join", data: { room } }));
+  return ack;
+}
+
+it("joins, emits to, leaves and kicks rooms through the client", async () => {
+  const { live, url } = roomsApp();
+  const socket = createBrickClient({
+    baseUrl: url,
+    contract,
+  }).chat.live.connect();
+  const received: string[] = [];
+  socket.on("message", (text) => received.push(text));
+  const left = new Promise<[string, string | undefined]>((resolve) =>
+    socket.onLeave((room, reason) => resolve([room, reason])),
+  );
+  await socket.ready;
+  await socket.join("doc:Sales Invoice/SINV-1");
+  await expect(socket.join("secret:1")).rejects.toHaveProperty(
+    "kind",
+    "refused",
+  );
+  await expect(socket.join("no-prefix")).rejects.toHaveProperty(
+    "kind",
+    "protocol",
+  );
+  live.emit("doc:Sales Invoice/SINV-1", "message", "doc");
+  live.emit(["user:anon", "team:none"], "message", "user");
+  socket.leave("doc:Sales Invoice/SINV-1");
+  await socket.join("doc:2");
+  live.emit("doc:Sales Invoice/SINV-1", "message", "after leave");
+  live.kick("doc:2", { reason: "removed" });
+  expect(await left).toEqual(["doc:2", "removed"]);
+  live.emit("doc:2", "message", "after kick");
+  live.emit("user:anon", "message", "end");
+  await Bun.sleep(20);
+  expect(received).toEqual(["doc", "user", "end"]);
+  socket.close();
+});
+
+it("kicks only connections also in another room", async () => {
+  const { live, url } = roomsApp();
+  const a = await open(url + "/v2/chat/live", { "x-user": "a" });
+  const b = await open(url + "/v2/chat/live", { "x-user": "b" });
+  expect(await joinRaw(a, "doc:1")).toEqual({ room: "doc:1", ok: true });
+  expect(await joinRaw(b, "doc:1")).toEqual({ room: "doc:1", ok: true });
+  const left = next(a, "$left");
+  const fromB = next(b, "message");
+  live.kick("doc:1", { also: "user:a" });
+  expect(await left).toEqual({ room: "doc:1" });
+  const fromA = next(a, "message");
+  live.emit("doc:1", "message", "doc");
+  live.emit("user:a", "message", "direct");
+  expect(await fromB).toBe("doc");
+  expect(await fromA).toBe("direct");
+});
+
+it("delivers once to connections on the current and v0.10 paths", async () => {
+  const service = defineService("chat");
+  const feed = service.socket({
+    name: "liveFeed",
+    input: {},
+    output: { message: t.String() },
+    allowMissingOrigin: true,
+    rooms: () => ["user:anon"],
+    handlers: {},
+  });
+  const app = brick({
+    services: [service],
+    prefix: "/v2",
+    docs: false,
+    requestLogging: false,
+    legacyRoutes: true,
+  }).listen(0);
+  apps.push(app);
+  const url = `http://localhost:${app.server!.port}/v2/chat`;
+  const current = await open(`${url}/live-feed`);
+  const legacy = await open(`${url}/liveFeed`);
+  const received: string[] = [];
+  for (const ws of [current, legacy])
+    ws.addEventListener("message", ({ data }) =>
+      received.push(JSON.parse(String(data)).data),
+    );
+  feed.emit("user:anon", "message", "once");
+  await Bun.sleep(20);
+  expect(received).toEqual(["once", "once"]);
+});
+
+it("refuses joins over the room cap and keeps server rooms", async () => {
+  const { live, url } = roomsApp(2);
+  const ws = await open(url + "/v2/chat/live");
+  expect(await joinRaw(ws, "doc:1")).toEqual({ room: "doc:1", ok: true });
+  expect(await joinRaw(ws, "doc:2")).toEqual({ room: "doc:2", ok: false });
+  const ack = next(ws, "$leave");
+  ws.send(JSON.stringify({ event: "$leave", data: { room: "user:anon" } }));
+  expect(await ack).toEqual({ room: "user:anon" });
+  const received = next(ws, "message");
+  live.emit("user:anon", "message", "still here");
+  expect(await received).toBe("still here");
+  const ended = closed(ws);
+  ws.send(JSON.stringify({ event: "$join", data: { room: 42 } }));
+  expect(await ended).toBe(1008);
+});
+
+it("validates emits at the call site and reserves $ event names", () => {
+  const { live } = roomsApp();
+  expect(() => live.emit("bad room", "message", "x")).toThrow(
+    "Invalid socket room",
+  );
+  // @ts-expect-error Payloads are checked.
+  expect(() => live.emit("doc:1", "message", 42)).toThrow(
+    "Invalid socket output",
+  );
+  expect(() => live.emit("doc:1", "message", "a".repeat(65536))).toThrow(
+    "too large",
+  );
+  expect(() => live.kick("doc:1", { also: "nope" })).toThrow(
+    "Invalid socket room",
+  );
+  const service = defineService("other");
+  expect(() =>
+    service.socket({
+      name: "live",
+      input: { $join: t.String() },
+      output: {},
+      handlers: { $join() {} },
+    }),
+  ).toThrow("reserved");
+  expect(() =>
+    service.socket({
+      name: "x",
+      input: {},
+      output: {},
+      maxRooms: 0,
+      handlers: {},
+    }),
+  ).toThrow("maxRooms");
+});
+
+it("emits { after: tx } on commit and drops it on rollback", async () => {
+  const { live, url } = roomsApp();
+  const ws = await open(url + "/v2/chat/live");
+  const received: unknown[] = [];
+  ws.addEventListener("message", ({ data }) =>
+    received.push(JSON.parse(String(data)).data),
+  );
+  const db = drizzle(new Database(":memory:"));
+  await runInTransaction(db, async (tx) => {
+    live.emit("user:anon", "message", "committed", { after: tx });
+    await Bun.sleep(10);
+    expect(received).toEqual([]);
+  });
+  await expect(
+    runInTransaction(db, async (tx) => {
+      live.emit("user:anon", "message", "rolled back", { after: tx });
+      throw new Error("rollback");
+    }),
+  ).rejects.toThrow("rollback");
+  await runInTransaction(db, async (tx) => {
+    await expect(
+      runInTransaction(tx, async (inner) => {
+        live.emit("user:anon", "message", "savepoint", { after: inner });
+        throw new Error("inner");
+      }),
+    ).rejects.toThrow("inner");
+  });
+  expect(() => live.emit("user:anon", "message", "x", { after: db })).toThrow(
+    "open transaction",
+  );
+  live.emit("user:anon", "message", "last");
+  await Bun.sleep(20);
+  expect(received).toEqual(["committed", "last"]);
 });

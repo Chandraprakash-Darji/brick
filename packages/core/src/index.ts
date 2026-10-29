@@ -73,8 +73,13 @@ export { compilerRuntime } from "./compiler/runtime";
 export { defineService, ServiceImpl } from "./service";
 export type {
   BrickSocketConfig,
+  BrickSocketHandle,
   BrickSocketSchema,
   BrickSocketSender,
+  SocketBroker,
+  SocketBrokerMessage,
+  SocketEmitArgs,
+  SocketEmitOptions,
   SocketEventArgs,
   SocketPayloads,
   SocketSchemas,

@@ -92,7 +92,7 @@ export default defineConfig({
 | `declared-events`        | Emitted event names exist in the service's event catalog.                                                                  | recommended | app  |
 | `deterministic-workflow` | No `Date.now`, `new Date()`, `Math.random`, `fetch` or database access in a workflow function outside steps.               | recommended | file |
 | `idempotent-listener`    | Listener writes use `deliveryId` or `onConflictDoNothing`, since delivery is at least once. Warning.                       | recommended | file |
-| `socket-schemas`         | Socket schemas have no format or transforms, and input event names don't start with `$`.                                   | recommended | file |
+| `socket-schemas`         | Socket schemas have no format or transforms, and event names don't start with `$`.                                         | recommended | file |
 | `no-unregistered-format` | A TypeBox format is used only when registered with `FormatRegistry` in the file, or listed in the rule's `formats` option. | recommended | file |
 | `no-floating-calls`      | Promises from service calls (`useService`) and `emitEvent` are awaited. Fix: adds `await`.                                 | recommended | file |
 
