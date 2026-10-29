@@ -88,7 +88,9 @@ describe("startInspector", () => {
   });
 
   it("does nothing for an app that runs no workflows", async () => {
-    expect(await startInspector(brick({ docs: false }))).toBeUndefined();
+    expect(
+      await startInspector(brick({ services: [], docs: false })),
+    ).toBeUndefined();
   });
 
   it("says how to build it when the build is missing", async () => {

@@ -340,8 +340,6 @@ h1 {
   min-height: 44px;
   max-height: 144px;
   padding: var(--space-md);
-  background: none;
-  border: 0;
   color: var(--text);
   font-size: var(--text-md);
   line-height: 1.5;

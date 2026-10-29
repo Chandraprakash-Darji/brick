@@ -89,7 +89,8 @@ export function createChatStore(path: string) {
     tables: { ...authSchema, messages },
   });
   const db = database.getDb();
-  syncSchema(database.tables, db);
+  // SQLite schema sync runs synchronously; only Postgres returns a promise.
+  void syncSchema(database.tables, db);
   return {
     database,
     db,
