@@ -142,6 +142,16 @@ export function socketPath(
   );
 }
 
+/** The origin a browser saw, so TLS-terminating proxies still pass the same-origin check. */
+function publicOrigin(request: Request): string {
+  // Browsers cannot set X-Forwarded-* on a WebSocket handshake, so a cross-site page cannot forge a match.
+  const forwarded = (name: string) =>
+    request.headers.get(name)?.split(",")[0]?.trim() || undefined;
+  const url = new URL(request.url);
+  const proto = forwarded("x-forwarded-proto");
+  return `${proto ? `${proto}:` : url.protocol}//${forwarded("x-forwarded-host") ?? url.host}`;
+}
+
 /** Mounts native adapters. Each connection owns its queue and service session. */
 export function mountSockets(
   app: Elysia,
@@ -178,9 +188,9 @@ export function mountSockets(
       }
     >();
     const fail = (ws: Peer, error: unknown) => {
-      if (ws.readyState !== 1) return;
       if (!(error instanceof SocketDenied))
         logger.error({ error, service, socket: definition.schema.name });
+      if (ws.readyState !== 1) return;
       ws.close(
         error instanceof SocketDenied ? 1008 : 1011,
         error instanceof SocketDenied
@@ -194,9 +204,9 @@ export function mountSockets(
         const origin = request.headers.get("origin");
         if (
           origin
-            ? !(
-                definition.allowedOrigins ?? [new URL(request.url).origin]
-              ).includes(origin)
+            ? !(definition.allowedOrigins ?? [publicOrigin(request)]).includes(
+                origin,
+              )
             : !definition.allowMissingOrigin
         )
           return new Response("Socket origin refused", { status: 403 });

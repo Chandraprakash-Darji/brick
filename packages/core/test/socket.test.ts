@@ -147,6 +147,37 @@ it("checks same-origin, configured origins, and missing origins separately", asy
   expect(ws.readyState).toBe(1);
 });
 
+it("accepts same-origin browsers behind a TLS-terminating proxy", async () => {
+  const url = echoSameOrigin() + "/v2/chat/live";
+  await expect(
+    open(url, { origin: "https://chat.example.com" }),
+  ).rejects.toBeDefined();
+  const ws = await open(url, {
+    origin: "https://chat.example.com",
+    "x-forwarded-proto": "https",
+    "x-forwarded-host": "chat.example.com",
+  });
+  expect(ws.readyState).toBe(1);
+  await expect(
+    open(url, {
+      origin: "https://attacker.test",
+      "x-forwarded-proto": "https",
+      "x-forwarded-host": "chat.example.com",
+    }),
+  ).rejects.toBeDefined();
+});
+
+function echoSameOrigin() {
+  const service = defineService("chat");
+  service.socket({
+    name: "live",
+    input: {},
+    output: {},
+    handlers: {},
+  });
+  return start(service);
+}
+
 for (const [payload, code] of [
   ["not json", 1007],
   [JSON.stringify({ event: "missing", data: "no" }), 1008],

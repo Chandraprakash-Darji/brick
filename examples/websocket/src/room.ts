@@ -2,12 +2,19 @@ import { resolve } from "node:path";
 import {
   brick,
   defineService,
-  getCompiledCheck,
   t,
   type BrickSocketSender,
   type SocketPayloads,
 } from "@brickkit/core";
-import { createChatStore, chatMessage, type ChatMessage } from "./store";
+import { drizzleAdapter } from "@better-auth/drizzle-adapter";
+import { betterAuth } from "better-auth/minimal";
+import { anonymous } from "better-auth/plugins/anonymous";
+import {
+  authSchema,
+  createChatStore,
+  chatMessage,
+  type ChatMessage,
+} from "./store";
 
 const output = {
   connected: t.Object({ id: t.String(), name: t.String() }),
@@ -15,18 +22,26 @@ const output = {
   history: t.Object({ messages: t.Array(chatMessage), done: t.Boolean() }),
   message: chatMessage,
 };
-const sessionInput = getCompiledCheck(
-  t.Object(
-    { fingerprint: t.String({ pattern: "^[a-f0-9]{32}$" }) },
-    { additionalProperties: false },
-  ),
-);
 const allowedOrigins = ["http://localhost:5178"];
 
 export function createChatApp(
   path = process.env.BRICK_CHAT_DB ?? resolve(".brick/chat.sqlite"),
 ) {
   const store = createChatStore(path);
+  const auth = betterAuth({
+    baseURL: process.env.BETTER_AUTH_URL ?? allowedOrigins[0],
+    secret: process.env.BETTER_AUTH_SECRET,
+    database: drizzleAdapter(store.db, {
+      provider: "sqlite",
+      schema: authSchema,
+    }),
+    plugins: [
+      anonymous({
+        generateName: () => `Guest ${crypto.randomUUID().slice(0, 4)}`,
+      }),
+    ],
+    trustedOrigins: allowedOrigins,
+  });
   const clients = new Set<BrickSocketSender<SocketPayloads<typeof output>>>();
   function publishPresence() {
     for (const client of clients) {
@@ -39,20 +54,17 @@ export function createChatApp(
   }
   const chat = defineService("chat", {
     database: store.database,
-    context: ({ request }) => {
-      const token = request.headers
-        .get("cookie")
-        ?.split(";")
-        .map((part) => part.trim())
-        .find((part) => part.startsWith("brick-chat="))
-        ?.slice("brick-chat=".length);
-      return { user: token ? store.user(token) : null };
+    context: async ({ request }) => {
+      const session = await auth.api.getSession({ headers: request.headers });
+      return {
+        user: session ? { id: session.user.id, name: session.user.name } : null,
+      };
     },
   });
   chat.socket({
     name: "live",
     description:
-      "Persistent shared conversation with browser fingerprint identities",
+      "Persistent shared conversation with anonymous Better Auth identities",
     input: {
       say: t.Object({
         text: t.String({ minLength: 1, maxLength: 2000, pattern: "\\S" }),
@@ -102,33 +114,10 @@ export function createChatApp(
   const app = brick({
     services: [chat],
     telemetry: true,
-    endpoints: [
-      {
-        method: "POST",
-        path: "/session",
-        handler: ({ request, body }) => {
-          const origin = request.headers.get("origin");
-          if (
-            origin &&
-            origin !== new URL(request.url).origin &&
-            !allowedOrigins.includes(origin)
-          )
-            return new Response("Origin refused", { status: 403 });
-          if (!sessionInput.Check(body))
-            return new Response("Invalid browser fingerprint", { status: 400 });
-          const { token, user } = store.session(body.fingerprint);
-          return Response.json(
-            { name: user.name },
-            {
-              headers: {
-                "set-cookie": `brick-chat=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000`,
-              },
-            },
-          );
-        },
-      },
-    ],
   });
+  app.all("/api/auth/*", ({ request }: { request: Request }) =>
+    auth.handler(request),
+  );
   app.cleanup(() => store.close());
   return app;
 }

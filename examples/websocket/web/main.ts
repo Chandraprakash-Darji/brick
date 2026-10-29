@@ -3,7 +3,6 @@ import {
   type BrickClientSocket,
 } from "@brickkit/core/client";
 import { contract } from "../_brick/contract";
-import FingerprintJS from "@fingerprintjs/fingerprintjs";
 import { icons, svgIcon } from "./icons";
 
 for (const element of document.querySelectorAll<HTMLElement>("[data-icon]")) {
@@ -34,7 +33,6 @@ let live: ReturnType<typeof api.chat.live.connect> | undefined;
 let currentUserId = "";
 let received = 0;
 const rendered = new Set<number>();
-let fingerprintAgent: ReturnType<typeof FingerprintJS.load> | undefined;
 let lastError = "";
 
 function connected(online: boolean) {
@@ -106,15 +104,15 @@ join.onclick = async () => {
   status.textContent = "Opening your connection…";
   lastError = "";
   try {
-    status.textContent = "Identifying this browser…";
-    fingerprintAgent ??= FingerprintJS.load({ monitoring: false });
-    const { visitorId } = await (await fingerprintAgent).get();
-    const session = await fetch("/session", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ fingerprint: visitorId }),
-    });
-    if (!session.ok) throw new Error("Could not create a demo session");
+    status.textContent = "Signing in…";
+    // Reuse the stored session; Better Auth refuses a second anonymous sign-in.
+    const current = await fetch("/api/auth/get-session");
+    if (!current.ok || !(await current.json())) {
+      const session = await fetch("/api/auth/sign-in/anonymous", {
+        method: "POST",
+      });
+      if (!session.ok) throw new Error("Could not sign in as a guest");
+    }
     const socket = api.chat.live.connect({ timeoutMs: 5000 });
     live = socket;
     socket.on("connected", ({ id }) => {

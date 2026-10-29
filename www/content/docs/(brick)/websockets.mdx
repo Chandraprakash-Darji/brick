@@ -87,7 +87,7 @@ Brick resolves context and runs `authorize` before upgrading, then repeats both 
 
 Browsers send applicable cookies during the handshake. The HTTP client's `headers` and `fetch` options do not attach authorization headers to a browser WebSocket. A failed browser handshake reports a connection error without exposing the HTTP response body or status.
 
-Brick accepts same-origin browser connections by default. For a separate frontend origin, configure an explicit list on the declaration:
+Brick accepts same-origin browser connections by default. Behind a reverse proxy that terminates TLS, Brick compares against `X-Forwarded-Proto` and `X-Forwarded-Host` when the proxy sets them. For a separate frontend origin, configure an explicit list on the declaration:
 
 ```ts
 allowedOrigins: ["http://localhost:5178", "https://app.example.com"],
@@ -123,9 +123,9 @@ Unknown input events and invalid payloads close with `1008`. Malformed JSON clos
 
 For a Vite frontend, run a separate Bun backend and configure Vite's WebSocket proxy. Contract generation alone does not install an upgrade handler into Vite, a Fetch mount, or a serverless platform. Production reverse proxies must forward WebSocket upgrades to the Bun server. Node adapters are not supported by this release.
 
-The [WebSocket example](https://github.com/Chandraprakash-Darji/brick/tree/main/examples/websocket) includes a dark chat interface, SQLite storage, browser fingerprint identities, contract generation, and a Vite proxy. Open it in two browser sessions, click **Join conversation** in each, then send a message. Both receive it, and the connection count updates when someone joins or leaves. Refresh and join again to restore the conversation.
+The [WebSocket example](https://github.com/Chandraprakash-Darji/brick/tree/main/examples/websocket) includes a dark chat interface, SQLite storage, anonymous Better Auth guests, contract generation, and a Vite proxy. Open it in two browser sessions, click **Join conversation** in each, then send a message. Both receive it, and the connection count updates when someone joins or leaves. Refresh and join again to restore the conversation.
 
-The example stores users, opaque sessions, and messages in `.brick/chat.sqlite` relative to the example directory. It uses the browser fingerprint as the user ID and assigns a stable guest name. Fingerprints are demo identifiers, not authentication secrets. The application commits each message before broadcasting and sends the latest 50 stored messages on join in bounded chunks. Its history and broadcast logic are application code; the transport itself does not persist or replay messages. Run it from a repository checkout:
+The example stores Better Auth users, sessions, and messages in `.brick/chat.sqlite` relative to the example directory. Better Auth's anonymous plugin signs each browser in as a guest, and the socket resolves that session from the handshake cookie. The application commits each message before broadcasting and sends the latest 50 stored messages on join in bounded chunks. Its history and broadcast logic are application code; the transport itself does not persist or replay messages. Run it from a repository checkout:
 
 ```sh
 bun install
