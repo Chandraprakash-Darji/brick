@@ -5,6 +5,8 @@
   },
   "include": [
     "test/socket.types.ts",
+    "test/commands.types.ts",
+    "test/commands.test.ts",
     "test/resource-types.test.ts",
     "test/tool.test.ts",
     "test/plugin.test.ts",

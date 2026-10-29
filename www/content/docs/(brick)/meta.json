@@ -16,6 +16,7 @@
     "services-and-actions",
     "context",
     "resources",
+    "commands",
     "routes",
     "access-control",
     "validation-and-errors",

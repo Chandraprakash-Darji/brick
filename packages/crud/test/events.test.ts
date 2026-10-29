@@ -252,7 +252,7 @@ describe("what does not emit", () => {
 describe("an app without events", () => {
   it("behaves exactly as before, even with an outbox table in the database", async () => {
     const { resource, service, db, outboxRows } = fixture({ events: false });
-    expect(service.events).toBeUndefined();
+    expect(service.recorder).toBeUndefined();
     const created = await resource.create.run({ name: "Ada", email: "a@x" });
     await resource.update.run({ id: created.id, data: { email: "b@x" } });
     await resource.delete.run({ id: created.id });

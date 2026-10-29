@@ -32,6 +32,12 @@ import { checkRecordAccess, defineResource } from "./resource";
 import type { ResourceActionInfo } from "./routes";
 import { isOutboxTable, type OutboxTable } from "./events/outbox";
 import type { ServiceEvents } from "./events/types";
+import {
+  checkEvent,
+  eventRefs,
+  type EventCatalog,
+  type EventRef,
+} from "./events/catalog";
 import { getActionAccess } from "./access";
 import { pickContextEnvelope } from "./context";
 import { createLogger, DEFAULT_LOG_PREFIXES } from "./logger";
@@ -72,6 +78,8 @@ export class ServiceImpl<
   private readonly sites = new Map<string, string | undefined>();
   private database?: DatabaseHandle<TDb>;
   private _isBuilt = false;
+  /** The declared events: `service.events.<name>`. */
+  readonly events: Readonly<Record<string, EventRef>>;
 
   constructor(
     name: string,
@@ -79,6 +87,8 @@ export class ServiceImpl<
   ) {
     this.name = name;
     this.options = options;
+    this.events = eventRefs(name, options.events);
+    for (const key of Object.keys(this.events)) this.claim("event", key);
     if (options.database !== undefined && !isDatabaseHandle(options.database)) {
       throw new Error("Service database must be created with defineDatabase()");
     }
@@ -348,14 +358,24 @@ export class ServiceImpl<
   }
 
   /** What a write needs to record events. Set by `brick({ events })`. */
-  events?: ServiceEvents;
+  recorder?: ServiceEvents;
 
   getOutbox(): OutboxTable | undefined {
     return Object.values(this.database?.tables ?? {}).find(isOutboxTable);
   }
 
-  setEvents(events: ServiceEvents | undefined): void {
-    this.events = events;
+  setRecorder(recorder: ServiceEvents | undefined): void {
+    this.recorder = recorder;
+  }
+
+  /** Whether the service declares an event catalog. */
+  get hasCatalog(): boolean {
+    return this.options.events !== undefined;
+  }
+
+  /** @throws When the event is not in the catalog or its payload does not match. */
+  checkEvent(name: string, payload: unknown): void {
+    checkEvent(this, name, payload);
   }
 
   setDb(database: DatabaseHandle<TDb>): void {
@@ -387,7 +407,7 @@ export class ServiceImpl<
     // The schema is data. A function among the options (context, an auth policy,
     // lifecycle hooks) cannot cross to the dev dashboard: structured clone
     // refuses the whole architecture. JSON keeps the data and drops the rest.
-    const { database: _database, ...config } = this.options;
+    const { database: _database, events: _events, ...config } = this.options;
     const options: ServiceSchema["options"] = JSON.parse(
       JSON.stringify(config),
     );
@@ -420,6 +440,14 @@ export class ServiceImpl<
         };
       }),
       tools: this.listTools().map((tool) => ({ name: tool.name })),
+      ...(this.hasCatalog
+        ? {
+            events: Object.values(this.events).map((ref) => ({
+              name: ref.name,
+              schema: JSON.parse(JSON.stringify(ref.schema)),
+            })),
+          }
+        : {}),
       resources: this.listResources().map((res) => ({
         name: res.name,
       })),
@@ -483,7 +511,9 @@ async function resolveServiceContext<
  * (`/api/<name>/<action>`) and appears in OpenAPI and the dashboard. Defining it
  * again from the same file (a dev reload) replaces it; from another file throws.
  * @param options - `database` (a handle from `defineDatabase`), `context` (adds
- * fields such as the signed-in user to every action's `ctx`), and `auth`,
+ * fields such as the signed-in user to every action's `ctx`), `events` (the
+ * event catalog: a payload schema per event name, recorded as
+ * `<service>.<name>` and offered as `service.events.<name>`), and `auth`,
  * `rateLimit`, `cache`, `resilience`, `telemetry`, and `lifecycle`.
  * @returns The service.
  * @example
@@ -508,11 +538,12 @@ async function resolveServiceContext<
 export function defineService<
   TDb = BunSQLiteDatabase<Record<string, unknown>>,
   TServiceContext extends Record<string, any> = Record<string, any>,
+  const TEvents extends EventCatalog = {},
 >(
   name: string,
-  options?: ServiceOptions<TServiceContext, TDb>,
-): Service<TDb, TServiceContext> {
+  options?: ServiceOptions<TServiceContext, TDb> & { events?: TEvents },
+): Service<TDb, TServiceContext, TEvents> {
   const service = new ServiceImpl<TDb, TServiceContext>(name, options);
   getGlobalRegistry().register(service as any);
-  return service;
+  return service as unknown as Service<TDb, TServiceContext, TEvents>;
 }

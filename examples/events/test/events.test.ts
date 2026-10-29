@@ -65,9 +65,7 @@ async function place(made: OrdersApp, extra: Record<string, unknown> = {}) {
 }
 
 const ship = (made: OrdersApp, id: string) =>
-  call(made, `/api/orders/order/${id}`, "PATCH", {
-    data: { status: "shipped" },
-  });
+  call(made, `/api/orders/order/${id}/ship`, "POST", {});
 
 const rows = (made: OrdersApp, table: typeof auditLog | typeof notifications) =>
   (made.database.getDb() as any).select().from(table);
@@ -122,7 +120,7 @@ describe("events from generated writes", () => {
     ]);
   });
 
-  it("an update carries before and after, and only a change to shipped books the carrier", async () => {
+  it("an update carries before and after, and only the ship command books the carrier", async () => {
     const carrier = createCarrier();
     const made = open({ carrier });
     const order = await place(made);
@@ -134,13 +132,18 @@ describe("events from generated writes", () => {
 
     expect((await ship(made, order.id)).status).toBe(200);
     await made.app.events!.drain();
+    // The command's rule: only a placed order ships, and a refusal records nothing.
+    const again = await ship(made, order.id);
+    expect(again.status).toBe(409);
+    expect(await again.json()).toMatchObject({ code: "NOT_PLACED" });
+    expect(await made.app.events!.counts()).toMatchObject({ pending: 0 });
 
     expect(carrier.bookings).toEqual([order.id]);
     const audit = await rows(made, auditLog);
     expect(audit.map((row: any) => row.detail).sort()).toEqual([
       "no visible change",
       "placed by ada@example.com",
-      "status: placed -> shipped",
+      "shipped",
     ]);
     expect(await rows(made, notifications)).toEqual(
       expect.arrayContaining([
@@ -382,7 +385,12 @@ for (const worldPackage of ["redis-world", "bullmq-world"] as const)
         });
         await made.app.events!.drain();
 
-        await runStatus(made, "completed");
+        const stored = await (made.database.getDb() as any)
+          .select()
+          .from(outbox);
+        expect(stored.some((row: any) => row.listener === "fulfilment")).toBe(
+          false,
+        );
         expect(carrier.bookings).toEqual([]);
         expect(await shipped(made)).toBeUndefined();
       });

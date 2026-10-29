@@ -32,9 +32,10 @@ const order = await call("/api/orders/order", "POST", {
 });
 console.log("created", order);
 
-await call(`/api/orders/order/${order.id}`, "PATCH", {
-  data: { status: "shipped" },
-});
+console.log(
+  "shipped",
+  await call(`/api/orders/order/${order.id}/ship`, "POST", {}),
+);
 console.log("events waiting:", await events.counts());
 
 // The carrier fails once, so the shipping delivery is left waiting for a retry.

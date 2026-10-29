@@ -3,9 +3,11 @@ import {
   defineDatabase,
   defineService,
   syncSchema,
+  t,
   type DispatchOptions,
   type EventsWorld,
 } from "@brickkit/core";
+import { orderEvents } from "./events";
 import { crud } from "@brickkit/crud";
 import { createCarrier, type Carrier } from "./carrier";
 import { setOrdersContext } from "./context";
@@ -33,20 +35,43 @@ export function createOrdersApp(options: OrdersAppOptions) {
   });
   syncSchema(database.tables, database.getDb());
 
-  const service = defineService(options.serviceName ?? "orders", { database });
+  const service = defineService(options.serviceName ?? "orders", {
+    database,
+    events: orderEvents,
+  });
 
-  service.resource({ name: "order", table: orders, id: orders.id }).use(
-    crud({
-      access: "public",
-      fields: {
-        id: { read: true, filter: ["eq"] },
-        customer: { read: true, create: true },
-        totalCents: { read: true, create: true },
-        status: { read: true, create: true, update: true, filter: ["eq"] },
-        internalNote: { create: true, update: true },
-      },
-    }),
-  );
+  const order = service
+    .resource({ name: "order", table: orders, id: orders.id })
+    .use(
+      crud({
+        access: "public",
+        fields: {
+          id: { read: true, filter: ["eq"] },
+          customer: { read: true, create: true },
+          totalCents: { read: true, create: true },
+          // Status changes only through commands, such as ship.
+          status: { read: true, filter: ["eq"] },
+          internalNote: { create: true, update: true },
+        },
+      }),
+    );
+
+  // POST /api/orders/order/:id/ship: the status change and the `shipped` event
+  // commit together, and only a placed order ships.
+  order.command("ship", {
+    description: "Ship a placed order",
+    errors: {
+      NOT_PLACED: { status: 409, message: "Only a placed order can ship" },
+    },
+    output: t.Object({ id: t.String(), status: t.String() }),
+    decide: (row, _input, { error }) =>
+      row.status !== "placed"
+        ? error.NOT_PLACED()
+        : {
+            set: { status: "shipped" },
+            emit: { shipped: { id: row.id, customer: row.customer } },
+          },
+  });
 
   service
     .resource({ name: "auditEntry", table: auditLog, id: auditLog.id })
@@ -86,9 +111,12 @@ export function createOrdersApp(options: OrdersAppOptions) {
   const app = brick({
     services: [service],
     events: {
-      listeners: createListeners(database.getDb() as never, carrier, {
-        workflows: options.world !== undefined,
-      }),
+      listeners: createListeners(
+        database.getDb() as never,
+        carrier,
+        service.events,
+        { workflows: options.world !== undefined },
+      ),
       dispatch: options.dispatch ?? { intervalMs: 250 },
       ...(options.world ? { world: options.world } : {}),
     },

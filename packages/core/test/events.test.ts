@@ -44,7 +44,7 @@ function setup(
     dispatch: { timer: false, maxBackoffMs: 5, ...dispatch },
   }).attach([service]);
   hubs.push(hub);
-  return { db, service, hub, events: service.events! };
+  return { db, service, hub, events: service.recorder! };
 }
 
 const rows = (db: any) => db.select().from(outbox).all();
@@ -131,7 +131,7 @@ describe("EventsHub", () => {
     });
     const hub = new EventsHub({}).attach([plain]);
     hubs.push(hub);
-    expect(plain.events).toBeUndefined();
+    expect(plain.recorder).toBeUndefined();
   });
 
   it("warns when events are set but no database has an outbox", () => {
@@ -405,7 +405,7 @@ describe("delivering events", () => {
         name: "x",
         getDb: () => ctx.db,
         getOutbox: () => outbox,
-        setEvents: () => {},
+        setRecorder: () => {},
       }),
     ]);
     hubs.push(other);
@@ -528,7 +528,7 @@ describe("delivering events", () => {
     }).attach([ctx.service]);
     hubs.push(recordOnly);
     recordOnly.start();
-    await ctx.service.events!.transaction(ctx.db, {}, async (_tx, rec) => {
+    await ctx.service.recorder!.transaction(ctx.db, {}, async (_tx, rec) => {
       await rec("item.create", {});
     });
     await new Promise((resolve) => setTimeout(resolve, 30));
@@ -706,7 +706,7 @@ describe("brick({ events })", () => {
     });
     hubs.push(app.events!);
     expect(app.events).toBeInstanceOf(EventsHub);
-    expect(service.events).toBeDefined();
+    expect(service.recorder).toBeDefined();
     expect(app.definition.events).toEqual({
       listeners: [{ name: "a", on: ["x.*"], kind: "handler" }],
       dispatch: true,
@@ -729,7 +729,7 @@ describe("brick({ events })", () => {
     });
     expect(app.events).toBeUndefined();
     expect(app.definition.events).toBeUndefined();
-    expect(service.events).toBeUndefined();
+    expect(service.recorder).toBeUndefined();
   });
 });
 

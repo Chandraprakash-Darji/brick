@@ -274,4 +274,6 @@ order.action({
 
 A resource action can't be named after a CRUD route segment (`query`, `count`, `exists`, `find-one`, `bulk-create`, `bulk-update`, `bulk-delete`, compared in kebab-case, so `findOne` is refused too) or after a CRUD action on that resource, such as `list`. Startup fails with `Brick: duplicate name "<name>" in service "<service>"`.
 
+For a state change with rules and events, such as shipping an order, declare a [command](/docs/commands) instead: a record action whose body is a pure `decide` function, run in one transaction with the events it emits.
+
 Plugins that need the same row loading can call `loadRecord(resource, { id, ctx, db?, access? })` from `@brickkit/core`. A plugin that owns row access, as crud does, registers its loader with `setRecordLoader(resource, loader)`.

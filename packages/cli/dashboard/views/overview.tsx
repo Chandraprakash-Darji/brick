@@ -39,6 +39,25 @@ export function OverviewView({
       service: service.name,
     })),
   );
+  const listeners = architecture?.schema.events?.listeners ?? [];
+  const events = services.flatMap((service) =>
+    (service.events ?? []).map((event) => ({
+      ...event,
+      service: service.name,
+      fields: Object.keys(
+        (event.schema as { properties?: object } | undefined)?.properties ?? {},
+      ),
+      listeners: listeners
+        .filter((listener) =>
+          listener.on.some((pattern) =>
+            pattern.endsWith("*")
+              ? event.name.startsWith(pattern.slice(0, -1))
+              : pattern === event.name,
+          ),
+        )
+        .map((listener) => listener.name),
+    })),
+  );
   const rows = useMemo<RouteRow[]>(() => {
     const result: RouteRow[] = [];
     for (const service of services) {
@@ -168,6 +187,39 @@ export function OverviewView({
                           {socket.hasAuthorize
                             ? "Checked on connect and messages"
                             : "No authorize hook"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Panel>
+            </>
+          )}
+          {events.length > 0 && (
+            <>
+              <h2 className="mt-2 -mb-1 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                Events
+              </h2>
+              <Panel>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="px-4">Event</TableHead>
+                      <TableHead>Payload</TableHead>
+                      <TableHead className="px-4">Listeners</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {events.map((event) => (
+                      <TableRow key={event.name}>
+                        <TableCell className="px-4 font-mono text-xs">
+                          {event.name}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {event.fields.join(", ") || "none"}
+                        </TableCell>
+                        <TableCell className="px-4 text-muted-foreground">
+                          {event.listeners.join(", ") || "none"}
                         </TableCell>
                       </TableRow>
                     ))}

@@ -138,3 +138,29 @@ it("refuses to turn off no-cross-service-tables", async () => {
   expect(result.code).toBe(1);
   expect(result.stderr).toContain("always an error and cannot be turned off");
 });
+
+it("declared-events checks emitted names against the service's catalog", async () => {
+  const root = await project({
+    ...BASE,
+    "brick.config.ts": `export default { lint: { presets: [], rules: { "brick/declared-events": "error" } } };\n`,
+    [`${S}/billing/billing.service.ts`]: `import { defineService, t } from "@brickkit/core";
+
+export const billing = defineService("billing", {
+  events: { charged: t.Object({ id: t.String() }) },
+});
+`,
+    [`${S}/billing/listeners/emit.ts`]: `import { emitEvent } from "@brickkit/core";
+
+export const ok = (ctx: any) => emitEvent(ctx, "billing.charged", { id: "1" });
+export const bad = (ctx: any) => emitEvent(ctx, "billing.refunded", {});
+`,
+  });
+  const result = await lint(root);
+  expect(result.stderr).toBe("");
+  const problems = result.stdout
+    .split("\n")
+    .filter((line) => line.endsWith("brick/declared-events"));
+  expect(problems).toHaveLength(1);
+  expect(problems[0]).toStartWith(`${S}/billing/listeners/emit.ts:4:`);
+  expect(problems[0]).toContain(`"billing.refunded"`);
+});

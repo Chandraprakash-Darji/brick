@@ -718,7 +718,7 @@ export const checkRules: Record<string, Rule> = {
   ),
 
   naming: rule(
-    "Actions are camelCase verbs (getUser), events are resource.pastTense (order.shipped), and rooms are prefix:value.",
+    "Actions are camelCase verbs (getUser), events are service.pastTense (orders.shipped), and rooms are prefix:value.",
     (context) => {
       if (skip(context)) return {};
       const checkRoom = (node: Node) => {
@@ -777,7 +777,7 @@ export const checkRules: Record<string, Rule> = {
             )
               context.report({
                 node: node.arguments[1],
-                message: `Event "${name}" should be resource.pastTense, such as order.shipped.`,
+                message: `Event "${name}" should be service.pastTense, such as orders.shipped.`,
               });
           }
           if (kind === "emit") {

@@ -1,8 +1,17 @@
+import { isEventRef, type EventRef } from "./catalog";
 import type { EventDelivery, EventListener, EventWorkflow } from "./types";
 
-type ListenerConfig<TPayload> = {
+type EventOn = EventRef<any> | readonly EventRef<any>[];
+type PayloadOf<O> =
+  O extends EventRef<infer P>
+    ? P
+    : O extends readonly EventRef<infer P>[]
+      ? P
+      : never;
+
+type ListenerConfig<TPayload, TOn = string | readonly string[]> = {
   name: string;
-  on: string | readonly string[];
+  on: TOn;
   maxAttempts?: number;
 } & (
   | {
@@ -25,8 +34,9 @@ type ListenerConfig<TPayload> = {
  * care: a delivery starts one run however often it is tried, and the workflow
  * retries its own steps.
  *
- * @param config - `name` (unique; it is part of each delivery's id), `on` (an
- * event name or a list of them; a trailing `*` matches a prefix, as in
+ * @param config - `name` (unique; it is part of each delivery's id), `on` (a
+ * declared event such as `orders.events.shipped`, which types the payload, or an
+ * event name; or a list of either; a trailing `*` matches a prefix, as in
  * `user.*`), `run` or `workflow`, and optionally `maxAttempts`.
  * @returns The listener.
  * @throws When the name is empty or contains `:`, `on` is empty, or the listener
@@ -51,18 +61,39 @@ type ListenerConfig<TPayload> = {
  * }
  *
  * defineListener({ name: "onboard", on: "user.create", workflow: onboard });
+ * @example
+ * // payload is { id: string; trackingId: string }, from the orders catalog.
+ * defineListener({
+ *   name: "notify-shipped",
+ *   on: orders.events.shipped,
+ *   run: ({ payload }) => notify(payload.id, payload.trackingId),
+ * });
  */
+export function defineListener<const TOn extends EventOn>(
+  config: ListenerConfig<PayloadOf<TOn>, TOn>,
+): EventListener<PayloadOf<TOn>>;
 export function defineListener<TPayload = any>(
-  config: ListenerConfig<TPayload>,
-): EventListener<TPayload> {
+  config: ListenerConfig<
+    TPayload,
+    string | EventRef<any> | readonly (string | EventRef<any>)[]
+  >,
+): EventListener<TPayload>;
+export function defineListener(
+  config: ListenerConfig<any, unknown>,
+): EventListener {
   if (typeof config.name !== "string" || !config.name)
     throw new Error("An event listener needs a name");
   if (config.name.includes(":"))
     throw new Error(
       `Event listener name '${config.name}' must not contain ':'`,
     );
-  const on = typeof config.on === "string" ? [config.on] : [...config.on];
-  if (!on.length || on.some((pattern) => !pattern))
+  const on = (Array.isArray(config.on) ? config.on : [config.on]).map(
+    (item: unknown) => (isEventRef(item) ? item.name : item),
+  ) as string[];
+  if (
+    !on.length ||
+    on.some((pattern) => !pattern || typeof pattern !== "string")
+  )
     throw new Error(`Event listener '${config.name}' listens for nothing`);
   if (
     config.maxAttempts !== undefined &&

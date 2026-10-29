@@ -107,6 +107,7 @@ export { createServiceProxy } from "./rpc";
 export {
   defineListener,
   emitEvent,
+  isEventRef,
   outboxTable,
   isOutboxTable,
   runInTransaction,
@@ -117,6 +118,9 @@ export {
   Dispatcher,
   type CrudEventPayload,
   type DispatchOptions,
+  type EventCatalog,
+  type EventRef,
+  type EventRefs,
   type EventDelivery,
   type EventEnvelope,
   type EventListener,

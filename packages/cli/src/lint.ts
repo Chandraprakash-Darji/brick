@@ -318,24 +318,16 @@ async function noCrossServiceTables(check: AppCheck, app: BrickApp, add: Add) {
 function declaredEvents(check: AppCheck, app: BrickApp, add: Add) {
   if (check.severity("declared-events") === "off") return;
   for (const service of app.definition.services) {
-    const catalog = (service.options as { events?: unknown }).events;
-    if (!catalog || typeof catalog !== "object") continue; // no catalog: string names
-    const keys = Object.keys(catalog);
+    if (!service.options.events) continue; // no catalog: any name goes
+    const names = new Set(Object.values(service.events).map((e) => e.name));
     const resources = service.listResources().map((r) => r.name);
+    // Catalog events are <service>.<event>; CRUD writes still emit
+    // <resource>.create|update|delete.
     const declared = (name: string) => {
-      const [owner, event] = name.includes(".")
-        ? name.split(".", 2)
-        : [undefined, name];
-      if (
-        keys.includes(event!) &&
-        (!owner || owner === service.name || resources.includes(owner))
-      )
-        return true;
-      // CRUD writes still emit <resource>.create|update|delete by name.
+      const [owner, event] = name.split(".", 2);
       return (
-        !!owner &&
-        resources.includes(owner) &&
-        /^(create|update|delete)$/.test(event!)
+        names.has(name) ||
+        (resources.includes(owner!) && /^(create|update|delete)$/.test(event!))
       );
     };
     for (const action of service.listActions())

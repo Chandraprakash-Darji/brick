@@ -17,7 +17,9 @@ interface EventsHost {
   readonly name: string;
   getDb(): unknown;
   getOutbox?(): OutboxTable | undefined;
-  setEvents?(events: ServiceEvents | undefined): void;
+  setRecorder?(recorder: ServiceEvents | undefined): void;
+  /** Throws for an event the service's catalog does not allow. */
+  checkEvent?(name: string, payload: unknown): void;
 }
 
 export function matchesEvent(pattern: string, name: string): boolean {
@@ -139,8 +141,10 @@ export class EventsHub {
       if (!table) continue;
       attached++;
       this.recorderNames.push(service.name);
-      const bound = this.bind(table);
-      service.setEvents?.(bound);
+      const bound = this.bind(table, (name, payload) =>
+        service.checkEvent?.(name, payload),
+      );
+      service.setRecorder?.(bound);
       const db = service.getDb();
       if (db && typeof db === "object") recorders.set(db, bound);
     }
@@ -316,7 +320,10 @@ export class EventsHub {
     return found;
   }
 
-  private bind(table: OutboxTable): ServiceEvents {
+  private bind(
+    table: OutboxTable,
+    check: (name: string, payload: unknown) => void,
+  ): ServiceEvents {
     const startAndNotify = () => {
       this.start();
       this.dispatchers.get(table)?.notify();
@@ -327,6 +334,7 @@ export class EventsHub {
       name: string,
       payload: unknown,
     ): Promise<boolean> => {
+      check(name, payload);
       const listeners = this.matching(name);
       if (!listeners.length) return false;
       const eventId = newEventId();

@@ -1,3 +1,4 @@
+import type { EventRef } from "./events/catalog";
 import { getActionRoute } from "./routes";
 import { getActionAccess } from "./access";
 import type { ServiceRegistry } from "./registry";
@@ -101,7 +102,8 @@ export function hoistAnchoredSchemas(spec: Record<string, any>): string[] {
  * Build the OpenAPI 3.1 document for the services: one path per action route,
  * with request and response schemas from the actions' TypeBox schemas, their
  * declared errors, tags by service, and a bearer security scheme where any
- * action needs authorization.
+ * action needs authorization. Declared events are listed under `x-brick-events`,
+ * by wire name, with their service and payload schema.
  *
  * `brick()` calls this for `/openapi.json`; call it yourself to write the
  * document to a file or feed another tool.
@@ -331,6 +333,18 @@ export function generateOpenApiSpec(
       },
     });
   }
+
+  const events = Object.fromEntries(
+    services.flatMap((service) =>
+      Object.values(
+        (service as { events?: Record<string, EventRef> }).events ?? {},
+      ).map((ref) => [
+        ref.name,
+        { service: service.name, payload: ref.schema },
+      ]),
+    ),
+  );
+  if (Object.keys(events).length) spec["x-brick-events"] = events;
 
   // Operations reference live TypeBox schemas. Rewrite only the serialized
   // document so OpenAPI pointers cannot corrupt runtime validation schemas.

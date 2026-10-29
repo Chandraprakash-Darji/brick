@@ -62,7 +62,7 @@ async function setup(
     db,
     service,
     hub,
-    events: service.events!,
+    events: service.recorder!,
     items,
     outbox,
     client,

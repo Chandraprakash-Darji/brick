@@ -1,0 +1,140 @@
+---
+title: Commands
+description: State changes with rules, applied in one transaction with the events they emit.
+---
+
+A command changes one record when its rules allow it, and records the events the change causes in the same transaction. It is a [record action](/docs/resources#resource-actions) whose body is `decide`, a pure function of the row and the input.
+
+## Minimal Example
+
+```ts title="src/services/orders/resources/order/commands/ship.command.ts"
+import { t } from "@brickkit/core";
+import { order } from "../order.resource";
+
+// POST /api/orders/order/:id/ship  ·  api.orders.order.ship({ id, trackingId })
+export default order.command("ship", {
+  input: t.Object({ trackingId: t.String() }),
+  errors: { NOT_PAID: { status: 409, message: "Only paid orders can ship" } },
+  decide: (row, input, { error }) =>
+    row.status !== "paid"
+      ? error.NOT_PAID()
+      : {
+          set: { status: "shipped" },
+          emit: { shipped: { id: row.id, trackingId: input.trackingId } },
+        },
+});
+```
+
+`shipped` is an event of the service's [event catalog](/docs/events#event-catalog). The `emit` keys and payloads are type-checked against it.
+
+## What Brick does
+
+For each call, inside one database transaction:
+
+1. Checks the input (`id` from the path joins it) and runs `authorize`.
+2. Loads the row through the resource's access rule, as a record action does: crud's `authorize` and `scope` with `@brickkit/crud`, the command's own `access` without it. A missing or hidden row answers `404 NOT_FOUND`.
+3. Loads the child rows that `load.children` asks for.
+4. Runs `decide(row, input, { error })`.
+5. On a rejection, rolls back and answers with the error. Nothing is written and no event is recorded.
+6. Checks every emitted event against the catalog. An undeclared event or a payload that doesn't match fails the call before any write.
+7. Updates the row with `set`, then applies the child changes, then records the events in the outbox.
+8. Commits. Listeners get the events after the commit.
+
+The write and its events commit together or not at all, so an event can't be lost between the write and the emit, and an event is never sent for a write that rolled back. A command records only the events it emits: it does not also record the CRUD `<resource>.update` event.
+
+A command that emits needs the app's `events` and an outbox table in the service's database, as `emitEvent` does.
+
+## `decide`
+
+`decide(row, input, { error })` returns either a rejection or the changes:
+
+| Field      | Meaning                                                                      |
+| ---------- | ---------------------------------------------------------------------------- |
+| `set`      | Columns of the row to update. Omit it, or leave it empty, to change nothing. |
+| `children` | Per child table: `insert`, `update` and `delete` lists. See below.           |
+| `emit`     | Events to record, by catalog name: `{ shipped: payload }`.                   |
+
+`error.CODE(message?, details?)` returns the rejection; it doesn't throw. `CODE` is one of the command's `errors` or a standard one (`BAD_REQUEST`, `NOT_FOUND`, `CONFLICT`, and so on). The call answers with that code and status.
+
+`decide` must not read the database, the clock or anything else outside its arguments. Put such values in the input.
+
+## Testing without a database
+
+The command has `decide` on it, with the error helpers already supplied:
+
+```ts title="ship.test.ts"
+import ship from "./ship.command";
+
+test("only paid orders ship", () => {
+  expect(
+    ship.decide({ ...order, status: "placed" }, { id: "o1", trackingId: "t" }),
+  ).toMatchObject({ code: "NOT_PAID", status: 409 });
+  expect(
+    ship.decide({ ...order, status: "paid" }, { id: "o1", trackingId: "t" }),
+  ).toEqual({
+    set: { status: "shipped" },
+    emit: { shipped: { id: "o1", trackingId: "t" } },
+  });
+});
+```
+
+## Reply
+
+Without `output`, a command answers `{ id }`. With `output`, it answers the updated row, read again in the transaction, with the loaded children, cut down to the schema's properties:
+
+```ts
+order.command("ship", {
+  output: t.Object({ id: t.String(), status: t.String() }),
+  // …
+});
+```
+
+The loaded row includes columns that crud hides from clients, so the reply only carries what `output` names.
+
+## Child tables
+
+Declare a resource's child tables on the resource: the child table and its column that holds the parent's id.
+
+```ts title="invoice.resource.ts"
+export const invoice = billing.resource({
+  name: "invoice",
+  table: invoices,
+  children: { items: { table: invoiceItems, parent: invoiceItems.invoiceId } },
+});
+```
+
+The child's own id is its single primary key, or the column you give as `id`.
+
+A command names the children it reads in `load.children`. `decide` receives them on the row as arrays, typed from the child table:
+
+```ts
+invoice.command("addItem", {
+  input: InvoiceItemInput,
+  errors: { NOT_DRAFT: { status: 409, message: "Only a draft takes items" } },
+  load: { children: ["items"] },
+  decide: (invoice, input, { error }) =>
+    invoice.status !== "draft"
+      ? error.NOT_DRAFT()
+      : {
+          set: { total: invoice.total + input.qty * input.rate },
+          children: { items: { insert: [input] } },
+          emit: { itemAdded: { id: invoice.id, item: input.itemCode } },
+        },
+});
+```
+
+Child changes, for each child table:
+
+| List     | Entries                        | Applied as                                                 |
+| -------- | ------------------------------ | ---------------------------------------------------------- |
+| `insert` | New rows                       | Inserted with the parent column set to the parent's id.    |
+| `update` | Partial rows with the child id | Each updates its row, only when it belongs to this parent. |
+| `delete` | Child ids                      | Deleted, only rows that belong to this parent.             |
+
+Brick applies the parent `set` first, then each child table's inserts, updates and deletes, all in the command's transaction. A change can't reach another parent's children, and the aggregate's rules always see and keep a consistent invoice.
+
+## Names and routes
+
+A command is registered as `<resource>.<name>` (`order.ship`), mounted at `POST /api/<service>/<resource>/:id/<kebab name>`, and called as `api.<service>.<resource>.<name>({ id, ...input })` from the [typed client](/docs/typed-client). A command and an action can't share a name; startup fails with the duplicate-name error. Commands appear in OpenAPI under their resource, like other resource actions.
+
+Commands take `description`, `tags`, `input`, `output`, `errors`, `authorize`, `access` (without crud), `load` and `decide`.

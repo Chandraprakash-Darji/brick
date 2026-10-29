@@ -12,6 +12,7 @@ import type { BunSQLiteDatabase } from "./db/sqlite";
 import type { DatabaseHandle } from "./db/define";
 import type { OutboxTable } from "./events/outbox";
 import type { ServiceEvents } from "./events/types";
+import type { EventCatalog, EventRefs } from "./events/catalog";
 import type { EventsDefinition } from "./events/hub";
 import type {
   BrickSocketConfig,
@@ -388,6 +389,21 @@ export interface ResourceConfig<TTable = any, _TCtx = any> {
   name: string;
   table: TTable;
   id?: import("drizzle-orm").Column;
+  /**
+   * Child tables of this resource, by name. A command can load them with its
+   * row (`load: { children: ["items"] }`) and insert, update and delete their
+   * rows in the same transaction.
+   */
+  children?: Record<string, ResourceChild>;
+}
+
+/** A child table: rows that belong to one row of their resource. */
+export interface ResourceChild<TTable = any> {
+  table: TTable;
+  /** The child's column that holds the parent row's id. */
+  parent: import("drizzle-orm").Column;
+  /** The child's id column. Defaults to its single primary key. */
+  id?: import("drizzle-orm").Column;
 }
 
 export type InferTableRow<TTable> = TTable extends { $inferSelect: infer S }
@@ -396,7 +412,10 @@ export type InferTableRow<TTable> = TTable extends { $inferSelect: infer S }
 export type InferTableInsert<TTable> = TTable extends { $inferInsert: infer S }
   ? S
   : any;
-export type ResourceTypeOptions = Pick<ResourceConfig, "name" | "id">;
+export type ResourceTypeOptions = Pick<
+  ResourceConfig,
+  "name" | "id" | "children"
+>;
 
 type PrimaryColumn<T> = T extends { _: { columns: infer C } }
   ? {
@@ -420,6 +439,7 @@ export interface Resource<
   TTable = any,
   TCtx extends ActionContext = ActionContext,
   TOptions = {},
+  TEvents extends EventCatalog = EventCatalog,
 > {
   use<
     P extends ResourcePlugin<
@@ -475,7 +495,180 @@ export interface Resource<
     TErr,
     TCtx
   >;
+  /**
+   * Declare a command: a record action whose body is the pure `decide`. Brick
+   * loads the row (and the child rows it asks for) in a transaction, runs
+   * `decide`, applies the changes it returns, records the events it emits in
+   * the same transaction, and commits. Registered as `<resource>.<name>` at
+   * `POST /api/<service>/<resource>/:id/<name>`.
+   */
+  command<
+    TIn extends TSchema | undefined = undefined,
+    TErr extends Record<string, ActionErrorDefinition> = {},
+    const TLoad extends readonly ChildNames<TOptions>[] = [],
+    TOut extends TSchema | undefined = undefined,
+  >(
+    name: string,
+    config: CommandConfig<
+      TIn,
+      TOut,
+      TErr,
+      TCtx,
+      CommandRow<TTable, TOptions, TLoad[number]>,
+      CommandChildren<TOptions>,
+      TEvents,
+      TLoad
+    >,
+  ): Command<
+    TIn,
+    TOut,
+    TErr,
+    TCtx,
+    CommandRow<TTable, TOptions, TLoad[number]>,
+    CommandChildren<TOptions>,
+    TEvents
+  >;
 }
+
+type ChildNames<TOptions> = TOptions extends {
+  children: infer C extends Record<string, ResourceChild>;
+}
+  ? keyof C & string
+  : never;
+
+/** The child tables of a resource, by name. */
+export type CommandChildren<TOptions> = TOptions extends {
+  children: infer C extends Record<string, ResourceChild>;
+}
+  ? { [K in keyof C]: C[K]["table"] }
+  : {};
+
+/** The row `decide` receives: the resource's row with the children it loads. */
+export type CommandRow<
+  TTable,
+  TOptions,
+  TLoaded extends string,
+> = InferTableRow<TTable> & {
+  [K in TLoaded & keyof CommandChildren<TOptions>]: InferTableRow<
+    CommandChildren<TOptions>[K]
+  >[];
+};
+
+/** The changes to one child table. Updates and deletes name rows by child id. */
+export interface ChildChanges<TChild = any> {
+  /** New rows. Their parent column is set to the parent's id. */
+  insert?: Partial<InferTableInsert<TChild>>[];
+  /** Partial rows, each with the child id; only rows of this parent change. */
+  update?: Partial<InferTableRow<TChild>>[];
+  /** Child ids to delete; only rows of this parent are deleted. */
+  delete?: (string | number)[];
+}
+
+/** What `decide` returns when the command goes ahead. */
+export interface CommandDecision<
+  TRow = any,
+  TChildren = {},
+  TEvents extends EventCatalog = EventCatalog,
+> {
+  /** Columns of the parent row to change. */
+  set?: Partial<Omit<TRow, keyof TChildren>>;
+  /** Inserts, updates and deletes per child table. */
+  children?: { [K in keyof TChildren]?: ChildChanges<TChildren[K]> };
+  /** Events to record with the write, by catalog name and payload. */
+  emit?: { [K in keyof TEvents]?: Static<TEvents[K]> };
+}
+
+/**
+ * The `error` helpers `decide` receives. Unlike an action's, they return the
+ * rejection instead of throwing, so `decide` stays a pure function.
+ */
+export type CommandErrors<
+  TErrors extends Record<string, ActionErrorDefinition>,
+> = {
+  [K in keyof TErrors | StandardErrorCode]: (
+    overrideMessage?: string,
+    details?: unknown,
+  ) => ActionExecutionError;
+};
+
+type StandardErrorCode =
+  | "BAD_REQUEST"
+  | "UNAUTHORIZED"
+  | "FORBIDDEN"
+  | "NOT_FOUND"
+  | "CONFLICT"
+  | "INTERNAL_SERVER_ERROR";
+
+/** `resource.command(name, config)`. */
+export interface CommandConfig<
+  TIn extends TSchema | undefined = undefined,
+  TOut extends TSchema | undefined = undefined,
+  TErr extends Record<string, ActionErrorDefinition> = {},
+  TCtx extends ActionContext = ActionContext,
+  TRow = any,
+  TChildren = {},
+  TEvents extends EventCatalog = EventCatalog,
+  TLoad extends readonly string[] = readonly string[],
+> {
+  description?: string;
+  tags?: string[];
+  /** The command's own input; `id` from the path joins it. */
+  input?: TIn;
+  /**
+   * The reply: the updated row (with loaded children), cut down to this
+   * schema's properties. Without it the reply is `{ id }`.
+   */
+  output?: TOut;
+  errors?: TErr;
+  /** Which child tables to load with the row, by their name on the resource. */
+  load?: { children?: TLoad };
+  /** For a resource without `crud`: which rows the command may load. */
+  access?: ResourceActionAccess<TCtx>;
+  authorize?: (params: {
+    user?: TCtx extends { user: infer U } ? U : any;
+    input: ResourceActionInput<TIn, true>;
+    ctx: TCtx;
+  }) => boolean | Promise<boolean>;
+  /**
+   * The rules: a pure function of the loaded row and the input. Return
+   * `error.CODE()` to reject (nothing is written), or the changes to make.
+   */
+  decide: (
+    row: TRow,
+    input: ResourceActionInput<TIn, true>,
+    helpers: { error: CommandErrors<TErr> },
+  ) => CommandDecision<TRow, TChildren, TEvents> | ActionExecutionError;
+}
+
+/** A command: an action with its `decide`, callable without a database. */
+export type Command<
+  TIn extends TSchema | undefined = undefined,
+  TOut extends TSchema | undefined = undefined,
+  TErr extends Record<string, ActionErrorDefinition> = {},
+  TCtx extends ActionContext = ActionContext,
+  TRow = any,
+  TChildren = {},
+  TEvents extends EventCatalog = EventCatalog,
+> = Action<
+  TIntersect<
+    [
+      TIn extends TSchema ? TIn : TObject<{}>,
+      TObject<{ id: TUnion<[TString, TNumber]> }>,
+    ]
+  >,
+  TOut extends TSchema ? TOut : TObject<{ id: TUnion<[TString, TNumber]> }>,
+  TErr,
+  TCtx
+> & {
+  /**
+   * Run the rules alone, with the standard and declared error helpers: for
+   * unit tests that need no database.
+   */
+  decide(
+    row: TRow,
+    input: ResourceActionInput<TIn, true>,
+  ): CommandDecision<TRow, TChildren, TEvents> | ActionExecutionError;
+};
 
 /**
  * Which rows a record action may load when its resource has no `crud`:
@@ -594,6 +787,11 @@ export interface ServiceOptions<
   resilience?: ResilienceOptions;
   telemetry?: TelemetryOptions;
   lifecycle?: LifecycleOptions;
+  /**
+   * The service's event catalog: payload schema by event name. Each becomes
+   * `service.events.<name>`, recorded as `<service>.<name>`.
+   */
+  events?: EventCatalog;
 }
 
 export type ActionAccessPolicy = "public" | "authorized" | "scoped";
@@ -633,6 +831,8 @@ export interface ServiceSchema {
   sockets?: BrickSocketSchema[];
   /** MCP tools. A tool with an HTTP route is also listed under `actions`. */
   tools?: { name: string }[];
+  /** The event catalog: each event's wire name and payload JSON Schema. */
+  events?: { name: string; schema: unknown }[];
   resources?: { name: string }[];
 }
 
@@ -679,8 +879,11 @@ export interface CompiledRoutePlan {
 export interface Service<
   TDb = BunSQLiteDatabase<Record<string, unknown>>,
   TServiceContext extends Record<string, any> = Record<string, any>,
+  TEvents extends EventCatalog = EventCatalog,
 > {
   readonly name: string;
+  /** The declared events, as handles for `defineListener` and `emitEvent`. */
+  readonly events: EventRefs<TEvents>;
   readonly options: ServiceOptions<TServiceContext, TDb>;
   readonly actions: Map<string, Action<any, any, any, any>>;
   readonly tools: Map<string, Tool<any, any, any, any>>;
@@ -797,7 +1000,8 @@ export interface Service<
   ): Resource<
     TTable,
     BaseContext<TDb> & TServiceContext,
-    ResourceIdentity<TTable, TOptions>
+    ResourceIdentity<TTable, TOptions>,
+    TEvents
   >;
 
   readonly preparations: Map<string, PreparationContribution>;
@@ -818,8 +1022,8 @@ export interface Service<
   /** The outbox table of this service's database, if it holds one (see `outboxTable`). */
   getOutbox?(): OutboxTable | undefined;
   /** What a write needs to record events. Set by `brick({ events })`; absent otherwise. */
-  readonly events?: ServiceEvents;
-  setEvents?(events: ServiceEvents | undefined): void;
+  readonly recorder?: ServiceEvents;
+  setRecorder?(recorder: ServiceEvents | undefined): void;
   resolveContext(
     callCtx?: Partial<BaseContext<TDb> & TServiceContext>,
   ): Promise<BaseContext<TDb> & TServiceContext>;

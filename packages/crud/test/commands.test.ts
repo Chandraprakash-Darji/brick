@@ -1,0 +1,109 @@
+import type { Database } from "bun:sqlite";
+import { beforeEach, expect, test } from "bun:test";
+import {
+  brick,
+  defineDatabase,
+  defineService,
+  resetGlobalRegistry,
+  t,
+} from "@brickkit/core";
+import { eq } from "drizzle-orm";
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { crud } from "../src";
+import { generateClientContract } from "../../cli/src/client-contract";
+
+beforeEach(resetGlobalRegistry);
+
+const orders = sqliteTable("orders", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  owner: text("owner").notNull(),
+  status: text("status").notNull(),
+});
+
+function fixture() {
+  const database = defineDatabase({ tables: { orders } });
+  const db = database.getDb();
+  const sqlite = (db as typeof db & { $client: Database }).$client;
+  sqlite.exec(
+    "CREATE TABLE orders (id INTEGER PRIMARY KEY AUTOINCREMENT, owner TEXT NOT NULL, status TEXT NOT NULL)",
+  );
+  sqlite.exec(
+    "INSERT INTO orders (owner, status) VALUES ('ada', 'paid'), ('bob', 'paid')",
+  );
+  const service = defineService("orders", {
+    database,
+    context: ({ request }) => ({ user: request.headers.get("x-user") }),
+  });
+  const order = service.resource({ name: "order", table: orders }).use(
+    crud({
+      access: {
+        authorize: ({ ctx }) => ctx.user != null,
+        scope: ({ ctx }) => eq(orders.owner, ctx.user as string),
+      },
+      fields: { id: { read: true }, status: { read: true } },
+    }),
+  );
+  order.command("markReady", {
+    input: t.Object({ note: t.String() }),
+    output: t.Object({ id: t.Number(), status: t.String() }),
+    decide: () => ({ set: { status: "ready" } }),
+  });
+  const app = brick({ services: [service], docs: false });
+  return { sqlite, app };
+}
+
+const call = (
+  app: { handle(request: Request): Promise<Response> },
+  path: string,
+  user?: string,
+) =>
+  app.handle(
+    new Request(`http://localhost${path}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(user ? { "x-user": user } : {}),
+      },
+      body: JSON.stringify({ note: "n" }),
+    }),
+  );
+
+test("a command loads its row through crud's access and scope", async () => {
+  const { sqlite, app } = fixture();
+  try {
+    const own = await call(app, "/api/orders/order/1/mark-ready", "ada");
+    expect(own.status).toBe(200);
+    // The reply keeps only the output's fields: `owner` stays hidden.
+    expect(await own.json()).toEqual({ id: 1, status: "ready" });
+    expect(
+      (await call(app, "/api/orders/order/2/mark-ready", "ada")).status,
+    ).toBe(404);
+    expect((await call(app, "/api/orders/order/1/mark-ready")).status).toBe(
+      401,
+    );
+    expect(sqlite.query("SELECT status FROM orders ORDER BY id").all()).toEqual(
+      [{ status: "ready" }, { status: "paid" }],
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("the typed client calls a command as api.<service>.<resource>.<command>", () => {
+  const { sqlite, app } = fixture();
+  try {
+    const contract = generateClientContract(app);
+    const parsed = JSON.parse(
+      JSON.parse(contract.match(/JSON\.parse\((".*")\);/)![1]!),
+    );
+    expect(parsed.orders.order.markReady.config).toEqual({
+      path: "/api/orders/order/:id/mark-ready",
+      method: "POST",
+    });
+    expect(contract).toContain(
+      '"markReady": BrickClientAction<{ "note": string; "id": number; }',
+    );
+  } finally {
+    sqlite.close();
+  }
+});

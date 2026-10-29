@@ -654,8 +654,8 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
           (operation === "create" ||
             operation === "update" ||
             operation === "delete") &&
-          service.events?.wants(eventName)
-            ? service.events
+          service.recorder?.wants(eventName)
+            ? service.recorder
             : undefined;
         const readableEventRow = (row: Record<string, unknown>) =>
           Object.fromEntries(
@@ -1126,8 +1126,8 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
         };
         const results =
           options.events !== false &&
-          service.events?.wants(`${resource.name}.${single}`)
-            ? await service.events.transaction(db, eventContext(ctx), run)
+          service.recorder?.wants(`${resource.name}.${single}`)
+            ? await service.recorder.transaction(db, eventContext(ctx), run)
             : await runInTransaction(db, (tx) => run(tx));
         return single === "delete"
           ? { count: results.length }
