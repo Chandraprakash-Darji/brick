@@ -93,6 +93,21 @@ export const ENTRY_POINTS: EntryPoint[] = [
       "Report a worker process's requests to a running dev dashboard.",
   },
   {
+    slug: "cli-lint-eslint",
+    specifier: "@brickkit/cli/lint/eslint",
+    file: "packages/cli/src/lint/eslint.ts",
+    tsconfig: "packages/cli/tsconfig.build.json",
+    description: "The Brick lint rules as an ESLint flat-config plugin.",
+  },
+  {
+    slug: "cli-lint-oxlint",
+    specifier: "@brickkit/cli/lint/oxlint",
+    file: "packages/cli/src/lint/oxlint.ts",
+    tsconfig: "packages/cli/tsconfig.build.json",
+    description:
+      "The Brick lint rules as an oxlint JS plugin, and an oxlint config from brick.config.ts.",
+  },
+  {
     slug: "crud",
     specifier: "@brickkit/crud",
     file: "packages/crud/src/index.ts",

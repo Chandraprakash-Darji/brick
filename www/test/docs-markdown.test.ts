@@ -37,7 +37,7 @@ npm install @brickkit/core
     expect(markdown).toContain(
       "pnpm add @brickkit/core @brickkit/crud @brickkit/cli",
     );
-    expect(markdown).toContain("POST   /api/page/query");
+    expect(markdown).toContain("POST   /api/pages/page/query");
   });
 
   test("keeps tutorial steps and card links from the rewritten docs", async () => {
