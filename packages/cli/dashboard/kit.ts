@@ -21,7 +21,9 @@ export {
 } from "@/extension-registry";
 export {
   appFetch,
+  createAppClient,
   useAppFetch,
+  useAppQuery,
   useArchitecture,
   useRequests,
   type AppFetchResult,

@@ -265,6 +265,7 @@ export default defineDashboard({
 - **Extensions:** add pages, sidebar links, slot contents and a root provider.
 - **Shared code:** they share the dashboard's React and UI kit, so a custom page looks like the built-in ones.
 - **Data:** your app's API is reached through the dashboard's `/app` proxy.
+- **Typed data:** `createAppClient<AppContract>({ contract })` gives extension pages your app's typed client, and `useAppQuery` runs its calls with loading and error state.
 - **Isolation:** a broken extension shows its error in place, and the rest of the dashboard keeps working.
 - **Theme:** colours, radius and fonts come from `brick.config.ts` with no code at all.
 - **Plugins:** they can ship their own extension. It shows in `brick dev`, and `brick build` bundles it with yours for the production dashboard.

@@ -9,6 +9,11 @@ import {
   type ReactNode,
 } from "react";
 import type { ArchitectureSchema } from "@brickkit/core";
+import {
+  createBrickClient,
+  type BrickClient,
+  type BrickClientOptions,
+} from "@brickkit/core/client";
 import type { TraceSummary } from "../src/dev-telemetry-store";
 import type {
   DashboardExtension,
@@ -171,36 +176,46 @@ export interface AppFetchResult<T> {
 }
 
 /**
- * Read `path` from the app (JSON, or text for anything else) when the
- * component mounts and whenever `path` changes. A `null` path waits.
+ * The app's typed client, calling it through the dashboard's `/app` proxy:
+ * `createAppClient<AppContract>({ contract })`, with both from the contract
+ * `brick dev` generates. CRUD and other plugin routes need the `contract`
+ * value. Headers, the prefix and timeouts are as for `createBrickClient`.
  */
-export function useAppFetch<T = unknown>(
-  path: string | null,
-  init?: RequestInit,
+export function createAppClient<TApp extends Record<string, any>>(
+  options: Omit<BrickClientOptions, "baseUrl"> & { contract?: TApp } = {},
+): BrickClient<TApp> {
+  return createBrickClient<TApp>({
+    ...options,
+    baseUrl: `${location.origin}/app`,
+  });
+}
+
+/**
+ * Run `query` when the component mounts and whenever `deps` change, as
+ * `useEffect` would: `useAppQuery((signal) => api.orders.order.list({}, { signal }), [])`.
+ * A `null` query waits. The signal aborts when deps change or on unmount.
+ */
+export function useAppQuery<T>(
+  query: ((signal: AbortSignal) => Promise<T>) | null,
+  deps: readonly unknown[],
 ): AppFetchResult<T> {
   const [result, setResult] = useState<
     Omit<AppFetchResult<T>, "refetch" | "loading">
   >({ data: undefined, error: undefined });
-  const [loading, setLoading] = useState(path !== null);
+  const [loading, setLoading] = useState(query !== null);
   const [attempt, setAttempt] = useState(0);
-  const options = JSON.stringify(init ?? {});
+  const waiting = query === null;
   useEffect(() => {
-    if (path === null) return;
+    if (!query) {
+      setLoading(false);
+      return;
+    }
     const abort = new AbortController();
     setLoading(true);
-    appFetch(path, {
-      ...(JSON.parse(options) as RequestInit),
-      signal: abort.signal,
-    })
-      .then(async (response) => {
-        const body = response.headers.get("content-type")?.includes("json")
-          ? await response.json()
-          : await response.text();
-        if (!response.ok)
-          throw new Error(
-            `${response.status} ${typeof body === "string" ? body : JSON.stringify(body)}`,
-          );
-        setResult({ data: body as T, error: undefined });
+    query(abort.signal)
+      .then((data) => {
+        // A run whose deps changed must not overwrite the newer one's data.
+        if (!abort.signal.aborted) setResult({ data, error: undefined });
       })
       .catch((error: unknown) => {
         if (abort.signal.aborted) return;
@@ -213,7 +228,39 @@ export function useAppFetch<T = unknown>(
         if (!abort.signal.aborted) setLoading(false);
       });
     return () => abort.abort();
-  }, [path, options, attempt]);
+    // The query is read fresh on each run; deps decide when it runs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waiting, attempt, ...deps]);
   const refetch = useCallback(() => setAttempt((count) => count + 1), []);
   return { ...result, loading, refetch };
+}
+
+/**
+ * Read `path` from the app (JSON, or text for anything else) when the
+ * component mounts and whenever `path` changes. A `null` path waits.
+ */
+export function useAppFetch<T = unknown>(
+  path: string | null,
+  init?: RequestInit,
+): AppFetchResult<T> {
+  const options = JSON.stringify(init ?? {});
+  return useAppQuery<T>(
+    path === null
+      ? null
+      : async (signal) => {
+          const response = await appFetch(path, {
+            ...(JSON.parse(options) as RequestInit),
+            signal,
+          });
+          const body = response.headers.get("content-type")?.includes("json")
+            ? await response.json()
+            : await response.text();
+          if (!response.ok)
+            throw new Error(
+              `${response.status} ${typeof body === "string" ? body : JSON.stringify(body)}`,
+            );
+          return body as T;
+        },
+    [path, options],
+  );
 }

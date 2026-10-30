@@ -135,12 +135,39 @@ Every page, slot, drawer tab and the root sits behind its own error boundary. A 
 
 ## Data hooks
 
-| Export                     | Returns                                                                                                                 |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `useAppFetch(path, init?)` | `{ data, error, loading, refetch }` for `path` on your app. JSON is parsed, anything else is text. Pass `null` to wait. |
-| `appFetch(path, init?)`    | A `fetch` of `path` on your app, for writes.                                                                            |
-| `useRequests()`            | The requests the dashboard holds live, newest first.                                                                    |
-| `useArchitecture()`        | Your app's services, actions and routes, or `null` before it starts.                                                    |
+| Export                                       | Returns                                                                                                                              |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `useAppFetch(path, init?)`                   | `{ data, error, loading, refetch }` for `path` on your app. JSON is parsed, anything else is text. Pass `null` to wait.              |
+| `appFetch(path, init?)`                      | A `fetch` of `path` on your app, for writes.                                                                                         |
+| `createAppClient<AppContract>({ contract })` | Your app's typed client, calling it through `/app`. Other options as for `createBrickClient`, without `baseUrl`.                     |
+| `useAppQuery(query, deps)`                   | `{ data, error, loading, refetch }` for any promise, such as a typed client call. `query` gets an abort signal; pass `null` to wait. |
+| `useRequests()`                              | The requests the dashboard holds live, newest first.                                                                                 |
+| `useArchitecture()`                          | Your app's services, actions and routes, or `null` before it starts.                                                                 |
+
+### The typed client
+
+Pages can call your app with the same typed client as your frontend. `createAppClient` points it at `/app`, and `useAppQuery` runs a call like `useAppFetch` runs a path:
+
+```tsx
+import { createAppClient, useAppQuery } from "@brickkit/cli/dashboard";
+import { contract, type AppContract } from "../../_brick/contract";
+
+const api = createAppClient<AppContract>({ contract });
+
+function OrdersPage() {
+  const { data, loading } = useAppQuery(
+    (signal) => api.orders.order.list({ limit: 20 }, { signal }),
+    [],
+  );
+  return (
+    <Panel title="Orders">
+      {loading ? "Loading…" : `${data?.items.length} orders`}
+    </Panel>
+  );
+}
+```
+
+Inputs and results are typed from the contract `brick dev` generates (pass its `contract` value too: CRUD and other plugin routes need it), so a renamed action breaks the extension's build. Writes are plain calls: `await api.orders.order.ship({ id, trackingId })`.
 
 The dashboard server passes `/app/*` to your app, as it passes `/workflows` to the workflow inspector. `/app/api/admin/queues` reaches `/api/admin/queues`, from the dashboard's own origin, so there are no cross-origin problems. Only the dashboard's own page may use it. The dashboard's cookies, and in production the credential you signed in to the dashboard with, aren't passed on: send your app's own `authorization` header in `init` when it needs one.
 

@@ -678,3 +678,28 @@ describe("plugin dashboard extensions", () => {
     }
   });
 });
+
+describe("createAppClient", () => {
+  it("calls the app through the dashboard's /app proxy", async () => {
+    const { createAppClient } = await import("../dashboard/extension");
+    const original = Object.getOwnPropertyDescriptor(globalThis, "location");
+    Object.defineProperty(globalThis, "location", {
+      value: { origin: "http://dashboard.test" },
+      configurable: true,
+    });
+    try {
+      const urls: string[] = [];
+      const api = createAppClient<any>({
+        fetch: (async (url: string | URL | Request) => {
+          urls.push(String(url));
+          return Response.json({ ok: true });
+        }) as typeof fetch,
+      });
+      expect(await api.orders.order.list({})).toEqual({ ok: true });
+      expect(urls[0]).toStartWith("http://dashboard.test/app/api/orders/");
+    } finally {
+      if (original) Object.defineProperty(globalThis, "location", original);
+      else delete (globalThis as { location?: unknown }).location;
+    }
+  });
+});
