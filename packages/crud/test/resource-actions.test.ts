@@ -343,3 +343,42 @@ test("legacyRoutes also serves v0.10 paths with a Deprecation header", async () 
     sqlite.close();
   }
 });
+
+test("a record action finds a row whose id column holds dates", async () => {
+  const events = sqliteTable("events", {
+    at: integer("at", { mode: "timestamp_ms" }).primaryKey(),
+    name: text("name").notNull(),
+  });
+  const database = defineDatabase({ tables: { events } });
+  const db = database.getDb();
+  const sqlite = (db as typeof db & { $client: Database }).$client;
+  try {
+    sqlite.exec(
+      "CREATE TABLE events (at INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+    );
+    const at = new Date("2026-01-01T00:00:00.000Z");
+    await db.insert(events).values({ at, name: "launch" });
+    const service = defineService("calendar", { database });
+    service.resource({ name: "event", table: events, id: events.at }).action({
+      name: "show",
+      record: true,
+      method: "GET",
+      access: "public",
+      output: t.Object({ name: t.String() }),
+      execute: ({ row }) => ({ name: row.name }),
+    });
+    const app = brick({ services: [service], docs: false });
+    const response = await call(
+      app,
+      "GET",
+      `/api/calendar/event/${encodeURIComponent(at.toISOString())}/show`,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ name: "launch" });
+    expect(
+      (await call(app, "GET", "/api/calendar/event/not-a-date/show")).status,
+    ).toBe(404);
+  } finally {
+    sqlite.close();
+  }
+});

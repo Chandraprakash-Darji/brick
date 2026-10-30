@@ -311,6 +311,24 @@ describe("app part and lifecycle", () => {
     await app.events?.stop();
   });
 
+  it("refuses a workflow listener, whose steps would see the app's deps", () => {
+    const flows = definePlugin({
+      name: "@acme/flows",
+      app: ({ listeners }) => {
+        listeners({
+          name: "flow-listener",
+          on: ["pages.*"],
+          workflow: "flows/sync",
+        } as never);
+      },
+    });
+    expect(() =>
+      brick({ services: [], requestLogging: false, plugins: [flows()] }),
+    ).toThrow(
+      "@acme/flows: plugins can't add workflow listeners yet, because workflow steps would see the app's deps instead of the plugin's; use a run listener ('flow-listener')",
+    );
+  });
+
   it("refuses a plugin passed to brick() that a resource already installed", () => {
     const audit = definePlugin({
       name: "@acme/audit",

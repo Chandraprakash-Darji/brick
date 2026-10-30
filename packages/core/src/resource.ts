@@ -55,6 +55,9 @@ export async function loadRecord(
       `Resource '${resource.name}' has no access rule for loading records: set \`access\` on the record action`,
     );
   const db = args.db ?? args.ctx?.db;
+  // An id its column can't hold names no row.
+  const id = idValue(resource.id, args.id);
+  if (id === undefined) return undefined;
   if (!db) throw new Error("Record actions require a configured database");
   const scope =
     args.access === "public"
@@ -63,7 +66,7 @@ export async function loadRecord(
   const [row] = await db
     .select()
     .from(resource.table)
-    .where(and(scope, eq(resource.id, args.id)))
+    .where(and(scope, eq(resource.id, id)))
     .limit(1);
   return row;
 }
@@ -78,6 +81,18 @@ export function checkRecordAccess(
     throw new Error(
       `Record action '${name}' needs \`access\` ("public" or { scope })`,
     );
+}
+
+/** The id from the path as its column stores it: a Date or BigInt for those columns, undefined when it can't be one. */
+function idValue(column: Column, id: unknown): unknown {
+  if (typeof id !== "string") return id;
+  if (column.dataType === "date") {
+    const date = new Date(id);
+    return Number.isNaN(date.getTime()) ? undefined : date;
+  }
+  if (column.dataType === "bigint")
+    return /^-?\d+$/.test(id) ? BigInt(id) : undefined;
+  return id;
 }
 
 function idSchema(column: Column): TSchema {

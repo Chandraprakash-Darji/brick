@@ -955,6 +955,11 @@ export function setupAppPlugins(
         // `useDeps()` in a plugin's listener returns the plugin's deps, not the app's.
         listeners.push(
           ...items.map((listener) => {
+            // Workflow steps run in the app's workflow handler, where they'd see the app's deps.
+            if (listener.workflow)
+              throw new Error(
+                `${manifest.name}: plugins can't add workflow listeners yet, because workflow steps would see the app's deps instead of the plugin's; use a run listener ('${listener.name}')`,
+              );
             const run = listener.run;
             return run
               ? {
