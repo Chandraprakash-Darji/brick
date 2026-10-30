@@ -1,6 +1,8 @@
-import type { RedisClient } from "bun";
 import { compareSocketSeq } from "./socket-schema";
 import type { SocketBroker, SocketBrokerMessage } from "./socket-types";
+
+// From the global, as @types/bun doesn't export RedisClient from "bun" for the .d.ts build.
+type RedisClient = InstanceType<typeof Bun.RedisClient>;
 
 export interface RedisBrokerOptions {
   /** Defaults to `REDIS_URL`, then `redis://localhost:6379`. */
