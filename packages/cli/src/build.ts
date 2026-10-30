@@ -18,8 +18,9 @@ export interface BuildApplicationOptions {
   /** Precompile Elysia's HTTP handlers at build time (default true). */
   aot?: boolean;
   /**
-   * The dashboard's extension, built into `<outdir>/dashboard` for the
-   * production dashboard to serve; its theme is checked here too.
+   * The dashboard's extension, built into `<outdir>/dashboard` with those of
+   * the app's plugins for the production dashboard to serve; its theme is
+   * checked here too.
    */
   dashboard?: DashboardExtensionOptions;
 }
@@ -121,8 +122,13 @@ if (import.meta.main) {
       join(staging, "brick-ir.json"),
       JSON.stringify(compilation.ir, null, 2) + "\n",
     );
-    if (extension)
-      await writeDashboardExtension(extension, join(staging, "dashboard"));
+    const dashboard = (await writeDashboardExtension(
+      extension,
+      app.definition.plugins ?? [],
+      join(staging, "dashboard"),
+    ))
+      ? join(outdir, "dashboard")
+      : undefined;
     await mkdir(outdir, { recursive: true });
     for (const name of [
       "routes.js",
@@ -131,7 +137,6 @@ if (import.meta.main) {
       "server.js",
     ])
       await rename(join(staging, name), join(outdir, name));
-    const dashboard = extension ? join(outdir, "dashboard") : undefined;
     if (dashboard) {
       await rm(dashboard, { recursive: true, force: true });
       await rename(join(staging, "dashboard"), dashboard);

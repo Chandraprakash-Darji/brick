@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { getGlobalRegistry, type BrickApp } from "@brickkit/core";
 import { isLoopbackHost } from "./dashboard-access";
 import {
@@ -37,7 +39,8 @@ export async function startProductionDashboard(
     warn?: (message: string) => void;
     /**
      * The project's extension (source, or the folder `brick build` wrote) and
-     * theme. Only pages marked `production: true` are shown.
+     * theme. The app's plugins' extensions join it, from source or as the
+     * folder holds them. Only pages marked `production: true` are shown.
      */
     dashboard?: DashboardExtensionOptions;
   },
@@ -61,6 +64,7 @@ export async function startProductionDashboard(
     warn,
   });
   const store = new DevTelemetryStore({ history });
+  const extension = options.dashboard?.extension;
   let started;
   try {
     started = await startDevDashboard({
@@ -71,6 +75,11 @@ export async function startProductionDashboard(
       store,
       history,
       dashboard: options.dashboard,
+      // A `brick build` folder already holds the plugins' extensions.
+      plugins:
+        extension && existsSync(join(resolve(extension), "extension.js"))
+          ? undefined
+          : app.definition.plugins,
       appUrl: `http://127.0.0.1:${options.appPort}`,
       probe: async () => {
         const response = await fetch(

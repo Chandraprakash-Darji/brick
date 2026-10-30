@@ -1,5 +1,5 @@
 import { existsSync, watch, type FSWatcher } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -138,6 +138,8 @@ export interface BuiltExtension {
   js: string;
   /** The extension's own Tailwind classes; empty when it uses none. */
   css: string;
+  /** A `brick build` folder's `extension-N.js` files, which its loader imports. */
+  parts?: Record<string, string>;
 }
 
 let warnedTailwind = false;
@@ -224,15 +226,60 @@ export async function buildDashboardExtension(
   };
 }
 
-/** Write the built extension into `outdir`, where `brick start` can serve it. */
+/**
+ * Write the app's extension and its plugins' into `outdir`, where `brick start`
+ * can serve them: the app's alone as it is, or with plugins each part apart
+ * and `extension.js` loading them, as `brick dev` serves them. Returns false
+ * when there is none to write. A plugin's that fails to build throws.
+ */
 export async function writeDashboardExtension(
-  entry: string,
+  entry: string | undefined,
+  plugins: readonly PluginDashboard[],
   outdir: string,
-): Promise<void> {
-  const built = await buildDashboardExtension(entry);
+): Promise<boolean> {
+  const parts = [
+    ...(entry ? [{ name: "app", path: entry, plugin: false }] : []),
+    ...[...pluginDashboards(plugins)].map(([path, name]) => ({
+      name,
+      path,
+      plugin: true,
+    })),
+  ];
+  if (!parts.length) return false;
+  const built = await Promise.all(
+    parts.map((part) =>
+      buildDashboardExtension(part.path).catch((error: unknown) => {
+        if (!part.plugin) throw error;
+        throw new Error(
+          `Brick compiler: the dashboard extension of plugin ${part.name} failed to build: ${error instanceof Error ? error.message : String(error)}`,
+          { cause: error },
+        );
+      }),
+    ),
+  );
   await mkdir(outdir, { recursive: true });
-  await writeFile(join(outdir, "extension.js"), built.js);
-  await writeFile(join(outdir, "extension.css"), built.css);
+  if (parts.length === 1 && entry) {
+    await writeFile(join(outdir, "extension.js"), built[0]!.js);
+    await writeFile(join(outdir, "extension.css"), built[0]!.css);
+    return true;
+  }
+  for (const [index, part] of built.entries())
+    await writeFile(join(outdir, `extension-${index}.js`), part.js);
+  await writeFile(
+    join(outdir, "extension.js"),
+    extensionLoader(
+      parts.map((part, index) => ({
+        name: part.name,
+        src: `./extension-${index}.js`,
+        plugin: part.plugin,
+      })),
+    ),
+  );
+  await writeFile(
+    join(outdir, "extension.css"),
+    built.map((part) => part.css).join(""),
+  );
+  return true;
 }
 
 /**
@@ -263,9 +310,14 @@ export class DashboardExtensionHost {
         const prebuilt = join(this.#path, "extension.js");
         if (existsSync(prebuilt)) {
           const css = join(this.#path, "extension.css");
+          const parts: Record<string, string> = {};
+          for (const name of await readdir(this.#path))
+            if (/^extension-\d+\.js$/.test(name))
+              parts[name] = await readFile(join(this.#path, name), "utf8");
           this.built = {
             js: await readFile(prebuilt, "utf8"),
             css: existsSync(css) ? await readFile(css, "utf8") : "",
+            parts,
           };
         } else {
           if (!existsSync(this.#path))
@@ -325,6 +377,17 @@ export class DashboardExtensionHost {
 export interface PluginDashboard {
   name: string;
   dashboard?: string;
+}
+
+/** The plugins' extensions by path, each once, in install order. */
+function pluginDashboards(
+  plugins: readonly PluginDashboard[],
+): Map<string, string> {
+  const wanted = new Map<string, string>();
+  for (const plugin of plugins)
+    if (plugin.dashboard && !wanted.has(resolve(plugin.dashboard)))
+      wanted.set(resolve(plugin.dashboard), plugin.name);
+  return wanted;
 }
 
 /**
@@ -449,15 +512,19 @@ export class DashboardExtensions {
     if (name === "extension.js") return this.built?.js;
     if (name === "extension.css") return this.built?.css;
     const match = /^extension-(\d+)\.js$/.exec(name);
-    return match ? this.#parts[Number(match[1])]?.host.built?.js : undefined;
+    if (!match) return undefined;
+    // The app's alone: a `brick build` folder, whose loader imports its own parts.
+    if (this.#own && this.#parts.length === 1)
+      return this.#parts[0]!.host.built?.parts?.[name];
+    return this.#parts[Number(match[1])]?.host.built?.js;
   }
 
   /** Follow the app's plugins: build the extensions they ship, drop the rest. */
   async setPlugins(plugins: readonly PluginDashboard[]): Promise<void> {
-    const wanted = new Map<string, string>();
-    for (const plugin of plugins)
-      if (plugin.dashboard && !wanted.has(resolve(plugin.dashboard)))
-        wanted.set(resolve(plugin.dashboard), plugin.name);
+    // A `brick build` folder already holds its plugins' extensions.
+    if (this.#own && existsSync(join(this.#parts[0]!.path, "extension.js")))
+      return;
+    const wanted = pluginDashboards(plugins);
     const start = this.#own ? 1 : 0;
     const current = this.#parts.slice(start);
     if (

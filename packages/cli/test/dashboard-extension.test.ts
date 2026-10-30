@@ -542,4 +542,139 @@ describe("plugin dashboard extensions", () => {
       dashboard.stop();
     }
   });
+
+  const pluginApp = join(import.meta.dir, "fixtures/plugin-app.ts");
+  const comments = {
+    name: "@acme/brick-comments",
+    dashboard: join(import.meta.dir, "fixtures/plugin-dashboard/index.tsx"),
+  };
+
+  it("brick build writes the app's and its plugins' parts and a loader, and production serves them", async () => {
+    const outdir = join(import.meta.dir, "fixtures", ".plugin-build");
+    try {
+      const result = await buildApplication({
+        entry: pluginApp,
+        outdir,
+        dashboard: { extension: entry },
+      });
+      const folder = join(outdir, "dashboard");
+      expect(result.dashboard).toBe(folder);
+      const loader = readFileSync(join(folder, "extension.js"), "utf8");
+      expect(loader).toContain(
+        '[{"name":"app","src":"./extension-0.js","plugin":false},{"name":"@acme/brick-comments","src":"./extension-1.js","plugin":true}]',
+      );
+      expect(readFileSync(join(folder, "extension-1.js"), "utf8")).toContain(
+        "From a plugin",
+      );
+      expect(readFileSync(join(folder, "extension.css"), "utf8")).toContain(
+        ".p-7",
+      );
+
+      const dashboard = await startDevDashboard({
+        port: 0,
+        store: new DevTelemetryStore(),
+        mode: "production",
+        dashboard: { extension: folder },
+      });
+      const base = `http://localhost:${dashboard.port}`;
+      try {
+        expect(await (await fetch(`${base}/assets/extension.js`)).text()).toBe(
+          loader,
+        );
+        expect(
+          await (await fetch(`${base}/assets/extension-0.js`)).text(),
+        ).toContain("@brickkit/cli/dashboard");
+        expect(
+          await (await fetch(`${base}/assets/extension-1.js`)).text(),
+        ).toContain("From a plugin");
+        // The folder already holds its plugins: they are not added again.
+        await dashboard.setPluginExtensions([comments]);
+        expect(await (await fetch(`${base}/assets/extension.js`)).text()).toBe(
+          loader,
+        );
+        expect(
+          await (await fetch(`${base}/assets/extension-0.js`)).text(),
+        ).toContain("@brickkit/cli/dashboard");
+      } finally {
+        dashboard.stop();
+      }
+    } finally {
+      rmSync(outdir, { recursive: true, force: true });
+    }
+  });
+
+  it("brick build writes a plugin's extension when the app has none", async () => {
+    const outdir = join(import.meta.dir, "fixtures", ".plugin-only-build");
+    try {
+      const result = await buildApplication({ entry: pluginApp, outdir });
+      const folder = join(outdir, "dashboard");
+      expect(result.dashboard).toBe(folder);
+      expect(readFileSync(join(folder, "extension.js"), "utf8")).toContain(
+        '[{"name":"@acme/brick-comments","src":"./extension-0.js","plugin":true}]',
+      );
+      expect(readFileSync(join(folder, "extension-0.js"), "utf8")).toContain(
+        "From a plugin",
+      );
+    } finally {
+      rmSync(outdir, { recursive: true, force: true });
+    }
+  });
+
+  it("brick build fails, naming the plugin, when its extension does not build", async () => {
+    const outdir = join(import.meta.dir, "fixtures", ".plugin-broken-build");
+    try {
+      await expect(
+        buildApplication({
+          entry: join(import.meta.dir, "fixtures/plugin-app-broken.ts"),
+          outdir,
+        }),
+      ).rejects.toThrow("plugin @acme/brick-broken failed to build");
+      expect(existsSync(outdir)).toBe(false);
+    } finally {
+      rmSync(outdir, { recursive: true, force: true });
+    }
+  });
+
+  it("the production dashboard builds plugins' extensions from source", async () => {
+    const dashboard = await startDevDashboard({
+      port: 0,
+      store: new DevTelemetryStore(),
+      mode: "production",
+      plugins: [comments, { name: "@acme/no-dashboard" }],
+    });
+    const base = `http://localhost:${dashboard.port}`;
+    try {
+      expect(
+        (await (await fetch(`${base}/api/state`)).json()).extension,
+      ).toEqual({ revision: expect.any(Number) });
+      expect(
+        await (await fetch(`${base}/assets/extension.js`)).text(),
+      ).toContain('"plugin":true');
+      expect(
+        await (await fetch(`${base}/assets/extension-0.js`)).text(),
+      ).toContain("From a plugin");
+      // `/app` is served now that an extension is active.
+      expect((await fetch(`${base}/app/`)).status).not.toBe(404);
+    } finally {
+      dashboard.stop();
+    }
+  });
+
+  it("the production dashboard has no extension when no plugin ships one", async () => {
+    const dashboard = await startDevDashboard({
+      port: 0,
+      store: new DevTelemetryStore(),
+      mode: "production",
+      plugins: [{ name: "@acme/no-dashboard" }],
+    });
+    const base = `http://localhost:${dashboard.port}`;
+    try {
+      expect(
+        (await (await fetch(`${base}/api/state`)).json()).extension,
+      ).toBeNull();
+      expect((await fetch(`${base}/app/`)).status).toBe(404);
+    } finally {
+      dashboard.stop();
+    }
+  });
 });

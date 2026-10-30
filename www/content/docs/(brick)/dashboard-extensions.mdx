@@ -181,4 +181,10 @@ Any other name is an error when the dashboard starts or `brick build` runs. Font
 
 `brick build` builds the extension into `<outdir>/dashboard` (`extension.js` and `extension.css`). The production dashboard of `brick start` takes either that folder or the source module as its extension, and needs no bundler for the folder.
 
-In production, only pages and links marked `production: true` appear. Slots and the root still apply. Extension pages stay behind the dashboard's `auth`, and so does `/app`. The production dashboard serves `/app` only when it has an extension.
+When the app's plugins ship extensions (see [Plugins](#plugins)), `brick build` builds each one apart into the same folder, as `brick dev` does: `extension-0.js` is the app's own, then one file per plugin, `extension.css` holds all their styles, and `extension.js` loads and merges them. With only plugin extensions, the folder holds just theirs. A plugin's extension that fails to build fails `brick build`, naming the plugin. Started from the source module, or with no extension of its own, the production dashboard builds the plugins' extensions when it starts.
+
+In production, only pages and links marked `production: true` appear, plugins' pages included. Slots and the root still apply. Extension pages stay behind the dashboard's `auth`, and so does `/app`. The production dashboard serves `/app` only when it has an extension, the app's or a plugin's.
+
+## Plugins
+
+A plugin ships its own extension with `definePlugin({ dashboard: "./dashboard.tsx" })` (see [Build a plugin](/docs/plugins/build-plugin#dashboard-extension)). The dashboard builds each one apart from the app's and merges them, in `brick dev` and in production: the app's comes first and keeps its slots, a page whose id is taken is skipped, and a plugin's pages without a place go under a section named after the plugin. One that fails to load is reported and the others still show.

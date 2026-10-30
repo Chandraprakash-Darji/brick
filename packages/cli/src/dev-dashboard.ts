@@ -125,13 +125,18 @@ export interface DevDashboardOptions {
    * its folder changes, and the page reloads; production serves it as built.
    */
   dashboard?: DashboardExtensionOptions;
+  /**
+   * The app's plugins, whose extensions are built and served before the
+   * dashboard listens. Dev learns them later, with `setPluginExtensions`.
+   */
+  plugins?: readonly PluginDashboard[];
   /** Where `/app/*` goes; the app the store's API documents name otherwise. */
   appUrl?: string;
 }
 
 export interface DevDashboard {
   readonly port: number;
-  /** Build and serve the dashboard extensions the app's plugins ship (dev only). */
+  /** Build and serve the dashboard extensions the app's plugins ship. */
   setPluginExtensions(plugins: readonly PluginDashboard[]): Promise<void>;
   stop(): void;
 }
@@ -164,7 +169,9 @@ export function startDevDashboard(
   }
   // In dev, plugins' extensions can join later (`setPluginExtensions`).
   const extension =
-    options.dashboard?.extension || !production
+    options.dashboard?.extension ||
+    !production ||
+    options.plugins?.some((plugin) => plugin.dashboard)
       ? new DashboardExtensions(options.dashboard?.extension, (message) =>
           console.warn(message),
         )
@@ -703,7 +710,12 @@ export function startDevDashboard(
 
   // The first build finishes before the page can be asked for; a failed one
   // is shown on the page, and does not stop the dashboard.
-  const ready = extension ? extension.load() : Promise.resolve();
+  const ready = extension
+    ? Promise.all([
+        extension.load(),
+        options.plugins && extension.setPlugins(options.plugins),
+      ])
+    : Promise.resolve();
   return ready.then(() => listen());
 
   function listen(): Promise<DevDashboard> {

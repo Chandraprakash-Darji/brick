@@ -264,7 +264,7 @@ export default defineDashboard({
 - **Data:** your app's API is reached through the dashboard's `/app` proxy.
 - **Isolation:** a broken extension shows its error in place, and the rest of the dashboard keeps working.
 - **Theme:** colours, radius and fonts come from `brick.config.ts` with no code at all.
-- **Plugins:** they can ship their own extension.
+- **Plugins:** they can ship their own extension. It shows in `brick dev`, and `brick build` bundles it with yours for the production dashboard.
 
 ## 7. `brick.config.ts`, one project structure, and lint rules
 

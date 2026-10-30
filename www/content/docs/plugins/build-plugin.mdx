@@ -135,7 +135,7 @@ The `app` part also runs for a plugin installed on a service or resource, once p
 | `secrets`   | Secrets from `defineSecret`, so `brick()` checks them at boot and the dashboard and `brick lint` list what the plugin needs.                                                              |
 | `tables`    | Tables the plugin owns. See below.                                                                                                                                                        |
 | `events`    | Events the plugin emits. They join the host's catalog as `<plugin>.<event>`.                                                                                                              |
-| `dashboard` | A dashboard extension module that `brick dev` merges with the app's own.                                                                                                                  |
+| `dashboard` | A dashboard extension module that the dashboard merges with the app's own, in `brick dev` and in production.                                                                              |
 
 ## Owned tables
 
@@ -180,6 +180,8 @@ Setup stays synchronous. Open connections in `on("start")`, never while the plug
 ## Dashboard extension
 
 `dashboard: "./dashboard.js"` points at a module whose default export is `defineDashboard({ ... })` (see [Dashboard extensions](/docs/dashboard-extensions)). The path is relative to the file that calls `definePlugin`. `brick dev` builds each plugin's extension apart from the app's and merges them: the app's comes first and keeps its slots, a page whose id is taken is skipped, and a plugin's pages without a place go under a section named after the plugin. One that fails to build or load is reported and the others still show.
+
+The production dashboard does the same. `brick build` writes each extension into `<outdir>/dashboard`, and a plugin's extension that fails to build fails the build, naming the plugin. As with the app's own pages, only a plugin's pages and links marked `production: true` show in production. See [Production](/docs/dashboard-extensions#production).
 
 ## What users see
 
