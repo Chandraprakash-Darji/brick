@@ -531,11 +531,7 @@ export const checkRules: Record<string, Rule> = {
       return {
         VariableDeclarator(node: Node) {
           const call = memberCall(node.init);
-          if (
-            node.id.type === "Identifier" &&
-            (call?.property === "useService" ||
-              call?.property === "createServiceProxy")
-          )
+          if (node.id.type === "Identifier" && call?.property === "useService")
             proxies.add(node.id.name);
         },
         ExpressionStatement(node: Node) {

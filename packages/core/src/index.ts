@@ -122,7 +122,6 @@ export {
   type ResourceActionInfo,
 } from "./routes";
 export {
-  createServiceProxy,
   useService,
   type ServiceClient,
   type ServiceActionCaller,

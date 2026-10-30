@@ -3,7 +3,7 @@ import {
   defineService,
   defineDatabase,
   defineAction,
-  createServiceProxy,
+  useService,
   getGlobalRegistry,
   resetGlobalRegistry,
   t,
@@ -116,14 +116,7 @@ describe("@brickkit/core Engine", () => {
       },
     });
 
-    interface NotifyServiceRpc {
-      send: (
-        input: { message: string },
-        ctx?: any,
-      ) => Promise<{ delivered: boolean }>;
-    }
-
-    const notifyRpc = createServiceProxy<NotifyServiceRpc>("notifications", {
+    const notifyRpc = useService(notifyService, {
       context: { traceId: "tr_custom_123" },
     });
 

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "bun:test";
 import {
   defineService,
   defineDatabase,
-  createServiceProxy,
+  useService,
   t,
   resetGlobalRegistry,
 } from "../src";
@@ -310,7 +310,7 @@ describe("Service-Level Context Resolution & Session Injection", () => {
         ordersDbCalls.push(ctx.dbName);
 
         // Call billing service from orders
-        const billingRpc = createServiceProxy("billing", { from: "orders" });
+        const billingRpc = useService(billingService, { from: "orders" });
         const chargeResult = await billingRpc.charge(
           { amount: input.amount },
           {
@@ -367,7 +367,7 @@ describe("Service-Level Context Resolution & Session Injection", () => {
       execute: async ({ ctx }) => ({ caller: ctx.caller }),
     });
 
-    const billingRpc = createServiceProxy("billing", { from: "orders" });
+    const billingRpc = useService(billingService, { from: "orders" });
 
     // A caller trying to spoof its identity via callCtx must be ignored.
     const result = await billingRpc.whoCalled({}, {
@@ -397,7 +397,7 @@ describe("Service-Level Context Resolution & Session Injection", () => {
       }),
     });
 
-    const billingRpc = createServiceProxy("billing");
+    const billingRpc = useService(billingService);
 
     // Attempt to pass a fake database in callCtx - it should be ignored
     const result = await billingRpc.getContext(
@@ -462,7 +462,7 @@ describe("Receiver-owned context", () => {
       const result =
         dispatch === "direct"
           ? await inspect.run(undefined, callerContext)
-          : await createServiceProxy("receiver", {
+          : await useService(service, {
               context: callerContext,
             }).inspect(undefined, callerContext);
       expect(result).toEqual({
@@ -519,7 +519,7 @@ describe("Receiver-owned context", () => {
       const result =
         dispatch === "direct"
           ? await inspect.run(undefined, envelope)
-          : await createServiceProxy("receiver", {
+          : await useService(service, {
               context: {
                 user: { id: "options-user" },
                 caller: "options-sender",

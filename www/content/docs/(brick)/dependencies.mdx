@@ -121,7 +121,7 @@ The types come from the generated contract, `_brick/contract.ts`, which `brick d
 
 ### Migrating from `createServiceProxy`
 
-`createServiceProxy` still works, but is deprecated: its type is written by hand and can drift from the service.
+`createServiceProxy` was removed in v0.11. Use `useService`, which is typed from the service instead of by hand:
 
 ```ts
 // Before

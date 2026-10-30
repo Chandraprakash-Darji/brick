@@ -78,7 +78,7 @@ export type UntypedServiceClient = { [name: string]: any };
  */
 export function useService<const N extends string = string>(
   service: { readonly name: string } & NamedService<N>,
-  options: Omit<ProxyOptions, "isMonolith"> = {},
+  options: ProxyOptions = {},
 ): N extends keyof BrickServices
   ? ServiceClient<BrickServices[N]>
   : UntypedServiceClient {
@@ -129,10 +129,6 @@ async function callAction(
   callCtx: Partial<ActionContext> | undefined,
   options: ProxyOptions,
 ) {
-  if (options.isMonolith === false)
-    throw new Error(
-      `[Brick-TS RPC] Remote microservice dispatch for '${serviceName}.${actionName}' is not configured. Use createClient({ baseUrl, contract }) for HTTP calls to remote services.`,
-    );
   const service = getGlobalRegistry().get(serviceName);
   if (!service) {
     throw new Error(
@@ -151,45 +147,6 @@ async function callAction(
     { "brick.service": serviceName, "brick.action": actionName },
     () => action.execute({ input: payload, ctx: envelopeCtx }),
   );
-}
-
-/**
- * @deprecated Use `useService(service, { from })`: its methods are typed from
- * the service, so renaming an action or changing its input is a compile error.
- *
- * Call another service's actions in-process by name, typed by hand. Each
- * property of the proxy is an action of that service: call it with the action's
- * input, and optionally a call context.
- *
- * The call runs through the target's own validation and authorization, with the
- * target's database and context (never the caller's), and shows as an `rpc`
- * span in the trace. Only in-process dispatch exists: with `isMonolith: false`
- * a call throws. Use the typed client to call a service over HTTP.
- *
- * @param serviceName - The registered name of the service to call.
- * @param options - `from` (the calling service's name, which becomes `ctx.caller`
- * in the target and cannot be spoofed), `context` (defaults for every call), and
- * `isMonolith`.
- * @returns A proxy typed as `T`, usually the target's actions.
- * @throws On a call, when the service or the action is not registered.
- */
-export function createServiceProxy<T extends Record<string, any>>(
-  serviceName: string,
-  options: ProxyOptions = {},
-): T {
-  return new Proxy({} as T, {
-    get(_, actionName: string) {
-      return (payload: any, callCtx?: Partial<ActionContext>) =>
-        callAction(
-          serviceName,
-          actionName,
-          (service) => service.getAction(actionName),
-          payload,
-          callCtx,
-          options,
-        );
-    },
-  });
 }
 
 /** Build the trusted envelope for a proxy call.

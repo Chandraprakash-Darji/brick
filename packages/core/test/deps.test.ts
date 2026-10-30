@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import {
   brick,
-  createServiceProxy,
   defineDatabase,
   defineListener,
   definePlugin,
@@ -222,14 +221,6 @@ describe("useService", () => {
   it("is not a promise", async () => {
     const billing = useService(billingService());
     expect(await Promise.resolve(billing)).toBe(billing);
-  });
-
-  it("keeps createServiceProxy working", async () => {
-    billingService();
-    const billing = createServiceProxy<{
-      charge(input: { cents: number }): Promise<{ caller: string }>;
-    }>("billing", { from: "orders" });
-    expect((await billing.charge({ cents: 1 })).caller).toBe("orders");
   });
 });
 

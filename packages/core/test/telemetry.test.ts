@@ -25,12 +25,12 @@ import { sql } from "drizzle-orm";
 import postgres from "postgres";
 import {
   brick,
-  createServiceProxy,
   defineDatabase,
   defineService,
   resetGlobalRegistry,
   t,
   traceRoute,
+  useService,
 } from "../src";
 
 const exporter = new InMemorySpanExporter();
@@ -80,7 +80,7 @@ function buildApp(telemetry?: boolean) {
     name: "checkout",
     input: t.Object({ id: t.String() }),
     execute: async ({ input }) => {
-      const remote = createServiceProxy<any>("users");
+      const remote = useService(users);
       return remote.getUser({ id: input.id });
     },
   });
@@ -221,7 +221,7 @@ describe("telemetry spans", () => {
 
   it("does not record RPC spans for calls made outside a traced request", async () => {
     buildApp(true);
-    const remote = createServiceProxy<any>("users");
+    const remote = useService({ name: "users" });
 
     expect(await remote.getUser({ id: "usr_42" })).toEqual({ id: "usr_42" });
     expect(exporter.getFinishedSpans()).toHaveLength(0);
