@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  getActionRoute,
   getPluginActionRoute,
   serializeSocketSchema,
   type Service,
@@ -66,6 +67,11 @@ import type { BrickClientAction${app.definition.sockets.length ? ", BrickClientS
 ${schemas.renderContract(namespaceType(types))}
 
 export const contract: AppContract = JSON.parse(${JSON.stringify(JSON.stringify(contract))});
+
+// Types useService(service) on the server from this contract.
+declare module "@brickkit/core/client" {
+  interface BrickServices extends AppContract {}
+}
 `;
 }
 
@@ -83,9 +89,10 @@ function addServiceActions(
   contract[service.name] = namespace;
   types[service.name] = namespaceTypes;
   for (const action of service.listActions()) {
-    const pluginRoute = getPluginActionRoute(action, prefix);
-    if (pluginRoute === false) continue;
-    const { input, output, errors, path, method } = action.config;
+    const route = getActionRoute(action, prefix);
+    if (route === false) continue;
+    const pluginRoute = getPluginActionRoute(action, prefix) || undefined;
+    const { input, output, errors } = action.config;
     let inputType: string;
     let outputType: string;
     try {
@@ -110,13 +117,7 @@ function addServiceActions(
         : pluginRoute?.resource
           ? { resource: pluginRoute.resource }
           : {}),
-      config: {
-        path:
-          pluginRoute?.path ??
-          path ??
-          `${prefix}/${service.name}/${action.name}`,
-        method: pluginRoute?.method ?? method ?? "POST",
-      },
+      config: { path: route.path, method: route.method },
     };
     insertAction(
       pluginRoute?.clientPath ? contract : namespace,

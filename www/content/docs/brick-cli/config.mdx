@@ -1,0 +1,105 @@
+---
+title: Configuration File
+description: Set the entry, paths and the dev, build, gen and lint settings once in brick.config.ts.
+---
+
+`brick.config.ts` holds project and tooling settings: where the app and its services are, what the CLI generates, and how `brick dev`, `brick build` and `brick lint` run. Without it you repeat flags in every script, such as `brick dev src/app.ts --client _brick/contract.ts --frontend '…'`.
+
+The file is optional. Without one, every command behaves as it did before the file existed.
+
+```ts title="brick.config.ts"
+import { defineConfig } from "@brickkit/cli";
+
+export default defineConfig({
+  entry: "src/app.ts", // default export is the BrickApp
+  services: "src/services", // scanned for *.action.ts, *.command.ts, …
+  generated: "_brick", // services.gen.ts and contract.ts go here
+
+  client: {
+    output: "_brick/contract.ts", // brick gen client; brick dev keeps it current
+  },
+  openapi: {
+    output: "openapi.json", // brick gen openapi
+  },
+
+  dev: {
+    port: 4000,
+    frontend: "vite --host localhost --port 5178 --strictPort",
+    dashboard: { port: 4001, historyDays: 7 }, // or false
+  },
+
+  build: {
+    outdir: "dist/brick",
+    aot: true,
+  },
+
+  dashboard: {
+    extension: "src/dashboard/index.tsx",
+    theme: { light: { primary: "oklch(0.55 0.2 260)" } },
+  },
+
+  lint: {
+    presets: ["recommended", "layout"],
+    rules: { "brick/test-colocated": "warn" },
+    ignore: ["src/legacy/**"],
+  },
+});
+```
+
+With this file, the scripts shrink to the command names:
+
+```json title="package.json"
+{
+  "scripts": {
+    "dev": "brick dev",
+    "build": "brick build",
+    "gen": "brick gen",
+    "lint": "brick lint"
+  }
+}
+```
+
+## Every key
+
+Paths are relative to the folder that holds `brick.config.ts`.
+
+| Key                    | Default           | Replaces                                               | Used by                                                                                                                          |
+| :--------------------- | :---------------- | :----------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------- |
+| `entry`                | `src/app.ts`      | the `[entry]` argument                                 | dev, start, worker, build, gen, info, lint                                                                                       |
+| `services`             | `src/services`    | new                                                    | the [services manifest](/docs/project-structure#the-services-manifest), layout rules                                             |
+| `generated`            | `_brick`          | new                                                    | `services.gen.ts`, and the default `contract.ts` of `brick gen client`                                                           |
+| `client.output`        | none (no client)  | `dev --client`, `gen client --output`                  | dev, gen client                                                                                                                  |
+| `openapi.output`       | stdout            | `gen openapi --output`                                 | gen openapi                                                                                                                      |
+| `dev.port`             | `4000`            | `dev --port`                                           | dev                                                                                                                              |
+| `dev.frontend`         | none              | `dev --frontend` (requires `client.output`)            | dev                                                                                                                              |
+| `dev.dashboard`        | `{}` (on)         | `--dashboard-port`, `--history-days`, `--no-dashboard` | dev; `false` turns the dashboard off                                                                                             |
+| `build.outdir`         | `dist/brick`      | `build --outdir`                                       | build                                                                                                                            |
+| `build.aot`            | `true`            | `build --no-aot`                                       | build                                                                                                                            |
+| `build.requestLogging` | `true`            | `build --no-request-logging`                           | build; only `true` is accepted, set `requestLogging` in `brick()`                                                                |
+| `dashboard.extension`  | none              | new                                                    | dev, build: the dashboard extension entry                                                                                        |
+| `dashboard.theme`      | built-in tokens   | new                                                    | dashboard and workflow inspector colours, radius (`radius`) and fonts (`fonts.sans`, `fonts.mono`), per scheme (`light`, `dark`) |
+| `lint.presets`         | `["recommended"]` | new                                                    | `brick lint`, the ESLint and oxlint plugin                                                                                       |
+| `lint.rules`           | `{}`              | new                                                    | per-rule `"error"`, `"warn"` or `"off"`, except rules that are always errors                                                     |
+| `lint.ignore`          | `[]`              | new                                                    | glob patterns skipped by every rule                                                                                              |
+
+## Rules for the file
+
+**Precedence.** A CLI flag wins over an environment variable (`PORT`), which wins over the config file, which wins over the default. Existing scripts keep working unchanged: `brick dev src/app.ts --port 5000` still serves `src/app.ts` on 5000. Flags that can only switch something off, such as `--no-aot` and `--no-dashboard`, win when given; otherwise the config decides. A `--dashboard-port` or `--history-days` flag turns the dashboard back on when the config sets `dev.dashboard: false`.
+
+**Location.** Brick looks for `brick.config.ts` in the working directory and its parents. In a monorepo, `--config path/to/brick.config.ts` picks one explicitly; every command takes it. With a config file, a bare `brick` runs `brick dev`, and a bare `brick gen` writes the services manifest, then the client contract and OpenAPI document when `client.output` and `openapi.output` are set.
+
+**Validation.** `defineConfig` gives types in the editor, and the CLI validates the file when it loads it. An unknown key, a bad type, or `dev.frontend` without `client.output` fails with the key's path:
+
+```text
+brick.config.ts: dev.dashboard.port must be a port number
+```
+
+**Dev dependency.** `defineConfig` comes from `@brickkit/cli`, a dev dependency, so the config never ends up in the server bundle.
+
+**Lint reads the same file.** `brick lint` uses `lint` and the paths above. The ESLint and oxlint plugin reads it through `brick.configs.fromProject()`, so presets and paths are set in one place. See [Lint](/docs/brick-cli/lint).
+
+## What stays out of the config
+
+Runtime behaviour stays in `brick()` in `app.ts`: `prefix`, `docs`, `telemetry`, `events`, the socket broker, `deps`. The app must run the same however it's started, including from tests that import it directly.
+
+Secrets never go here. Read them through [secrets](/docs/reference/configuration#secrets-management-brickkitcore); the `no-env-outside-secrets` lint rule enforces it.

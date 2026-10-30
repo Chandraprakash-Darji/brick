@@ -46,23 +46,25 @@ it("uses generated metadata for CRUD routes, namespaced calls and disabled expos
       app.handle(new Request(url, options))) as typeof fetch,
   });
   try {
-    expect(contract.note.list.config).toEqual({
+    expect(contract.notes.note.list.config).toEqual({
       method: "POST",
-      path: "/v2/note/search",
+      path: "/v2/notes/note/search",
     });
-    expect(contract.note.count).toBeUndefined();
-    expect(await api.note.create({ id: "one", title: "Hello" })).toEqual({
+    expect(contract.notes.note.count).toBeUndefined();
+    expect(await api.notes.note.create({ id: "one", title: "Hello" })).toEqual({
       id: "one",
       title: "Hello",
     });
-    expect((await api.note.list({})).items).toEqual([
+    expect((await api.notes.note.list({})).items).toEqual([
       { id: "one", title: "Hello" },
     ]);
     expect(
-      await api.note.update({ id: "one", data: { title: "Edited" } }),
+      await api.notes.note.update({ id: "one", data: { title: "Edited" } }),
     ).toEqual({ id: "one", title: "Edited" });
     expect(await note.count.run({})).toEqual({ count: 1 });
-    expect(await api.note.delete({ id: "one" })).toEqual({ success: true });
+    expect(await api.notes.note.delete({ id: "one" })).toEqual({
+      success: true,
+    });
   } finally {
     db.$client.close();
   }

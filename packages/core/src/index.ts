@@ -18,6 +18,27 @@ export type {
   PluginRouteMethod,
   PluginEndpointContext,
 } from "./plugin";
+export {
+  definePlugin,
+  satisfiesRange,
+  brickVersion,
+  isPluginInstance,
+} from "./define-plugin";
+export type {
+  PluginManifest,
+  PluginFactory,
+  PluginInstance,
+  PluginInfo,
+  PluginInstallOptions,
+  PluginContext,
+  PluginServiceContext,
+  PluginSetupContext,
+  PluginAppContext,
+  PluginLifecycleContext,
+  PluginHooks,
+  PluginTableBuilders,
+  InstalledPlugin,
+} from "./define-plugin";
 // HTTP Runtime (Elysia app): bundled to user apps, never the CLI.
 export { brick, type CreateServerOptions } from "./server";
 export {
@@ -73,22 +94,47 @@ export { compilerRuntime } from "./compiler/runtime";
 export { defineService, ServiceImpl } from "./service";
 export type {
   BrickSocketConfig,
+  BrickSocketHandle,
   BrickSocketSchema,
   BrickSocketSender,
+  SocketBroker,
+  SocketBrokerMessage,
+  SocketEmitArgs,
+  SocketEmitOptions,
   SocketEventArgs,
+  SocketReplay,
   SocketPayloads,
   SocketSchemas,
 } from "./socket-types";
 export { serializeSocketSchema } from "./socket-schema";
+export { redisBroker, type RedisBrokerOptions } from "./socket-redis";
 export { getActionAccess, setActionAccess, ACTION_ACCESS_KEY } from "./access";
 export type { ActionAccessInfo } from "./access";
-export { defineAction, buildErrorHelpers } from "./action";
-export { defineResource } from "./resource";
-export { createServiceProxy } from "./rpc";
+export {
+  defineAction,
+  defineError,
+  errorsOf,
+  buildErrorHelpers,
+} from "./action";
+export { defineResource, loadRecord } from "./resource";
+export {
+  getActionRoute,
+  kebabCase,
+  type ActionRoute,
+  type ResourceActionInfo,
+} from "./routes";
+export {
+  useService,
+  type ServiceClient,
+  type ServiceActionCaller,
+  type UntypedServiceClient,
+} from "./rpc";
+export { port, useDeps, type Port, type Ports, type DepsOf } from "./deps";
 
 export {
   defineListener,
   emitEvent,
+  isEventRef,
   outboxTable,
   isOutboxTable,
   runInTransaction,
@@ -99,9 +145,14 @@ export {
   Dispatcher,
   type CrudEventPayload,
   type DispatchOptions,
+  type EventCatalog,
+  type EventRef,
+  type EventRefs,
   type EventDelivery,
   type EventEnvelope,
   type EventListener,
+  type ListenerFailure,
+  type RetryDecision,
   type EventRecorder,
   type EventWorkflow,
   type EventsDefinition,
@@ -129,6 +180,7 @@ export type {
   BrickClient,
   BrickClientOptions,
   BrickClientAction,
+  BrickServices,
   BrickCallOptions,
   BrickActionCaller,
   InferActionInput,
@@ -158,7 +210,7 @@ export * from "./types";
 
 // Secrets & Environment Variables
 export {
-  secret,
+  defineSecret,
   SecretRef,
   envSource,
   resolveSecrets,

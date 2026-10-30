@@ -83,12 +83,12 @@ describe("OpenAPI 3.1 Specification Generator", () => {
     expect(spec.tags).toBeDefined();
     expect(spec.tags.some((t: any) => t.name === "pages")).toBe(true);
 
-    // 3. POST /api/pages/createPage
-    const createPath = spec.paths["/api/pages/createPage"];
+    // 3. POST /api/pages/create-page
+    const createPath = spec.paths["/api/pages/create-page"];
     expect(createPath).toBeDefined();
     expect(createPath.post).toBeDefined();
     expect(createPath.post.operationId).toBe("pages_createPage_post");
-    expect(createPath.post.tags).toEqual(["content", "pages"]);
+    expect(createPath.post.tags).toEqual(["pages", "content"]);
     expect(createPath.post.summary).toBe("pages.createPage");
     expect(createPath.post.description).toBe("Create a new page");
 
@@ -122,8 +122,8 @@ describe("OpenAPI 3.1 Specification Generator", () => {
     expect(spec.components.securitySchemes.bearerAuth.type).toBe("http");
     expect(spec.components.securitySchemes.bearerAuth.scheme).toBe("bearer");
 
-    // 4. GET only /api/pages/getPage
-    const getPath = spec.paths["/api/pages/getPage"];
+    // 4. GET only /api/pages/get-page
+    const getPath = spec.paths["/api/pages/get-page"];
     expect(getPath).toBeDefined();
     expect(getPath.post).toBeUndefined();
     expect(getPath.get).toBeDefined();
@@ -252,7 +252,7 @@ it("hoists TypeBox $id/$ref anchors into components.schemas", () => {
     items: { $ref: "#/components/schemas/T0" },
   });
   expect(
-    spec.paths["/api/anchored/echoJson"].post.requestBody.content[
+    spec.paths["/api/anchored/echo-json"].post.requestBody.content[
       "application/json"
     ].schema.properties.filter,
   ).toEqual({ $ref: "#/components/schemas/CrudWhere_lead" });
@@ -280,7 +280,7 @@ it("keeps runtime schemas intact when hoisting OpenAPI anchors", async () => {
     tree: { label: "root", children: [{ label: "leaf", children: [] }] },
   };
   const response = await app.fetch(
-    new Request("http://localhost/api/schemaIsolation/echo", {
+    new Request("http://localhost/api/schema-isolation/echo", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
@@ -289,7 +289,7 @@ it("keeps runtime schemas intact when hoisting OpenAPI anchors", async () => {
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual(body);
   const invalid = await app.fetch(
-    new Request("http://localhost/api/schemaIsolation/echo", {
+    new Request("http://localhost/api/schema-isolation/echo", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ tree: { label: 123, children: [] } }),

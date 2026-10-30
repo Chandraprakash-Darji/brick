@@ -6,7 +6,17 @@ import {
 } from "./compiler";
 import type { Service } from "./types";
 import { getGlobalRegistry } from "./registry";
-import { getPluginActionRoute, getPluginEndpoints } from "./plugin";
+import {
+  getPluginActionRoute,
+  getPluginEndpoints,
+  installedPlugins,
+} from "./plugin";
+import {
+  pluginLifecycle,
+  setupAppPlugins,
+  type PluginInstance,
+} from "./define-plugin";
+import { getActionRoute } from "./routes";
 import { generateOpenApiSpec } from "./openapi";
 import { resolveSecrets, type SecretSource } from "./secrets";
 import {
@@ -31,9 +41,16 @@ import {
 } from "./endpoints";
 import { instrumentDatabase, traceHttpRequest, withSpan } from "./telemetry";
 import { EventsHub } from "./events/hub";
+import { bindDeps } from "./deps";
 import { WEBHOOK_ROUTE } from "./events/workflows";
 import type { EventsOptions } from "./events/types";
-import { mountSockets, socketPath } from "./socket";
+import {
+  legacySocketPath,
+  localBroker,
+  mountSockets,
+  socketPath,
+} from "./socket";
+import type { SocketBroker } from "./socket-types";
 
 export interface CreateServerOptions {
   port?: number;
@@ -87,6 +104,34 @@ export interface CreateServerOptions {
    * and an app without this option behaves exactly as before. See `EventsOptions`.
    */
   events?: EventsOptions;
+  /**
+   * Also serve the v0.10 paths (CRUD at `${prefix}/${resource}/...`, service
+   * actions and sockets at `${prefix}/${service}/${name}` as declared, and
+   * explicit paths that still start with the prefix) with the same handlers.
+   * Their responses carry `Deprecation: true` and a `Link` to the new path, and
+   * their spans `brick.legacy_route`. OpenAPI and the client describe only the
+   * new paths. Removed in v0.12.
+   */
+  legacyRoutes?: boolean;
+  /**
+   * Socket fan-out. `broker` carries emits and kicks between processes
+   * (default: this process only). See `redisBroker`. The app closes it on stop.
+   * `secret` signs replay sequences; give every process the same one so a
+   * client can resume on any of them (default: random per process).
+   */
+  sockets?: { broker?: SocketBroker; secret?: string };
+  /**
+   * The values of the services' declared `deps` (`port<T>()`), by name. Every
+   * declared dep must be provided, and every provided one declared. Actions read
+   * them as `ctx.deps`, listeners and workflow steps with `useDeps()`.
+   */
+  deps?: Record<string, unknown>;
+  /**
+   * App-wide plugins from `definePlugin`, in install order: their `app` part
+   * adds start/stop lifecycle, middleware and listeners. Plugins installed with
+   * `service.use()` or `resource.use()` take part too, before these.
+   */
+  plugins?: readonly PluginInstance<any, any>[];
 }
 
 export {
@@ -109,11 +154,11 @@ export {
  * @param options - `prefix` for action routes (default `/api`), `services`,
  * `title`, `version`, and `description` for the OpenAPI document, `docs` and the
  * paths of its pages, `requestLogging`, `reference`, `endpoints`, `secrets`,
- * `telemetry`, `documentation`, and `dashboard`. See `CreateServerOptions`.
+ * `telemetry`, `documentation`, `dashboard`, and `deps`. See `CreateServerOptions`.
  * @returns The app, with `definition` (its services, prefix, and routes),
  * `endpoint()` to add raw routes, and `listEndpoints()` to list them.
- * @throws When a required secret is missing, or `documentation` or `dashboard`
- * is invalid.
+ * @throws When a required secret is missing, `documentation` or `dashboard`
+ * is invalid, or `deps` misses a dep a service declares or has one none declares.
  * @example
  * import { brick } from "@brickkit/core";
  * import { pagesService } from "./services/pages";
@@ -144,6 +189,13 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
   if (options.secrets?.validate !== false) {
     resolveSecrets({ source: options.secrets?.source });
   }
+
+  const services = options.services ?? getGlobalRegistry().list();
+  const plugins = setupAppPlugins(
+    services.flatMap((service) => installedPlugins(service)),
+    options.plugins ?? [],
+  );
+  for (const handler of plugins.middleware) app.request(handler);
 
   // Diagnostics & health
   app.get("/_health", () => ({
@@ -181,9 +233,21 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
     else registerReferenceRoute(app, settings);
   }
 
-  const services = options.services ?? getGlobalRegistry().list();
-  const events = options.events
-    ? new EventsHub(options.events).attach(services)
+  const byName = new Map<string, unknown>();
+  for (const service of services) {
+    if ((byName.get(service.name) ?? service) !== service)
+      throw new Error(`Brick: duplicate service "${service.name}" in brick()`);
+    byName.set(service.name, service);
+  }
+  bindDeps(services, options.deps);
+  const eventsOptions = plugins.listeners.length
+    ? {
+        ...options.events,
+        listeners: [...(options.events?.listeners ?? []), ...plugins.listeners],
+      }
+    : options.events;
+  const events = eventsOptions
+    ? new EventsHub(eventsOptions, options.deps).attach(services)
     : undefined;
   if (events?.workflows)
     app.all(WEBHOOK_ROUTE, ({ request }) => events.webhook(request));
@@ -277,6 +341,36 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
       throw new Error(`Brick: duplicate socket route '${socket.path}'`);
     socketRoutes.add(key);
   }
+  // v0.10 socket routes, where they are free; the upgrade carries no headers.
+  const legacySockets = options.legacyRoutes
+    ? services.flatMap((service) =>
+        service.listSockets().flatMap((definition) => {
+          const path = legacySocketPath(prefix, service.name, definition);
+          if (path === undefined) return [];
+          const key = routeKey("GET", path);
+          if (registeredRoutes.has(key) || socketRoutes.has(key)) return [];
+          socketRoutes.add(key);
+          return [{ service: service.name, path, definition }];
+        }),
+      )
+    : [];
+
+  // v0.10 paths, mounted after every current route so they never take one.
+  const legacyRoutes: {
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+    path: string;
+    successor: string;
+    handler: (context: any) => unknown;
+  }[] = [];
+  const addLegacy = (
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
+    path: string | undefined,
+    successor: string,
+    handler: (context: any) => unknown,
+  ) => {
+    if (options.legacyRoutes && path !== undefined && path !== successor)
+      legacyRoutes.push({ method, path, successor, handler });
+  };
 
   const mountRoute = (
     method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
@@ -316,8 +410,13 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
   };
 
   // Raw endpoints (outside the JSON action mesh).
-  const mountEndpoint = (def: EndpointDefinition, plugin = false) => {
+  const mountEndpoint = (
+    def: EndpointDefinition,
+    plugin = false,
+    legacyPath?: string,
+  ) => {
     const handler = createEndpointHandler(def, services);
+    addLegacy(def.method, legacyPath, def.path, handler);
     mountRoute(
       def.method,
       def.path,
@@ -335,7 +434,7 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
 
   for (const service of services) {
     for (const def of getPluginEndpoints(service, prefix))
-      mountEndpoint(def, true);
+      mountEndpoint(def, true, def.legacyPath);
   }
 
   for (const def of options.endpoints ?? []) {
@@ -418,10 +517,51 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
         : invoke,
       getPluginActionRoute(action, prefix) !== undefined,
     );
-    if (mounted) mountedRoutes.push(route.ir);
+    if (mounted) {
+      mountedRoutes.push(route.ir);
+      const current = getActionRoute(action, prefix);
+      if (current)
+        addLegacy(route.ir.method, current.legacyPath, route.ir.path, invoke);
+    }
   }
 
-  mountSockets(app, sockets);
+  for (const legacy of legacyRoutes) {
+    const key = routeKey(legacy.method, legacy.path);
+    // A current route or socket owns the path: the old one is not served.
+    if (registeredRoutes.has(key) || socketRoutes.has(key)) continue;
+    const handle = (context: any) => {
+      context.set.headers["deprecation"] = "true";
+      context.set.headers["link"] = `<${legacy.successor.replace(
+        /:([^/]+)/g,
+        (match, name: string) =>
+          context.params?.[name] === undefined
+            ? match
+            : encodeURIComponent(context.params[name]),
+      )}>; rel="successor-version"`;
+      return legacy.handler(context);
+    };
+    mountRoute(
+      legacy.method,
+      legacy.path,
+      telemetry
+        ? (context: any) =>
+            traceHttpRequest(
+              context,
+              legacy.method,
+              legacy.path,
+              () => handle(context),
+              { "brick.legacy_route": true },
+            )
+        : handle,
+    );
+  }
+
+  mountSockets(
+    app,
+    [...sockets, ...legacySockets],
+    options.sockets?.broker ?? localBroker(),
+    options.sockets?.secret,
+  );
   const definition = Object.freeze({
     services: Object.freeze([...services]),
     prefix,
@@ -437,9 +577,30 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
     documentation: normalizeDocumentation(options.documentation),
     dashboard,
     ...(events ? { events: events.describe() } : {}),
+    plugins: Object.freeze(plugins.plugins),
   });
   Object.defineProperty(brickApp, "definition", { value: definition });
   Object.defineProperty(brickApp, "events", { value: events });
+  // Plugin lifecycle: start before serving, stop after the server stops.
+  const lifecycle = pluginLifecycle(plugins.lifecycles);
+  const listen = app.listen.bind(app);
+  const stop = app.stop.bind(app);
+  Object.defineProperty(brickApp, "start", { value: lifecycle.start });
+  brickApp.listen = ((...args: Parameters<typeof listen>) => {
+    lifecycle
+      .start()
+      .catch((error) =>
+        console.error("[Brick-TS] A plugin failed to start:", error),
+      );
+    return listen(...args);
+  }) as typeof brickApp.listen;
+  brickApp.stop = (async (closeActiveConnections?: boolean) => {
+    try {
+      await stop(closeActiveConnections);
+    } finally {
+      await lifecycle.stop();
+    }
+  }) as typeof brickApp.stop;
   getGlobalRegistry().setApplicationRoutes(definition);
 
   // Serialize stable metadata once; registry changes invalidate the snapshot.

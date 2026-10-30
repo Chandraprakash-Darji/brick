@@ -1,14 +1,14 @@
 import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { secret, envSource } from "@brickkit/core";
+import { defineSecret, envSource } from "@brickkit/core";
 
 // Single declaration site for every pages env var. Values load from
 // process.env (Bun populates it from .env locally); boot validation in
 // brick() fails fast on missing required secrets.
 
 // PORT defaults to 5174; non-numeric/non-positive values throw at boot.
-export const portSecret = secret("PORT")
+export const portSecret = defineSecret("PORT")
   .default("5174")
   .transform((raw) => {
     const n = Math.floor(Number(raw));
@@ -17,18 +17,18 @@ export const portSecret = secret("PORT")
   });
 
 // Validated when set; loadEnv falls back to http://localhost:<PORT>.
-export const baseUrlSecret = secret("BASE_URL")
+export const baseUrlSecret = defineSecret("BASE_URL")
   .default(`http://localhost:${portSecret.value()}`)
   .url();
 
 // Shared pages/auth Postgres database; DATABASE_URL selects the database.
 // Local dev default targets the `drafton` database on localhost.
-export const databaseUrlSecret = secret("DATABASE_URL").default(
+export const databaseUrlSecret = defineSecret("DATABASE_URL").default(
   "postgresql://localhost:5432/drafton",
 );
 
 // MCP protected-resource identifier (RFC 8707); defaults to <BASE_URL>/mcp.
-export const mcpResourceSecret = secret("MCP_RESOURCE")
+export const mcpResourceSecret = defineSecret("MCP_RESOURCE")
   .default(`${baseUrlSecret.value()}/mcp`)
   .url();
 
@@ -74,7 +74,7 @@ function developmentAuthSecret(): string {
 
 // Required in prod (boot throws when missing). Locally, one is generated, unless
 // AUTH_SECRET is set.
-export const authSecret = secret(
+export const authSecret = defineSecret(
   "AUTH_SECRET",
   isProd || envSource.get("AUTH_SECRET") !== undefined
     ? {}

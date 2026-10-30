@@ -22,8 +22,8 @@ async function waitForOutput(read: () => string, text: string, ms = 8000) {
     throw new Error(`No "${text}" after ${ms} ms. Output:\n${read()}`);
 }
 
-function createNote(port: number) {
-  return fetch(`http://localhost:${port}/api/note`, {
+function createNote(port: number, service: string) {
+  return fetch(`http://localhost:${port}/api/${service}/note`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ body: "hello" }),
@@ -58,7 +58,7 @@ describe("event delivery in the runner", () => {
     const { received } = await import(fixture("events-prod"));
 
     try {
-      const response = await createNote(port);
+      const response = await createNote(port, "events_prod_service");
       expect(response.status).toBe(200);
       expect(
         await waitFor(() => received.some((payload: any) => payload.row)),
@@ -167,7 +167,7 @@ describe("event delivery in the runner", () => {
     servers.push({ stop: () => app.stop() }, { stop: () => app.events.stop() });
     const { received } = await import(fixture("events-dev"));
 
-    const response = await createNote(port);
+    const response = await createNote(port, "events_dev_service");
     expect(response.status).toBe(200);
     expect(
       await waitFor(() => received.some((payload: any) => payload.row)),

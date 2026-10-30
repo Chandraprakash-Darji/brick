@@ -16,7 +16,7 @@ const service = defineService("built", {
 service.action({
   name: "getPage",
   method: "GET",
-  path: "/api/public/pages/:slug",
+  path: "/public/pages/:slug",
   input: t.Object({ slug: t.String({ minLength: 2 }) }),
   output: t.Object({ slug: t.String() }),
   authorize: ({ user }) => Boolean(user),

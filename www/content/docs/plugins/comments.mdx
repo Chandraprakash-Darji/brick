@@ -1,29 +1,164 @@
 ---
 title: Comments Plugin Pattern
-description: Attach discussion threads to any parent resource using a canonical comments schema.
+description: Attach comments to any resource with a definePlugin plugin that owns its table and follows the host's deletes.
 ---
 
-This guide demonstrates the canonical Brick-TS comments plugin pattern, attaching threaded discussions to any parent resource with target foreign-key validation.
+This recipe is the comments plugin from `examples/extensions`. One `use()` call gives a resource comments with CRUD routes of their own. The plugin owns its table, checks its options, deletes a record's comments when the record is deleted, declares a `comments.added` event and ships a dashboard page.
 
-## Canonical Schema
+## Plugin implementation
 
-The comments pattern uses a single, unified database schema across all services:
+```ts title="src/plugins/comments/index.ts"
+import {
+  ActionExecutionError,
+  definePlugin,
+  emitEvent,
+  eq,
+  t,
+} from "@brickkit/core";
+import { crud } from "@brickkit/crud";
 
-```ts title="src/extensions/comments/schema.ts"
-import { sqliteTable, text } from "@brickkit/core";
+export const comments = definePlugin({
+  name: "@brick-examples/comments",
+  brick: "^0.11.0",
+  requires: ["@brickkit/crud"],
+  options: t.Object({
+    maxLength: t.Integer({
+      default: 2000,
+      minimum: 1,
+      description: "The longest comment body, in characters.",
+    }),
+  }),
+  // Built for the host database's engine, named <resource>_comments.
+  tables: ({ table, text, timestamp }) => ({
+    comments: table("comments", {
+      id: text("id")
+        .primaryKey()
+        .$defaultFn(() => crypto.randomUUID()),
+      targetId: text("target_id").notNull(),
+      body: text("body").notNull(),
+      createdAt: timestamp("created_at")
+        .notNull()
+        .$defaultFn(() => new Date()),
+    }),
+  }),
+  events: { added: t.Object({ id: t.String(), targetId: t.String() }) },
 
-export const commentsTable = sqliteTable("comments", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  targetId: text("target_id").notNull(),
-  body: text("body").notNull(),
+  resource: ({ resource, service, tables, options, events, hooks }) => {
+    const table = tables.comments;
+    const clean = (body: unknown) => {
+      const text = String(body ?? "").trim();
+      if (!text)
+        throw new ActionExecutionError(
+          "BAD_REQUEST",
+          "Comment body cannot be blank",
+          400,
+        );
+      if (text.length > options.maxLength)
+        throw new ActionExecutionError(
+          "BAD_REQUEST",
+          `Comment body is longer than ${options.maxLength} characters`,
+          400,
+        );
+      return text;
+    };
+
+    // A deleted record takes its comments along, in the same transaction.
+    hooks.afterDelete(({ id, tx }) =>
+      tx.delete(table).where(eq(table.targetId, String(id))),
+    );
+
+    const comment = service
+      .resource({ name: `${resource.name}Comment`, table, id: table.id })
+      .use(
+        crud({
+          access: "public",
+          fields: {
+            id: { read: true, filter: ["eq"] },
+            targetId: { read: true, create: true, filter: ["eq"] },
+            body: {
+              read: true,
+              create: true,
+              update: true,
+              filter: ["contains"],
+            },
+            createdAt: { read: true, sort: true },
+          },
+          hooks: {
+            beforeCreate: async ({ data, tx }) => {
+              data.body = clean(data.body);
+              const parents = await tx
+                .select({ id: resource.id })
+                .from(resource.table)
+                .where(eq(resource.id, data.targetId))
+                .limit(1);
+              if (!parents.length)
+                throw new ActionExecutionError(
+                  "NOT_FOUND",
+                  "Comment target not found",
+                  404,
+                );
+            },
+            beforeUpdate: ({ data }) => {
+              if (data.body !== undefined) data.body = clean(data.body);
+            },
+            // Recorded only when the app records events (brick({ events })).
+            afterCreate: async ({ row, ctx, tx }) => {
+              if (service.recorder)
+                await emitEvent(
+                  ctx,
+                  events.added,
+                  { id: String(row.id), targetId: String(row.targetId) },
+                  { tx },
+                );
+            },
+          },
+        }),
+      );
+    return { comments: comment };
+  },
+
+  dashboard: "./dashboard.tsx",
 });
 ```
 
-### Schema
+## Installing it
 
-These columns match the Drizzle tables in the example. Defaults marked as application defaults run in Drizzle, rather than in SQL.
+```ts title="src/services/pages.ts"
+import {
+  defineDatabase,
+  defineService,
+  sqliteTable,
+  syncSchema,
+  text,
+} from "@brickkit/core";
+import { crud } from "@brickkit/crud";
+import { comments } from "../plugins/comments";
+
+export const pagesTable = sqliteTable("pages", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+});
+
+const database = defineDatabase({ tables: { pages: pagesTable } });
+export const pagesService = defineService("pages", { database });
+
+export const page = pagesService
+  .resource({ name: "page", table: pagesTable, id: pagesTable.id })
+  .use(
+    crud({
+      access: "public",
+      fields: { id: { read: true }, title: { read: true, create: true } },
+    }),
+  )
+  .use(comments({ maxLength: 500 }));
+
+// Development: creates pages and the plugin's page_comments.
+syncSchema(pagesService);
+```
+
+The app does not import or declare the comments table: the plugin adds `page_comments` to the database, where `syncSchema` and [migrations](/docs/plugins/build-plugin#owned-tables) find it. Installing on a second resource (`post.use(comments())`) gives that resource its own `post_comments`.
+
+### Schema
 
 export const commentsSchemaFields = [
   {
@@ -36,168 +171,32 @@ export const commentsSchemaFields = [
   {
     name: "target_id",
     type: "text",
-    description: "Parent record identifier, validated by the application.",
+    description: "The commented record's id, checked to exist on create.",
   },
   {
     name: "body",
     type: "text",
-    description: "Text content.",
+    description: "Trimmed text, at most maxLength characters.",
+  },
+  {
+    name: "created_at",
+    type: "integer (SQLite) / timestamptz (Postgres)",
+    description: "When the comment was written.",
+    defaultValue: "new Date() (application)",
   },
 ];
 
-<DatabaseTable name="comments" fields={commentsSchemaFields} />
+<DatabaseTable name="page_comments" fields={commentsSchemaFields} />
 
-export const pagesSchemaFields = [
-  {
-    name: "id",
-    type: "text",
-    description: "Row identifier.",
-    isPrimaryKey: true,
-    defaultValue: "crypto.randomUUID() (application)",
-  },
-  {
-    name: "title",
-    type: "text",
-    description: "Display title.",
-  },
-];
+## Routes
 
-<DatabaseTable name="pages" fields={pagesSchemaFields} />
+The comment resource gets the standard CRUD routes under its service, with the resource name in kebab-case (`pageComment` → `page-comment`, see [URL Scheme](/docs/routes)):
 
-## Plugin Implementation
+- `POST /api/pages/page-comment` (create)
+- `POST /api/pages/page-comment/query` (list)
+- `POST /api/pages/page-comment/count` and `POST /api/pages/page-comment/exists`
+- `GET`, `PATCH` and `DELETE /api/pages/page-comment/:id`
 
-Implement the comments factory using `defineResourcePlugin` and `@brickkit/crud`:
+The typed client reaches them as `api.pages.pageComment.list()` and so on; in process, `page.comments.list(...)`. OpenAPI and the dashboard label them with `@brick-examples/comments`.
 
-```ts title="src/extensions/comments/index.ts"
-import { ActionExecutionError, defineResourcePlugin, eq } from "@brickkit/core";
-import { crud } from "@brickkit/crud";
-import { commentsTable } from "./schema";
-
-export { commentsTable } from "./schema";
-
-/** Resource plugin that attaches comments to any host resource. */
-export function comments(options: { table: typeof commentsTable }) {
-  return defineResourcePlugin({
-    name: "example/comments",
-    setup({ resource, service }) {
-      const comment = service
-        .resource({
-          name: `${resource.name}Comment`,
-          table: options.table,
-          id: options.table.id,
-        })
-        .use(
-          crud({
-            // Anyone may read and post comments; editing and deleting
-            // existing comments requires an authenticated user.
-            access: {
-              authorize: ({ operation, ctx }) => {
-                if (operation === "update" || operation === "delete") {
-                  return !!ctx.user;
-                }
-
-                return true;
-              },
-            },
-            fields: {
-              id: { read: true, filter: ["eq"] },
-              targetId: { read: true, create: true, filter: ["eq"] },
-              body: {
-                read: true,
-                create: true,
-                update: true,
-                filter: ["contains"],
-              },
-            },
-            hooks: {
-              beforeCreate: async ({ data, ctx }) => {
-                data.body = String(data.body).trim();
-                if (!data.body) {
-                  throw new ActionExecutionError(
-                    "BAD_REQUEST",
-                    "Comment body cannot be blank",
-                    400,
-                  );
-                }
-
-                // Verify parent resource exists in the database
-                const parents = await ctx.db
-                  .select({ id: resource.id })
-                  .from(resource.table)
-                  .where(eq(resource.id, data.targetId))
-                  .limit(1);
-
-                if (!parents.length) {
-                  throw new ActionExecutionError(
-                    "NOT_FOUND",
-                    "Comment target not found",
-                    404,
-                  );
-                }
-              },
-              beforeUpdate: ({ data }) => {
-                if (data.body !== undefined) {
-                  data.body = String(data.body).trim();
-                  if (!data.body) {
-                    throw new ActionExecutionError(
-                      "BAD_REQUEST",
-                      "Comment body cannot be blank",
-                      400,
-                    );
-                  }
-                }
-              },
-            },
-          }),
-        );
-
-      return { comments: comment };
-    },
-  });
-}
-```
-
-## Attaching to Resources
-
-Attach the comments plugin to any host resource with `.use()`:
-
-```ts title="src/services/pages.ts"
-import {
-  defineDatabase,
-  defineService,
-  sqliteTable,
-  text,
-} from "@brickkit/core";
-import { crud } from "@brickkit/crud";
-import { comments, commentsTable } from "../extensions/comments";
-
-export const pagesTable = sqliteTable("pages", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  title: text("title").notNull(),
-});
-
-const database = defineDatabase({ tables: { pagesTable, commentsTable } });
-export const pagesService = defineService("pages", { database });
-
-// Attach comments plugin to the page resource:
-export const page = pagesService
-  .resource({ name: "page", table: pagesTable, id: pagesTable.id })
-  .use(
-    crud({
-      access: "public",
-      fields: { id: { read: true }, title: { read: true, create: true } },
-    }),
-  )
-  .use(comments({ table: commentsTable }));
-```
-
-This automatically mounts the standard CRUD REST endpoints for the comment resource (under the service prefix, e.g. `/api`):
-
-- `POST /api/pageComment` (create)
-- `POST /api/pageComment/query` (list)
-- `POST /api/pageComment/count` and `POST /api/pageComment/exists`
-- `GET /api/pageComment/:id` (public), `PATCH /api/pageComment/:id` and `DELETE /api/pageComment/:id` (authenticated)
-
-The recipe has no per-comment ownership, so any authenticated user can edit or delete any comment. If comments should be editable only by their author, add an owner column to the table and return an ownership `scope` from the access policy, alongside `authorize`.
+The recipe allows anyone to edit or delete any comment. For per-author comments, add an owner column and return an ownership `scope` from an `access` policy, or make `access` one of the plugin's options.

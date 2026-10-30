@@ -237,7 +237,7 @@ export const incrementView = blogService.action({
   name: "incrementView",
   description: "Atomically increment the view counter for an article",
   method: "POST",
-  path: "/api/blog/articles/:id/view",
+  path: "/articles/:id/view", // POST /api/blog/articles/:id/view
   input: t.Object({
     id: t.String(),
   }),
@@ -293,12 +293,12 @@ bunx brick dev src/server.ts --port 4000
 
 ### Step 7: Verify with Requests
 
-CRUD routes are mounted under the resource name (`/api/article`), while the custom action uses the `path` you declared.
+CRUD routes are mounted under the service and resource names (`/api/blog/article`). The custom action's `path` is relative to the service, so it mounts at `/api/blog/articles/:id/view`. See [URL Scheme](/docs/routes).
 
 #### 1. Create an Article (Authorized)
 
 ```bash
-curl -X POST http://localhost:4000/api/article \
+curl -X POST http://localhost:4000/api/blog/article \
   -H "Authorization: Bearer author-token" \
   -H "Content-Type: application/json" \
   -d '{
@@ -321,7 +321,7 @@ The `:id` path parameter becomes `input.id`, so no body is needed.
 #### 3. List Articles (Public Read)
 
 ```bash
-curl -X POST http://localhost:4000/api/article/query \
+curl -X POST http://localhost:4000/api/blog/article/query \
   -H "Content-Type: application/json" \
   -d '{"limit": 5, "orderBy": [{"field": "views", "direction": "desc"}]}'
 ```

@@ -108,6 +108,17 @@ api.records.search({ term: 42 });
 api.records.private_tool();
 // @ts-expect-error Unknown action.
 api.users.missing();
+
+// The contract also types useService on the server.
+import { defineService, useService } from "@brickkit/core";
+const records = useService(defineService("records"), { from: "users" });
+const viaService: Promise<string> = records.get_value({ doctype: "CRMDeal", fields: [] });
+// @ts-expect-error A renamed action is a compile error.
+records.getValue({ doctype: "CRMDeal", fields: [] });
+// @ts-expect-error So is a changed input.
+records.search({ term: 42 });
+const users = useService(defineService("users"));
+const nested: Promise<{ id: string; roles: ("admin" | "member")[] }> = users.profile.get({ id: "u1" });
 `,
     );
 

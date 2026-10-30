@@ -12,12 +12,15 @@ import type {
   ServiceEvents,
 } from "./types";
 import { WorkflowRuntime } from "./workflows";
+import { runWithDeps } from "../deps";
 
 interface EventsHost {
   readonly name: string;
   getDb(): unknown;
   getOutbox?(): OutboxTable | undefined;
-  setEvents?(events: ServiceEvents | undefined): void;
+  setRecorder?(recorder: ServiceEvents | undefined): void;
+  /** Throws for an event the service's catalog does not allow. */
+  checkEvent?(name: string, payload: unknown): void;
 }
 
 export function matchesEvent(pattern: string, name: string): boolean {
@@ -63,6 +66,8 @@ export interface EventsDefinition {
 /** What the dispatcher runs for a delivery. */
 export interface Deliverable {
   readonly maxAttempts?: number;
+  readonly errors?: EventListener["errors"];
+  readonly retry?: EventListener["retry"];
   run(delivery: EventDelivery): void | Promise<void>;
 }
 
@@ -81,7 +86,15 @@ export class EventsHub {
   private started = false;
   private stopping: Promise<void> | undefined;
 
-  constructor(options: EventsOptions) {
+  /**
+   * @param options - The `events` option.
+   * @param deps - The app's `brick({ deps })`, which `useDeps()` returns in its
+   * listeners and workflow steps.
+   */
+  constructor(
+    options: EventsOptions,
+    private readonly deps: Record<string, unknown> = {},
+  ) {
     for (const listener of options.listeners ?? []) {
       if (typeof listener.name !== "string" || !listener.name)
         throw new Error("An event listener needs a name");
@@ -114,6 +127,7 @@ export class EventsHub {
         options.world,
         options.workflows,
         workflowListeners,
+        deps,
       );
     }
     this.dispatchOptions =
@@ -139,8 +153,10 @@ export class EventsHub {
       if (!table) continue;
       attached++;
       this.recorderNames.push(service.name);
-      const bound = this.bind(table);
-      service.setEvents?.(bound);
+      const bound = this.bind(table, (name, payload) =>
+        service.checkEvent?.(name, payload),
+      );
+      service.setRecorder?.(bound);
       const db = service.getDb();
       if (db && typeof db === "object") recorders.set(db, bound);
     }
@@ -301,22 +317,35 @@ export class EventsHub {
     let found = this.deliverables.get(name);
     if (!found) {
       const runtime = this.runtime;
-      found = listener.workflow
-        ? {
-            ...(listener.maxAttempts !== undefined
-              ? { maxAttempts: listener.maxAttempts }
-              : {}),
-            run: async (delivery) => {
-              await runtime!.startRun(listener, delivery);
-            },
-          }
-        : (listener as Deliverable);
+      found = {
+        ...(listener.errors ? { errors: listener.errors } : {}),
+        ...(listener.retry ? { retry: listener.retry } : {}),
+        ...(listener.workflow
+          ? {
+              ...(listener.maxAttempts !== undefined
+                ? { maxAttempts: listener.maxAttempts }
+                : {}),
+              run: async (delivery) => {
+                await runtime!.startRun(listener, delivery);
+              },
+            }
+          : {
+              ...(listener.maxAttempts !== undefined
+                ? { maxAttempts: listener.maxAttempts }
+                : {}),
+              run: (delivery) =>
+                runWithDeps(this.deps, () => listener.run!(delivery)),
+            }),
+      };
       this.deliverables.set(name, found);
     }
     return found;
   }
 
-  private bind(table: OutboxTable): ServiceEvents {
+  private bind(
+    table: OutboxTable,
+    check: (name: string, payload: unknown) => void,
+  ): ServiceEvents {
     const startAndNotify = () => {
       this.start();
       this.dispatchers.get(table)?.notify();
@@ -327,6 +356,7 @@ export class EventsHub {
       name: string,
       payload: unknown,
     ): Promise<boolean> => {
+      check(name, payload);
       const listeners = this.matching(name);
       if (!listeners.length) return false;
       const eventId = newEventId();

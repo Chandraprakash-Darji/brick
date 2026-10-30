@@ -55,7 +55,7 @@ function call(
 }
 
 async function place(made: OrdersApp, extra: Record<string, unknown> = {}) {
-  const response = await call(made, "/api/order", "POST", {
+  const response = await call(made, "/api/orders/order", "POST", {
     customer: "ada@example.com",
     totalCents: 4200,
     ...extra,
@@ -65,7 +65,7 @@ async function place(made: OrdersApp, extra: Record<string, unknown> = {}) {
 }
 
 const ship = (made: OrdersApp, id: string) =>
-  call(made, `/api/order/${id}`, "PATCH", { data: { status: "shipped" } });
+  call(made, `/api/orders/order/${id}/ship`, "POST", {});
 
 const rows = (made: OrdersApp, table: typeof auditLog | typeof notifications) =>
   (made.database.getDb() as any).select().from(table);
@@ -120,11 +120,11 @@ describe("events from generated writes", () => {
     ]);
   });
 
-  it("an update carries before and after, and only a change to shipped books the carrier", async () => {
+  it("an update carries before and after, and only the ship command books the carrier", async () => {
     const carrier = createCarrier();
     const made = open({ carrier });
     const order = await place(made);
-    await call(made, `/api/order/${order.id}`, "PATCH", {
+    await call(made, `/api/orders/order/${order.id}`, "PATCH", {
       data: { internalNote: "gift wrap" },
     });
     await made.app.events!.drain();
@@ -132,13 +132,18 @@ describe("events from generated writes", () => {
 
     expect((await ship(made, order.id)).status).toBe(200);
     await made.app.events!.drain();
+    // The command's rule: only a placed order ships, and a refusal records nothing.
+    const again = await ship(made, order.id);
+    expect(again.status).toBe(409);
+    expect(await again.json()).toMatchObject({ code: "NOT_PLACED" });
+    expect(await made.app.events!.counts()).toMatchObject({ pending: 0 });
 
     expect(carrier.bookings).toEqual([order.id]);
     const audit = await rows(made, auditLog);
     expect(audit.map((row: any) => row.detail).sort()).toEqual([
       "no visible change",
       "placed by ada@example.com",
-      "status: placed -> shipped",
+      "shipped",
     ]);
     expect(await rows(made, notifications)).toEqual(
       expect.arrayContaining([
@@ -153,9 +158,9 @@ describe("events from generated writes", () => {
   it("a delete is audited", async () => {
     const made = open();
     const order = await place(made);
-    expect((await call(made, `/api/order/${order.id}`, "DELETE")).status).toBe(
-      200,
-    );
+    expect(
+      (await call(made, `/api/orders/order/${order.id}`, "DELETE")).status,
+    ).toBe(200);
     await made.app.events!.drain();
     expect(
       (await rows(made, auditLog)).map((row: any) => row.event).sort(),
@@ -166,8 +171,8 @@ describe("events from generated writes", () => {
     const made = open();
     const order = await place(made);
     await made.app.events!.drain();
-    await call(made, `/api/order/${order.id}`);
-    await call(made, "/api/order/query", "POST", {});
+    await call(made, `/api/orders/order/${order.id}`);
+    await call(made, "/api/orders/order/query", "POST", {});
     expect(await made.app.events!.counts()).toMatchObject({
       pending: 0,
       delivered: 2,
@@ -176,7 +181,7 @@ describe("events from generated writes", () => {
 
   it("a write that is refused records no event", async () => {
     const made = open();
-    const response = await call(made, "/api/order", "POST", {
+    const response = await call(made, "/api/orders/order", "POST", {
       customer: "ada@example.com",
     });
     expect(response.status).toBeGreaterThanOrEqual(400);
@@ -375,12 +380,17 @@ for (const worldPackage of ["redis-world", "bullmq-world"] as const)
         const carrier = createCarrier();
         const made = await open2({ carrier });
         const order = await place(made);
-        await call(made, `/api/order/${order.id}`, "PATCH", {
+        await call(made, `/api/orders/order/${order.id}`, "PATCH", {
           data: { internalNote: "gift wrap" },
         });
         await made.app.events!.drain();
 
-        await runStatus(made, "completed");
+        const stored = await (made.database.getDb() as any)
+          .select()
+          .from(outbox);
+        expect(stored.some((row: any) => row.listener === "fulfilment")).toBe(
+          false,
+        );
         expect(carrier.bookings).toEqual([]);
         expect(await shipped(made)).toBeUndefined();
       });

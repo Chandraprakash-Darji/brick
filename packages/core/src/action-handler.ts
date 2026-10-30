@@ -190,7 +190,18 @@ export async function executeCompiledRoute(
       }
     }
 
-    const hasP = isNonEmpty(params);
+    // Path segments are strings; numeric ids (`/:id`) need numbers.
+    let coercedParams = params;
+    if (params && plan.coercions) {
+      for (const c of plan.coercions) {
+        if (!c.isNumber || typeof params[c.key] !== "string") continue;
+        const num = Number(params[c.key]);
+        if (isNaN(num)) continue;
+        if (coercedParams === params) coercedParams = { ...params };
+        coercedParams[c.key] = num;
+      }
+    }
+    const hasP = isNonEmpty(coercedParams);
     const hasB = isNonEmpty(body);
     const hasQ = isNonEmpty(coercedQuery);
 
@@ -198,21 +209,21 @@ export async function executeCompiledRoute(
       if (hasQ && !hasP && !hasB) {
         input = coercedQuery;
       } else if (hasP && !hasQ && !hasB) {
-        input = params;
+        input = coercedParams;
       } else if (hasB && !hasP && !hasQ) {
         input = body;
       } else if (hasQ || hasP || hasB) {
-        input = Object.assign({}, coercedQuery, params, body);
+        input = Object.assign({}, coercedQuery, coercedParams, body);
       }
     } else {
       if (hasB && !hasP && !hasQ) {
         input = body;
       } else if (hasP && !hasB && !hasQ) {
-        input = params;
+        input = coercedParams;
       } else if (hasQ && !hasP && !hasB) {
         input = coercedQuery;
       } else if (hasP || hasB || hasQ) {
-        input = Object.assign({}, params, body, coercedQuery);
+        input = Object.assign({}, coercedParams, body, coercedQuery);
       }
     }
   }
@@ -227,6 +238,7 @@ export async function executeCompiledRoute(
     db: plan.cachedDb ?? plan.service.getDb(),
     logger: plan.logger,
     services: EMPTY_SERVICES,
+    deps: plan.service.deps ?? EMPTY_SERVICES,
     metadata: { headers },
     _resolved: true,
   };

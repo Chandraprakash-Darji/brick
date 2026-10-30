@@ -1,5 +1,10 @@
-import { defineListener, type EventDelivery } from "@brickkit/core";
+import {
+  defineListener,
+  type EventDelivery,
+  type EventRefs,
+} from "@brickkit/core";
 import type { Carrier } from "./carrier";
+import type { orderEvents } from "./events";
 import { fulfilOrder } from "./workflows/fulfil-order";
 import { auditLog, notifications, type OrderRow } from "./schema";
 
@@ -31,11 +36,12 @@ function describeChange(before: OrderRow, after: OrderRow): string {
 export function createListeners(
   db: Db,
   carrier: Carrier,
+  events: EventRefs<typeof orderEvents>,
   options: { workflows?: boolean } = {},
 ) {
   const audit = defineListener({
     name: "audit",
-    on: "order.*",
+    on: ["order.*", events.shipped],
     run: async (delivery: EventDelivery<any>) => {
       const payload = delivery.payload;
       const detail =
@@ -46,7 +52,9 @@ export function createListeners(
                 (payload as Updated).before,
                 (payload as Updated).after,
               )
-            : "deleted";
+            : delivery.name === events.shipped.name
+              ? "shipped"
+              : "deleted";
       await db
         .insert(auditLog)
         .values({
@@ -75,27 +83,26 @@ export function createListeners(
     },
   });
 
-  const fulfilment = defineListener<Updated>({
+  const fulfilment = defineListener({
     name: "fulfilment",
-    on: "order.update",
+    on: events.shipped,
     workflow: fulfilOrder,
   });
 
-  const shipping = defineListener<Updated>({
+  // The payload is typed from the catalog: { id: string; customer: string }.
+  const shipping = defineListener({
     name: "shipping",
-    on: "order.update",
+    on: events.shipped,
     maxAttempts: 3,
     run: async ({ deliveryId, payload }) => {
-      const { before, after } = payload;
-      if (before.status === after.status || after.status !== "shipped") return;
-      await carrier.book(after.id);
+      await carrier.book(payload.id);
       await db
         .insert(notifications)
         .values({
           id: deliveryId,
           kind: "shipped",
-          orderId: after.id,
-          recipient: after.customer,
+          orderId: payload.id,
+          recipient: payload.customer,
         })
         .onConflictDoNothing();
     },

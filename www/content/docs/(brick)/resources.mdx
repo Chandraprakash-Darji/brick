@@ -93,28 +93,28 @@ export const pagesSchemaFields = [
 
 ## Public Action Names
 
-When `crud()` installs onto `pagesService.resource({ name: "page", ... })`, actions are registered on the service under dot-separated names prefixed by the resource name. Routes are mounted under `${prefix}/${resource}`, not under the service name:
+When `crud()` installs onto `pagesService.resource({ name: "page", ... })`, actions are registered on the service under dot-separated names prefixed by the resource name. Routes are mounted under `${prefix}/${service}/${resource}`, in kebab-case (see [URL Scheme](/docs/routes)):
 
-| Action         | Route                     | Input                                                           |
-| :------------- | :------------------------ | :-------------------------------------------------------------- |
-| `page.list`    | `POST /api/page/query`    | `{ select?, where?, orderBy?, limit?, offset?, includeTotal? }` |
-| `page.get`     | `GET /api/page/:id`       | `{ id, select? }`                                               |
-| `page.findOne` | `POST /api/page/find-one` | Same as `list`; returns the first row or `null`                 |
-| `page.create`  | `POST /api/page`          | Fields with `create: true`                                      |
-| `page.update`  | `PATCH /api/page/:id`     | `{ id, data }` with fields that have `update: true`             |
-| `page.delete`  | `DELETE /api/page/:id`    | `{ id }`; returns `{ success: true }`                           |
-| `page.count`   | `POST /api/page/count`    | `{ where? }`; returns `{ count }`                               |
-| `page.exists`  | `POST /api/page/exists`   | `{ where? }`; returns `{ exists }`                              |
+| Action         | Route                           | Input                                                           |
+| :------------- | :------------------------------ | :-------------------------------------------------------------- |
+| `page.list`    | `POST /api/pages/page/query`    | `{ select?, where?, orderBy?, limit?, offset?, includeTotal? }` |
+| `page.get`     | `GET /api/pages/page/:id`       | `{ id, select? }`                                               |
+| `page.findOne` | `POST /api/pages/page/find-one` | Same as `list`; returns the first row or `null`                 |
+| `page.create`  | `POST /api/pages/page`          | Fields with `create: true`                                      |
+| `page.update`  | `PATCH /api/pages/page/:id`     | `{ id, data }` with fields that have `update: true`             |
+| `page.delete`  | `DELETE /api/pages/page/:id`    | `{ id }`; returns `{ success: true }`                           |
+| `page.count`   | `POST /api/pages/page/count`    | `{ where? }`; returns `{ count }`                               |
+| `page.exists`  | `POST /api/pages/page/exists`   | `{ where? }`; returns `{ exists }`                              |
 
 The bulk operations are off until you enable them (see [Bulk Operations](#bulk-operations)):
 
-| Action            | Route                        | Input                                  |
-| :---------------- | :--------------------------- | :------------------------------------- |
-| `page.bulkCreate` | `POST /api/page/bulk-create` | `{ items }`, each item as for `create` |
-| `page.bulkUpdate` | `POST /api/page/bulk-update` | `{ items }`, each item `{ id, data }`  |
-| `page.bulkDelete` | `POST /api/page/bulk-delete` | `{ ids }`; returns `{ count }`         |
+| Action            | Route                              | Input                                  |
+| :---------------- | :--------------------------------- | :------------------------------------- |
+| `page.bulkCreate` | `POST /api/pages/page/bulk-create` | `{ items }`, each item as for `create` |
+| `page.bulkUpdate` | `POST /api/pages/page/bulk-update` | `{ items }`, each item `{ id, data }`  |
+| `page.bulkDelete` | `POST /api/pages/page/bulk-delete` | `{ ids }`; returns `{ count }`         |
 
-The action names appear in architecture introspection and client contracts; OpenAPI summaries use `service.action` (for example, `pages.page.list`). `.use(crud(...))` also returns the resource with these actions attached, so you can call `page.list({ input: {} })` in-process. Use the `routes` option to change a route's `path` or `scope`, or set a route to `false` to keep the action but not mount it over HTTP.
+The action names appear in architecture introspection and client contracts; OpenAPI summaries use `service.action` (for example, `pages.page.list`), and every route is tagged `pages · page`. The typed client nests them under the service: `api.pages.page.list()`. `.use(crud(...))` also returns the resource with these actions attached, so you can call `page.list({ input: {} })` in-process. Use the `routes` option to change a route's `path` (relative to `/api/pages/page`) or `scope`, or set a route to `false` to keep the action but not mount it over HTTP.
 
 ## Field Policies
 
@@ -212,3 +212,55 @@ When the database client supports `prepare()` (Bun SQLite), CRUD reuses prepared
 - Statements are cached per query shape (operation, filter structure, selected fields, ordering), up to 128 per database, with filter values bound as placeholders.
 - Caching is skipped when a call has a non-empty `scope` condition, and for any table with a column that uses `$defaultFn` or `$onUpdateFn` (such as the `$defaultFn` UUID in the example above).
 - For resources with no `scope` function and no such columns, `brick()` prepares the default `list` and `get` statements when it builds the app.
+
+## Resource Actions
+
+CRUD covers reads and writes of whole rows. For anything else on a resource, such as an import or a state change, declare a resource action with `resource.action()`. It takes everything a [service action](/docs/services-and-actions) takes (`name`, `description`, `input`, `output`, `errors`, `authorize`, `method`, `path`, `tags`, `emits`) plus `record` and `access`.
+
+A collection-level action works on the resource as a whole:
+
+```ts title="src/services/orders.ts"
+// POST /api/orders/order/import-csv
+order.action({
+  name: "importCsv",
+  input: t.Object({ csv: t.String() }),
+  output: t.Object({ imported: t.Integer() }),
+  execute: async ({ input, ctx }) => {
+    // …
+  },
+});
+```
+
+A record-level action works on one row. Set `record: true`:
+
+```ts title="src/services/orders.ts"
+// POST /api/orders/order/:id/archive
+order.action({
+  name: "archive",
+  record: true, // adds :id and loads the row
+  access: { scope: ({ ctx }) => eq(orders.owner, ctx.user.id) },
+  input: t.Object({ reason: t.String() }),
+  output: OrderRow,
+  execute: async ({ row, input, ctx }) => {
+    // row is already loaded
+  },
+});
+```
+
+The action is registered as `<resource>.<name>` (here `order.importCsv` and `order.archive`), like CRUD's `order.list`. The typed client, OpenAPI and MCP show it under its resource: `api.orders.order.archive({ id, reason })`. The method defaults to `POST`; `method: "GET"` is allowed. An explicit `path` is relative to `/api/<service>/<resource>`, and a record action's path must contain `/:id`.
+
+With `record: true`, Brick:
+
+1. Adds `id` to the input, typed from the resource's id column and read from the path. `input` must be a `t.Object` (or omitted).
+2. Runs the action's `authorize`.
+3. Loads the full table row, hidden columns included, through the action's `access`.
+4. Answers `404 NOT_FOUND` when the row is missing or the caller can't see it.
+5. Calls `execute({ input, row, ctx, error })`.
+
+A record action must declare `access`, or startup fails: `{ scope }` returns a condition that limits which rows it can load, and `"public"` loads any row by id. `access` is only for record actions.
+
+A resource action can't be named after a CRUD route segment (`query`, `count`, `exists`, `find-one`, `bulk-create`, `bulk-update`, `bulk-delete`, compared in kebab-case, so `findOne` is refused too) or after a CRUD action on that resource, such as `list`. Startup fails with `Brick: duplicate name "<name>" in service "<service>"`.
+
+For a state change with rules and events, such as shipping an order, declare a [command](/docs/commands) instead: a record action whose body is a pure `decide` function, run in one transaction with the events it emits.
+
+Plugins that need the same row loading can call `loadRecord(resource, { id, ctx, db?, access })` from `@brickkit/core`.

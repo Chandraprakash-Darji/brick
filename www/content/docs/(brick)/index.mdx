@@ -97,7 +97,7 @@ flowchart TD
     ServiceA --> Actions["Custom Actions (TypeBox)"]
     ServiceA --> CRUD["CRUD Engine (@brickkit/crud)"]
     CRUD --> DB[(Database: SQLite / PostgreSQL)]
-    ServiceA -. "createServiceProxy()" .- ServiceB
+    ServiceA -. "useService()" .- ServiceB
 ```
 
 ### 1. Logical Monolith, Physical Microservices

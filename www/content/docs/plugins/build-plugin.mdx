@@ -1,145 +1,254 @@
 ---
 title: Authoring Plugins
-description: Create custom service and resource plugins with scoped routes and typed APIs.
+description: Build plugins with definePlugin, a checked manifest and owned tables, lifecycle and host hooks.
 ---
 
-Plugins package modular capabilities into reusable TypeScript descriptors that install onto services or resources.
+A plugin packages a capability so that one line installs it: `page.use(comments())`. Write it with `definePlugin`. It has a manifest that Brick checks when the plugin is installed, and one place for each thing the plugin brings: tables, events, routes, hooks into the host's CRUD writes, and an app-wide part with a start/stop lifecycle.
 
-## Authoring a Service Plugin (`defineServicePlugin`)
+`defineServicePlugin` and `defineResourcePlugin` still work. They are covered [at the end of this page](#the-older-defineserviceplugin-and-defineresourceplugin).
 
-A service plugin registers actions and raw HTTP endpoints onto a host service using `setup({ service, routes })`:
+## A complete plugin
+
+```ts title="@acme/brick-comments/src/index.ts"
+import {
+  ActionExecutionError,
+  definePlugin,
+  defineSecret,
+  eq,
+  t,
+} from "@brickkit/core";
+import { crud } from "@brickkit/crud";
+
+export const comments = definePlugin({
+  name: "@acme/brick-comments",
+  description: "Comments on any resource.",
+  brick: "^0.11.0", // checked when the plugin is installed
+  requires: ["@brickkit/crud"], // must be installed on the same host first
+  options: t.Object({
+    maxLength: t.Integer({ default: 2000, description: "Longest comment." }),
+  }),
+  secrets: {
+    moderationKey: defineSecret("ACME_MODERATION_KEY", { default: "" }),
+  },
+
+  // Tables the plugin owns: created in the host service's database, for its engine.
+  tables: ({ table, text, timestamp }) => ({
+    comments: table("comments", {
+      id: text("id")
+        .primaryKey()
+        .$defaultFn(() => crypto.randomUUID()),
+      targetId: text("target_id").notNull(),
+      body: text("body").notNull(),
+      createdAt: timestamp("created_at")
+        .notNull()
+        .$defaultFn(() => new Date()),
+    }),
+  }),
+  // Joins the host's event catalog as `comments.added`.
+  events: { added: t.Object({ id: t.String(), targetId: t.String() }) },
+
+  // Installed with resource.use().
+  resource: ({ resource, service, tables, options, events, hooks }) => {
+    // The host's own CRUD writes, inside their transaction.
+    hooks.afterDelete(({ id, tx }) =>
+      tx
+        .delete(tables.comments)
+        .where(eq(tables.comments.targetId, String(id))),
+    );
+    const comment = service
+      .resource({
+        name: `${resource.name}Comment`,
+        table: tables.comments,
+        id: tables.comments.id,
+      })
+      .use(
+        crud({
+          access: "public",
+          fields: {
+            id: { read: true },
+            targetId: { read: true, create: true, filter: ["eq"] },
+            body: { read: true, create: true },
+          },
+          hooks: {
+            beforeCreate: ({ data }) => {
+              if (String(data.body).length > options.maxLength)
+                throw new ActionExecutionError(
+                  "BAD_REQUEST",
+                  "Comment is too long",
+                  400,
+                );
+            },
+          },
+        }),
+      );
+    return { comments: comment };
+  },
+
+  // The app-wide part: lifecycle, middleware and listeners.
+  app: ({ on }) => {
+    on("start", async ({ secrets }) => {
+      /* open a client with secrets.moderationKey.require() */
+    });
+    on("stop", async () => {
+      /* close it */
+    });
+  },
+
+  dashboard: "./dashboard.js", // a dashboard extension, relative to this file
+});
+```
+
+```ts title="src/services/pages/page.resource.ts"
+import { crud } from "@brickkit/crud";
+import { comments } from "@acme/brick-comments";
+
+export const page = pages
+  .resource({ name: "page", table: pagesTable, id: pagesTable.id })
+  .use(crud({ access: "public", fields: { id: { read: true } } }))
+  .use(comments({ maxLength: 500 }));
+
+page.comments; // the pageComment resource, typed
+```
+
+`definePlugin` returns a factory. Calling it (`comments({ maxLength: 500 })`) checks the Brick version and the options and returns an instance to install.
+
+## Where it is installed
+
+Scope comes from the install site:
+
+| Install                          | Runs            | Gets                                                     |
+| -------------------------------- | --------------- | -------------------------------------------------------- |
+| `resource.use(plugin())`         | `resource` part | `resource`, `service`, `tables`, `hooks` of the resource |
+| `service.use(plugin())`          | `service` part  | `service`, `tables`, `hooks` of every resource           |
+| `brick({ plugins: [plugin()] })` | `app` part only | lifecycle, middleware, listeners                         |
+
+The `app` part also runs for a plugin installed on a service or resource, once per instance, when `brick()` creates the app. A plugin that has no part for a host refuses it: `@acme/brick-comments cannot be installed on a service; use resource.use()`.
+
+## The manifest
+
+| Field       | What Brick does with it                                                                                                                                                                   |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`      | The npm package name. Labels the plugin's routes, tables and events in OpenAPI and the dashboard.                                                                                         |
+| `brick`     | A semver range checked against the running `@brickkit/core`: `@acme/brick-comments supports Brick ^0.11.0; this app runs 0.12.1`.                                                         |
+| `requires`  | Plugin names that must already be installed on the same host: `@acme/brick-comments requires @brickkit/crud, installed on resource "page" before it`.                                     |
+| `options`   | A TypeBox schema. Defaults fill what the user leaves out; the values are checked at install, with errors that name the plugin and the option. The factory's parameter type comes from it. |
+| `secrets`   | Secrets from `defineSecret`, so `brick()` checks them at boot and the dashboard and `brick lint` list what the plugin needs.                                                              |
+| `deps`      | What the plugin needs from the app, as `port<T>()` slots. The user passes the values at install. See below.                                                                               |
+| `tables`    | Tables the plugin owns. See below.                                                                                                                                                        |
+| `events`    | Events the plugin emits. They join the host's catalog as `<plugin>.<event>`.                                                                                                              |
+| `dashboard` | A dashboard extension module that the dashboard merges with the app's own, in `brick dev` and in production.                                                                              |
+
+## Dependencies
+
+A plugin declares what it needs from the app with `port<T>()`, the same slots a service's `deps` uses. The user passes the values when installing, in the factory's second argument next to `prefix`:
+
+```ts
+import { definePlugin, port, t } from "@brickkit/core";
+
+export const notify = definePlugin({
+  name: "@acme/brick-notify",
+  brick: "^0.11.0",
+  deps: { mailer: port<{ send(to: string): Promise<void> }>() },
+  service: ({ service, deps }) => {
+    deps.mailer; // typed, in the resource, service and app parts
+    service.action({
+      name: "notifySend",
+      input: t.Object({ to: t.String() }),
+      execute: async ({ input, ctx }) => {
+        await ctx.deps.mailer.send(input.to); // the plugin's deps
+        return { ok: true };
+      },
+    });
+  },
+});
+
+orders.use(notify({}, { deps: { mailer: createMailer() } }));
+```
+
+- **Required.** When a plugin declares deps, the install options and every dep in them are required: `notify()` does not compile. A JavaScript caller gets `@acme/brick-notify needs deps.mailer; pass it when installing: notify(options, { deps: { mailer } })`.
+- **Exact.** A key the plugin does not declare is a compile error, and at install `@acme/brick-notify does not declare deps.extra; it takes mailer`. A plugin without `deps` takes none.
+- **`ctx.deps` is the plugin's.** In every action, socket, endpoint and host hook the plugin adds, `ctx.deps` holds exactly the values passed at install, typed by its ports. That includes actions on resources it creates and `crud()` it installs inside its setup. It never holds the host service's `brick({ deps })`; a plugin without deps sees `{}`. Create actions inside the setup: one action object registered by two installs with different deps is refused.
+- **Setup and listeners.** Every part receives the values as `deps`, and `on("start")` and `on("stop")` handlers as `context.deps`. `useDeps()` in the `run` of a listener the plugin adds returns them too. Plugins can't add workflow listeners yet: workflow steps run in the app's workflow handler, where they would see the app's deps, so installing one fails.
+- **App plugins.** `brick({ plugins: [notify({}, { deps: { mailer } })] })` takes them the same way.
+
+## Owned tables
+
+`tables` receives engine-aware builders: `table`, `text`, `integer`, `real`, `boolean`, `timestamp` (a `Date`) and `json`. Brick passes the SQLite or the Postgres ones to match the host database, so one plugin works on both.
+
+- **Names.** Each table is prefixed with the host and the plugin: `table("comments")` on resource `page` becomes `page_comments`; a table with another name becomes `page_comments_<name>`. The installer can choose the prefix instead: `comments({}, { prefix: "blog_" })` gives `blog_comments`. A name the service already has is refused.
+- **Database.** The tables are added to the host service's database (`database.tables`), so they belong to that service.
+- **Schema sync.** `syncSchema(service)` and `syncSchema(database.tables, db)` create them with the app's own tables.
+- **Migrations.** Drizzle Kit reads tables from a schema file. Import the services, which installs the plugins, and export the plugin tables by name. Run Drizzle Kit with Bun so it can load `@brickkit/core`:
+
+```ts title="src/schema/plugins.ts"
+import { database } from "../services/pages/database";
+import "../services/pages/page.resource"; // installs the comments plugin
+
+export const { page_comments } = database.tables;
+```
+
+```bash
+bunx --bun drizzle-kit generate
+```
+
+The file you import must not use top-level `await`, which Drizzle Kit cannot load.
+
+## Host hooks
+
+`hooks.beforeCreate`, `afterCreate`, `beforeUpdate`, `afterUpdate`, `beforeDelete`, `afterDelete` and `afterCommit` subscribe to the host's CRUD writes (resources with `crud()`). They run after the host's own `crud()` hooks, inside the write's transaction, and receive it as `tx`: write through `tx` and the rows commit or roll back with the write. A hook that throws rolls the whole write back. `afterCommit` runs after the commit. On a service, the hooks see the writes of every resource in it. Declare `requires: ["@brickkit/crud"]` so the user installs crud first.
+
+## Lifecycle, middleware and listeners
+
+The `app` part receives `on`, `middleware` and `listeners`:
+
+- `on("start", fn)` runs when the app starts, in install order; `on("stop", fn)` when it stops, in reverse order. Both may be async. `brick dev`, `brick start`, `brick worker` and a built server start the app before serving; `app.listen()` starts it too, and `app.stop()` stops it. In a test, `await app.start()` and `await app.stop()`. A start that throws stops the plugins already started and fails the start.
+- `middleware(fn)` runs before every request is routed. Return a `Response` to answer it; return nothing to let it through.
+- `listeners(...)` adds event listeners to the app's `events`.
+
+Setup stays synchronous. Open connections in `on("start")`, never while the plugin installs.
+
+## Events
+
+`events: { added: t.Object({ ... }) }` adds `comments.added` to the host service's catalog. In the parts, `events.added` is the event reference, recorded as `<service>.comments.added`. Emit it with `emitEvent(ctx, events.added, payload, { tx })`; listeners take it with `defineListener({ on: events.added })`. Emitting needs `brick({ events })` and an outbox, so a plugin that should work without them checks `service.recorder` first.
+
+## Dashboard extension
+
+`dashboard: "./dashboard.js"` points at a module whose default export is `defineDashboard({ ... })` (see [Dashboard extensions](/docs/dashboard-extensions)). The path is relative to the file that calls `definePlugin`. `brick dev` builds each plugin's extension apart from the app's and merges them: the app's comes first and keeps its slots, a page whose id is taken is skipped, and a plugin's pages without a place go under a section named after the plugin. One that fails to build or load is reported and the others still show.
+
+The production dashboard does the same. `brick build` writes each extension into `<outdir>/dashboard`, and a plugin's extension that fails to build fails the build, naming the plugin. As with the app's own pages, only a plugin's pages and links marked `production: true` show in production. See [Production](/docs/dashboard-extensions#production).
+
+## What users see
+
+Every route, table and event a plugin contributes is labelled with its name: `x-brick-plugin` in OpenAPI, the plugin beside each route, table and event on the dashboard's overview, and `app.definition.plugins` lists every installation.
+
+## Local plugins
+
+A plugin that is not published lives in `src/plugins/<name>/` with the same layout as a package. Lint it with the `plugin` preset of [`brick lint`](/docs/brick-cli/lint). To publish one, see the [plugin directory](/docs/plugins/directory).
+
+## The older `defineServicePlugin` and `defineResourcePlugin`
+
+Both keep working. They have no manifest, tables, hooks or lifecycle: a `setup` that registers routes and returns an API.
 
 ```ts title="src/plugins/greeting.ts"
-import { defineServicePlugin, t, type PluginRoutes } from "@brickkit/core";
+import { defineServicePlugin, t } from "@brickkit/core";
 
-export interface GreetingOptions {
-  salutation?: string;
-  routes?: PluginRoutes<"app" | "service">;
-}
-
-export function greeting(options: GreetingOptions = {}) {
-  const salutation = options.salutation ?? "Hello";
-
-  return defineServicePlugin({
+export const greeting = (salutation = "Hello") =>
+  defineServicePlugin({
     name: "example/greeting",
-    routes: options.routes,
-    setup({ service, routes }) {
-      // 1. Register an action onto the service mesh
+    setup({ routes }) {
       const hello = routes.action({
         name: "hello",
         method: "GET",
-        path: `/${service.name}/hello`,
-        input: t.Object({
-          name: t.String({ minLength: 1 }),
-        }),
+        path: "/hello", // GET /api/<service>/hello
+        input: t.Object({ name: t.String({ minLength: 1 }) }),
         output: t.String(),
         execute: ({ input }) => `${salutation}, ${input.name}!`,
       });
-
-      // 2. Register a raw HTML endpoint (outside the JSON action mesh)
-      routes.endpoint({
-        name: "welcome",
-        method: "GET",
-        path: `/${service.name}/welcome.html`,
-        handler: async ({ set }) => {
-          set.headers["content-type"] = "text/html; charset=utf-8";
-          return `<!DOCTYPE html><html><body><h1>${salutation}!</h1></body></html>`;
-        },
-      });
-
-      // Return a typed API namespace for callers
-      return {
-        hello,
-        salutation,
-      };
+      return { hello };
     },
   });
-}
+
+export const api = greeterService.use(greeting("Welcome"));
 ```
 
-### Installing the Service Plugin
-
-Install onto a service using `service.use()`:
-
-```ts title="src/services/greeter.ts"
-import { defineService } from "@brickkit/core";
-import { greeting } from "../plugins/greeting";
-
-export const greeterService = defineService("greeter");
-
-// Install the plugin
-export const api = greeterService.use(greeting({ salutation: "Welcome" }));
-
-// In-process TypeScript calls are fully typed:
-const message = await api.hello({ input: { name: "Ada" } });
-console.log(message); // "Welcome, Ada!"
-```
-
-## Authoring a Resource Plugin (`defineResourcePlugin`)
-
-A resource plugin attaches behavior to a specific database table and entity:
-
-```ts title="src/plugins/slugify.ts"
-import { defineResourcePlugin, eq } from "@brickkit/core";
-
-export function slugLookup(options: { slugColumn: any }) {
-  return defineResourcePlugin({
-    name: "example/slugLookup",
-    setup({ resource, service, routes }) {
-      // Return helper methods attached directly onto the resource object
-      return {
-        findBySlug: async (slug: string, ctx: any) => {
-          if (!ctx.db) throw new Error("Database required");
-          const rows = await ctx.db
-            .select()
-            .from(resource.table)
-            .where(eq(options.slugColumn, slug))
-            .limit(1);
-          return rows[0] ?? null;
-        },
-      };
-    },
-  });
-}
-```
-
-### Installing the Resource Plugin
-
-Install onto a resource using `resource.use()`:
-
-```ts title="src/services/articles.ts"
-const article = service
-  .resource({ name: "article", table: articlesTable, id: articlesTable.id })
-  .use(slugLookup({ slugColumn: articlesTable.slug }));
-
-// The returned resource is augmented with findBySlug:
-const found = await article.findBySlug("my-post-slug", ctx);
-```
-
-## Plugin Design Principles
-
-1. **Synchronous Setup**: `setup()` must execute synchronously. Asynchronous connection initialization or network lookups are prohibited during registration.
-2. **Connection Flow**: Use `ctx.db` provided during request handling. Never create persistent connection pools inside plugin constructors.
-3. **Collision Avoidance**: Resource plugin contributions must not overwrite existing resource properties or prototype methods.
-4. **Isolated Descriptors**: Reinstalling a plugin with a different descriptor of the same name fails. Reuse descriptors when sharing instances.
-
-### Schema
-
-The resource-plugin example expects an application-owned `articles` table with an identity column and a slug column. Declare the table before registering the resource. A unique slug makes `findBySlug` unambiguous.
-
-export const articleFields = [
-  {
-    name: "id",
-    type: "text",
-    description: "Article identifier.",
-    isPrimaryKey: true,
-  },
-  {
-    name: "slug",
-    type: "text",
-    description: "Slug used by findBySlug.",
-    isUnique: true,
-  },
-];
-
-<DatabaseTable name="articles" fields={articleFields} />
+`routes` is the same registrar `definePlugin` parts get. Route paths are relative to the route's `scope`: service routes default to `service` (`${prefix}/${service}`), resource routes to `resource` (`${prefix}/${service}/${resource}`), and `app` mounts under `${prefix}`. See [URL Scheme](/docs/routes#plugin-route-scopes). `routes.endpoint()` registers a raw HTTP endpoint outside the JSON action mesh.

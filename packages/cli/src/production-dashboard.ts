@@ -1,5 +1,11 @@
+import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { getGlobalRegistry, type BrickApp } from "@brickkit/core";
 import { isLoopbackHost } from "./dashboard-access";
+import {
+  themeCss,
+  type DashboardExtensionOptions,
+} from "./dashboard-extension";
 import { DEFAULT_DASHBOARD_PORT, startDevDashboard } from "./dev-dashboard";
 import { openHistory } from "./dev-history";
 import { installTracing } from "./dev-telemetry";
@@ -31,11 +37,19 @@ export async function startProductionDashboard(
     /** Where `.brick/` history is kept; the working folder by default. */
     directory?: string;
     warn?: (message: string) => void;
+    /**
+     * The project's extension (source, or the folder `brick build` wrote) and
+     * theme. The app's plugins' extensions join it, from source or as the
+     * folder holds them. Only pages marked `production: true` are shown.
+     */
+    dashboard?: DashboardExtensionOptions;
   },
 ): Promise<ProductionDashboard | undefined> {
   const config = app.definition.dashboard;
   if (!config) return undefined;
   const warn = options.warn ?? ((message) => console.warn(message));
+  // A mistyped token is a configuration error, not a reason to run without the dashboard.
+  themeCss(options.dashboard?.theme);
   const host = config.host ?? "127.0.0.1";
   const port = config.port ?? DEFAULT_DASHBOARD_PORT;
   if (!isLoopbackHost(host) && !config.auth) {
@@ -50,6 +64,7 @@ export async function startProductionDashboard(
     warn,
   });
   const store = new DevTelemetryStore({ history });
+  const extension = options.dashboard?.extension;
   let started;
   try {
     started = await startDevDashboard({
@@ -59,6 +74,13 @@ export async function startProductionDashboard(
       auth: config.auth,
       store,
       history,
+      dashboard: options.dashboard,
+      // A `brick build` folder already holds the plugins' extensions.
+      plugins:
+        extension && existsSync(join(resolve(extension), "extension.js"))
+          ? undefined
+          : app.definition.plugins,
+      appUrl: `http://127.0.0.1:${options.appPort}`,
       probe: async () => {
         const response = await fetch(
           `http://127.0.0.1:${options.appPort}/_health`,

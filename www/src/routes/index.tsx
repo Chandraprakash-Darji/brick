@@ -65,7 +65,7 @@ const codeSamples = {
     serviceCode: serverSource.trim(),
     sideFile: "src/server.ts",
     sideDesc:
-      "Expose the users service over HTTP. Run bun run --cwd examples/showcase serve, then request /api/users/getUser?id=usr_42.",
+      "Expose the users service over HTTP. Run bun run --cwd examples/showcase serve, then POST the id usr_42 to /api/users/get-user.",
     sideCode: serverSource.trim(),
   },
 };

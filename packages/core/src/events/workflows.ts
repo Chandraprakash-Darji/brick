@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { runWithDeps } from "../deps";
 import type {
   EventDelivery,
   EventListener,
@@ -67,6 +68,7 @@ export class WorkflowRuntime {
     readonly world: EventsWorld,
     options: WorkflowsOptions | undefined,
     private readonly listeners: readonly EventListener[],
+    private readonly deps: Record<string, unknown> = {},
   ) {
     ({ root: this.root, dir: this.dir } = resolveWorkflowPaths(options));
   }
@@ -182,7 +184,11 @@ export class WorkflowRuntime {
     const bundle = await this.loadBundle(flow);
     if (typeof bundle.POST !== "function")
       throw new Error(`${flow} does not export a POST handler`);
-    this.world.registerHandler?.(WORKFLOW_QUEUE_PREFIX, bundle.POST);
+    const post = bundle.POST;
+    // Steps run inside this handler, so `useDeps()` in a step finds this app's deps.
+    this.world.registerHandler?.(WORKFLOW_QUEUE_PREFIX, (request: Request) =>
+      runWithDeps(this.deps, () => post(request)),
+    );
     await this.world.start?.();
     return sdk;
   }

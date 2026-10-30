@@ -50,12 +50,12 @@ describe("@brickkit/cli OpenAPI & Interactive Documentation Server", () => {
     expect(spec.openapi).toBe("3.1.0");
     expect(spec.info.title).toBe("Pages Platform API");
     expect(spec.info.version).toBe("2.5.0");
-    expect(spec.paths["/api/pages/createPage"]).toBeDefined();
-    expect(spec.paths["/api/pages/createPage"].post).toBeDefined();
-    expect(spec.paths["/api/pages/createPage"].post.summary).toBe(
+    expect(spec.paths["/api/pages/create-page"]).toBeDefined();
+    expect(spec.paths["/api/pages/create-page"].post).toBeDefined();
+    expect(spec.paths["/api/pages/create-page"].post.summary).toBe(
       "pages.createPage",
     );
-    expect(spec.paths["/api/pages/createPage"].post.requestBody).toBeDefined();
+    expect(spec.paths["/api/pages/create-page"].post.requestBody).toBeDefined();
 
     // 2. Test /docs (Scalar UI)
     const docsResponse = await app.handle(new Request("http://localhost/docs"));

@@ -1,6 +1,8 @@
 import { expect, test, spyOn } from "bun:test";
 import {
   defineAction,
+  defineError,
+  errorsOf,
   defineService,
   t,
   brick,
@@ -318,7 +320,7 @@ for (const compiler of [true, false]) {
         requestLogging: false,
       });
       const response = await app.handle(
-        new Request(`http://localhost/api/${service.name}/invalidOutput`, {
+        new Request(`http://localhost/api/${service.name}/invalid-output`, {
           method: "POST",
         }),
       );
@@ -392,4 +394,49 @@ test("input validation keeps caller-provided values and endpoint output validati
   } finally {
     log.mockRestore();
   }
+});
+
+const SlugExists = defineError("SLUG_EXISTS", {
+  status: 409,
+  message: "Slug is already taken",
+  details: t.Object({ slug: t.String(), takenBy: t.String() }),
+});
+
+test("defineError types details, keeps plain errors loose, and shows in OpenAPI", async () => {
+  const create = defineAction({
+    name: "create",
+    errors: { ...SlugExists, PLAIN: { status: 400, message: "Plain" } },
+    execute: ({ error }) => {
+      error.SLUG_EXISTS(undefined, { slug: "a", takenBy: "u_1" });
+    },
+  });
+  const failure = await create.execute({}).catch((e) => e);
+  expect(failure).toMatchObject({
+    code: "SLUG_EXISTS",
+    status: 409,
+    message: "Slug is already taken",
+    details: { slug: "a", takenBy: "u_1" },
+  });
+  // Types only: details are not validated at runtime.
+  const loose = defineAction({
+    name: "loose",
+    errors: { ...SlugExists },
+    execute: ({ error }) => error.SLUG_EXISTS(undefined, { slug: 1 } as any),
+  });
+  expect((await loose.execute({}).catch((e) => e)).details).toEqual({
+    slug: 1,
+  });
+
+  expect(errorsOf(create)).toEqual(create.config.errors!);
+  const spec = generateOpenApiSpec({
+    services: [defineService("detail_errors").action(create)],
+  });
+  const alternatives =
+    spec.paths["/api/detail_errors/create"].post.responses[409].content[
+      "application/json"
+    ].schema.oneOf;
+  expect(alternatives[0].allOf[1].properties.details).toMatchObject({
+    type: "object",
+    required: ["slug", "takenBy"],
+  });
 });

@@ -152,7 +152,7 @@ function setup(
   }).attach([service]);
   hubs.push(hub);
   const record = (label = "a") =>
-    service.events!.transaction(db, { traceId: "tr_1" }, async (tx, rec) => {
+    service.recorder!.transaction(db, { traceId: "tr_1" }, async (tx, rec) => {
       await tx.insert(items).values({ label });
       await rec("item.create", { id: 1, row: { label } });
     });

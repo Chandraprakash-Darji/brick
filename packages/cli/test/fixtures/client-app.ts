@@ -18,7 +18,7 @@ export const records = defineService("records");
 records.tool({
   name: "get_value",
   http: true,
-  path: "/v2/records/:doctype/value",
+  path: "/:doctype/value",
   method: "POST",
   input: t.Object({
     doctype: t.Literal("CRMDeal"),
@@ -46,7 +46,7 @@ export const users = defineService("users");
 users.tool({
   name: "profile.get",
   http: true,
-  path: "/v2/users/:id",
+  path: "/:id",
   method: "GET",
   input: t.Object({ id: t.String(), details: t.Optional(t.Boolean()) }),
   output: t.Object({
@@ -58,7 +58,7 @@ users.tool({
 users.tool({
   name: "update",
   http: true,
-  path: "/v2/users/update",
+  path: "/update",
   method: "PATCH",
   input: t.Object({ id: t.String(), name: t.String() }),
   output: t.Boolean(),

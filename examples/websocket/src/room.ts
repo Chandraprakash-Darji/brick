@@ -1,11 +1,5 @@
 import { resolve } from "node:path";
-import {
-  brick,
-  defineService,
-  t,
-  type BrickSocketSender,
-  type SocketPayloads,
-} from "@brickkit/core";
+import { brick, defineService, t } from "@brickkit/core";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { betterAuth } from "better-auth/minimal";
 import { anonymous } from "better-auth/plugins/anonymous";
@@ -23,6 +17,7 @@ const output = {
   message: chatMessage,
 };
 const allowedOrigins = ["http://localhost:5178"];
+const ROOM = "chat:lobby";
 
 export function createChatApp(
   path = process.env.BRICK_CHAT_DB ?? resolve(".brick/chat.sqlite"),
@@ -42,16 +37,8 @@ export function createChatApp(
     ],
     trustedOrigins: allowedOrigins,
   });
-  const clients = new Set<BrickSocketSender<SocketPayloads<typeof output>>>();
-  function publishPresence() {
-    for (const client of clients) {
-      try {
-        client.send("presence", { count: clients.size });
-      } catch {
-        clients.delete(client);
-      }
-    }
-  }
+  // Connections to this process. Every connection is in the one shared room.
+  let online = 0;
   const chat = defineService("chat", {
     database: store.database,
     context: async ({ request }) => {
@@ -61,7 +48,7 @@ export function createChatApp(
       };
     },
   });
-  chat.socket({
+  const live = chat.socket({
     name: "live",
     description:
       "Persistent shared conversation with anonymous Better Auth identities",
@@ -73,6 +60,7 @@ export function createChatApp(
     output,
     allowedOrigins,
     authorize: ({ ctx }) => ctx.user != null,
+    rooms: () => [ROOM],
     open: ({ ctx, socket }) => {
       if (!ctx.user) return;
       socket.send("connected", ctx.user);
@@ -90,24 +78,16 @@ export function createChatApp(
         batch.push(message);
       }
       socket.send("history", { messages: batch, done: true });
-      clients.add(socket);
-      publishPresence();
+      live.emit(ROOM, "presence", { count: ++online });
     },
-    close: ({ socket }) => {
-      clients.delete(socket);
-      publishPresence();
+    close: () => {
+      live.emit(ROOM, "presence", { count: --online });
     },
     handlers: {
       say: ({ input, ctx }) => {
         if (!ctx.user) return;
         const message = store.save(ctx.user.id, input.text);
-        for (const client of clients) {
-          try {
-            client.send("message", message);
-          } catch {
-            clients.delete(client);
-          }
-        }
+        live.emit(ROOM, "message", message);
       },
     },
   });

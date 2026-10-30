@@ -44,12 +44,12 @@ describe("@brickkit/cli request logging & reference docs", () => {
     });
 
     const res = await app.handle(
-      new Request("http://localhost/api/items/listItems"),
+      new Request("http://localhost/api/items/list-items"),
     );
     expect(res.status).toBe(200);
 
     expect(lines.length).toBe(1);
-    expect(lines[0]).toMatch(/^GET \/api\/items\/listItems → 200 \(\d+ms\)$/);
+    expect(lines[0]).toMatch(/^GET \/api\/items\/list-items → 200 \(\d+ms\)$/);
   });
 
   it("preserves mapped error responses while logging them", async () => {
@@ -162,7 +162,7 @@ describe("@brickkit/cli request logging & reference docs", () => {
         requestLogging: false,
       });
       const res = await app.handle(
-        new Request("http://localhost/api/items/listItems"),
+        new Request("http://localhost/api/items/list-items"),
       );
       expect(res.status).toBe(200);
       expect(calls).toEqual([]);
@@ -179,7 +179,7 @@ describe("@brickkit/cli request logging & reference docs", () => {
     });
 
     const res = await app.handle(
-      new Request("http://localhost/api/items/listItems"),
+      new Request("http://localhost/api/items/list-items"),
     );
     expect(res.status).toBe(200);
     expect(lines).toEqual([]);

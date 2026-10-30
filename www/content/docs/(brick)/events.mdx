@@ -99,26 +99,64 @@ Reads emit nothing.
 
 A write that fails records no event, and an event whose write was rolled back is never delivered. A resource can opt out with `crud({ events: false })`.
 
+## Event catalog
+
+A service declares the events it emits, with a payload schema for each:
+
+```ts title="src/services/orders/orders.service.ts"
+import { defineService, t } from "@brickkit/core";
+
+export const orders = defineService("orders", {
+  database,
+  events: {
+    placed: t.Object({ id: t.String(), customer: t.String() }),
+    shipped: t.Object({ id: t.String(), trackingId: t.String() }),
+  },
+});
+```
+
+Each entry becomes a handle, `orders.events.shipped`. Its name on the wire is `<service>.<event>`, here `orders.shipped`: CRUD events are named after the resource (`order.update`), catalog events after the service, because the catalog belongs to the service. Catalog names are plain identifiers such as `shipped` or `itemAdded`, without a dot.
+
+A listener that takes a handle gets a typed payload, with no cast:
+
+```ts
+defineListener({
+  name: "send-tracking",
+  on: orders.events.shipped,
+  run: ({ payload }) => mailer.tracking(payload.id, payload.trackingId),
+});
+```
+
+`on` also takes a list of handles, and handles and names mixed. String names keep working, for CRUD events and prefixes such as `order.*`.
+
+Once a service has a catalog, it only records the events in it, plus the CRUD events of its own resources. Recording an undeclared name, or a payload that does not match its schema, throws before anything is written. A service without a catalog records any name, as before.
+
+The catalog appears in the OpenAPI document under `x-brick-events` (each event with its service and payload schema), in the architecture that `brick info` and the dev dashboard read (`services[].events`), and as the Events table on the dashboard Overview, with the listeners of each event.
+
+[Commands](/docs/commands) emit catalog events from their `emit` result, recorded in the same transaction as their write.
+
 ## Events from your own code
 
-`emitEvent` records an event of your own from an action, a tool or a hook. Listeners get it as they get a CRUD event, with the payload you give:
+`emitEvent` records an event of your own from an action, a tool or a hook. Listeners get it as they get a CRUD event, with the payload you give. Pass a catalog handle to have the payload typed and checked:
 
 ```ts
 import { emitEvent } from "@brickkit/core";
 
-service.action({
+orders.action({
   name: "refund",
   input: t.Object({ id: t.String() }),
   execute: async ({ ctx, input }) => {
     await ctx.db
-      .update(orders)
+      .update(ordersTable)
       .set({ status: "refunded" })
-      .where(eq(orders.id, input.id));
-    await emitEvent(ctx, "order.refunded", { id: input.id });
+      .where(eq(ordersTable.id, input.id));
+    await emitEvent(ctx, orders.events.refunded, { id: input.id });
     return { ok: true };
   },
 });
 ```
+
+A name works too (`emitEvent(ctx, "orders.refunded", payload)`), checked against the catalog at runtime.
 
 By default the event is committed in a transaction of its own, after your writes. To commit it with them, pass the `tx` of a transaction you have open: `emitEvent(ctx, name, payload, { tx })`. It is then delivered at the dispatcher's next poll, because Brick does not see your commit. `source` says what emitted it, and listeners see it.
 
@@ -126,7 +164,7 @@ By default the event is committed in a transaction of its own, after your writes
 
 ## Listeners
 
-`defineListener` takes a unique `name`, the event names it listens for in `on`, and either `run`, a handler, or `workflow`, a [workflow](#workflows). A trailing `*` matches a prefix, so `user.*` listens for every user event and `*` for everything.
+`defineListener` takes a unique `name`, the events it listens for in `on` (catalog handles or names), and either `run`, a handler, or `workflow`, a [workflow](#workflows). A trailing `*` matches a prefix, so `user.*` listens for every user event and `*` for everything.
 
 Each listener gets its own delivery of an event. If two listeners listen for `user.create` and one of them fails, only that one is retried.
 
@@ -151,6 +189,24 @@ await events.retryDead("evt_01J...:welcome-email");
 ```
 
 Set `maxAttempts` on a listener to override the dispatcher's default.
+
+### Typed errors and retry
+
+A listener can declare `errors`, as an action does (`defineError(...)` results or `errorsOf(action)`), and raise them from `run` with `error.CODE()`. Add `retry` to choose, per failure, between `"retry"` (the usual backoff) and `"dead"` (park it now):
+
+```ts
+const charge = defineListener({
+  name: "charge-card",
+  on: orders.events.placed,
+  errors: { ...errorsOf(chargeInvoice) },
+  retry: (error) => (error.code === "CARD_DECLINED" ? "dead" : "retry"),
+  run: async ({ payload }, { error }) => {
+    // error.CARD_DECLINED(undefined, { reason }) is checked like in an action
+  },
+});
+```
+
+`error` is a union with one member per declared code (`code`, `message`, typed `details`), plus `{ code: "UNKNOWN", message, cause }` for anything else the handler threw. Without `retry`, every failure retries until `maxAttempts`, as before. `"retry"` cannot extend `maxAttempts`, and a `retry` that throws counts as `"retry"`. Workflow steps do not take `errors` yet.
 
 ## Delivery settings
 
@@ -208,7 +264,7 @@ If you already run BullMQ, use `@brickkit/bullmq-world` instead: it has the same
 Write the workflow, hand it to `defineListener` as `workflow`, and give `events` a world:
 
 ```ts title="src/workflows/fulfil-order.ts"
-import type { WorkflowEvent } from "@brickkit/core";
+import { useDeps, type WorkflowEvent } from "@brickkit/core";
 import { sleep } from "workflow";
 
 export async function fulfilOrder(event: WorkflowEvent<OrderUpdated>) {
@@ -220,7 +276,8 @@ export async function fulfilOrder(event: WorkflowEvent<OrderUpdated>) {
 
 async function bookCarrier(orderId: string) {
   "use step";
-  return carrier.book(orderId);
+  // A step cannot close over the app; useDeps() returns the deps of the app running it.
+  return useDeps(ordersDeps).carrier.book(orderId);
 }
 ```
 
@@ -241,6 +298,8 @@ export default brick({
   },
 });
 ```
+
+Listeners and steps read what they need, such as the carrier, with `useDeps()`; the app provides it in `brick({ deps })`. See [Dependencies](/docs/dependencies).
 
 `brick dev` and `brick start` do the rest. Before the app loads they make the `"use workflow"` and `"use step"` files load as workflows and steps, and before events start they build the workflow bundle into `.well-known/workflow/v1` (add it to `.gitignore`). On a reload of `brick dev` the bundle is kept when nothing it was built from has changed (the workflow and step files, what they import, `package.json`, the lockfile, `tsconfig.json`), so editing a route costs nothing; adding or removing a source file, or giving one a `"use workflow"` or `"use step"` directive, rebuilds it. `brick start` and `brick build` always build. The world starts with the app's events and closes when they stop.
 

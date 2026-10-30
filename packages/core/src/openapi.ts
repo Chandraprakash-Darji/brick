@@ -1,4 +1,5 @@
-import { getPluginActionRoute } from "./plugin";
+import type { EventRef } from "./events/catalog";
+import { getActionRoute } from "./routes";
 import { getActionAccess } from "./access";
 import type { ServiceRegistry } from "./registry";
 import { getGlobalRegistry } from "./registry";
@@ -101,7 +102,8 @@ export function hoistAnchoredSchemas(spec: Record<string, any>): string[] {
  * Build the OpenAPI 3.1 document for the services: one path per action route,
  * with request and response schemas from the actions' TypeBox schemas, their
  * declared errors, tags by service, and a bearer security scheme where any
- * action needs authorization.
+ * action needs authorization. Declared events are listed under `x-brick-events`,
+ * by wire name, with their service and payload schema.
  *
  * `brick()` calls this for `/openapi.json`; call it yourself to write the
  * document to a file or feed another tool.
@@ -126,24 +128,17 @@ export function generateOpenApiSpec(
     (options.registry ? options.registry.list() : getGlobalRegistry().list());
 
   const paths: Record<string, any> = {};
-  const tagsSet = new Set<string>();
+  const tags = new Map<string, string>();
   let hasAnyAuthorizedAction = false;
 
   for (const service of services) {
-    tagsSet.add(service.name);
+    tags.set(service.name, `Actions exposed by '${service.name}' service`);
 
     for (const action of service.listActions()) {
-      const pluginRoute = getPluginActionRoute(action, prefix);
-      if (pluginRoute === false) continue;
-      const routePath =
-        pluginRoute?.path ??
-        action.config.path ??
-        `${prefix}/${service.name}/${action.name}`;
-      const method = (
-        pluginRoute?.method ??
-        action.config.method ??
-        "POST"
-      ).toLowerCase();
+      const route = getActionRoute(action, prefix);
+      if (route === false) continue;
+      const routePath = route.path;
+      const method = route.method.toLowerCase();
       const pathParams = [...routePath.matchAll(/:([^/]+)/g)].map(
         (match) => match[1]!,
       );
@@ -151,6 +146,15 @@ export function generateOpenApiSpec(
       if (!paths[actionPath]) paths[actionPath] = {};
       // Match the compiler's first-registration-wins policy for route collisions.
       if (paths[actionPath][method]) continue;
+
+      const resource = (action as { resource?: string }).resource;
+      // Resource routes group under `service · resource`.
+      const group = resource ? `${service.name} · ${resource}` : service.name;
+      if (resource)
+        tags.set(
+          group,
+          `Routes of resource '${resource}' in service '${service.name}'`,
+        );
 
       const hasAuth = getActionAccess(action).hasAuthorize;
       if (hasAuth) {
@@ -177,7 +181,12 @@ export function generateOpenApiSpec(
       }
 
       const errorAlternatives = new Set<string>();
-      const addError = (code: string, status: number, message: string) => {
+      const addError = (
+        code: string,
+        status: number,
+        message: string,
+        details?: unknown,
+      ) => {
         const key = `${status}:${code}`;
         if (errorAlternatives.has(key)) return;
         errorAlternatives.add(key);
@@ -186,7 +195,11 @@ export function generateOpenApiSpec(
             { $ref: "#/components/schemas/ErrorEnvelope" },
             {
               type: "object",
-              properties: { code: { const: code }, status: { const: status } },
+              properties: {
+                code: { const: code },
+                status: { const: status },
+                ...(details ? { details } : {}),
+              },
             },
           ],
         };
@@ -210,7 +223,7 @@ export function generateOpenApiSpec(
       if (action.config.errors) {
         for (const [code, errorDef] of Object.entries(action.config.errors)) {
           const def = errorDef as ActionErrorDefinition;
-          addError(code, def.status || 400, def.message || code);
+          addError(code, def.status || 400, def.message || code, def.details);
         }
       }
       addError("INTERNAL_SERVER_ERROR", 500, "Internal server error");
@@ -223,10 +236,7 @@ export function generateOpenApiSpec(
         description:
           action.config.description ??
           `Execute action '${action.name}' on service '${service.name}'`,
-        tags:
-          action.config.tags && action.config.tags.length > 0
-            ? action.config.tags
-            : [service.name],
+        tags: [...new Set([group, ...(action.config.tags ?? [])])],
         ...((action as { plugin?: string }).plugin
           ? { "x-brick-plugin": (action as { plugin?: string }).plugin }
           : {}),
@@ -289,10 +299,7 @@ export function generateOpenApiSpec(
       description,
     },
     paths,
-    tags: Array.from(tagsSet).map((name) => ({
-      name,
-      description: `Actions exposed by '${name}' service`,
-    })),
+    tags: Array.from(tags, ([name, description]) => ({ name, description })),
   };
 
   spec.components = {
@@ -335,6 +342,22 @@ export function generateOpenApiSpec(
       },
     });
   }
+
+  const events = Object.fromEntries(
+    services.flatMap((service) =>
+      Object.values(
+        (service as { events?: Record<string, EventRef> }).events ?? {},
+      ).map((ref) => [
+        ref.name,
+        {
+          service: service.name,
+          payload: ref.schema,
+          ...(ref.plugin ? { "x-brick-plugin": ref.plugin } : {}),
+        },
+      ]),
+    ),
+  );
+  if (Object.keys(events).length) spec["x-brick-events"] = events;
 
   // Operations reference live TypeBox schemas. Rewrite only the serialized
   // document so OpenAPI pointers cannot corrupt runtime validation schemas.

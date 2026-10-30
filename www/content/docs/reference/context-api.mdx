@@ -77,14 +77,14 @@ export type NarrowAuthorizedContext<TCtx> = TCtx extends { user: infer U }
 
 This utility narrows `ctx.user` from `User | null` to `NonNullable<User>` at the type level. Inside `execute({ ctx })` of an action with `authorize`, you do not need optional chaining or null assertions on `ctx.user`. The narrowing is a type assertion only: it is your `authorize` function that must actually reject calls without a user.
 
-## Context Isolation Across Service Proxies
+## Context Isolation Across Service Calls
 
-When calling actions with `createServiceProxy("targetService")` (call signature: `proxy.actionName(input, ctx?)`), Brick isolates execution contexts:
+When calling actions with `useService(targetService)` (call signature: `client.actionName(input, ctx?)`, or `client.resource.actionName(input, ctx?)`), Brick isolates execution contexts:
 
 1. **Envelope allowlist**: Only `user`, `traceId`, `requestId`, and `tenantId` from the proxy's `options.context` or per-call context are forwarded, plus `caller` as described below. Per-call values take precedence over proxy defaults. Custom fields such as `session` and `isOwner` are dropped.
 2. **Independent Context Resolution**: The target service receives the envelope in its resolver input and uses its own database. Resolver return values take precedence over envelope values, including explicit `null` or `undefined`. Direct action calls enforce the same envelope allowlist for caller custom fields while accepting runtime fields such as `request`.
-3. **`caller` Field**: The proxy sets `ctx.caller` to `options.from` — the name of the service that created the proxy, passed to `createServiceProxy(target, { from: "..." })` — never the target service's name. When `from` is provided, any `caller` in `options.context` or the per-call context is ignored, so it cannot be spoofed. Without `from`, an explicitly supplied `caller` still passes through; otherwise `caller` is left unset.
+3. **`caller` Field**: The proxy sets `ctx.caller` to `options.from` — the name of the service that created the proxy, passed to `useService(target, { from: "..." })` — never the target service's name. When `from` is provided, any `caller` in `options.context` or the per-call context is ignored, so it cannot be spoofed. Without `from`, an explicitly supplied `caller` still passes through; otherwise `caller` is left unset.
 
-Only in-process dispatch is implemented; creating a proxy with `{ isMonolith: false }` throws when an action is called.
+Only in-process dispatch is implemented. The target runs with its own `ctx.deps`, never the caller's.
 
 The resolver input also includes `user?: unknown`, an identity claim. Validate it before use. `tenantId` is a claim to validate against the user's access, not proof of tenant membership. Internal proxy calls have a placeholder request without browser cookies; resolve their identity from the envelope according to the receiving service's trust policy.

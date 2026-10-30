@@ -9,6 +9,7 @@ import { toErrorResponse } from "./error-response";
 import { createLogger } from "./logger";
 import { ActionExecutionError, ValidationError } from "./types";
 import type { BrickSocketSchema } from "./socket-types";
+import type { InstalledPlugin } from "./define-plugin";
 
 export type EndpointMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -48,6 +49,8 @@ export interface EndpointDefinition {
   summary?: string;
   description?: string;
   tags?: string[];
+  /** The plugin that contributed it; OpenAPI labels it `x-brick-plugin`. */
+  plugin?: string;
 }
 
 /** Resolve the db for an endpoint: explicit service first, else first service holding one. */
@@ -166,6 +169,7 @@ export function endpointPaths(defs: EndpointDefinition[]): Record<string, any> {
       ...(def.summary ? { summary: def.summary } : {}),
       ...(def.description ? { description: def.description } : {}),
       ...(def.tags ? { tags: def.tags } : {}),
+      ...(def.plugin ? { "x-brick-plugin": def.plugin } : {}),
       ...(params.length > 0 ? { parameters: params } : {}),
       responses: { 200: { description: "Successful response" } },
     };
@@ -190,7 +194,15 @@ export type BrickApp = Elysia<any, any, any, any, any, any, any> & {
     readonly dashboard?: DashboardOptions;
     /** The listeners and settings of `events`, as plain data. */
     readonly events?: EventsDefinition;
+    /** Every `definePlugin` installation, in install order. */
+    readonly plugins?: readonly InstalledPlugin[];
   };
+  /**
+   * Run the plugins' `on("start")` handlers in install order, once. `listen`
+   * calls it; `brick dev` and `brick start` await it before serving. `stop()`
+   * runs their `on("stop")` handlers in reverse order.
+   */
+  start(): Promise<void>;
   /**
    * The events of this app, when `events` is set: start and stop delivery, drain
    * what is due, and see or retry what is parked. `brick dev` and `brick start`

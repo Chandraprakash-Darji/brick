@@ -25,14 +25,17 @@ const call = async (path: string, method: string, body?: unknown) => {
   return response.json();
 };
 
-const order = await call("/api/order", "POST", {
+const order = await call("/api/orders/order", "POST", {
   customer: "ada@example.com",
   totalCents: 4200,
   internalNote: "never leaves the database",
 });
 console.log("created", order);
 
-await call(`/api/order/${order.id}`, "PATCH", { data: { status: "shipped" } });
+console.log(
+  "shipped",
+  await call(`/api/orders/order/${order.id}/ship`, "POST", {}),
+);
 console.log("events waiting:", await events.counts());
 
 // The carrier fails once, so the shipping delivery is left waiting for a retry.

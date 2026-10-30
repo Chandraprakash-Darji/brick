@@ -139,11 +139,16 @@ join.onclick = async () => {
     socket.onError((error) => {
       lastError = error.message;
     });
-    socket.onClose(({ code }) => {
-      connected(false);
+    // The client reconnects by itself; history is resent and deduplicated by id.
+    socket.onStatus((next) => {
+      connected(next === "open");
+      if (next === "open") return;
+      join.hidden = next === "reconnecting";
       status.textContent =
-        lastError || "Disconnected. Join the conversation to continue.";
-      status.classList.toggle("error", !!lastError || code !== 1000);
+        next === "reconnecting"
+          ? "Connection lost. Reconnecting…"
+          : lastError || "Disconnected. Join the conversation to continue.";
+      status.classList.toggle("error", next === "closed" && !!lastError);
     });
     await socket.ready;
     connected(true);

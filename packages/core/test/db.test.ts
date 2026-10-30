@@ -6,7 +6,7 @@ import {
   createDatabase,
   attachDatabase,
   resetGlobalRegistry,
-  createServiceProxy,
+  useService,
   t,
   sqliteTable,
   text,
@@ -294,11 +294,7 @@ describe("@brickkit/core Database & Drizzle Integration", () => {
       },
     });
 
-    interface WarehouseRpc {
-      findItem: (input: { id: string }, ctx?: any) => Promise<any>;
-    }
-
-    const warehouseRpc = createServiceProxy<WarehouseRpc>("warehouse");
+    const warehouseRpc = useService(warehouseService);
     const result = await warehouseRpc.findItem({ id: "item_rpc" });
 
     expect(result).toBeDefined();

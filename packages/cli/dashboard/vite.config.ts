@@ -27,9 +27,16 @@ export default defineConfig({
     emptyOutDir: true,
     assetsInlineLimit: 0,
     rollupOptions: {
-      input: fileURLToPath(new URL("./main.tsx", import.meta.url)),
+      input: {
+        app: fileURLToPath(new URL("./main.tsx", import.meta.url)),
+        // `@brickkit/cli/dashboard` for extensions; it shares chunks with the
+        // app, so both use one copy of each component and context.
+        kit: fileURLToPath(new URL("./kit.ts", import.meta.url)),
+      },
+      // Keep kit.js's exports: extensions import them.
+      preserveEntrySignatures: "exports-only",
       output: {
-        entryFileNames: "app.js",
+        entryFileNames: "[name].js",
         chunkFileNames: "[name]-[hash].js",
         assetFileNames: (asset) =>
           asset.names.includes("main.css") ? "app.css" : "[name][extname]",

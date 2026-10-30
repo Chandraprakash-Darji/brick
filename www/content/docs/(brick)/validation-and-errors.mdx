@@ -154,3 +154,29 @@ export const resetPassword = authService.action({
 If you omit `status` on a declared error, it defaults to `400`. A declared error with the same name as a standard helper (for example `NOT_FOUND`) overrides it.
 
 Custom error keys are typed onto the `error` argument, ensuring compile-time safety and autocompletion for error codes.
+
+### Typed `details` and reusable errors
+
+`defineError(code, { status, message, details? })` returns a one-entry `errors` map, so you define an error once and spread it into any action. Give it a TypeBox `details` schema and `error.CODE(message, details)` checks the details against it:
+
+```ts
+import { defineError, errorsOf, t } from "@brickkit/core";
+
+const SlugExists = defineError("SLUG_EXISTS", {
+  status: 409,
+  message: "Slug is already taken",
+  details: t.Object({ slug: t.String(), takenBy: t.String() }),
+});
+
+export const createPage = pagesService.action({
+  name: "page.create",
+  errors: { ...SlugExists },
+  execute: ({ input, error }) => {
+    error.SLUG_EXISTS(undefined, { slug: input.slug, takenBy: "u_1" });
+  },
+});
+```
+
+The details schema appears in the OpenAPI response for the error. It is checked by the compiler only: Brick does not validate `details` at runtime. Errors declared as `{ status, message }` keep their loose `details?: unknown`.
+
+`errorsOf(action)` returns an action's `errors` map, so another action or an [event listener](/docs/events#typed-errors-and-retry) can re-declare them: `errors: { ...errorsOf(createPage) }`.

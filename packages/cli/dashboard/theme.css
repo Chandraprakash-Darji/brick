@@ -6,10 +6,17 @@
 
 @custom-variant dark (&:is(.dark *));
 
-@theme inline {
+/* Not inline: the fonts stay variables, so a project's dashboard.theme.fonts can set them. */
+@theme {
   --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
 
+/*
+ * The token names below are what dashboard.theme accepts; THEME_TOKENS in
+ * src/dashboard-extension.ts lists them, and a test keeps the two in step.
+ */
+@theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

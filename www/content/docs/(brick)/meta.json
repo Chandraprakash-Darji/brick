@@ -11,10 +11,14 @@
     "quickstart",
     "tutorial",
     "for-ai-agents",
+    "project-structure",
     "---Core Concepts---",
     "services-and-actions",
     "context",
+    "dependencies",
     "resources",
+    "commands",
+    "routes",
     "access-control",
     "validation-and-errors",
     "hooks",
@@ -26,6 +30,7 @@
     "tanstack-query",
     "tools-and-mcp",
     "openapi",
+    "dashboard-extensions",
     "type-inference",
     "database"
   ]

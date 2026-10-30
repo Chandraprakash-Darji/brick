@@ -72,7 +72,7 @@ it("emits a frozen IR and a synchronous handler with no input/context/auth stage
   expect(source).not.toContain("contextHook(");
   expect(source).not.toContain("authorize(");
   const value = route.handler({
-    request: request("/api/simple/getReady"),
+    request: request("/api/simple/get-ready"),
     headers: { "x-request-id": "custom" },
     set: { headers: {} },
   });
@@ -142,33 +142,33 @@ it("matches generic route behavior for input precedence, coercion, schema errors
   });
   const cases: [string, string, unknown?, Record<string, string>?][] = [
     [
-      "/custom/path?count=2&enabled=1&id=query",
+      "/api/secure/custom/path?count=2&enabled=1&id=query",
       "GET",
       undefined,
       { "x-user": "alice" },
     ],
     [
-      "/custom/path?count=0x10&enabled=false",
+      "/api/secure/custom/path?count=0x10&enabled=false",
       "GET",
       undefined,
       { "x-user": "alice" },
     ],
     [
-      "/custom-post/path?count=4&enabled=1&id=query",
+      "/api/secure/custom-post/path?count=4&enabled=1&id=query",
       "POST",
       { id: "body", count: 3, enabled: false },
       { "x-user": "alice" },
     ],
     [
-      "/custom/path?count=bad&enabled=1",
+      "/api/secure/custom/path?count=bad&enabled=1",
       "GET",
       undefined,
       { "x-user": "alice" },
     ],
-    ["/custom/path?count=2&enabled=1", "GET"],
-    ["/custom-post/path", "POST", {}, { "x-user": "alice" }],
-    ["/api/secure/badOutput", "POST"],
-    ["/api/secure/knownError", "POST"],
+    ["/api/secure/custom/path?count=2&enabled=1", "GET"],
+    ["/api/secure/custom-post/path", "POST", {}, { "x-user": "alice" }],
+    ["/api/secure/bad-output", "POST"],
+    ["/api/secure/known-error", "POST"],
     ["/api/secure/broken", "POST"],
   ];
   for (const [path, method, body, headers] of cases) {
@@ -216,7 +216,7 @@ it("isolates request contexts and maps Promise/thenable rejections", async () =>
   const users = await Promise.all(
     Array.from({ length: 16 }, async (_, i) => {
       const response = await app.handle(
-        request("/api/async/getUser", "GET", undefined, {
+        request("/api/async/get-user", "GET", undefined, {
           "x-user": String(i),
         }),
       );
@@ -227,9 +227,9 @@ it("isolates request contexts and maps Promise/thenable rejections", async () =>
     Array.from({ length: 16 }, (_, i) => String(i)),
   );
   expect(
-    await (await app.handle(request("/api/plain/getThenable"))).json(),
+    await (await app.handle(request("/api/plain/get-thenable"))).json(),
   ).toEqual({ ok: true });
-  const failure = await app.handle(request("/api/plain/getRejected"));
+  const failure = await app.handle(request("/api/plain/get-rejected"));
   expect(failure.status).toBe(500);
   expect(await failure.json()).toMatchObject({
     code: "INTERNAL_SERVER_ERROR",
@@ -269,7 +269,7 @@ it("loads emitted handler functions and rejects stale schemas rather than using 
       requestLogging: false,
     });
     expect(
-      await (await app.handle(request("/v1/emitted/getItem?id=abc"))).json(),
+      await (await app.handle(request("/v1/emitted/get-item?id=abc"))).json(),
     ).toEqual({
       id: "abc",
     });
@@ -300,7 +300,8 @@ it("reports route collisions and safely quotes names/keys in generated code", as
   const compilation = compileBrickApplication({ services: [service] });
   expect(compilation.ir.diagnostics.length).toBe(1);
   const route = compilation.routes.find(
-    (route) => route.ir.path === "/shared" && route.ir.method === "GET",
+    (route) =>
+      route.ir.path === "/api/quoted/shared" && route.ir.method === "GET",
   )!;
   const value = await route.handler({
     query: { "odd'key": "2" },

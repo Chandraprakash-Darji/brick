@@ -1,6 +1,14 @@
 export { defineListener } from "./listener";
 export { emitEvent } from "./emit";
 export {
+  checkEvent,
+  eventRefs,
+  isEventRef,
+  type EventCatalog,
+  type EventRef,
+  type EventRefs,
+} from "./catalog";
+export {
   outboxTable,
   isOutboxTable,
   outboxEngine,
@@ -31,6 +39,8 @@ export type {
   EventDelivery,
   EventEnvelope,
   EventListener,
+  ListenerFailure,
+  RetryDecision,
   EventRecorder,
   EventWorkflow,
   EventsOptions,

@@ -15,7 +15,7 @@ Open `http://localhost:5178` in two browser sessions, then:
 
 The dark chat UI uses the supplied design tokens, system fonts, and Hugeicons. Messages appear only after the server sends them back. Inspect `/api/chat/live` under DevTools → Network → WS to see the frames.
 
-The application broadcasts to every connected client in this server process. It commits messages to SQLite before broadcasting and loads the latest 50 on join, in small frames that fit the socket limit. All messages remain in the database. The history and broadcast policies belong to this application, not the socket transport.
+Every connection is in the socket room `chat:lobby`, and the application emits to it with `live.emit()`. It commits messages to SQLite before emitting and loads the latest 50 on join, in small frames that fit the socket limit. All messages remain in the database. The history policy belongs to this application, not the socket transport.
 
 ## Identity and storage
 

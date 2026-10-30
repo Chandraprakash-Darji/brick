@@ -1,12 +1,40 @@
-import type { EventDelivery, EventListener, EventWorkflow } from "./types";
+import { isEventRef, type EventRef } from "./catalog";
+import { buildErrorHelpers } from "../action";
+import type { ActionErrorDefinition, ErrorBuilder } from "../types";
+import type {
+  EventDelivery,
+  EventListener,
+  EventWorkflow,
+  ListenerFailure,
+  RetryDecision,
+} from "./types";
 
-type ListenerConfig<TPayload> = {
+type EventOn = EventRef<any> | readonly EventRef<any>[];
+type PayloadOf<O> =
+  O extends EventRef<infer P>
+    ? P
+    : O extends readonly EventRef<infer P>[]
+      ? P
+      : never;
+
+type ListenerConfig<
+  TPayload,
+  TOn = string | readonly string[],
+  TErrors extends Record<string, ActionErrorDefinition> = {},
+> = {
   name: string;
-  on: string | readonly string[];
+  on: TOn;
   maxAttempts?: number;
+  /** Errors `run` may raise with `error.CODE()`. Spread `defineError(...)` results or `errorsOf(action)` here. */
+  errors?: TErrors;
+  /** Decides what a failure does next. Without it every failure retries until `maxAttempts`. */
+  retry?: (error: ListenerFailure<TErrors>) => RetryDecision;
 } & (
   | {
-      run: (delivery: EventDelivery<TPayload>) => void | Promise<void>;
+      run: (
+        delivery: EventDelivery<TPayload>,
+        helpers: { error: ErrorBuilder<TErrors> },
+      ) => void | Promise<void>;
       workflow?: never;
     }
   | { workflow: EventWorkflow<TPayload>; run?: never }
@@ -25,8 +53,13 @@ type ListenerConfig<TPayload> = {
  * care: a delivery starts one run however often it is tried, and the workflow
  * retries its own steps.
  *
- * @param config - `name` (unique; it is part of each delivery's id), `on` (an
- * event name or a list of them; a trailing `*` matches a prefix, as in
+ * A listener can declare `errors`, as an action does, and raise them in `run` with
+ * `error.CODE()`. `retry(error)` then picks `"retry"` or `"dead"` from the typed
+ * `error.code`; anything not declared arrives as `{ code: "UNKNOWN", cause }`.
+ *
+ * @param config - `name` (unique; it is part of each delivery's id), `on` (a
+ * declared event such as `orders.events.shipped`, which types the payload, or an
+ * event name; or a list of either; a trailing `*` matches a prefix, as in
  * `user.*`), `run` or `workflow`, and optionally `maxAttempts`.
  * @returns The listener.
  * @throws When the name is empty or contains `:`, `on` is empty, or the listener
@@ -51,18 +84,46 @@ type ListenerConfig<TPayload> = {
  * }
  *
  * defineListener({ name: "onboard", on: "user.create", workflow: onboard });
+ * @example
+ * // payload is { id: string; trackingId: string }, from the orders catalog.
+ * defineListener({
+ *   name: "notify-shipped",
+ *   on: orders.events.shipped,
+ *   run: ({ payload }) => notify(payload.id, payload.trackingId),
+ * });
  */
-export function defineListener<TPayload = any>(
-  config: ListenerConfig<TPayload>,
-): EventListener<TPayload> {
+export function defineListener<
+  const TOn extends EventOn,
+  const TErrors extends Record<string, ActionErrorDefinition> = {},
+>(
+  config: ListenerConfig<PayloadOf<TOn>, TOn, TErrors>,
+): EventListener<PayloadOf<TOn>>;
+export function defineListener<
+  TPayload = any,
+  const TErrors extends Record<string, ActionErrorDefinition> = {},
+>(
+  config: ListenerConfig<
+    TPayload,
+    string | EventRef<any> | readonly (string | EventRef<any>)[],
+    TErrors
+  >,
+): EventListener<TPayload>;
+export function defineListener(
+  config: ListenerConfig<any, unknown, any>,
+): EventListener {
   if (typeof config.name !== "string" || !config.name)
     throw new Error("An event listener needs a name");
   if (config.name.includes(":"))
     throw new Error(
       `Event listener name '${config.name}' must not contain ':'`,
     );
-  const on = typeof config.on === "string" ? [config.on] : [...config.on];
-  if (!on.length || on.some((pattern) => !pattern))
+  const on = (Array.isArray(config.on) ? config.on : [config.on]).map(
+    (item: unknown) => (isEventRef(item) ? item.name : item),
+  ) as string[];
+  if (
+    !on.length ||
+    on.some((pattern) => !pattern || typeof pattern !== "string")
+  )
     throw new Error(`Event listener '${config.name}' listens for nothing`);
   if (
     config.maxAttempts !== undefined &&
@@ -90,10 +151,18 @@ export function defineListener<TPayload = any>(
     throw new Error(
       `Event listener '${name}': workflow must be a function marked "use workflow"`,
     );
+  const helpers = buildErrorHelpers(config.errors);
   return Object.freeze({
     name: config.name,
     on: Object.freeze(on),
-    ...(config.run !== undefined ? { run: config.run } : {}),
+    ...(config.run !== undefined
+      ? {
+          run: ((delivery: EventDelivery) =>
+            config.run!(delivery, { error: helpers })) as EventListener["run"],
+        }
+      : {}),
+    ...(config.errors ? { errors: config.errors } : {}),
+    ...(config.retry ? { retry: config.retry } : {}),
     ...(config.workflow !== undefined ? { workflow: config.workflow } : {}),
     ...(config.maxAttempts !== undefined
       ? { maxAttempts: config.maxAttempts }

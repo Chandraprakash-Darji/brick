@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import {
   Activity,
   Bell,
@@ -28,16 +28,27 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { routeHref, type SidebarState, type Theme, type View } from "@/state";
+import { Slot } from "@/extension";
+import type { NavItem } from "@/extension-registry";
 
-const NAV: { view: View; label: string; icon: ReactNode }[] = [
-  { view: "overview", label: "Overview", icon: <LayoutGrid /> },
-  { view: "requests", label: "Requests", icon: <Activity /> },
-  { view: "logs", label: "Logs", icon: <ScrollText /> },
-  { view: "apis", label: "APIs", icon: <BookOpen /> },
-  { view: "docs", label: "Docs", icon: <BookText /> },
-  { view: "workflows", label: "Workflows", icon: <Workflow /> },
-  { view: "errors", label: "Errors", icon: <TriangleAlert /> },
-  { view: "reloads", label: "Reloads", icon: <RefreshCw /> },
+const builtIn = (view: View, label: string, icon: ReactNode): NavItem => ({
+  key: view,
+  view,
+  label,
+  icon,
+  href: routeHref(view),
+});
+
+/** The dashboard's own pages; an extension's join them (`mergeNav`). */
+export const BUILT_IN_NAV: NavItem[] = [
+  builtIn("overview", "Overview", <LayoutGrid />),
+  builtIn("requests", "Requests", <Activity />),
+  builtIn("logs", "Logs", <ScrollText />),
+  builtIn("apis", "APIs", <BookOpen />),
+  builtIn("docs", "Docs", <BookText />),
+  builtIn("workflows", "Workflows", <Workflow />),
+  builtIn("errors", "Errors", <TriangleAlert />),
+  builtIn("reloads", "Reloads", <RefreshCw />),
 ];
 
 /**
@@ -45,7 +56,8 @@ const NAV: { view: View; label: string; icon: ReactNode }[] = [
  * page instead of taking space from it.
  */
 export function Sidebar({
-  view,
+  nav,
+  current,
   sidebar,
   errorCount,
   hasNewErrors,
@@ -53,7 +65,9 @@ export function Sidebar({
   hasWorkflows,
   production,
 }: {
-  view: View;
+  nav: NavItem[];
+  /** The key of the page showing. */
+  current: string | undefined;
   sidebar: SidebarState;
   errorCount: number;
   hasNewErrors: boolean;
@@ -92,52 +106,78 @@ export function Sidebar({
             </span>
           )}
         </div>
-        {NAV.filter(
-          (item) =>
-            !(
-              production &&
-              (item.view === "apis" ||
-                item.view === "docs" ||
-                item.view === "workflows")
-            ) &&
-            (item.view !== "docs" || hasDocs) &&
-            (item.view !== "workflows" || hasWorkflows),
-        ).map((item) => {
-          const showCount = item.view === "errors" && errorCount > 0;
-          const link = (
-            <a
-              href={routeHref(item.view)}
-              aria-label={item.label}
-              aria-current={item.view === view ? "page" : undefined}
-              onClick={desktop ? undefined : sidebar.close}
-              className={cn(
-                "relative flex h-8 items-center gap-2 rounded-lg text-sm font-medium whitespace-nowrap text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 aria-[current=page]:bg-muted aria-[current=page]:text-foreground [&_svg]:size-4 [&_svg]:shrink-0",
-                expanded ? "px-2" : "w-8 justify-center",
-              )}
-            >
-              {item.icon}
-              {expanded && (
-                <span className="flex-1 truncate">{item.label}</span>
-              )}
-              {expanded && showCount && (
-                <Badge variant={hasNewErrors ? "destructive" : "outline"}>
-                  {errorCount}
-                </Badge>
-              )}
-              {!expanded && item.view === "errors" && hasNewErrors && (
-                <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-destructive" />
-              )}
-            </a>
-          );
-          return expanded ? (
-            <div key={item.view}>{link}</div>
-          ) : (
-            <Tooltip key={item.view}>
-              <TooltipTrigger render={link} />
-              <TooltipContent side="right">{item.label}</TooltipContent>
-            </Tooltip>
-          );
-        })}
+        <Slot name="sidebar.header" expanded={expanded} />
+        {nav
+          .filter(
+            (item) =>
+              !(
+                production &&
+                (item.view === "apis" ||
+                  item.view === "docs" ||
+                  item.view === "workflows")
+              ) &&
+              (item.view !== "docs" || hasDocs) &&
+              (item.view !== "workflows" || hasWorkflows),
+          )
+          .map((item, index, shown) => {
+            const showCount = item.view === "errors" && errorCount > 0;
+            // An extension's section starts with its heading.
+            const heading =
+              item.section !== undefined &&
+              item.section !== shown[index - 1]?.section ? (
+                expanded ? (
+                  <div className="mt-3 mb-1 truncate px-2 text-xs font-medium text-muted-foreground">
+                    {item.section}
+                  </div>
+                ) : (
+                  <Separator className="my-2" />
+                )
+              ) : null;
+            const link = (
+              <a
+                href={item.href}
+                {...(item.external
+                  ? { target: "_blank", rel: "noreferrer" }
+                  : {})}
+                aria-label={item.label}
+                aria-current={item.key === current ? "page" : undefined}
+                onClick={desktop ? undefined : sidebar.close}
+                className={cn(
+                  "relative flex h-8 items-center gap-2 rounded-lg text-sm font-medium whitespace-nowrap text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 aria-[current=page]:bg-muted aria-[current=page]:text-foreground [&_svg]:size-4 [&_svg]:shrink-0",
+                  expanded ? "px-2" : "w-8 justify-center",
+                )}
+              >
+                {item.icon}
+                {expanded && (
+                  <span className="flex-1 truncate">{item.label}</span>
+                )}
+                {expanded && showCount && (
+                  <Badge variant={hasNewErrors ? "destructive" : "outline"}>
+                    {errorCount}
+                  </Badge>
+                )}
+                {!expanded && item.view === "errors" && hasNewErrors && (
+                  <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-destructive" />
+                )}
+              </a>
+            );
+            return (
+              <Fragment key={item.key}>
+                {heading}
+                {expanded ? (
+                  <div>{link}</div>
+                ) : (
+                  <Tooltip>
+                    <TooltipTrigger render={link} />
+                    <TooltipContent side="right">{item.label}</TooltipContent>
+                  </Tooltip>
+                )}
+              </Fragment>
+            );
+          })}
+        <div className="mt-auto">
+          <Slot name="sidebar.footer" expanded={expanded} />
+        </div>
       </nav>
     </>
   );
@@ -150,7 +190,7 @@ const THEME_ICON: Record<Theme, ReactNode> = {
 };
 
 export function Topbar({
-  view,
+  current,
   connected,
   hasNewErrors,
   theme,
@@ -162,7 +202,8 @@ export function Topbar({
   onTheme,
   onRestart,
 }: {
-  view: View;
+  /** The page showing, for its title. */
+  current: NavItem | undefined;
   connected: boolean;
   hasNewErrors: boolean;
   theme: Theme;
@@ -174,7 +215,6 @@ export function Topbar({
   onTheme: () => void;
   onRestart: () => void;
 }) {
-  const current = NAV.find((item) => item.view === view);
   return (
     <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b bg-background/95 px-6 backdrop-blur-sm supports-backdrop-filter:bg-background/50 max-sm:px-4">
       <div className="flex items-center gap-2">
@@ -201,8 +241,10 @@ export function Topbar({
           {current?.icon}
           <span>{current?.label}</span>
         </div>
+        <Slot name="topbar.start" />
       </div>
       <div className="flex items-center gap-2">
+        <Slot name="topbar.end" />
         {production && <Badge variant="outline">Production</Badge>}
         <span
           role="status"

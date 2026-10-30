@@ -4,6 +4,11 @@ import { compileBrickApplication, emitCompiledApplication } from "./compiler";
 import { brickAot } from "./compiler/aot";
 import { loadBrickApp } from "./app-entry";
 import { buildAppWorkflows, workflowTransformPlugin } from "./workflows";
+import {
+  themeCss,
+  writeDashboardExtension,
+  type DashboardExtensionOptions,
+} from "./dashboard-extension";
 
 export interface BuildApplicationOptions {
   /** A module whose default export is a BrickApp, without starting a server. */
@@ -12,6 +17,12 @@ export interface BuildApplicationOptions {
   port?: number;
   /** Precompile Elysia's HTTP handlers at build time (default true). */
   aot?: boolean;
+  /**
+   * The dashboard's extension, built into `<outdir>/dashboard` with those of
+   * the app's plugins for the production dashboard to serve; its theme is
+   * checked here too.
+   */
+  dashboard?: DashboardExtensionOptions;
 }
 
 /** Bundle an exported BrickApp with generated handlers and its original configuration. */
@@ -31,6 +42,14 @@ export async function buildApplication(options: BuildApplicationOptions) {
   if (!Number.isInteger(port) || port < 1 || port > 65535)
     throw new Error(
       "Brick compiler: port must be an integer between 1 and 65535",
+    );
+  themeCss(options.dashboard?.theme);
+  const extension = options.dashboard?.extension
+    ? resolve(options.dashboard.extension)
+    : undefined;
+  if (extension && !(await Bun.file(extension).exists()))
+    throw new Error(
+      `Brick compiler: dashboard extension not found: ${extension}`,
     );
   const app = await loadBrickApp(entry);
   // The bundle stays in the project, where the server finds it from the working
@@ -54,6 +73,7 @@ export const app = await loadCompiledBrickApp(() => import(${JSON.stringify(entr
 if (import.meta.main) {
   const port = Number(process.env.PORT ?? ${port});
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Invalid PORT: must be between 1 and 65535");
+  await app.start?.();
   app.listen(port);
   app.events?.start();
   console.log("Brick compiled server listening on http://localhost:" + app.server.port);
@@ -102,6 +122,13 @@ if (import.meta.main) {
       join(staging, "brick-ir.json"),
       JSON.stringify(compilation.ir, null, 2) + "\n",
     );
+    const dashboard = (await writeDashboardExtension(
+      extension,
+      app.definition.plugins ?? [],
+      join(staging, "dashboard"),
+    ))
+      ? join(outdir, "dashboard")
+      : undefined;
     await mkdir(outdir, { recursive: true });
     for (const name of [
       "routes.js",
@@ -110,7 +137,17 @@ if (import.meta.main) {
       "server.js",
     ])
       await rename(join(staging, name), join(outdir, name));
-    return { outdir, entry: join(outdir, "server.js"), ir: compilation.ir };
+    if (dashboard) {
+      await rm(dashboard, { recursive: true, force: true });
+      await rename(join(staging, "dashboard"), dashboard);
+    }
+    return {
+      outdir,
+      entry: join(outdir, "server.js"),
+      ir: compilation.ir,
+      /** The built dashboard extension's folder, when there is one. */
+      dashboard,
+    };
   } finally {
     await rm(staging, { recursive: true, force: true });
   }

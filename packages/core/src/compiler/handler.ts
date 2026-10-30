@@ -54,9 +54,21 @@ export function createHandlerFactory(route: RouteIR): HandlerFactory {
                 );
             }
           }
+          // Path segments are strings; numeric ids (`/:id`) need numbers.
+          let coercedParams = params;
+          if (params && route.coercions.length) {
+            for (const { key, type } of route.coercions) {
+              if (type !== "number" || typeof params[key] !== "string")
+                continue;
+              const value = Number(params[key]);
+              if (Number.isNaN(value)) continue;
+              if (coercedParams === params) coercedParams = { ...params };
+              coercedParams[key] = value;
+            }
+          }
           let input = readLike
-            ? runtime.mergeInput(coercedQuery, params, body)
-            : runtime.mergeInput(params, body, coercedQuery);
+            ? runtime.mergeInput(coercedQuery, coercedParams, body)
+            : runtime.mergeInput(coercedParams, body, coercedQuery);
           if (objectInput) input ??= {};
           return input;
         }
@@ -91,6 +103,7 @@ export function createHandlerFactory(route: RouteIR): HandlerFactory {
         db: cachedDb ?? service.getDb(),
         logger,
         services: runtime.emptyServices,
+        deps: service.deps ?? runtime.emptyServices,
         metadata: { headers },
         _resolved: true,
       };

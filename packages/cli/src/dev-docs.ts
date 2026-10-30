@@ -594,9 +594,17 @@ export class DevDocs {
   }
 }
 
-// What the dashboard supplies to the project's components itself, so there is
-// only one copy of React on the page. See the import map in the page shell.
-const SHARED = ["react", "react/jsx-runtime", "react/jsx-dev-runtime"];
+// What the dashboard supplies to the project's components and its extension
+// itself, so there is one copy of React and of the UI kit on the page. See the
+// import map in the page shell.
+const SHARED = [
+  "react",
+  "react/jsx-runtime",
+  "react/jsx-dev-runtime",
+  "react-dom",
+  "react-dom/client",
+  "@brickkit/cli/dashboard",
+];
 
 /** Bundle a module of React components for the dashboard to import. */
 export async function bundleComponents(entry: string): Promise<string> {
@@ -607,10 +615,16 @@ export async function bundleComponents(entry: string): Promise<string> {
       format: "esm",
       external: SHARED,
       minify: false,
+      // Report what went wrong, not only that something did.
+      throw: false,
     });
     if (!result.success)
       throw new Error(result.logs.map((log) => log.message).join("\n"));
-    return result.outputs[0]!.text();
+    // A CSS import adds a stylesheet output; the module is the entry point.
+    const output =
+      result.outputs.find((item) => item.kind === "entry-point") ??
+      result.outputs[0]!;
+    return output.text();
   }
   // Under Node the dev server's own bundler does the work. The name is not
   // written as a literal so the CLI's Bun bundle, which never gets here,

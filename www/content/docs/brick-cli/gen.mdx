@@ -86,6 +86,17 @@ export const api = createBrickClient({
 | `openapi`  | `--output <file>` | Writes JSON to specified file path instead of stdout.               |
 | `client`   | `<entry>`         | _(Required)_ Application entry file default-exporting a `BrickApp`. |
 | `client`   | `--output <file>` | Destination file path (defaults to `_brick/contract.ts`).           |
+| all        | `--config <path>` | The `brick.config.ts` to read (default: the nearest one).           |
+
+With a [`brick.config.ts`](/docs/brick-cli/config), `<entry>` is optional and comes from `entry`; `--output` defaults to `openapi.output` and `client.output` (else `<generated>/contract.ts`). A flag still wins. A bare `brick gen` writes the services manifest, then the contract and the OpenAPI document when the config names their outputs.
+
+## Generating the services manifest (`brick gen manifest`)
+
+```bash
+brick gen manifest
+```
+
+Writes `<generated>/services.gen.ts` (default `_brick/services.gen.ts`), which imports every definition file under the `services` folder so each one registers itself. `brick dev`, `brick build`, `brick gen client`, `brick gen openapi` and `brick lint` refresh it before they load the app when the project has a config file. See [the services manifest](/docs/project-structure#the-services-manifest).
 
 ## Run generation during development and builds
 

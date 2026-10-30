@@ -175,10 +175,10 @@ export const app_settingsSchemaFields = [
 
 <DatabaseTable name="app_settings" fields={app_settingsSchemaFields} />
 
-To fetch all comments for an article over HTTP, call the `comment.list` action. CRUD routes are scoped to the resource name, and `list` is mounted at `POST {prefix}/{resource}/query`:
+To fetch all comments for an article over HTTP, call the `comment.list` action. CRUD routes are scoped to the service and resource names, and `list` is mounted at `POST {prefix}/{service}/{resource}/query`:
 
 ```bash
-curl -X POST http://localhost:4000/api/comment/query \
+curl -X POST http://localhost:4000/api/blog/comment/query \
   -H "Content-Type: application/json" \
   -d '{"where": {"field": "targetId", "op": "eq", "value": "ARTICLE_UUID"}}'
 ```
@@ -195,7 +195,7 @@ import { blogService } from "./blog";
 export const getArticleDetails = blogService.action({
   name: "getArticleDetails",
   method: "GET",
-  path: "/api/blog/articles/:id/details",
+  path: "/articles/:id/details", // GET /api/blog/articles/:id/details
   input: t.Object({ id: t.String() }),
   output: t.Object({
     id: t.String(),

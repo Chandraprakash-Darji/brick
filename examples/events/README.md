@@ -1,14 +1,35 @@
 # Events example
 
 An orders service whose writes emit events. Every generated `create`, `update`
-and `delete` on `order` records an event in the same transaction as the row, and
-three listeners react to it after the commit:
+and `delete` on `order` records an event in the same transaction as the row. The
+service also declares an event catalog (`src/events.ts`) with one event,
+`shipped`, and a `ship` command that emits it:
 
-| Listener   | Listens for    | What it does                                                          |
-| ---------- | -------------- | --------------------------------------------------------------------- |
-| `audit`    | `order.*`      | Writes one `audit_log` row per event, describing what changed.        |
-| `receipt`  | `order.create` | Writes a `receipt` notification.                                      |
-| `shipping` | `order.update` | When `status` becomes `shipped`, books a carrier and notifies. Flaky. |
+```ts
+order.command("ship", {
+  access: "public",
+  errors: {
+    NOT_PLACED: { status: 409, message: "Only a placed order can ship" },
+  },
+  decide: (row, _input, { error }) =>
+    row.status !== "placed"
+      ? error.NOT_PLACED()
+      : {
+          set: { status: "shipped" },
+          emit: { shipped: { id: row.id, customer: row.customer } },
+        },
+});
+```
+
+`POST /api/orders/order/:id/ship` changes the status and records
+`orders.shipped` in one transaction. `status` can't be changed with a PATCH.
+Three listeners react after the commit:
+
+| Listener   | Listens for                           | What it does                                                   |
+| ---------- | ------------------------------------- | -------------------------------------------------------------- |
+| `audit`    | `order.*` and `orders.events.shipped` | Writes one `audit_log` row per event, describing what changed. |
+| `receipt`  | `order.create`                        | Writes a `receipt` notification.                               |
+| `shipping` | `orders.events.shipped`               | Books a carrier and notifies, with a typed payload. Flaky.     |
 
 The carrier is a stand-in API that can be told to fail, so the `shipping`
 listener shows retries and the `dead` state. Every listener writes its row under
@@ -31,9 +52,10 @@ The database is `.data/orders.sqlite`. Set `DB_PATH` to move it. Set
 `CARRIER_FAILURES=2` to make the carrier fail twice before it answers.
 
 ```sh
-curl -s -X POST localhost:4000/api/order -H 'content-type: application/json' \
+curl -s -X POST localhost:4000/api/orders/order -H 'content-type: application/json' \
   -d '{"customer":"ada@example.com","totalCents":4200}'
-curl -s -X POST localhost:4000/api/notification/query -H 'content-type: application/json' -d '{}'
+curl -s -X POST localhost:4000/api/orders/order/<id>/ship
+curl -s -X POST localhost:4000/api/orders/notification/query -H 'content-type: application/json' -d '{}'
 ```
 
 ## Shipping as a workflow

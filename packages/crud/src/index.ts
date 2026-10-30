@@ -182,6 +182,33 @@ function whereDepthExceeded(input: unknown): boolean {
   return false;
 }
 const own = (value: object, key: string) => Object.hasOwn(value, key);
+
+// Where definePlugin's `hooks.*` puts a plugin's hooks, on the resource or the
+// service it is installed on. A process-global symbol, so core needs no crud import.
+const HOST_HOOKS = Symbol.for("brickkit.plugin.hooks");
+type Hook = (args: any) => unknown;
+/** The crud() hooks, then those of plugins installed on the resource, then on the service. */
+function withHostHooks(
+  hooks: CrudOptions<any, any>["hooks"],
+  resource: object,
+  service: object,
+): NonNullable<CrudOptions<any, any>["hooks"]> {
+  const hosted = [resource, service]
+    .map((host) => (host as Record<symbol, unknown>)[HOST_HOOKS])
+    .filter(Boolean) as Record<string, Hook[]>[];
+  if (!hosted.length) return hooks ?? {};
+  const merged: Record<string, Hook> = { ...hooks };
+  for (const name of new Set(hosted.flatMap((item) => Object.keys(item)))) {
+    const chain = [
+      (hooks as Record<string, Hook> | undefined)?.[name],
+      ...hosted.flatMap((item) => item[name] ?? []),
+    ].filter((hook): hook is Hook => typeof hook === "function");
+    merged[name] = async (args) => {
+      for (const hook of chain) await hook(args);
+    };
+  }
+  return merged;
+}
 function uniqueViolation(error: unknown): boolean {
   let current = error;
   for (
@@ -653,8 +680,8 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
           (operation === "create" ||
             operation === "update" ||
             operation === "delete") &&
-          service.events?.wants(eventName)
-            ? service.events
+          service.recorder?.wants(eventName)
+            ? service.recorder
             : undefined;
         const readableEventRow = (row: Record<string, unknown>) =>
           Object.fromEntries(
@@ -883,7 +910,7 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
           );
           return { exists: rows.length > 0 };
         }
-        const hooks = options.hooks ?? {};
+        const hooks = withHostHooks(options.hooks, resource, service);
         // Hooks get the transaction; a bulk call passes its own in `outer`.
         const inTransaction = <R>(
           fn: (tx: any, record?: EventRecorder) => Promise<R>,
@@ -1125,8 +1152,8 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
         };
         const results =
           options.events !== false &&
-          service.events?.wants(`${resource.name}.${single}`)
-            ? await service.events.transaction(db, eventContext(ctx), run)
+          service.recorder?.wants(`${resource.name}.${single}`)
+            ? await service.recorder.transaction(db, eventContext(ctx), run)
             : await runInTransaction(db, (tx) => run(tx));
         return single === "delete"
           ? { count: results.length }

@@ -3,7 +3,16 @@ title: Plugins Overview
 description: Extend services and resources with modular plugins, typed APIs, and scoped routes.
 ---
 
-Brick-TS provides modular plugin primitives—`defineServicePlugin` and `defineResourcePlugin`—to package reusable capabilities, custom endpoints, and typed resource extensions.
+Brick-TS provides modular plugin primitives to package reusable capabilities, custom endpoints, and typed resource extensions.
+
+<Callout type="info">
+  New plugins use **`definePlugin`**: a manifest Brick checks at install (name,
+  supported Brick versions, required plugins, typed options, secrets), tables
+  the plugin owns, hooks into the host's CRUD writes, events, and an app-wide
+  part with a start/stop lifecycle. See [Authoring
+  Plugins](/docs/plugins/build-plugin). `defineServicePlugin` and
+  `defineResourcePlugin`, below, keep working.
+</Callout>
 
 ## Minimal Example
 

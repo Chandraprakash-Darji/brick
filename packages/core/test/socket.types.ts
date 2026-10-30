@@ -4,7 +4,7 @@ import { createBrickClient, type BrickClientSocket } from "../src/client";
 const service = defineService("chat", {
   context: () => ({ user: { id: "user" } }),
 });
-service.socket({
+const handle = service.socket({
   name: "live",
   input: { say: t.String(), count: t.Number() },
   output: { message: t.Object({ text: t.String() }) },
@@ -24,6 +24,13 @@ service.socket({
     },
   },
 });
+handle.emit("doc:1", "message", { text: "hi" });
+handle.emit(["user:1", "team:2"], "message", { text: "hi" }, { after: {} });
+handle.kick("doc:1", { also: "user:1", reason: "removed" });
+// @ts-expect-error Emit payloads are checked.
+handle.emit("doc:1", "message", { text: 42 });
+// @ts-expect-error Only output events can be emitted.
+handle.emit("doc:1", "say", "hello");
 service.socket({
   name: "missing",
   input: { say: t.String() },
@@ -59,3 +66,28 @@ live.on("say", () => {});
 declare const union: "say" | "count";
 // @ts-expect-error An uncorrelated union event/payload must not compile.
 live.send(union, "hello");
+void live.join("doc:1").then(() => live.leave("doc:1"));
+live.onLeave((room: string, reason?: string) => void [room, reason]);
+const mobile = createBrickClient({
+  baseUrl: "https://example.test",
+  contract,
+}).chat.live.connect({
+  token: async () => "jwt",
+  reconnect: { minDelayMs: 100 },
+});
+const status: "connecting" | "open" | "reconnecting" | "closed" = mobile.status;
+void status;
+mobile.onStatus((next) => void next);
+mobile.onReconnect(() => {});
+createBrickClient({
+  baseUrl: "https://example.test",
+  contract,
+}).chat.live.connect({ reconnect: false });
+mobile.onGap((room: string) => void room);
+service.socket({
+  name: "replayed",
+  input: {},
+  output: {},
+  replay: { keep: 100, maxAgeMs: 60_000 },
+  handlers: {},
+});

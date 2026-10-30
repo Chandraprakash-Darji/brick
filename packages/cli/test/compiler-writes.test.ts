@@ -76,8 +76,12 @@ it("preserves defaults, mapping, write permissions, hooks and persistence across
     ] as const;
     const results: any[] = [];
     for (const [method, path, body] of commands) {
-      const ra = await a.app.handle(request(method, path, body)),
-        rb = await b.app.handle(request(method, path, body));
+      const ra = await a.app.handle(
+          request(method, path.replace("/api/", "/api/specialized/"), body),
+        ),
+        rb = await b.app.handle(
+          request(method, path.replace("/api/", "/api/generic/"), body),
+        );
       expect(ra.status).toBe(rb.status);
       const value = await ra.json();
       expect(value).toEqual(await rb.json());

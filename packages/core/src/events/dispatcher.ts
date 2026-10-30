@@ -2,6 +2,7 @@ import { and, asc, eq, inArray, lt, lte, or, sql } from "drizzle-orm";
 import { type OutboxStatus, type OutboxTable, outboxEngine } from "./outbox";
 import { runInTransaction } from "./transaction";
 import type { Deliverable } from "./hub";
+import { ActionExecutionError } from "../types";
 import type { DispatchOptions, EventDelivery } from "./types";
 
 export type ResolvedDispatchOptions = Required<DispatchOptions>;
@@ -39,6 +40,24 @@ interface OutboxRow {
 }
 
 const PURGE_INTERVAL_MS = 60_000;
+
+/** Asks the listener's `retry` what to do with a failure. A `retry` that throws counts as "retry". */
+function decideRetry(listener: Deliverable, error: unknown): "retry" | "dead" {
+  if (!listener.retry) return "retry";
+  try {
+    return listener.retry(
+      error instanceof ActionExecutionError && listener.errors?.[error.code]
+        ? { code: error.code, message: error.message, details: error.details }
+        : {
+            code: "UNKNOWN",
+            message: error instanceof Error ? error.message : String(error),
+            cause: error,
+          },
+    );
+  } catch {
+    return "retry";
+  }
+}
 
 export function backoffMs(attempt: number, maxBackoffMs: number): number {
   return Math.min(1_000 * 2 ** Math.max(0, attempt - 1), maxBackoffMs);
@@ -256,6 +275,7 @@ export class Dispatcher {
         row,
         error,
         listener.maxAttempts ?? this.options.maxAttempts,
+        decideRetry(listener, error),
       );
       return;
     }
@@ -285,9 +305,10 @@ export class Dispatcher {
     row: OutboxRow,
     error: unknown,
     maxAttempts: number,
+    decision: "retry" | "dead" = "retry",
   ): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
-    if (row.attempts >= maxAttempts) {
+    if (decision === "dead" || row.attempts >= maxAttempts) {
       await this.park(row, message);
       return;
     }

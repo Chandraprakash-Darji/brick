@@ -139,7 +139,7 @@ it("rejects plugin routes that collide with ordinary actions or endpoints", () =
   service.action({
     name: "ordinary",
     method: "GET",
-    path: "/api/comments/:id",
+    path: "/comments/:id",
     execute: () => 1,
   });
   service.use(
@@ -150,7 +150,6 @@ it("rejects plugin routes that collide with ordinary actions or endpoints", () =
           count: routes.action({
             name: "count",
             method: "GET",
-            scope: "app",
             path: "/comments/:commentId",
             input: t.Object({ commentId: t.String() }),
             execute: () => 2,
@@ -194,7 +193,7 @@ it("puts independently configured resource plugins in their browser namespaces",
     ["post", 7],
   ] as const) {
     const response = await app.handle(
-      new Request(`http://localhost/api/${resource}/comments/count`),
+      new Request(`http://localhost/api/content/${resource}/comments/count`),
     );
     expect(await response.json()).toEqual({ count });
   }
@@ -203,11 +202,11 @@ it("puts independently configured resource plugins in their browser namespaces",
     /export const contract: AppContract = JSON.parse\((.+)\);/,
   )![1]!;
   const module = { contract: JSON.parse(JSON.parse(serialized)) };
-  expect(module.contract.page.comments.count.config.path).toBe(
-    "/api/page/comments/count",
+  expect(module.contract.content.page.comments.count.config.path).toBe(
+    "/api/content/page/comments/count",
   );
-  expect(module.contract.post.comments.count.config.path).toBe(
-    "/api/post/comments/count",
+  expect(module.contract.content.post.comments.count.config.path).toBe(
+    "/api/content/post/comments/count",
   );
   expect(module.contract.content.comments).toBeUndefined();
   expect(

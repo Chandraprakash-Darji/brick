@@ -95,7 +95,7 @@ it("includes startup endpoints and invalidates OpenAPI when service definitions 
   service.action({ name: "laterAction", execute: () => "later" });
   const spec = await (await app.handle(request("/openapi.json"))).json();
   expect(spec.paths["/later"]).toBeDefined();
-  expect(spec.paths["/api/spec/laterAction"]).toBeDefined();
+  expect(spec.paths["/api/spec/later-action"]).toBeDefined();
   expect(await (await app.handle(request("/openapi.json"))).json()).toEqual(
     spec,
   );

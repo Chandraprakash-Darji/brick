@@ -25,12 +25,12 @@ import { sql } from "drizzle-orm";
 import postgres from "postgres";
 import {
   brick,
-  createServiceProxy,
   defineDatabase,
   defineService,
   resetGlobalRegistry,
   t,
   traceRoute,
+  useService,
 } from "../src";
 
 const exporter = new InMemorySpanExporter();
@@ -80,7 +80,7 @@ function buildApp(telemetry?: boolean) {
     name: "checkout",
     input: t.Object({ id: t.String() }),
     execute: async ({ input }) => {
-      const remote = createServiceProxy<any>("users");
+      const remote = useService(users);
       return remote.getUser({ id: input.id });
     },
   });
@@ -120,15 +120,40 @@ function spanNamed(name: string) {
 describe("telemetry spans", () => {
   it("records an HTTP span with the action span as its child", async () => {
     const app = buildApp(true);
-    const response = await post(app, "/api/users/getUser", { id: "usr_42" });
+    const response = await post(app, "/api/users/get-user", { id: "usr_42" });
 
     expect(response.status).toBe(200);
-    const root = spanNamed("POST /api/users/getUser");
+    const root = spanNamed("POST /api/users/get-user");
     const action = spanNamed("action users.getUser");
     expect(action.parentSpanContext?.spanId).toBe(root.spanContext().spanId);
     expect(action.attributes["brick.action"]).toBe("getUser");
     expect(root.attributes["http.response.status_code"]).toBe(200);
     expect(root.status.code).toBe(SpanStatusCode.UNSET);
+  });
+
+  it("marks calls to v0.10 paths with brick.legacy_route", async () => {
+    resetGlobalRegistry();
+    const users = defineService("users");
+    users.action({ name: "getUser", execute: () => ({ ok: true }) });
+    const app = brick({
+      services: [users],
+      requestLogging: false,
+      telemetry: true,
+      legacyRoutes: true,
+    });
+    const response = await post(app, "/api/users/getUser", {});
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("deprecation")).toBe("true");
+    const root = spanNamed("POST /api/users/getUser");
+    expect(root.attributes["brick.legacy_route"]).toBe(true);
+    expect(spanNamed("action users.getUser").parentSpanContext?.spanId).toBe(
+      root.spanContext().spanId,
+    );
+    await post(app, "/api/users/get-user", {});
+    expect(
+      spanNamed("POST /api/users/get-user").attributes["brick.legacy_route"],
+    ).toBeUndefined();
   });
 
   it("marks server faults on the action and request spans with the code and exception", async () => {
@@ -148,14 +173,14 @@ describe("telemetry spans", () => {
 
   it("keeps client errors as attributes rather than span errors", async () => {
     const app = buildApp(true);
-    const response = await post(app, "/api/users/getUser", { id: "nope" });
+    const response = await post(app, "/api/users/get-user", { id: "nope" });
 
     expect(response.status).toBe(404);
     const action = spanNamed("action users.getUser");
     expect(action.attributes["brick.error.code"]).toBe("NOT_FOUND");
     expect(action.attributes["brick.error.status"]).toBe(404);
     expect(action.status.code).toBe(SpanStatusCode.UNSET);
-    expect(spanNamed("POST /api/users/getUser").status.code).toBe(
+    expect(spanNamed("POST /api/users/get-user").status.code).toBe(
       SpanStatusCode.UNSET,
     );
   });
@@ -186,17 +211,17 @@ describe("telemetry spans", () => {
     const disabled = buildApp(false);
 
     expect(
-      (await post(omitted, "/api/users/getUser", { id: "usr_42" })).status,
+      (await post(omitted, "/api/users/get-user", { id: "usr_42" })).status,
     ).toBe(200);
     expect(
-      (await post(disabled, "/api/users/getUser", { id: "usr_42" })).status,
+      (await post(disabled, "/api/users/get-user", { id: "usr_42" })).status,
     ).toBe(200);
     expect(exporter.getFinishedSpans()).toHaveLength(0);
   });
 
   it("does not record RPC spans for calls made outside a traced request", async () => {
     buildApp(true);
-    const remote = createServiceProxy<any>("users");
+    const remote = useService({ name: "users" });
 
     expect(await remote.getUser({ id: "usr_42" })).toEqual({ id: "usr_42" });
     expect(exporter.getFinishedSpans()).toHaveLength(0);
@@ -209,7 +234,7 @@ describe("trace context and database spans", () => {
     const traceId = "4bf92f3577b34da6a3ce929d0e0e4736";
     const parentId = "00f067aa0ba902b7";
     const response = await app.handle(
-      new Request("http://localhost/api/users/getUser", {
+      new Request("http://localhost/api/users/get-user", {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -220,7 +245,7 @@ describe("trace context and database spans", () => {
     );
 
     expect(response.status).toBe(200);
-    const root = spanNamed("POST /api/users/getUser");
+    const root = spanNamed("POST /api/users/get-user");
     expect(root.spanContext().traceId).toBe(traceId);
     expect(root.parentSpanContext?.spanId).toBe(parentId);
     expect(response.headers.get("x-trace-id")).toBe(traceId);
@@ -231,16 +256,16 @@ describe("trace context and database spans", () => {
 
   it("returns the request's trace id as x-trace-id when the caller sends none", async () => {
     const app = buildApp(true);
-    const response = await post(app, "/api/users/getUser", { id: "usr_42" });
+    const response = await post(app, "/api/users/get-user", { id: "usr_42" });
 
-    const root = spanNamed("POST /api/users/getUser");
+    const root = spanNamed("POST /api/users/get-user");
     expect(response.headers.get("x-trace-id")).toBe(root.spanContext().traceId);
   });
 
   it("keeps a client-supplied x-trace-id and records it on the span", async () => {
     const app = buildApp(true);
     const response = await app.handle(
-      new Request("http://localhost/api/users/getUser", {
+      new Request("http://localhost/api/users/get-user", {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -252,7 +277,7 @@ describe("trace context and database spans", () => {
 
     expect(response.headers.get("x-trace-id")).toBe("client-42");
     expect(
-      spanNamed("POST /api/users/getUser").attributes["brick.trace_id"],
+      spanNamed("POST /api/users/get-user").attributes["brick.trace_id"],
     ).toBe("client-42");
   });
 

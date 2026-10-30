@@ -3,5 +3,5 @@
   "description": "Command-line developer and build tooling",
   "icon": "Terminal",
   "root": true,
-  "pages": ["index", "dev-and-start", "build", "gen", "info"]
+  "pages": ["index", "config", "dev-and-start", "build", "gen", "lint", "info"]
 }

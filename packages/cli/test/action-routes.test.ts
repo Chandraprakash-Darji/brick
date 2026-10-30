@@ -14,14 +14,14 @@ it("exposes only the effective action path and method in both server modes and O
         service.action({
           name: "get_document",
           method,
-          ...(customPath ? { path: "/v2/documents/:name" } : {}),
+          ...(customPath ? { path: "/documents/:name" } : {}),
           input: t.Object({ name: t.String(), field: t.String() }),
           output: t.String(),
           execute: ({ input }) => `${input.name}:${input.field}`,
         });
         const effectiveMethod = method ?? "POST";
         const path = customPath
-          ? "/v2/documents/CRMDeal"
+          ? "/v2/records/documents/CRMDeal"
           : "/v2/records/get_document";
         const compilation = compileBrickApplication({
           services: [service],
@@ -30,7 +30,7 @@ it("exposes only the effective action path and method in both server modes and O
         expect(compilation.ir.routes).toHaveLength(1);
         expect(compilation.ir.routes[0]!.method).toBe(effectiveMethod);
         expect(compilation.ir.routes[0]!.path).toBe(
-          customPath ? "/v2/documents/:name" : path,
+          customPath ? "/v2/records/documents/:name" : path,
         );
         const app = brick({
           services: [service],
@@ -80,7 +80,7 @@ it("exposes only the effective action path and method in both server modes and O
         const spec = await (
           await app.handle(new Request("http://localhost/openapi.json"))
         ).json();
-        const specPath = customPath ? "/v2/documents/{name}" : path;
+        const specPath = customPath ? "/v2/records/documents/{name}" : path;
         expect(Object.keys(spec.paths)).toEqual([specPath]);
         expect(Object.keys(spec.paths[specPath])).toEqual([
           effectiveMethod.toLowerCase(),

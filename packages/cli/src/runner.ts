@@ -1,10 +1,10 @@
 import { existsSync } from "fs";
 import { watch } from "fs";
-import { resolve, dirname, basename } from "path";
+import { resolve, dirname, basename, sep } from "path";
 import { fileURLToPath } from "node:url";
 import {
   brick,
-  getPluginActionRoute,
+  getActionRoute,
   isBrickApp,
   type ApiDocument,
   type ArchitectureSchema,
@@ -12,11 +12,17 @@ import {
   type DocumentationOptions,
   type EventsHub,
 } from "@brickkit/core";
-import { startDevDashboard, type DevDashboard } from "./dev-dashboard";
+import {
+  DEFAULT_DASHBOARD_PORT,
+  startDevDashboard,
+  type DevDashboard,
+} from "./dev-dashboard";
+import type { DashboardExtensionOptions } from "./dashboard-extension";
 import { DocsHost } from "./dev-docs";
 import { DEFAULT_HISTORY_DAYS, openHistory } from "./dev-history";
 import { DevTelemetryStore } from "./dev-telemetry-store";
 import { parsePort } from "./port-utils";
+import { writeServiceManifest } from "./manifest";
 import { buildAppWorkflows, registerWorkflowTransform } from "./workflows";
 import { startProductionDashboard } from "./production-dashboard";
 import type {
@@ -35,10 +41,19 @@ export interface DevServerOptions {
   frontend?: string;
   /**
    * Local dashboard with live requests, traces, errors, and reloads. Needs an
-   * entry. `historyDays` is how long finished requests are kept on disk
-   * (default 90); zero keeps live data only.
+   * entry. `port` defaults to 9400. `historyDays` is how long finished
+   * requests are kept on disk (default 90); zero keeps live data only.
+   * `extension` and `theme` customise it (see `DashboardExtensionOptions`);
+   * `brick start` reads only those two, for the production dashboard.
    */
-  dashboard?: { port: number; historyDays?: number } | false;
+  dashboard?:
+    | ({ port?: number; historyDays?: number } & DashboardExtensionOptions)
+    | false;
+  /**
+   * Keep `<generated>/services.gen.ts` importing every definition file under
+   * `services`: written before the app starts and again when files change.
+   */
+  manifest?: { services: string; generated: string };
 }
 
 async function createServer(
@@ -68,6 +83,8 @@ async function createServer(
     });
 
   await buildAppWorkflows(app, { reuse: label === "Development" });
+  // Plugins open their connections before the first request.
+  await app.start?.();
   await app.listen({ port });
   app.events?.start();
 
@@ -81,14 +98,9 @@ async function createServer(
     const actions = svc.listActions();
     console.log(`   • ${svc.name} (${actions.length} actions)`);
     for (const act of actions) {
-      const pluginRoute = getPluginActionRoute(act, prefix);
-      if (pluginRoute === false) continue;
-      const method = pluginRoute?.method ?? act.config.method ?? "POST";
-      const path =
-        pluginRoute?.path ??
-        act.config.path ??
-        `${prefix}/${svc.name}/${act.name}`;
-      console.log(`     -> ${method.padEnd(6)} ${path}`);
+      const route = getActionRoute(act, prefix);
+      if (route === false) continue;
+      console.log(`     -> ${route.method.padEnd(6)} ${route.path}`);
     }
   }
 
@@ -172,25 +184,28 @@ export async function startProdServer(options: DevServerOptions = {}) {
     const actions = svc.listActions();
     console.log(`   • ${svc.name} (${actions.length} actions)`);
     for (const act of actions) {
-      const pluginRoute = getPluginActionRoute(act, prefix);
-      if (pluginRoute === false) continue;
-      const method = pluginRoute?.method ?? act.config.method ?? "POST";
-      const path =
-        pluginRoute?.path ??
-        act.config.path ??
-        `${prefix}/${svc.name}/${act.name}`;
-      console.log(`     -> ${method.padEnd(6)} ${path}`);
+      const route = getActionRoute(act, prefix);
+      if (route === false) continue;
+      console.log(`     -> ${route.method.padEnd(6)} ${route.path}`);
     }
   }
 
   await buildAppWorkflows(app);
   // Before listening, so the first request is already traced and its logs kept.
-  const dashboard = await startProductionDashboard(app, { appPort: port });
+  const dashboard = await startProductionDashboard(app, {
+    appPort: port,
+    dashboard: options.dashboard || undefined,
+  });
+  await app.start?.();
   app.listen(port);
-  if (app.events) {
-    app.events.start();
-    finishDeliveriesOnSignal(app.events);
-  }
+  app.events?.start();
+  // Finish deliveries, then stop the server and the plugins (reverse order).
+  finishDeliveriesOnSignal({
+    stop: async () => {
+      await app.events?.stop();
+      await app.stop();
+    },
+  });
 
   console.log(`\n⚡ API Gateway running on: http://localhost:${port}`);
   console.log(`🩺 Health check:        http://localhost:${port}/_health`);
@@ -245,8 +260,15 @@ export async function startWorker(options: { entry: string }) {
       "Brick: this app only records events (events.dispatch is false), so a worker would deliver nothing. Enable dispatch for the worker process.",
     );
   await buildAppWorkflows(app);
-  app.events.start();
-  finishDeliveriesOnSignal(app.events);
+  const events = app.events;
+  await app.start?.();
+  events.start();
+  finishDeliveriesOnSignal({
+    stop: async () => {
+      await events.stop();
+      await app.stop();
+    },
+  });
   const listeners = app.events.describe().listeners;
   console.log(`\n🧱 Brick-TS Worker`);
   console.log(
@@ -326,7 +348,7 @@ export async function startDevServer(options: DevServerOptions = {}) {
   if (
     options.dashboard &&
     options.port !== undefined &&
-    options.dashboard.port === options.port
+    (options.dashboard.port ?? DEFAULT_DASHBOARD_PORT) === options.port
   )
     throw new Error(
       "Brick: dashboard port must differ from the API port. Use --dashboard-port <number>.",
@@ -337,6 +359,8 @@ export async function startDevServer(options: DevServerOptions = {}) {
       options.port === undefined ? undefined : String(options.port),
       process.env.PORT,
     );
+  const manifest = options.manifest;
+  if (manifest) await writeServiceManifest(manifest);
   const history = options.dashboard
     ? await openHistory({
         directory: process.cwd(),
@@ -424,6 +448,9 @@ export async function startDevServer(options: DevServerOptions = {}) {
             telemetry.setArchitecture(
               message.architecture as ArchitectureSchema,
               generation,
+            );
+            void dashboard?.setPluginExtensions(
+              (message.architecture as ArchitectureSchema).plugins ?? [],
             );
           }
           if (
@@ -515,10 +542,14 @@ export async function startDevServer(options: DevServerOptions = {}) {
   const dashboard: DevDashboard | undefined =
     telemetry && options.dashboard
       ? await startDevDashboard({
-          port: options.dashboard.port,
+          port: options.dashboard.port ?? DEFAULT_DASHBOARD_PORT,
           store: telemetry,
           history,
           docs: () => docs?.current,
+          dashboard: {
+            extension: options.dashboard.extension,
+            theme: options.dashboard.theme,
+          },
           restart: () => {
             void restart("dashboard");
           },
@@ -532,7 +563,12 @@ export async function startDevServer(options: DevServerOptions = {}) {
   }
   let child = launch();
   const watchDirs = [
-    ...new Set([resolve("src"), resolve("app"), resolve(resolvedEntry, "..")]),
+    ...new Set([
+      resolve("src"),
+      resolve("app"),
+      resolve(resolvedEntry, ".."),
+      ...(manifest ? [manifest.services] : []),
+    ]),
   ].filter(existsSync);
   let pending: ReturnType<typeof setTimeout> | undefined;
   let restarting = false;
@@ -572,15 +608,34 @@ export async function startDevServer(options: DevServerOptions = {}) {
       void restart();
     }, 100);
   }
+  const extension = options.dashboard && options.dashboard.extension;
+  const extensionDir =
+    extension && !watchDirs.includes(dirname(resolve(extension)))
+      ? `${dirname(resolve(extension))}${sep}`
+      : undefined;
   const watchers = watchDirs.map((dir) =>
     watch(dir, { recursive: true }, (_event, filename) => {
       if (!filename || filename.split(/[\\/]/).includes("node_modules")) return;
       const file = resolve(dir, filename);
       if (
         file === resolve(options.clientOutput ?? "_brick/contract.ts") ||
-        basename(file).startsWith(".brick-contract-")
+        basename(file).startsWith(".brick-contract-") ||
+        // The dashboard rebuilds its extension itself; the app restarts only
+        // for the files it imports.
+        (extensionDir !== undefined &&
+          file.startsWith(extensionDir) &&
+          !dependencyFiles.has(file))
       )
         return;
+      // A definition file was added or removed: refresh the import list first.
+      if (manifest && file.startsWith(manifest.services + sep)) {
+        void writeServiceManifest(manifest)
+          .catch((error: unknown) =>
+            console.error("[Brick-TS] Could not write services.gen.ts:", error),
+          )
+          .finally(scheduleRestart);
+        return;
+      }
       scheduleRestart();
     }),
   );

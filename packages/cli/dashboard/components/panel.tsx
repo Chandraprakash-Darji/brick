@@ -1,4 +1,4 @@
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { Plus } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -12,13 +12,15 @@ const CORNERS = {
 
 /**
  * Efferd's card: a square, 1px-bordered surface with a plus mark on each
- * corner, built on the shadcn Card with its radius and ring removed.
+ * corner, built on the shadcn Card with its radius and ring removed. A `title`
+ * is a heading row across the top.
  */
 export function Panel({
   className,
   children,
+  title,
   ...props
-}: ComponentProps<"div">) {
+}: Omit<ComponentProps<"div">, "title"> & { title?: ReactNode }) {
   return (
     <Card
       className={cn(
@@ -38,6 +40,9 @@ export function Panel({
           )}
         />
       ))}
+      {title !== undefined && (
+        <div className="border-b px-4 py-3 text-sm font-medium">{title}</div>
+      )}
       {children}
     </Card>
   );

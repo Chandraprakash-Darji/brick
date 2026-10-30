@@ -18,7 +18,7 @@ brick dev src/server.ts --port 4000
 When running `brick dev`:
 
 1. **Entry File Loading**: The CLI resolves the application entry file. If an entry file path is provided but does not exist, the CLI exits immediately with an error.
-2. **Watch Directories**: The CLI monitors `src/`, `app/`, and the parent folder of the entry file for changes (excluding `node_modules`).
+2. **Watch Directories**: The CLI monitors `src/`, `app/`, and the parent folder of the entry file for changes (excluding `node_modules`). With a [`brick.config.ts`](/docs/brick-cli/config), it also watches the `services` folder and rewrites [`services.gen.ts`](/docs/project-structure#the-services-manifest) before the restart, so an added or removed definition file is registered.
 3. **Fresh Application Process**: After a short debounce, `brick dev` stops the application process and starts a new one. The entry and all its dependencies run again with a fresh service registry and module graph. Default-exported `BrickApp` options (including the route prefix) are preserved; the CLI port takes precedence. For the programmatic `startDevServer({ prefix })` option, the exported app’s prefix takes precedence and the runner prints a warning.
 
 ### Generate contracts before frontend startup
@@ -49,9 +49,9 @@ Upon startup, `brick dev` logs registered services and their public HTTP endpoin
 🧱 Brick-TS Development Server
    Registered Services: 2
    • pages (8 actions)
-     -> POST   /api/pages/page.list
-     -> POST   /api/pages/page.get
-     -> POST   /api/pages/page.create
+     -> POST   /api/pages/page/query
+     -> GET    /api/pages/page/:id
+     -> POST   /api/pages/page
    • users (2 actions)
      -> GET    /api/users/:id
      -> POST   /api/users/login
@@ -81,7 +81,7 @@ brick dev src/server.ts --history-days 0        # live requests only, nothing on
 brick dev src/server.ts --no-dashboard          # API only
 ```
 
-The Overview tab draws the app as a graph of clients, services, and databases. Each service shows its actions and tools, each database its name, engine, and tables, and the calls, durations, and health fill in from recent requests. Below it are each HTTP route with its action and recent request and failure counts, and the services with their databases and resources. SQL statements appear as child spans under the action that ran them, with the statement text on hover. Spans are colored by type: request, action, service call, and SQL.
+The Overview tab draws the app as a graph of clients, services, and databases. Each service shows its actions and tools, each database its name, engine, and tables, and the calls, durations, and health fill in from recent requests. Below it are each HTTP route with its action and recent request and failure counts, and the services with their databases and resources. SQL statements appear as child spans under the action that ran them, with the statement text on hover. Spans are colored by type: request, action, service call, and SQL. When the app sets [`legacyRoutes`](/docs/routes#legacyroutes), the Overview also shows how many recent calls used a v0.10 path.
 
 ### API Reference
 

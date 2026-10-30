@@ -55,7 +55,7 @@ Every action invocation and service resolver receives a `BaseContext` containing
 | `logger`    | `Logger`                  | Logger with `.info()`, `.warn()`, `.error()`, and `.debug()`.                                            |
 | `traceId`   | `string`                  | Trace ID. Over HTTP, taken from the `x-trace-id` header when present (e.g., `tr_k2l9p0`).                |
 | `requestId` | `string`                  | Request ID. Over HTTP, taken from the `x-request-id` header when present (e.g., `req_k2l9p0`).           |
-| `services`  | `Record<string, any>`     | Reserved. Brick passes an empty object; use `createServiceProxy` to call other services.                 |
+| `services`  | `Record<string, any>`     | Reserved. Brick passes an empty object; use `useService` to call other services.                         |
 | `metadata`  | `Record<string, unknown>` | Over HTTP, `{ headers }` with the request headers; an empty object in-process.                           |
 
 Over HTTP, Brick echoes `traceId` and `requestId` back as `x-trace-id` and `x-request-id` response headers.
@@ -82,28 +82,22 @@ The returned object is merged with `BaseContext` to form `ActionContext`. Inside
 
 ## Context Isolation Across In-Process Service Calls
 
-When calling another service in-process using `createServiceProxy`, Brick enforces strict context isolation:
+When calling another service in-process with `useService`, Brick enforces strict context isolation:
 
 ```ts title="src/services/notifications.ts"
-import { createServiceProxy, defineService } from "@brickkit/core";
+import { defineService, useService } from "@brickkit/core";
+import { usersService } from "./users";
 
 export const notificationsService = defineService("notifications");
 
-// The type parameter is the shape you call; Brick doesn't infer it
-type UsersApi = {
-  getUser: (input: {
-    id: string;
-  }) => Promise<{ id: string; name: string; email: string }>;
-};
-
-// Proxy to the "users" service, looked up by name in the global registry.
+// Typed from the users service's actions (through the generated contract).
 // `from` identifies the calling service, so `users` actions see `ctx.caller === "notifications"`.
-const users = createServiceProxy<UsersApi>("users", { from: "notifications" });
+const users = useService(usersService, { from: "notifications" });
 
 export const sendWelcome = notificationsService.action({
   name: "sendWelcome",
   execute: async ({ ctx }) => {
-    // Proxy methods take (input, callCtx?) and run the action in-process
+    // Methods take (input, callCtx?) and run the action in-process
     const user = await users.getUser({ id: "usr_1" });
     ctx.logger.info(`Sending welcome email to ${user.email}`);
     return { sent: true };
@@ -111,7 +105,9 @@ export const sendWelcome = notificationsService.action({
 });
 ```
 
-Each proxy method takes the action's input as its first argument and an optional call context as its second. Only in-process (monolith) dispatch is implemented; `createServiceProxy(name, { isMonolith: false })` throws when called.
+Each method takes the action's input as its first argument and an optional call context as its second. Only in-process dispatch is implemented. See [Service references](/docs/dependencies#service-references) for how the types are inferred.
+
+Besides its context, each service has its own [declared dependencies](/docs/dependencies) in `ctx.deps`. A call to another service runs with that service's deps, never the caller's.
 
 ### Security Boundaries
 
@@ -120,11 +116,11 @@ What the receiving service sees:
 1. **Own context and database**: The receiving service runs its own `context` resolver and uses its own database.
 2. **Framework fields are dropped**: `db`, `request`, `logger`, `services`, and `metadata` in the call context are discarded before reaching the receiving service.
 3. **Envelope fields pass through**: Only `caller`, `user`, `traceId`, `requestId`, and `tenantId` are forwarded. The resolver receives these fields and its returned values always take precedence. Caller custom fields such as `session` and `isOwner` are discarded for direct action calls and proxy calls. Treat `tenantId` as a claim to validate, not proof of access.
-4. **`ctx.caller`**: The proxy sets `ctx.caller` to `from` — the name you passed when creating the proxy, `createServiceProxy<UsersApi>("users", { from: "notifications" })` — never the target service's name. When `from` is provided, any `caller` in the proxy's `options.context` or the per-call context is ignored, so it cannot be spoofed. Without `from`, an explicitly supplied `caller` still passes through; otherwise `caller` is left unset.
+4. **`ctx.caller`**: The client sets `ctx.caller` to `from` — the name you passed when creating it, `useService(usersService, { from: "notifications" })` — never the target service's name. When `from` is provided, any `caller` in the client's `options.context` or the per-call context is ignored, so it cannot be spoofed. Without `from`, an explicitly supplied `caller` still passes through; otherwise `caller` is left unset.
 
 ### Internal calls without cookies
 
-A proxy call receives a placeholder request without browser cookies. A resolver that supports internal callers should validate `envelope.user` and derive its own session and helpers. For example, accept a user ID only after checking it with your identity store and caller trust policy:
+A `useService` call receives a placeholder request without browser cookies. A resolver that supports internal callers should validate `envelope.user` and derive its own session and helpers. For example, accept a user ID only after checking it with your identity store and caller trust policy:
 
 ```ts
 const accounts = defineService("accounts", {

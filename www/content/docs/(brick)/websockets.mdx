@@ -42,9 +42,94 @@ import { chat } from "./chat";
 export default brick({ services: [chat] });
 ```
 
-The default route is `/api/chat/live`. `brick({ prefix: "/v2" })` changes the prefix. Set a static `path` on the socket declaration to override the complete route. Declare sockets before `brick()` builds the service. Duplicate socket routes and conflicting GET routes fail at startup.
+The default route is `/api/chat/live`: the prefix, the service, then the socket name in kebab-case. `brick({ prefix: "/v2" })` changes the prefix. A static `path` on the socket declaration is relative to the service, so `path: "/stream"` mounts at `/api/chat/stream`. A socket can't share a URL segment with an action or resource of the same service (see [URL Scheme](/docs/routes)). Declare sockets before `brick()` builds the service. Duplicate socket routes and conflicting GET routes fail at startup.
 
-`input` lists events the client sends. Every input event requires a handler. `output` lists events the server sends. Handlers receive their inferred `input`, the owning service's `ctx`, and a typed `socket`. `socket.send()` checks the event name and payload in TypeScript and validates the payload at runtime.
+`input` lists events the client sends. Every input event requires a handler. `output` lists events the server sends. Handlers receive their inferred `input`, the owning service's `ctx`, and a typed `socket`. `socket.send()` checks the event name and payload in TypeScript and validates the payload at runtime. Event names starting with `$` are reserved for Brick's control messages.
+
+`service.socket()` returns a socket handle with `name`, `emit()` and `kick()`. (Before v0.11 it returned the service, so chaining after it no longer works.)
+
+## Rooms
+
+A socket can put each connection in rooms when it opens, and decide which rooms a client may ask to join:
+
+```ts
+export const live = desk.socket({
+  name: "live",
+  input: {},
+  output: { updated: DocChange, notify: Notice },
+  authorize: ({ ctx }) => ctx.user != null,
+  rooms: ({ ctx }) => [
+    `user:${ctx.user.id}`,
+    ...ctx.user.teams.map((team) => `team:${team}`),
+  ],
+  join: ({ ctx, room }) =>
+    room.startsWith("doc:") && canRead(ctx.user, room.slice(4)),
+  handlers: {},
+});
+```
+
+`rooms` runs once with the handshake context. `join` runs for every room a client requests, with freshly resolved context, after `authorize`. Without `join`, every client request is refused. Room names have the form `prefix:value` and are at most 200 bytes. A connection can be in at most 100 rooms; set `maxRooms` to change that. Rooms are scoped to their socket, so two sockets never share a room.
+
+```ts
+const socket = api.desk.live.connect();
+await socket.join("doc:Sales Invoice/SINV-0042"); // throws BrickSocketError kind "refused"
+socket.leave("doc:Sales Invoice/SINV-0042");
+socket.onLeave((room, reason) => closeEditor(room, reason));
+```
+
+A client can leave only the rooms it joined; rooms from `rooms` stay until the connection closes or a kick removes them. On the wire, `join` and `leave` are the control messages `$join` and `$leave`, which the server acknowledges with the same event.
+
+## Emit from anywhere
+
+The handle emits to rooms from an action, a listener, a hook or a workflow step:
+
+```ts
+live.emit("doc:Sales Invoice/SINV-0042", "updated", { name, modified });
+live.emit(["user:42", "team:7"], "notify", { text: "Invoice submitted" });
+```
+
+The payload is checked against the output schema and serialized once, however many connections receive it. An invalid payload, an invalid room name, or a frame over 64 KiB throws at the call site. A connection in several of the rooms receives the message once per room. Delivery is at most once and unacknowledged: clients that need every change refetch after reconnecting.
+
+Pass `{ after: tx }` to send only once a transaction commits:
+
+```ts
+await runInTransaction(db, async (tx) => {
+  await tx
+    .update(invoices)
+    .set({ status: "submitted" })
+    .where(eq(invoices.id, id));
+  live.emit(`doc:Sales Invoice/${id}`, "updated", change, { after: tx }); // dropped on rollback
+});
+```
+
+`tx` must come from `runInTransaction` (generated CRUD writes and recorded events use it too); a nested savepoint that rolls back drops its emits. Any other value throws, because Brick cannot see when a plain Drizzle transaction commits.
+
+`kick` removes connections from a room, in every process:
+
+```ts
+live.kick("doc:Sales Invoice/SINV-0042"); // everyone in the room
+live.kick("doc:Sales Invoice/SINV-0042", { also: "user:42" }); // only user 42's connections
+live.kick("team:7", { also: "user:42", reason: "removed from team" });
+```
+
+`also` selects connections that are also in that room. The client receives `$left { room, reason }` and `onLeave(room, reason)` runs.
+
+## Fan-out across processes
+
+A broker carries emits and kicks between processes. The default broker delivers within the process. When you run more than one API process, use the Redis broker:
+
+```ts title="src/api/app.ts"
+import { brick, redisBroker } from "@brickkit/core";
+
+export default brick({
+  services,
+  sockets: { broker: redisBroker({ url: process.env.REDIS_URL }) },
+});
+```
+
+It is built on Bun's built-in Redis client, so it needs no extra package. Each room topic (`<service>.<socket>:<room>`) has its own Redis channel. A process subscribes when its first local connection enters a room and unsubscribes when the last one leaves, so it only receives traffic for rooms it holds. A join is acknowledged once the subscription is in place.
+
+An emit is a single `PUBLISH`. The emitting process does not deliver locally: it receives its own message back from Redis like every other process and delivers it once. Each process uses two Redis connections, one to publish and one to subscribe, reconnects after a drop, and then resubscribes to every room it holds. While Redis is unreachable, the newest emits wait in a bounded queue (`queue`, default 1000) and older ones are dropped. Use one broker per app; the app closes it on stop. A custom broker implements `SocketBroker`: `publish`, `subscribe`, and optionally `ready`, `close`, and `head` with `history` for replay.
 
 ## Connect from the browser
 
@@ -75,7 +160,7 @@ unsubscribe();
 live.close();
 ```
 
-Register listeners before awaiting `ready` so you receive messages sent by the server's `open` hook. `ready` rejects if the connection fails or closes before opening. Event and lifecycle listeners return unsubscribe functions. Closing a connection removes its listeners and timers.
+Register listeners before awaiting `ready` so you receive messages sent by the server's `open` hook. `ready` resolves on the first open and rejects only if the client closes for good before that. Event and lifecycle listeners return unsubscribe functions. `close()` removes the listeners and timers.
 
 Socket connections require the runtime `contract` option. A type-only contract cannot supply socket routes or runtime validation schemas. HTTP action calls continue to use the same client.
 
@@ -83,7 +168,7 @@ Unknown events, incorrect payloads, and reversed message directions fail TypeScr
 
 ## Authorization and origins
 
-Brick resolves context and runs `authorize` before upgrading, then repeats both before every message handler. A resolver that checks the current session store can reject a revoked session on the next message. The request headers remain those of the original handshake, so reconnect when credentials change.
+Brick resolves context and runs `authorize` before upgrading, then repeats both before every message handler. A resolver that checks the current session store can reject a revoked session on the next message. The request headers remain those of the original handshake; a reconnect sends fresh ones.
 
 Browsers send applicable cookies during the handshake. The HTTP client's `headers` and `fetch` options do not attach authorization headers to a browser WebSocket. A failed browser handshake reports a connection error without exposing the HTTP response body or status.
 
@@ -93,15 +178,89 @@ Brick accepts same-origin browser connections by default. Behind a reverse proxy
 allowedOrigins: ["http://localhost:5178", "https://app.example.com"],
 ```
 
-Clients that omit `Origin`, including Bun clients, require `allowMissingOrigin: true`. Origin checks and authorization are separate. Set `authorize` for private sockets even when an origin is allowed.
+Clients that omit `Origin`, including Bun clients, require `allowMissingOrigin: true`, except on token handshakes. Origin checks and authorization are separate. Set `authorize` for private sockets even when an origin is allowed.
+
+## Mobile and token auth
+
+React Native and other non-browser clients have no session cookie. Pass a `token` function instead. It runs on every connect and reconnect, so a refreshed token is used:
+
+```ts
+const live = api.chat.live.connect({ token: () => session.accessToken });
+// sends: Sec-WebSocket-Protocol: brick.v1, brick.token.<token>
+```
+
+The server picks `brick.v1` and echoes it, as browsers require. Before calling the context resolver, Brick moves the token into an `Authorization: Bearer <token>` header and removes it from the protocol list, so bearer-based resolvers, including Better Auth's bearer plugin, work unchanged:
+
+```ts
+context: async ({ request }) => ({
+  user: await auth.api.getSession({ headers: request.headers }),
+}),
+```
+
+The token must use RFC 6455 token characters. JWTs and base64url work; padded base64 (`=`) does not, and the client throws a protocol error for it. Cross-site WebSocket hijacking relies on cookies the browser attaches by itself, so a token handshake without `Origin` is accepted unless `allowMissingOrigin: false`; cookie handshakes keep the strict default. A token handshake that sends `Origin` still passes the origin check. Proxies may log the `Sec-WebSocket-Protocol` header, so use short-lived tokens.
+
+## Reconnect
+
+The client reconnects by default. It retries with exponential backoff and jitter, asks `token` for a fresh token, rejoins the rooms it joined, and keeps its listeners:
+
+```ts
+const live = api.desk.live.connect({
+  token: () => auth.getToken(),
+  reconnect: { minDelayMs: 500, maxDelayMs: 30_000, jitter: 0.2 }, // the defaults
+});
+live.status; // "connecting" | "open" | "reconnecting" | "closed"
+live.onStatus((status) => badge.set(status));
+live.onReconnect(() => refetchOpenDocs()); // messages sent while offline are not replayed
+```
+
+| Retries after                                | Stops after                                            |
+| -------------------------------------------- | ------------------------------------------------------ |
+| Network loss and abnormal close (`1006`)     | Normal close by either side (`1000`)                   |
+| Server error or restart (`1011`, `1012`)     | Policy refusal (`1008`), auth refusal (`4401`, `4403`) |
+| Try again later (`1013`)                     | Protocol errors (`1003`, `1007`, `1009`, `4000`)       |
+| Handshake failure (timeout, refused upgrade) | `close()` or an aborted `signal`                       |
+
+Browsers do not expose why a handshake failed, so a refused upgrade (such as an expired token) is retried with backoff and a fresh token. Backoff resets once a connection has stayed open for 10 seconds. While `navigator.onLine` is false the client waits, and it retries at once on the `online` event or when the page becomes visible. A room the server kicked the client from is not rejoined; if a rejoin is refused, `onLeave(room, "join refused")` runs.
+
+`onClose` runs on every close, including the ones that are retried; check `status === "closed"` for the final one. `send` while reconnecting throws: there is no hidden buffer that could resend an action twice. Pass `reconnect: false` to end the client at the first close, as in v0.10.
+
+## Missed-message replay
+
+With `replay`, a reconnecting client gets what it missed in each room it joined instead of refetching everything:
+
+```ts
+const live = desk.socket({
+  // …
+  replay: { keep: 200, maxAgeMs: 5 * 60_000 },
+});
+
+socket.onGap((room) => refetch(room)); // history no longer covers what was missed
+```
+
+Every emit then gets a per-room sequence number, carried in the frame next to `event` and `data` as `room` and `seq`. The client remembers the last sequence it saw in each room and rejoins with `$join { room, since }`. The server replays the newer emits in order, then continues live; a replayed emit that also arrives live is delivered once. If `since` is older than the kept history, the server sends `$gap { room }` instead and `onGap(room)` runs.
+
+The in-process broker keeps the last `keep` emits per room for up to `maxAgeMs`. The Redis broker writes each emit to a stream per room with `XADD … MAXLEN ~ keep`, uses the stream entry id as the sequence, expires the stream after `maxAgeMs` without emits, and replays with one `XRANGE`. `~` trims approximately, so Redis may keep more than `keep`.
+
+The server signs each sequence for its room. A `since` that wasn't sent to the client in that room, or that was changed, gets `$gap` and no history, so a client can't read what a room held before it was let in by sending an early `since`. A client that leaves a room and is let in again later can still resume from the last sequence it saw. With several processes, give them all the same secret so a client can resume on any of them:
+
+```ts
+brick({
+  services,
+  sockets: { broker: redisBroker({ url }), secret: process.env.SOCKET_SECRET },
+});
+```
+
+Without `secret`, each process signs with a random key, and a client that reconnects to another process gets `$gap`.
+
+Replay covers rooms the client joined with `join()`. Rooms from the socket's `rooms` come back with the new connection; for those the client calls `onGap` after a reconnect. Replay is opt-in per socket, since kept emits cost memory or Redis storage, and it needs a broker with `head` and `history`. Without it, reconnect behaves as described above.
 
 ## Lifecycle and cancellation
 
 Use optional `open({ ctx, socket })` and `close({ ctx, socket, code, reason })` hooks for setup and cleanup. The close hook receives the connection's initial context and runs once. Cleanup starts when the connection closes, without waiting for a blocked message handler. Release application subscriptions or cancel application work in this hook. Messages queued after closure do not execute, and sends after closure fail.
 
-Pass `connect({ signal })` to cancel opening or close an established connection. An abort before opening rejects `ready` with the signal's reason. `timeoutMs` limits opening only. These options inherit the client's defaults, and connection options override them.
+Pass `connect({ signal })` to cancel opening or close an established connection. An abort before opening rejects `ready` with the signal's reason. `timeoutMs` limits each opening attempt. These options inherit the client's defaults, and connection options override them.
 
-`BrickSocketError` is exported from `@brickkit/core/client`. Its `kind` is `connection`, `protocol`, or `backpressure`. Expected connection failures reach `onError`. A remote close reaches `onClose` with its code and reason. Each `close()` call is safe to repeat.
+`BrickSocketError` is exported from `@brickkit/core/client`. Its `kind` is `connection`, `protocol`, `backpressure`, or `refused` (a refused `join`). Expected connection failures reach `onError`. A remote close reaches `onClose` with its code and reason. Each `close()` call is safe to repeat.
 
 ## Message limits and delivery
 
@@ -115,7 +274,7 @@ Only JSON-compatible TypeBox schemas are supported. Transforms, custom formats, 
 
 Unknown input events and invalid payloads close with `1008`. Malformed JSON closes with `1007`, binary frames with `1003`, and overloaded queues with `1013`. Oversized messages close with `1009` when Brick detects them; frames rejected by the native transport can appear as an abnormal `1006` close. Unexpected handler errors and invalid server output close with `1011`; detailed errors stay in server logs. The browser client closes invalid server messages with the application code `4000` and reports a protocol error.
 
-`send()` means the local connection accepted the message. It does not acknowledge remote processing. Sending before `ready` or after closure throws. Brick does not reconnect, retry, buffer disconnected messages, or replay them automatically. Room membership and broadcast policy belong to the application. There is no built-in room API or distributed messaging in this release.
+`send()` means the local connection accepted the message. It does not acknowledge remote processing. Sending before `ready`, while reconnecting, or after closure throws. Brick does not buffer messages sent while disconnected.
 
 ## Development and deployment
 
@@ -125,7 +284,7 @@ For a Vite frontend, run a separate Bun backend and configure Vite's WebSocket p
 
 The [WebSocket example](https://github.com/get-brickkit/brick/tree/main/examples/websocket) includes a dark chat interface, SQLite storage, anonymous Better Auth guests, contract generation, and a Vite proxy. Open it in two browser sessions, click **Join conversation** in each, then send a message. Both receive it, and the connection count updates when someone joins or leaves. Refresh and join again to restore the conversation.
 
-The example stores Better Auth users, sessions, and messages in `.brick/chat.sqlite` relative to the example directory. Better Auth's anonymous plugin signs each browser in as a guest, and the socket resolves that session from the handshake cookie. The application commits each message before broadcasting and sends the latest 50 stored messages on join in bounded chunks. Its history and broadcast logic are application code; the transport itself does not persist or replay messages. Run it from a repository checkout:
+The example stores Better Auth users, sessions, and messages in `.brick/chat.sqlite` relative to the example directory. Better Auth's anonymous plugin signs each browser in as a guest, and the socket resolves that session from the handshake cookie. Every connection is in one room, `chat:lobby`. The application commits each message, then emits it to that room, and sends the latest 50 stored messages on join in bounded chunks. Its history is application code; the transport itself does not persist messages. Run it from a repository checkout:
 
 ```sh
 bun install

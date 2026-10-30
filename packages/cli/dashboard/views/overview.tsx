@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/table";
 import { isFailure } from "@/format";
 import { cn } from "@/lib/utils";
+import { Slot } from "@/extension";
 import type {
   ArchitectureSnapshot,
   TraceSummary,
@@ -38,6 +39,25 @@ export function OverviewView({
       service: service.name,
     })),
   );
+  const listeners = architecture?.schema.events?.listeners ?? [];
+  const events = services.flatMap((service) =>
+    (service.events ?? []).map((event) => ({
+      ...event,
+      service: service.name,
+      fields: Object.keys(
+        (event.schema as { properties?: object } | undefined)?.properties ?? {},
+      ),
+      listeners: listeners
+        .filter((listener) =>
+          listener.on.some((pattern) =>
+            pattern.endsWith("*")
+              ? event.name.startsWith(pattern.slice(0, -1))
+              : pattern === event.name,
+          ),
+        )
+        .map((listener) => listener.name),
+    })),
+  );
   const rows = useMemo<RouteRow[]>(() => {
     const result: RouteRow[] = [];
     for (const service of services) {
@@ -52,7 +72,8 @@ export function OverviewView({
         );
         result.push({
           key,
-          action: `${service.name}.${action.name}`,
+          // Labelled with the plugin that contributed it.
+          action: `${service.name}.${action.name}${action.plugin ? ` · ${action.plugin}` : ""}`,
           requests: matching.length,
           failures: matching.filter(isFailure).length,
         });
@@ -60,6 +81,7 @@ export function OverviewView({
     }
     return result;
   }, [services, traces]);
+  const legacyCalls = traces.filter((trace) => trace.legacyRoute).length;
 
   return (
     <>
@@ -67,6 +89,7 @@ export function OverviewView({
         title="Overview"
         description="Routes and services of the running app. Counts cover the recent requests kept in memory."
       />
+      <Slot name="overview.top" />
       {!architecture ? (
         <Panel>
           <Empty title="Waiting for the application to start" />
@@ -74,6 +97,15 @@ export function OverviewView({
       ) : (
         <>
           <ServiceGraphPanel architecture={architecture} traces={traces} />
+          {legacyCalls > 0 && (
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground tabular-nums">
+                {legacyCalls}
+              </span>{" "}
+              recent {legacyCalls === 1 ? "call" : "calls"} used a v0.10 path (
+              <code>legacyRoutes</code>).
+            </p>
+          )}
           <Panel>
             {rows.length === 0 ? (
               <Empty title="No HTTP routes are registered" />
@@ -164,6 +196,45 @@ export function OverviewView({
               </Panel>
             </>
           )}
+          {events.length > 0 && (
+            <>
+              <h2 className="mt-2 -mb-1 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                Events
+              </h2>
+              <Panel>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="px-4">Event</TableHead>
+                      <TableHead>Payload</TableHead>
+                      <TableHead className="px-4">Listeners</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {events.map((event) => (
+                      <TableRow key={event.name}>
+                        <TableCell className="px-4 font-mono text-xs">
+                          {event.name}
+                          {event.plugin && (
+                            <span className="text-muted-foreground">
+                              {" "}
+                              · {event.plugin}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {event.fields.join(", ") || "none"}
+                        </TableCell>
+                        <TableCell className="px-4 text-muted-foreground">
+                          {event.listeners.join(", ") || "none"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Panel>
+            </>
+          )}
           <h2 className="mt-2 -mb-1 text-xs font-medium tracking-wider text-muted-foreground uppercase">
             Services
           </h2>
@@ -175,7 +246,13 @@ export function OverviewView({
                   <div className="text-muted-foreground">
                     {service.databaseConfig
                       ? `${service.databaseConfig.engine} · tables: ${
-                          service.databaseConfig.tables.join(", ") || "none"
+                          service.databaseConfig.tables
+                            .map((table) => {
+                              const plugin =
+                                service.databaseConfig?.plugins?.[table];
+                              return plugin ? `${table} (${plugin})` : table;
+                            })
+                            .join(", ") || "none"
                         }`
                       : "No database"}
                   </div>

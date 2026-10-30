@@ -61,6 +61,14 @@ export const ENTRY_POINTS: EntryPoint[] = [
     description: "Compile and bind a Brick application's routes ahead of time.",
   },
   {
+    slug: "cli-dashboard",
+    specifier: "@brickkit/cli/dashboard",
+    file: "packages/cli/dashboard/kit.ts",
+    tsconfig: "packages/cli/dashboard/tsconfig.json",
+    description:
+      "defineDashboard, the UI kit and the data hooks for a dashboard extension.",
+  },
+  {
     slug: "cli-vite",
     specifier: "@brickkit/cli/vite",
     file: "packages/cli/src/vite.ts",

@@ -82,5 +82,29 @@ export function isSocketEnvelope(
   );
 }
 
+/** `prefix:value`, at most 200 bytes, without control characters. */
+export function isSocketRoom(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    // eslint-disable-next-line no-control-regex
+    /^[A-Za-z][\w-]*:[^\u0000-\u001f\u007f]+$/.test(value) &&
+    new TextEncoder().encode(value).byteLength <= 200
+  );
+}
+
+/** A replay sequence: `<number>-<number>`, the shape of a Redis stream id, then `.` and the server's signature for its room. */
+export function isSocketSeq(value: unknown): value is string {
+  return (
+    typeof value === "string" && /^\d{1,20}-\d{1,20}\.[\w-]{22}$/.test(value)
+  );
+}
+
+export function compareSocketSeq(a: string, b: string): number {
+  const [a1, a2] = a.split(".")[0]!.split("-").map(BigInt) as [bigint, bigint];
+  const [b1, b2] = b.split(".")[0]!.split("-").map(BigInt) as [bigint, bigint];
+  if (a1 !== b1) return a1 > b1 ? 1 : -1;
+  return a2 === b2 ? 0 : a2 > b2 ? 1 : -1;
+}
+
 export const SOCKET_MAX_BYTES = 64 * 1024;
 export const SOCKET_BUFFER_BYTES = 1024 * 1024;

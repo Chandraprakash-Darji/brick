@@ -359,9 +359,15 @@ test("bulk operations are off unless enabled, and follow routes", () => {
       services: [hidden.service],
       prefix: "/api",
     });
-    expect(Object.keys(spec.paths)).toContain("/api/record/bulk-create");
-    expect(Object.keys(spec.paths)).toContain("/api/record/bulk-update");
-    expect(Object.keys(spec.paths)).not.toContain("/api/record/bulk-delete");
+    expect(Object.keys(spec.paths)).toContain(
+      `/api/${hidden.service.name}/record/bulk-create`,
+    );
+    expect(Object.keys(spec.paths)).toContain(
+      `/api/${hidden.service.name}/record/bulk-update`,
+    );
+    expect(Object.keys(spec.paths)).not.toContain(
+      `/api/${hidden.service.name}/record/bulk-delete`,
+    );
     expect(typeof hidden.resource.bulkDelete).toBe("function");
   } finally {
     hidden.sqlite.close();
@@ -382,7 +388,7 @@ test("the typed client calls bulk operations over HTTP", async () => {
   if (!serialized) throw new Error("Generated contract is missing");
   const client = createBrickClient<{ record: typeof f.resource }>({
     baseUrl: "http://localhost",
-    contract: JSON.parse(JSON.parse(serialized)),
+    contract: JSON.parse(JSON.parse(serialized))[f.service.name],
     fetch: async (url, init) => app.handle(new Request(String(url), init)),
   });
   try {

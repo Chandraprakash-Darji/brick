@@ -1,24 +1,43 @@
 import { expect, test } from "bun:test";
 import {
+  brick,
   defineDatabase,
   defineService,
+  getTableName,
   sqliteTable,
   syncSchema,
   text,
   ValidationError,
 } from "@brickkit/core";
-import { comments, commentsTable } from "../src/extensions/comments";
+import { crud } from "@brickkit/crud";
+import { comments } from "../src/extensions/comments";
 
 const pages = sqliteTable("pages", { id: text("id").primaryKey() });
 
-test("comment creation rejects missing, null and blank bodies without inserting", async () => {
-  const database = defineDatabase({ tables: { pages, commentsTable } });
-  const db = database.getDb();
-  syncSchema(database.tables, db);
-  await db.insert(pages).values({ id: "page-1" });
-  const page = defineService("comment_body_validation", { database })
+function setup(name: string) {
+  const database = defineDatabase({ tables: { pages } });
+  const service = defineService(name, { database });
+  const page = service
     .resource({ name: "page", table: pages, id: pages.id })
-    .use(comments({ table: commentsTable }));
+    .use(
+      crud({ access: "public", fields: { id: { read: true, create: true } } }),
+    )
+    .use(comments());
+  const db = database.getDb();
+  syncSchema(service);
+  return { database, db, page, service };
+}
+
+test("the plugin owns its table in the host database", () => {
+  const { database, page } = setup("comment_tables");
+  expect(getTableName(page.comments.table)).toBe("page_comments");
+  expect(Object.keys(database.tables)).toEqual(["pages", "page_comments"]);
+});
+
+test("comment creation rejects missing, null and blank bodies without inserting", async () => {
+  const { db, page } = setup("comment_body_validation");
+  const table = page.comments.table;
+  await db.insert(pages).values({ id: "page-1" });
 
   for (const input of [
     { targetId: "page-1" },
@@ -29,7 +48,7 @@ test("comment creation rejects missing, null and blank bodies without inserting"
     await expect(page.comments.create.run(input)).rejects.toBeInstanceOf(
       ValidationError,
     );
-    expect(await db.select().from(commentsTable)).toEqual([]);
+    expect(await db.select().from(table)).toEqual([]);
   }
 
   for (const body of ["", "   ", "\n\t"]) {
@@ -40,11 +59,39 @@ test("comment creation rejects missing, null and blank bodies without inserting"
       message: "Comment body cannot be blank",
       status: 400,
     });
-    expect(await db.select().from(commentsTable)).toEqual([]);
+    expect(await db.select().from(table)).toEqual([]);
   }
 
   await page.comments.create.run({ targetId: "page-1", body: "  Hello  " });
+  expect(await db.select({ body: table.body }).from(table)).toEqual([
+    { body: "Hello" },
+  ]);
+});
+
+test("deleting the host record deletes its comments in the same transaction", async () => {
+  const { db, page } = setup("comment_cascade");
+  await db.insert(pages).values([{ id: "a" }, { id: "b" }]);
+  await page.comments.create.run({ targetId: "a", body: "on a" });
+  await page.comments.create.run({ targetId: "b", body: "on b" });
+  await page.delete.run({ id: "a" });
   expect(
-    await db.select({ body: commentsTable.body }).from(commentsTable),
-  ).toEqual([{ body: "Hello" }]);
+    (await db.select().from(page.comments.table)).map((row) => row.targetId),
+  ).toEqual(["b"]);
+});
+
+test("comments.added joins the host's catalog and dashboard extension is declared", () => {
+  const { service } = setup("comment_events");
+  const catalog: Record<string, { name: string }> = service.events;
+  expect(catalog["comments.added"]?.name).toBe("comment_events.comments.added");
+  const app = brick({ services: [service], requestLogging: false });
+  expect(app.definition.plugins).toEqual([
+    {
+      name: "@brick-examples/comments",
+      brick: ">=0.10.0 <0.12.0",
+      scope: "resource",
+      service: "comment_events",
+      resource: "page",
+      dashboard: expect.stringMatching(/extensions\/comments\/dashboard\.tsx$/),
+    },
+  ]);
 });

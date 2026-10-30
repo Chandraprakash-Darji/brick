@@ -1,67 +1,91 @@
 ---
 title: Audit Trail Plugin Recipe
-description: Record immutable audit trails for resource mutations using CRUD lifecycle hooks.
+description: Record an audit row for every write to a resource, in the write's own transaction, with one use() call.
 ---
 
-This recipe demonstrates how to create a reusable audit trail plugin that logs resource mutations to an application-owned database table using CRUD `after*` hooks.
+This recipe builds an audit trail plugin with `definePlugin`. It owns its log table and subscribes to the host resource's CRUD writes itself, so installing it is one line and there is nothing to wire by hand.
 
-## Minimal Example
+## The plugin
 
-Create an audit logging resource plugin and attach it to sensitive entity resources:
+```ts title="src/plugins/audit/index.ts"
+import { definePlugin } from "@brickkit/core";
 
-```ts title="src/plugins/audit.ts"
-import {
-  defineResourcePlugin,
-  integer,
-  sqliteTable,
-  text,
-} from "@brickkit/core";
+export const audit = definePlugin({
+  name: "@acme/brick-audit",
+  brick: "^0.11.0",
+  requires: ["@brickkit/crud"],
 
-// 1. Declare the audit log storage table
-export const auditLogs = sqliteTable("audit_logs", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  resourceName: text("resource_name").notNull(),
-  recordId: text("record_id").notNull(),
-  operation: text("operation").notNull(), // "create" | "update" | "delete"
-  userId: text("user_id"),
-  timestamp: integer("timestamp").notNull(),
-});
+  // Created in the host's database as <resource>_audit.
+  tables: ({ table, text, timestamp }) => ({
+    audit: table("audit", {
+      id: text("id")
+        .primaryKey()
+        .$defaultFn(() => crypto.randomUUID()),
+      recordId: text("record_id").notNull(),
+      operation: text("operation").notNull(), // create | update | delete
+      userId: text("user_id"),
+      at: timestamp("at")
+        .notNull()
+        .$defaultFn(() => new Date()),
+    }),
+  }),
 
-// 2. Define the resource plugin
-export function auditTrail() {
-  return defineResourcePlugin({
-    name: "auditTrail",
-    setup({ resource, service }) {
-      const recordMutation = async (
-        operation: string,
-        recordId: string,
-        ctx: any,
-      ) => {
-        if (!ctx.db) return;
-        await ctx.db.insert(auditLogs).values({
-          resourceName: resource.name,
-          recordId: String(recordId),
+  resource: ({ tables, hooks }) => {
+    const record =
+      (operation: "create" | "update" | "delete") =>
+      async ({
+        id,
+        row,
+        ctx,
+        tx,
+      }: {
+        id?: unknown;
+        row?: Record<string, unknown>;
+        ctx: any;
+        tx: any;
+      }) => {
+        await tx.insert(tables.audit).values({
+          recordId: String(row?.id ?? id),
           operation,
           userId: ctx.user?.id ?? null,
-          timestamp: Date.now(),
         });
       };
-
-      return {
-        recordMutation,
-      };
-    },
-  });
-}
+    // Inside the write's transaction: the audit row commits or rolls back with it.
+    hooks.afterCreate(record("create"));
+    hooks.afterUpdate(record("update"));
+    hooks.afterDelete(record("delete"));
+    return { auditLog: tables.audit };
+  },
+});
 ```
+
+## Installing it
+
+```ts title="src/services/accounts.ts"
+import { crud } from "@brickkit/crud";
+import { audit } from "../plugins/audit";
+
+export const account = accountsService
+  .resource({ name: "account", table: accountsTable, id: accountsTable.id })
+  .use(
+    crud({
+      access: { authorize: ({ ctx }) => !!ctx.user },
+      fields: {
+        id: { read: true },
+        name: { read: true, create: true, update: true },
+      },
+    }),
+  )
+  .use(audit());
+```
+
+Every create, update and delete through `account`'s CRUD routes, its bulk routes and in-process calls now writes a row to `account_audit`. `account.auditLog` is the table, for reading the trail. `audit` must come after `crud()`: `requires` refuses it otherwise.
+
+To audit every resource of a service, give the plugin a `service` part with the same hooks and install it with `service.use(audit())`: hooks on a service see the writes of all its resources.
 
 ### Schema
 
-These columns match the Drizzle tables in the example. Defaults marked as application defaults run in Drizzle, rather than in SQL.
-
-export const audit_logsSchemaFields = [
+export const auditSchemaFields = [
   {
     name: "id",
     type: "text",
@@ -70,77 +94,33 @@ export const audit_logsSchemaFields = [
     defaultValue: "crypto.randomUUID() (application)",
   },
   {
-    name: "resource_name",
-    type: "text",
-    description: "Name of the mutated resource.",
-  },
-  {
     name: "record_id",
     type: "text",
-    description: "Identifier of the mutated row.",
+    description: "Identifier of the written row.",
   },
   {
     name: "operation",
     type: "text",
-    description: "Mutation action: create, update, or delete.",
+    description: "create, update or delete.",
   },
   {
     name: "user_id",
     type: "text",
-    description: "Authenticated user identifier, or null for anonymous writes.",
+    description: "The signed-in user's id, or null.",
     isOptional: true,
   },
   {
-    name: "timestamp",
-    type: "integer",
-    description:
-      "Unix epoch timestamp in milliseconds, set by the audit logger.",
+    name: "at",
+    type: "integer (SQLite) / timestamptz (Postgres)",
+    description: "When the write happened.",
+    defaultValue: "new Date() (application)",
   },
 ];
 
-<DatabaseTable name="audit_logs" fields={audit_logsSchemaFields} />
+<DatabaseTable name="account_audit" fields={auditSchemaFields} />
 
-## Wiring into CRUD Lifecycle Hooks
+## Considerations
 
-Attach the audit logger to your resource's `crud()` lifecycle hooks:
-
-```ts title="src/services/accounts.ts"
-import { crud } from "@brickkit/crud";
-import { accountsTable, accountsService } from "./schema";
-import { auditTrail } from "../plugins/audit";
-
-// 1. Install audit plugin onto resource
-const accountResource = accountsService
-  .resource({ name: "account", table: accountsTable, id: accountsTable.id })
-  .use(auditTrail());
-
-// 2. Wire mutation records in crud() hooks
-accountResource.use(
-  crud({
-    access: {
-      authorize: ({ ctx }) => !!ctx.user,
-    },
-    fields: {
-      id: { read: true },
-      name: { read: true, create: true, update: true },
-    },
-    hooks: {
-      afterCreate: async ({ row, ctx }) => {
-        await accountResource.recordMutation("create", String(row.id), ctx);
-      },
-      afterUpdate: async ({ id, ctx }) => {
-        await accountResource.recordMutation("update", String(id), ctx);
-      },
-      afterDelete: async ({ id, ctx }) => {
-        await accountResource.recordMutation("delete", String(id), ctx);
-      },
-    },
-  }),
-);
-```
-
-## Architectural Considerations
-
-- **Atomic Writes**: `after*` hooks run inside the write's transaction and receive it as `tx`. Insert audit rows through `tx` and they commit or roll back with the mutation. Side effects outside the database belong in `afterCommit`.
-- **Masking & Security**: Never log unredacted passwords, payment details, or personal data to audit tables.
-- **Dedicated Read Policy**: Expose audit logs through a separate administrative resource with restricted access controls.
+- **Atomic writes**: the hooks run inside the write's transaction and write through `tx`, so an audit row exists exactly when its write committed. A hook that throws rolls the write back. Side effects outside the database belong in `hooks.afterCommit`.
+- **Masking**: do not copy passwords, payment details or personal data into the audit table.
+- **Reading the trail**: expose `auditLog` through a separate resource with restricted access, not through the audited one.

@@ -39,7 +39,7 @@ flowchart TD
     ServiceA --> Actions["Typed Actions (TypeBox)"]
     ServiceA --> CRUD["Declarative CRUD (@brickkit/crud)"]
     CRUD --> DB[("Database (Postgres / SQLite)")]
-    ServiceA -. "In-process (createServiceProxy)" .-> ServiceB
+    ServiceA -. "In-process (useService)" .-> ServiceB
 ```
 
 ## Power Through Constraints
@@ -52,7 +52,7 @@ In Brick, domain boundaries are explicit. Services are declared with `defineServ
 
 - A service owns its database connection and schema models.
 - Services cannot arbitrarily bypass each other's security policies or reach into foreign tables.
-- Cross-service communication happens through typed service proxies (`createServiceProxy()`), preserving domain boundaries whether running in the same process today or separated into independent services tomorrow.
+- Cross-service communication happens through typed service references (`useService()`), preserving domain boundaries whether running in the same process today or separated into independent services tomorrow.
 
 ### 2. Actions as Atomic Capabilities
 
@@ -90,7 +90,7 @@ In traditional frameworks, if `Service A` needs to trigger logic inside `Service
 Brick solves this with **monomorphic execution**:
 
 - An action is an HTTP route and a callable TypeScript function at the same time.
-- Calling `chargeInvoice({ input: { ... } })` executes in-process through the **exact same validation, authorization, and error handling pipeline** as an incoming HTTP `POST /api/billing/chargeInvoice` request.
+- Calling `chargeInvoice({ input: { ... } })` executes in-process through the **exact same validation, authorization, and error handling pipeline** as an incoming HTTP `POST /api/billing/charge-invoice` request.
 - Zero network serialization penalty. Zero HTTP loopback overhead. 100% guarantee that authorization rules and validation schemas are always enforced.
 
 ### 4. Deny-by-Default Declarative CRUD

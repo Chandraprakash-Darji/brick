@@ -493,7 +493,7 @@ for (const compiler of [false, true]) {
     });
     const request = (path: string, body: unknown) =>
       app.handle(
-        new Request(`http://localhost/api/record${path}`, {
+        new Request(`http://localhost/api/${service.name}/record${path}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(body),
@@ -624,7 +624,7 @@ for (const compiler of [false, true]) {
       /export const contract: AppContract = JSON.parse\((.+)\);/,
     )?.[1];
     if (!serialized) throw new Error("Generated contract is missing");
-    const contract = JSON.parse(JSON.parse(serialized));
+    const contract = JSON.parse(JSON.parse(serialized))[service.name];
     const client = createBrickClient<{ named: typeof resource }>({
       baseUrl: "http://localhost",
       contract,

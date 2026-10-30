@@ -137,21 +137,21 @@ The CLI loads your entry, then prints the registered services and the route each
 🧱 Brick-TS Development Server
    Registered Services: 1
    • pages (8 actions)
-     -> POST   /api/page/query
-     -> GET    /api/page/:id
-     -> POST   /api/page
-     -> PATCH  /api/page/:id
-     -> DELETE /api/page/:id
-     -> POST   /api/page/find-one
-     -> POST   /api/page/count
-     -> POST   /api/page/exists
+     -> POST   /api/pages/page/query
+     -> GET    /api/pages/page/:id
+     -> POST   /api/pages/page
+     -> PATCH  /api/pages/page/:id
+     -> DELETE /api/pages/page/:id
+     -> POST   /api/pages/page/find-one
+     -> POST   /api/pages/page/count
+     -> POST   /api/pages/page/exists
 
 ⚡ API Gateway running on: http://localhost:4000
 🩺 Health check:        http://localhost:4000/_health
 🗺️ Architecture graph:  http://localhost:4000/_brick/services
 ```
 
-CRUD routes are mounted under the resource name (`page`), not the service name. The action names are still `page.list`, `page.get`, `page.create`, and so on.
+CRUD routes are mounted under the service and the resource (`/api/pages/page`). The action names are still `page.list`, `page.get`, `page.create`, and so on. See [URL Scheme](/docs/routes) for how every route is built.
 
 <Callout type="info">
   `brick dev` imports your entry to register its services, then builds its own
@@ -167,7 +167,7 @@ Execute HTTP requests against the generated CRUD endpoints. Successful calls ret
 ### Create a Record
 
 ```bash
-curl -X POST http://localhost:4000/api/page \
+curl -X POST http://localhost:4000/api/pages/page \
   -H "Content-Type: application/json" \
   -d '{"title": "First Page", "content": "Welcome to Brick-TS!"}'
 ```
@@ -184,10 +184,10 @@ Response:
 
 ### List Records with Filtering
 
-`page.list` is a `POST` to `/api/page/query`. The body is validated against the filter operators and sortable fields you enabled in `fields`:
+`page.list` is a `POST` to `/api/pages/page/query`. The body is validated against the filter operators and sortable fields you enabled in `fields`:
 
 ```bash
-curl -X POST http://localhost:4000/api/page/query \
+curl -X POST http://localhost:4000/api/pages/page/query \
   -H "Content-Type: application/json" \
   -d '{
     "where": {

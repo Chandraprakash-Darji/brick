@@ -99,7 +99,7 @@ describe("better-auth + service context loading", () => {
     const cookie = sessionCookie(await api.signInResponse());
 
     const ctx = await pagesService.resolveContext({
-      request: new Request("http://localhost/api/page", {
+      request: new Request("http://localhost/api/pages/page", {
         headers: { cookie },
       }),
     });
@@ -111,7 +111,7 @@ describe("better-auth + service context loading", () => {
   it("leaves user null without a session cookie (protected tools reject)", async () => {
     isolatedAuth();
     const ctx = await pagesService.resolveContext({
-      request: new Request("http://localhost/api/page"),
+      request: new Request("http://localhost/api/pages/page"),
     });
     expect(ctx.user).toBeNull();
     await expect(listPagesTool({ ctx, input: {} })).rejects.toThrow(
@@ -125,7 +125,7 @@ describe("better-auth + service context loading", () => {
     await api.signup();
     const cookie = sessionCookie(await api.signInResponse());
     const ctx = await pagesService.resolveContext({
-      request: new Request("http://localhost/api/page", {
+      request: new Request("http://localhost/api/pages/page", {
         headers: { cookie },
       }),
     });

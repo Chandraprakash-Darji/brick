@@ -78,9 +78,9 @@ describe("@brickkit/cli Server Engine", () => {
     expect(infoJson.services.length).toBe(1);
     expect(infoJson.services[0].name).toBe("deals");
 
-    // 3. POST /api/deals/createDeal with valid body
+    // 3. POST /api/deals/create-deal with valid body
     const createRes = await app.handle(
-      new Request("http://localhost:4000/api/deals/createDeal", {
+      new Request("http://localhost:4000/api/deals/create-deal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: "Enterprise License", amount: 50000 }),
@@ -92,9 +92,9 @@ describe("@brickkit/cli Server Engine", () => {
     expect(createData.title).toBe("Enterprise License");
     expect(createRes.headers.get("x-trace-id")).toBeDefined();
 
-    // 4. POST /api/deals/createDeal with invalid body (amount < 0)
+    // 4. POST /api/deals/create-deal with invalid body (amount < 0)
     const invalidRes = await app.handle(
-      new Request("http://localhost:4000/api/deals/createDeal", {
+      new Request("http://localhost:4000/api/deals/create-deal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: "Bad Deal", amount: -10 }),
@@ -105,9 +105,9 @@ describe("@brickkit/cli Server Engine", () => {
     expect(invalidData.name).toBe("ValidationError");
     expect(invalidData.errors.length).toBeGreaterThan(0);
 
-    // 5. GET /api/deals/listDeals
+    // 5. GET /api/deals/list-deals
     const listRes = await app.handle(
-      new Request("http://localhost:4000/api/deals/listDeals"),
+      new Request("http://localhost:4000/api/deals/list-deals"),
     );
     expect(listRes.status).toBe(200);
     const listData = await listRes.json();

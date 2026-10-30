@@ -12,6 +12,13 @@ import {
 import { generateClientContract } from "./client-contract";
 import { requireBrickApp } from "./app-entry";
 import { startViteDashboard, type ViteDashboard } from "./dev-vite-dashboard";
+import {
+  themeCss,
+  type DashboardExtensionOptions,
+  type DashboardTheme,
+} from "./dashboard-extension";
+
+export type { DashboardTheme };
 import { ModuleRunner } from "vite/module-runner";
 
 export interface BrickClientPluginOptions {
@@ -24,9 +31,12 @@ export interface BrickClientPluginOptions {
    * during `vite dev` (default: on at port 9400). Apps must pass
    * `telemetry: true` to brick() to record requests. `historyDays` is how long
    * finished requests are kept in `.brick/` (default 90, 0 for none). Set to
-   * false to disable.
+   * false to disable. `extension` (relative to the Vite root) and `theme`
+   * customise it, as in `brick dev`.
    */
-  dashboard?: { port?: number; historyDays?: number } | false;
+  dashboard?:
+    | ({ port?: number; historyDays?: number } & DashboardExtensionOptions)
+    | false;
 }
 
 /** Load a BrickApp through Vite's server module graph, including dependency HMR. */
@@ -84,6 +94,7 @@ export function brickClient(options: BrickClientPluginOptions): Plugin {
         throw new Error(
           "Brick: contract output must not overwrite the app entry.",
         );
+      if (options.dashboard) themeCss(options.dashboard.theme);
     },
     async configureServer(server) {
       const environment = server.environments.ssr;
@@ -105,6 +116,12 @@ export function brickClient(options: BrickClientPluginOptions): Plugin {
         const started = await startViteDashboard({
           port: options.dashboard?.port,
           historyDays: options.dashboard?.historyDays,
+          dashboard: {
+            extension: options.dashboard?.extension
+              ? resolve(server.config.root, options.dashboard.extension)
+              : undefined,
+            theme: options.dashboard?.theme,
+          },
           directory: server.config.root,
           entry,
           logger: server.config.logger,

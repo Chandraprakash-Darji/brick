@@ -117,10 +117,11 @@ imported only as types in the browser client.
 
 ## Routes
 
-- `/api/page` and `/api/page/:id`: owner-scoped CRUD.
-- `/api/pages/echo`: tool explicitly exposed over HTTP.
+- `/api/pages/page` and `/api/pages/page/:id`: owner-scoped CRUD (list is
+  `POST /api/pages/page/query`).
+- `POST /api/pages/echo`: tool explicitly exposed over HTTP.
 - `/api/auth/*`: Better Auth.
-- `/api/public/pages/:slug`: public metadata.
+- `GET /api/pages/public/:slug`: public metadata.
 - `/p/:slug`: rendered public page.
 - `/openapi.json`, `/swagger`: API documentation. The API reference (this app's
   routes and Better Auth's) is the APIs tab of the `brick dev` dashboard.

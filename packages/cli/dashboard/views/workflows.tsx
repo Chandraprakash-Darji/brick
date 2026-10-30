@@ -38,6 +38,12 @@ export function WorkflowsView({
         title="Workflow inspector"
         src="/workflows/"
         className="h-[calc(100svh-3.5rem)] w-full border-0"
+        onLoad={(event) => {
+          // The project's theme applies to the inspector too: it uses the same tokens.
+          const theme = document.querySelector("link[data-brick-theme]");
+          const head = event.currentTarget.contentDocument?.head;
+          if (theme && head) head.append(theme.cloneNode());
+        }}
       />
     </div>
   );
