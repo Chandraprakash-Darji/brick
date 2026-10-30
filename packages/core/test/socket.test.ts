@@ -880,7 +880,12 @@ it("doesn't replay a room's messages from before the client could join it", asyn
   live.emit("doc:private", "message", "before you were allowed in");
   allowed = true;
   // Neither a sequence signed for another room nor an edited one replays.
-  for (const since of [seq, seq.replace(/-\d+\./, "-0.")]) {
+  let since = seq;
+  for (const attempt of ["other room", "edited"]) {
+    if (attempt === "edited") {
+      since = frames.find((f) => f.event === "$gap").data.seq;
+      since = since.replace(/-\d+\./, "-0.");
+    }
     frames.length = 0;
     ws.send(JSON.stringify({ event: "$leave", data: { room: "doc:private" } }));
     ws.send(

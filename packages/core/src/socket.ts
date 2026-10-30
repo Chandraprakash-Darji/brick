@@ -400,6 +400,7 @@ export function mountSockets(
   broker: SocketBroker,
   secret?: string,
 ): void {
+  if (secret === "") throw new Error("Brick: sockets.secret can't be empty");
   // A sequence is signed for its room, so a client resumes only a room it was sent that sequence in.
   const key = secret ?? randomBytes(32);
   const signature = (topic: string, seq: string) =>
