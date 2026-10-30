@@ -1,6 +1,6 @@
 ---
 title: "BrickKit v0.11.0: realtime rooms, commands, plugins you can ship, and one URL scheme"
-description: "Rooms and fan-out for typed sockets, a home for business rules, declared dependencies, definePlugin, dashboard extensions, brick.config.ts and @brickkit/lint, plus every breaking change."
+description: "Rooms and fan-out for typed sockets, a home for business rules, declared dependencies, definePlugin, dashboard extensions, brick.config.ts and lint rules, plus every breaking change."
 date: "2026-10-30"
 category: release
 version: "0.11.0"
@@ -14,11 +14,11 @@ v0.11 is the biggest BrickKit release so far. It started from three things we ke
 
 This release fixes all three. It also gives plugins and the dev dashboard real extension points.
 
-| Item             | Value                                                                       |
-| ---------------- | --------------------------------------------------------------------------- |
-| Previous release | `v0.10.0`                                                                   |
-| Current release  | `v0.11.0`                                                                   |
-| Packages         | `@brickkit/core`, `@brickkit/crud`, `@brickkit/cli`, `@brickkit/lint` (new) |
+| Item             | Value                                               |
+| ---------------- | --------------------------------------------------- |
+| Previous release | `v0.10.0`                                           |
+| Current release  | `v0.11.0`                                           |
+| Packages         | `@brickkit/core`, `@brickkit/crud`, `@brickkit/cli` |
 
 There are breaking changes. They're all listed at the [end of this post](#every-breaking-change), each with what to do.
 
@@ -190,7 +190,7 @@ const billing = useService(billingService, { from: "orders" });
 await billing.invoice.close({ id });
 ```
 
-`useService` gets its types from the contract `brick dev` generates, so renaming an action breaks the build instead of production. `createServiceProxy` still works but is deprecated.
+`useService` gets its types from the contract `brick dev` generates, so renaming an action breaks the build instead of production. `createServiceProxy` is gone; `useService` replaces it.
 
 ## 5. Plugins you can ship
 
@@ -266,7 +266,7 @@ export default defineDashboard({
 - **Theme:** colours, radius and fonts come from `brick.config.ts` with no code at all.
 - **Plugins:** they can ship their own extension.
 
-## 7. `brick.config.ts`, one project structure, and `@brickkit/lint`
+## 7. `brick.config.ts`, one project structure, and lint rules
 
 The flags you repeated in every script now live in one optional file:
 
@@ -277,7 +277,7 @@ export default defineConfig({
   entry: "src/app.ts",
   services: "src/services",
   client: { output: "_brick/contract.ts" },
-  dev: { frontend: "vite --port 5178" },
+  dev: { frontend: "vite --port 5178" }, // brick dev also starts your frontend, after writing the contract
   dashboard: { extension: "src/dashboard/index.tsx" },
   lint: { presets: ["recommended", "layout"] },
 });
@@ -292,10 +292,10 @@ v0.11 also settles where things go:
 - **One definition per file.** The folders mirror the URLs.
 - **A generated manifest.** `brick dev` writes `_brick/services.gen.ts`, which imports every definition file, so an action can't silently fail to register because nobody imported it.
 
-The new `@brickkit/lint` package enforces this structure, along with rules that catch real bugs:
+`@brickkit/cli` now ships lint rules that enforce this structure, along with rules that catch real bugs:
 
 - **Errors:** undeclared errors, GET actions that write, emits outside a transaction, non-deterministic workflows, cross-service table access (always an error), and wildcard origins.
-- **How it runs:** it works as an ESLint flat-config plugin and as an oxlint JS plugin. `brick lint` also runs the rules that need the whole app.
+- **How it runs:** import `@brickkit/cli/lint/eslint` as an ESLint flat-config plugin, or `@brickkit/cli/lint/oxlint` as an oxlint JS plugin. `brick lint` runs them through oxlint, plus the rules that need the whole app.
 
 ## 8. Smaller things
 
@@ -335,5 +335,5 @@ The new `@brickkit/lint` package enforces this structure, along with rules that 
 | A service with an event catalog refuses event names it doesn't declare, apart from its own CRUD events.                                                                               | Declare the event in the catalog.                                           |
 | `defineService` has new type parameters (`<TDb, TCtx, TEvents, TName, TPorts>`).                                                                                                      | Update code that passed explicit generics.                                  |
 | Path parameters are converted to numbers when the input schema declares a number.                                                                                                     | Nothing, unless you relied on receiving a string.                           |
-
-`createServiceProxy` is deprecated in favour of `useService` and still works in v0.11.
+| `createServiceProxy` is removed, and with it the `isMonolith` option.                                                                                                                 | Call `useService(service, { from })` instead.                               |
+| A plugin installed with `service.use()` or `resource.use()` and again in `brick({ plugins })` fails at startup.                                                                       | Install it in one place.                                                    |
