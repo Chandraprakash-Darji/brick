@@ -241,6 +241,17 @@ Every emit then gets a per-room sequence number, carried in the frame next to `e
 
 The in-process broker keeps the last `keep` emits per room for up to `maxAgeMs`. The Redis broker writes each emit to a stream per room with `XADD … MAXLEN ~ keep`, uses the stream entry id as the sequence, expires the stream after `maxAgeMs` without emits, and replays with one `XRANGE`. `~` trims approximately, so Redis may keep more than `keep`.
 
+The server signs each sequence for its room. A `since` that wasn't sent to the client in that room, or that was changed, gets `$gap` and no history, so a client can't read what a room held before it was let in by sending an early `since`. A client that leaves a room and is let in again later can still resume from the last sequence it saw. With several processes, give them all the same secret so a client can resume on any of them:
+
+```ts
+brick({
+  services,
+  sockets: { broker: redisBroker({ url }), secret: process.env.SOCKET_SECRET },
+});
+```
+
+Without `secret`, each process signs with a random key, and a client that reconnects to another process gets `$gap`.
+
 Replay covers rooms the client joined with `join()`. Rooms from the socket's `rooms` come back with the new connection; for those the client calls `onGap` after a reconnect. Replay is opt-in per socket, since kept emits cost memory or Redis storage, and it needs a broker with `head` and `history`. Without it, reconnect behaves as described above.
 
 ## Lifecycle and cancellation

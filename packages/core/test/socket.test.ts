@@ -841,3 +841,59 @@ it("checks replay settings and broker support", () => {
     }),
   ).toThrow("does not support replay");
 });
+
+it("doesn't replay a room's messages from before the client could join it", async () => {
+  const service = defineService("chat");
+  let allowed = false;
+  const live = service.socket({
+    name: "live",
+    output: { message: t.String() },
+    allowMissingOrigin: true,
+    replay: { keep: 10, maxAgeMs: 60_000 },
+    join: ({ room }) => room === "doc:public" || allowed,
+    handlers: {},
+  });
+  const url = start(service);
+  const ws = new WebSocket(url.replace(/^http/, "ws") + "/v2/chat/live", [
+    "brick.v1",
+    "brick.token.x",
+  ]);
+  peers.push(ws);
+  const frames: any[] = [];
+  ws.onmessage = ({ data }) => frames.push(JSON.parse(String(data)));
+  await new Promise((resolve, reject) => {
+    ws.onopen = resolve;
+    ws.onerror = reject;
+  });
+  const ack = async (room: string) => {
+    for (let i = 0; i < 100; i++) {
+      const found = frames.find(
+        (f) => f.event === "$join" && f.data.room === room,
+      );
+      if (found) return found.data;
+      await Bun.sleep(5);
+    }
+  };
+  // Any room the client may join tells it the current sequence.
+  ws.send(JSON.stringify({ event: "$join", data: { room: "doc:public" } }));
+  const { seq } = await ack("doc:public");
+  live.emit("doc:private", "message", "before you were allowed in");
+  allowed = true;
+  // Neither a sequence signed for another room nor an edited one replays.
+  for (const since of [seq, seq.replace(/-\d+\./, "-0.")]) {
+    frames.length = 0;
+    ws.send(JSON.stringify({ event: "$leave", data: { room: "doc:private" } }));
+    ws.send(
+      JSON.stringify({ event: "$join", data: { room: "doc:private", since } }),
+    );
+    expect((await ack("doc:private")).ok).toBe(true);
+    expect(frames.find((f) => f.event === "$gap")?.data.room).toBe(
+      "doc:private",
+    );
+  }
+  live.emit("doc:private", "message", "after");
+  await Bun.sleep(30);
+  expect(
+    frames.filter((f) => f.event === "message").map((f) => f.data),
+  ).toEqual(["after"]);
+});

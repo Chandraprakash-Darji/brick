@@ -1,3 +1,4 @@
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Elysia } from "elysia";
 import { websocket } from "elysia/websocket";
 import { createLogger } from "./logger";
@@ -397,7 +398,23 @@ export function mountSockets(
   app: Elysia,
   sockets: { service: string; path: string; definition: RegisteredSocket }[],
   broker: SocketBroker,
+  secret?: string,
 ): void {
+  // A sequence is signed for its room, so a client resumes only a room it was sent that sequence in.
+  const key = secret ?? randomBytes(32);
+  const signature = (topic: string, seq: string) =>
+    createHmac("sha256", key)
+      .update(`${topic}\n${seq}`)
+      .digest("base64url")
+      .slice(0, 22);
+  const sign = (topic: string, seq: string) =>
+    `${seq}.${signature(topic, seq)}`;
+  const verify = (topic: string, signed: string) => {
+    const [seq, sig] = signed.split(".") as [string, string];
+    return timingSafeEqual(Buffer.from(sig), Buffer.from(signature(topic, seq)))
+      ? seq
+      : undefined;
+  };
   if (
     sockets.some(({ definition }) => definition.replay) &&
     !(broker.head && broker.history)
@@ -496,7 +513,7 @@ export function mountSockets(
     const frameOf = (message: SocketBrokerMessage & { type: "emit" }) =>
       message.seq === undefined
         ? message.frame
-        : `${message.frame.slice(0, -1)},"room":${JSON.stringify(roomOf(message.topic))},"seq":${JSON.stringify(message.seq)}}`;
+        : `${message.frame.slice(0, -1)},"room":${JSON.stringify(roomOf(message.topic))},"seq":${JSON.stringify(sign(message.topic, message.seq))}}`;
     const deliver = (message: SocketBrokerMessage) => {
       if (message.type === "emit") {
         app.server?.publish(message.topic, frameOf(message));
@@ -544,17 +561,27 @@ export function mountSockets(
         await entered;
         if (replay && connection.rooms.has(topic)) {
           // Held in this process before reading history, so later emits are either in it or arrive live.
-          const start = since ?? (await broker.head!(topic));
-          const missed = await broker.history!(topic, start, replay);
+          // A since not signed for this room gets no history, only $gap.
+          const start =
+            since === undefined
+              ? await broker.head!(topic)
+              : verify(topic, since);
+          const missed =
+            start === undefined
+              ? undefined
+              : await broker.history!(topic, start, replay);
           const restart = missed ? undefined : await broker.head!(topic);
           if (!isOpen()) return;
           if (connection.rooms.has(topic)) {
             connection.ws.subscribe(topic);
-            if (since === undefined) seq = start;
+            if (since === undefined) seq = sign(topic, start!);
             for (const message of missed ?? [])
               if (message.type === "emit") connection.ws.send(frameOf(message));
             if (restart !== undefined)
-              control(connection.ws, "$gap", { room: name, seq: restart });
+              control(connection.ws, "$gap", {
+                room: name,
+                seq: sign(topic, restart),
+              });
           }
         }
       }

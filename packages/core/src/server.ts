@@ -116,8 +116,10 @@ export interface CreateServerOptions {
   /**
    * Socket fan-out. `broker` carries emits and kicks between processes
    * (default: this process only). See `redisBroker`. The app closes it on stop.
+   * `secret` signs replay sequences; give every process the same one so a
+   * client can resume on any of them (default: random per process).
    */
-  sockets?: { broker?: SocketBroker };
+  sockets?: { broker?: SocketBroker; secret?: string };
   /**
    * The values of the services' declared `deps` (`port<T>()`), by name. Every
    * declared dep must be provided, and every provided one declared. Actions read
@@ -558,6 +560,7 @@ export function brick(options: CreateServerOptions = {}): BrickApp {
     app,
     [...sockets, ...legacySockets],
     options.sockets?.broker ?? localBroker(),
+    options.sockets?.secret,
   );
   const definition = Object.freeze({
     services: Object.freeze([...services]),

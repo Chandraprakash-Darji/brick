@@ -92,14 +92,16 @@ export function isSocketRoom(value: unknown): value is string {
   );
 }
 
-/** A replay sequence: `<number>-<number>`, the shape of a Redis stream id. */
+/** A replay sequence: `<number>-<number>`, the shape of a Redis stream id, then `.` and the server's signature for its room. */
 export function isSocketSeq(value: unknown): value is string {
-  return typeof value === "string" && /^\d{1,20}-\d{1,20}$/.test(value);
+  return (
+    typeof value === "string" && /^\d{1,20}-\d{1,20}\.[\w-]{22}$/.test(value)
+  );
 }
 
 export function compareSocketSeq(a: string, b: string): number {
-  const [a1, a2] = a.split("-").map(BigInt) as [bigint, bigint];
-  const [b1, b2] = b.split("-").map(BigInt) as [bigint, bigint];
+  const [a1, a2] = a.split(".")[0]!.split("-").map(BigInt) as [bigint, bigint];
+  const [b1, b2] = b.split(".")[0]!.split("-").map(BigInt) as [bigint, bigint];
   if (a1 !== b1) return a1 > b1 ? 1 : -1;
   return a2 === b2 ? 0 : a2 > b2 ? 1 : -1;
 }
