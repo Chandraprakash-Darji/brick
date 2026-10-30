@@ -116,12 +116,7 @@ export {
   errorsOf,
   buildErrorHelpers,
 } from "./action";
-export {
-  defineResource,
-  loadRecord,
-  setRecordLoader,
-  type RecordLoader,
-} from "./resource";
+export { defineResource, loadRecord } from "./resource";
 export {
   getActionRoute,
   kebabCase,

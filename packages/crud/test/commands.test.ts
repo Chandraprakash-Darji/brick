@@ -44,6 +44,8 @@ function fixture() {
     }),
   );
   order.command("markReady", {
+    authorize: ({ ctx }) => ctx.user != null,
+    access: { scope: ({ ctx }) => eq(orders.owner, ctx.user as string) },
     input: t.Object({ note: t.String() }),
     output: t.Object({ id: t.Number(), status: t.String() }),
     decide: () => ({ set: { status: "ready" } }),
@@ -68,7 +70,7 @@ const call = (
     }),
   );
 
-test("a command loads its row through crud's access and scope", async () => {
+test("a command loads its row through its own access", async () => {
   const { sqlite, app } = fixture();
   try {
     const own = await call(app, "/api/orders/order/1/mark-ready", "ada");

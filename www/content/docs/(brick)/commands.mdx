@@ -13,6 +13,7 @@ import { order } from "../order.resource";
 
 // POST /api/orders/order/:id/ship  ·  api.orders.order.ship({ id, trackingId })
 export default order.command("ship", {
+  access: "public", // any row by id; { scope } limits which rows it loads
   input: t.Object({ trackingId: t.String() }),
   errors: { NOT_PAID: { status: 409, message: "Only paid orders can ship" } },
   decide: (row, input, { error }) =>
@@ -32,7 +33,7 @@ export default order.command("ship", {
 For each call, inside one database transaction:
 
 1. Checks the input (`id` from the path joins it) and runs `authorize`.
-2. Loads the row through the resource's access rule, as a record action does: crud's `authorize` and `scope` with `@brickkit/crud`, the command's own `access` without it. A missing or hidden row answers `404 NOT_FOUND`.
+2. Loads the row through the command's `access`, as a record action does: `{ scope }` limits which rows it can load, `"public"` loads any row by id. A missing or hidden row answers `404 NOT_FOUND`.
 3. Loads the child rows that `load.children` asks for.
 4. Runs `decide(row, input, { error })`.
 5. On a rejection, rolls back and answers with the error. Nothing is written and no event is recorded.
@@ -89,7 +90,7 @@ order.command("ship", {
 });
 ```
 
-The loaded row includes columns that crud hides from clients, so the reply only carries what `output` names.
+The loaded row has every column, including ones you don't expose to clients, so the reply only carries what `output` names.
 
 ## Child tables
 
@@ -109,6 +110,7 @@ A command names the children it reads in `load.children`. `decide` receives them
 
 ```ts
 invoice.command("addItem", {
+  access: "public",
   input: InvoiceItemInput,
   errors: { NOT_DRAFT: { status: 409, message: "Only a draft takes items" } },
   load: { children: ["items"] },
@@ -137,4 +139,4 @@ Brick applies the parent `set` first, then each child table's inserts, updates a
 
 A command is registered as `<resource>.<name>` (`order.ship`), mounted at `POST /api/<service>/<resource>/:id/<kebab name>`, and called as `api.<service>.<resource>.<name>({ id, ...input })` from the [typed client](/docs/typed-client). A command and an action can't share a name; startup fails with the duplicate-name error. Commands appear in OpenAPI under their resource, like other resource actions.
 
-Commands take `description`, `tags`, `input`, `output`, `errors`, `authorize`, `access` (without crud), `load` and `decide`.
+Commands take `description`, `tags`, `input`, `output`, `errors`, `authorize`, `access`, `load` and `decide`.

@@ -3,7 +3,6 @@ import {
   t,
   ActionExecutionError,
   setActionAccess,
-  setRecordLoader,
   runInTransaction,
   onTransactionCommit,
   type EventRecorder,
@@ -1280,39 +1279,6 @@ export function crud<const F extends Fields, const O extends Operations = {}>(
                 .prepare(),
             );
         },
-      });
-      // Record actions (`resource.action({ record: true })`) and commands load
-      // their row as `get` would see it: the same authorize and scope, so they
-      // never reach a row CRUD hides. The full row is returned, hidden fields too.
-      setRecordLoader(resource, async ({ id, ctx, db }) => {
-        if (options.access !== "public") {
-          const accessConfig = options.access;
-          if (
-            !accessConfig?.authorize ||
-            !(await accessConfig.authorize({
-              operation: "get",
-              input: { id },
-              ctx,
-            } as CrudAuthorizeArgs<F>))
-          )
-            throw new ActionExecutionError(
-              ctx.user == null ? "UNAUTHORIZED" : "FORBIDDEN",
-              "Access denied",
-              ctx.user == null ? 401 : 403,
-            );
-        }
-        const target: any = db ?? ctx.db ?? service.getDb();
-        if (!target) throw new Error("CRUD requires a configured database");
-        const scope =
-          options.access === "public"
-            ? undefined
-            : await options.access?.scope?.({ operation: "get", ctx });
-        const [row] = await target
-          .select()
-          .from(resource.table)
-          .where(and(scope, eq(idColumn, databaseValue(idColumn, id))))
-          .limit(1);
-        return row;
       });
       return api;
     },

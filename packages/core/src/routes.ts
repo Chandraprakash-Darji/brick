@@ -98,6 +98,6 @@ export interface ResourceActionInfo {
   /** The declared name, without the `resource.` prefix. */
   name: string;
   record: boolean;
-  /** A record action's own access rule, for a resource without crud. */
+  /** A record action's own access rule. */
   access?: ResourceActionAccess;
 }

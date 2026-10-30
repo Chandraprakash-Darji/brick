@@ -48,6 +48,8 @@ function fixture() {
   const archive = order.action({
     name: "archive",
     record: true,
+    authorize: ({ ctx }) => ctx.user != null,
+    access: { scope: ({ ctx }) => eq(orders.owner, ctx.user as string) },
     input: t.Object({ reason: t.String() }),
     output: t.Object({
       id: t.Number(),
@@ -122,7 +124,7 @@ test("service, CRUD and resource actions follow the owner tree in kebab-case", (
   }
 });
 
-test("a record action loads its row through crud's access and answers 404 for hidden rows", async () => {
+test("a record action loads its row through its own access and answers 404 for hidden rows", async () => {
   const { sqlite, service } = fixture();
   try {
     const app = brick({ services: [service], docs: false });
@@ -134,10 +136,10 @@ test("a record action loads its row through crud's access and answers 404 for hi
       { reason: "done" },
     );
     expect(ok.status).toBe(200);
-    // The row holds fields crud hides from reads; the action sees them.
+    // The row holds every column, including ones crud hides from reads.
     expect(await ok.json()).toEqual({ id: 1, reason: "done", secret: "s1" });
 
-    // Bob's row exists, but crud's scope hides it from ada.
+    // Bob's row exists, but the action's scope hides it from ada.
     const hidden = await call(
       app,
       "POST",
@@ -155,7 +157,7 @@ test("a record action loads its row through crud's access and answers 404 for hi
       { reason: "x" },
     );
     expect(missing.status).toBe(404);
-    // crud's authorize refuses an anonymous caller before any row loads.
+    // The action's authorize refuses an anonymous caller before any row loads.
     const anonymous = await call(
       app,
       "POST",
@@ -181,7 +183,7 @@ test("a record action loads its row through crud's access and answers 404 for hi
   }
 });
 
-test("a record action without crud needs its own access", async () => {
+test("a record action needs its own access, with or without crud", async () => {
   const database = defineDatabase({ tables: { orders } });
   const db = database.getDb();
   const sqlite = (db as typeof db & { $client: Database }).$client;
@@ -197,6 +199,15 @@ test("a record action without crud needs its own access", async () => {
       execute: ({ row }) => row,
     });
     expect(() => brick({ services: [bare], docs: false })).toThrow(
+      /needs `access`/,
+    );
+
+    const withCrud = defineService("withCrud", { database });
+    withCrud
+      .resource({ name: "order", table: orders })
+      .use(crud({ access: "public", fields: { id: { read: true } } }))
+      .action({ name: "ship", record: true, execute: ({ row }) => row });
+    expect(() => brick({ services: [withCrud], docs: false })).toThrow(
       /needs `access`/,
     );
 
@@ -224,18 +235,21 @@ test("a record action without crud needs its own access", async () => {
   }
 });
 
-test("record actions reject `access` when crud owns the rows", () => {
+test("crud's access does not affect how a record action loads its row", async () => {
   const { sqlite, service } = fixture();
   try {
     service.getResource("order")!.action({
       name: "reopen",
       record: true,
       access: "public",
-      execute: () => null,
+      output: t.Object({ owner: t.String() }),
+      execute: ({ row }) => ({ owner: row.owner }),
     });
-    expect(() => brick({ services: [service], docs: false })).toThrow(
-      /loads rows through its crud access/,
-    );
+    const app = brick({ services: [service], docs: false });
+    // crud's scope would hide bob's row from an anonymous caller; `access: "public"` loads it.
+    const res = await call(app, "POST", "/api/order-billing/order/2/reopen");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ owner: "bob" });
   } finally {
     sqlite.close();
   }

@@ -561,21 +561,31 @@ export const checkRules: Record<string, Rule> = {
   ),
 
   "explicit-access": rule(
-    "Every action and CRUD resource sets access; nothing is public by omission.",
+    "Every action and CRUD resource sets access, and record actions and commands set `access`; nothing is public by omission.",
     (context) => {
       if (skip(context)) return {};
       return {
         CallExpression(node: Node) {
           const definition = definitionOf(node);
           if (!definition) return;
-          if (
-            (definition.kind === "action" || definition.kind === "command") &&
+          // Record actions and commands load a row, so they always need access.
+          const record =
+            definition.kind === "command" ||
+            (definition.kind === "action" &&
+              getProperty(definition.config, "record")?.value?.value === true);
+          if (record && !getProperty(definition.config, "access"))
+            context.report({
+              node: definition.nameNode ?? node,
+              message: `Set access on this ${definition.kind === "command" ? "command" : "record action"}: access: { scope } or "public"; it decides which rows it can load.`,
+            });
+          else if (
+            definition.kind === "action" &&
             !getProperty(definition.config, "authorize") &&
             !getProperty(definition.config, "access")
           )
             context.report({
               node: definition.nameNode ?? node,
-              message: `Set access on this ${definition.kind}: authorize, or access: "public" when anyone may call it.`,
+              message: `Set access on this action: authorize, or access: "public" when anyone may call it.`,
             });
           if (
             definition.kind === "crud" &&

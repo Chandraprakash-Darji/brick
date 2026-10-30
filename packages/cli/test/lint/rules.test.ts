@@ -365,13 +365,13 @@ const CASES: Record<string, Case[]> = {
   "explicit-access": [
     {
       file: "src/a.ts",
-      code: `s.action({ name: "a", authorize: () => true });\ns.action({ name: "b", access: "public" });\nr.use(crud({ access: "public" }));\n`,
+      code: `s.action({ name: "a", authorize: () => true });\ns.action({ name: "b", access: "public" });\nr.use(crud({ access: "public" }));\nr.action({ name: "c", record: true, access: "public" });\nr.command("d", { access: { scope } });\n`,
       errors: 0,
     },
     {
       file: "src/b.ts",
-      code: `s.action({ name: "a" });\nr.use(crud({ fields: {} }));\n`,
-      errors: 2,
+      code: `s.action({ name: "a" });\nr.use(crud({ fields: {} }));\nr.use(crud({ access: "public" }));\nr.action({ name: "c", record: true, authorize: () => true });\nr.command("d", { authorize: () => true });\n`,
+      errors: 4,
     },
   ],
   "socket-authorize": [

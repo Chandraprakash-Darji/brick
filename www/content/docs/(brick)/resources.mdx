@@ -238,6 +238,7 @@ A record-level action works on one row. Set `record: true`:
 order.action({
   name: "archive",
   record: true, // adds :id and loads the row
+  access: { scope: ({ ctx }) => eq(orders.owner, ctx.user.id) },
   input: t.Object({ reason: t.String() }),
   output: OrderRow,
   execute: async ({ row, input, ctx }) => {
@@ -252,28 +253,14 @@ With `record: true`, Brick:
 
 1. Adds `id` to the input, typed from the resource's id column and read from the path. `input` must be a `t.Object` (or omitted).
 2. Runs the action's `authorize`.
-3. Loads the full table row, hidden columns included, through the resource's access rule.
+3. Loads the full table row, hidden columns included, through the action's `access`.
 4. Answers `404 NOT_FOUND` when the row is missing or the caller can't see it.
 5. Calls `execute({ input, row, ctx, error })`.
 
-With `@brickkit/crud` installed, the row loads as crud's `get` would see it: crud's `authorize` runs with operation `"get"` (401 or 403 on refusal) and crud's `scope` for `"get"` is applied. A record action can't reach a row CRUD would hide.
-
-Without crud, a record action must declare `access`, or startup fails:
-
-```ts
-order.action({
-  name: "archive",
-  record: true,
-  access: { scope: ({ ctx }) => eq(orders.owner, ctx.user.id) },
-  // or access: "public" to load any row by id
-  execute: async ({ row }) => row,
-});
-```
-
-`access` is only for record actions, and setting it on a resource that has crud is also a startup error, since crud owns the rows.
+A record action must declare `access`, or startup fails: `{ scope }` returns a condition that limits which rows it can load, and `"public"` loads any row by id. `access` is only for record actions.
 
 A resource action can't be named after a CRUD route segment (`query`, `count`, `exists`, `find-one`, `bulk-create`, `bulk-update`, `bulk-delete`, compared in kebab-case, so `findOne` is refused too) or after a CRUD action on that resource, such as `list`. Startup fails with `Brick: duplicate name "<name>" in service "<service>"`.
 
 For a state change with rules and events, such as shipping an order, declare a [command](/docs/commands) instead: a record action whose body is a pure `decide` function, run in one transaction with the events it emits.
 
-Plugins that need the same row loading can call `loadRecord(resource, { id, ctx, db?, access? })` from `@brickkit/core`. A plugin that owns row access, as crud does, registers its loader with `setRecordLoader(resource, loader)`.
+Plugins that need the same row loading can call `loadRecord(resource, { id, ctx, db?, access })` from `@brickkit/core`.

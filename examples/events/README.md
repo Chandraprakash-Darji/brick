@@ -7,6 +7,7 @@ service also declares an event catalog (`src/events.ts`) with one event,
 
 ```ts
 order.command("ship", {
+  access: "public",
   errors: {
     NOT_PLACED: { status: 409, message: "Only a placed order can ship" },
   },

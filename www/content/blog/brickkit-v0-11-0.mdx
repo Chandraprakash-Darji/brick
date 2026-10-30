@@ -121,6 +121,7 @@ Segments are the kebab-case of your names. An explicit `path` is now relative to
 order.action({
   name: "archive",
   record: true, // adds :id and loads the row
+  access: { scope: ({ ctx }) => eq(orders.owner, ctx.user.id) },
   input: t.Object({ reason: t.String() }),
   output: OrderRow,
   execute: async ({ row, input, ctx }) => {
@@ -129,7 +130,7 @@ order.action({
 });
 ```
 
-With `record: true`, Brick loads the row through the resource's own access rules: crud's `authorize` and `scope`, or the action's `access` when there's no crud. It answers 404 when the row is missing or hidden, so a record action can never reach a row CRUD would hide. The typed client follows the same tree: `api.orders.order.archive({ id, reason })`.
+With `record: true`, Brick loads the row through the action's own `access`: `{ scope }` limits which rows it can load, and `"public"` loads any row by id. Every record action and command declares one. It answers 404 when the row is missing or hidden. The typed client follows the same tree: `api.orders.order.archive({ id, reason })`.
 
 Mobile apps can't all update the day your server does. So `brick({ legacyRoutes: true })` keeps the v0.10 paths answering for one release, with `Deprecation` and `Link` headers, and the dev dashboard counts how many calls still use them.
 
@@ -156,6 +157,7 @@ A command is an action with a name that says what it does, its rules first, and 
 
 ```ts
 order.command("ship", {
+  access: "public",
   input: t.Object({ trackingId: t.String() }),
   errors: { NOT_PAID: { status: 409, message: "Only paid orders can ship" } },
   decide: (row, input, { error }) =>

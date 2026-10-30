@@ -29,8 +29,8 @@ If the hosted docs differ from the installed version, inspect the package types 
 - Import definition modules before compiling the app, generating contracts, or exporting the global registry. Registration occurs when modules load.
 - Tools register separately from HTTP actions. Set `http: true` or attach a tool with `.action(tool)` only when HTTP access is required.
 - Use the generated typed-client contract for browser calls. Keep server modules out of browser imports.
-- For work on one row or one collection of a resource that CRUD doesn't cover, use `resource.action()`. `record: true` adds `id` from the path and passes the loaded `row` to `execute`; it answers 404 for rows the caller can't see. Without crud, a record action needs `access` (`"public"` or `{ scope }`); with crud, don't set `access`.
-- For a state change with rules that emits events, use `resource.command(name, { input, errors, load, decide })`. `decide(row, input, { error })` is pure: return `error.CODE()` to reject, or `{ set, children, emit }`. Brick writes the change and records `emit` events in one transaction. Declare events in `defineService(name, { events: { shipped: t.Object(...) } })` and listen with `defineListener({ name, on: service.events.shipped, run })`; catalog events are named `<service>.<event>` on the wire.
+- For work on one row or one collection of a resource that CRUD doesn't cover, use `resource.action()`. `record: true` adds `id` from the path and passes the loaded `row` to `execute`; it answers 404 for rows the caller can't see. Every record action and command needs `access` (`"public"` or `{ scope }`).
+- For a state change with rules that emits events, use `resource.command(name, { access, input, errors, load, decide })`. `decide(row, input, { error })` is pure: return `error.CODE()` to reject, or `{ set, children, emit }`. Brick writes the change and records `emit` events in one transaction. Declare events in `defineService(name, { events: { shipped: t.Object(...) } })` and listen with `defineListener({ name, on: service.events.shipped, run })`; catalog events are named `<service>.<event>` on the wire.
 
 ## Routes
 

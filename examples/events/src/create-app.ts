@@ -61,6 +61,7 @@ export function createOrdersApp(options: OrdersAppOptions) {
   // commit together, and only a placed order ships.
   order.command("ship", {
     description: "Ship a placed order",
+    access: "public",
     errors: {
       NOT_PLACED: { status: 409, message: "Only a placed order can ship" },
     },

@@ -36,51 +36,10 @@ const CRUD_SEGMENTS = new Set([
 ]);
 
 /**
- * Loads one row of a resource by id for a record action, applying the access
- * rule that owns the resource's rows. Resolves `undefined` when the row is
- * missing or hidden from the caller; throws to refuse the caller outright.
- */
-export type RecordLoader = (args: {
-  id: unknown;
-  ctx: any;
-  /** A transaction to read in; the context's database otherwise. */
-  db?: any;
-}) => Promise<Record<string, unknown> | undefined>;
-
-// Process-global so a second core copy (Vite SSR) finds the same loader.
-const recordLoaderKey = Symbol.for("brickkit.resource.recordLoader");
-
-/**
- * Make `loader` the way record actions load this resource's rows. `crud` calls
- * it, so a record action reads only rows its `access` lets the caller see.
- *
- * @throws When the resource already has a loader.
- */
-export function setRecordLoader(
-  resource: Resource<any, any, any>,
-  loader: RecordLoader,
-): void {
-  if (Object.hasOwn(resource, recordLoaderKey))
-    throw new Error(`Resource '${resource.name}' already has a record loader`);
-  // Plugin rollback restores own properties, so a failed install drops it too.
-  Object.defineProperty(resource, recordLoaderKey, {
-    value: loader,
-    configurable: true,
-  });
-}
-
-function recordLoaderOf(resource: object): RecordLoader | undefined {
-  return (resource as Record<symbol, RecordLoader | undefined>)[
-    recordLoaderKey
-  ];
-}
-
-/**
- * Load the row a record action (or command) works on: through the loader a
- * plugin set (`crud`'s access and scope), or else through `access`.
+ * Load the row a record action (or command) works on, through its `access`.
  *
  * @returns The row, or `undefined` when it is missing or hidden.
- * @throws When the resource has neither a loader nor `access`.
+ * @throws When `access` is missing.
  */
 export async function loadRecord(
   resource: Resource<any, any, any>,
@@ -91,11 +50,9 @@ export async function loadRecord(
     access?: ResourceActionAccess;
   },
 ): Promise<Record<string, unknown> | undefined> {
-  const loader = recordLoaderOf(resource);
-  if (loader) return loader(args);
   if (!args.access)
     throw new Error(
-      `Resource '${resource.name}' has no access rule for loading records: install crud or set \`access\` on the record action`,
+      `Resource '${resource.name}' has no access rule for loading records: set \`access\` on the record action`,
     );
   const db = args.db ?? args.ctx?.db;
   if (!db) throw new Error("Record actions require a configured database");
@@ -111,23 +68,15 @@ export async function loadRecord(
   return row;
 }
 
-/**
- * Startup check: a record action needs exactly one access rule, `crud`'s or
- * its own.
- */
+/** Startup check: a record action needs its own `access`. */
 export function checkRecordAccess(
   resource: Resource<any, any, any>,
   info: ResourceActionInfo,
 ): void {
   const name = `${resource.name}.${info.name}`;
-  const crud = recordLoaderOf(resource) !== undefined;
-  if (crud && info.access !== undefined)
+  if (info.access === undefined)
     throw new Error(
-      `Record action '${name}' sets \`access\`, but resource '${resource.name}' loads rows through its crud access`,
-    );
-  if (!crud && info.access === undefined)
-    throw new Error(
-      `Record action '${name}' needs \`access\` ("public" or { scope }) because resource '${resource.name}' has no crud`,
+      `Record action '${name}' needs \`access\` ("public" or { scope })`,
     );
 }
 
