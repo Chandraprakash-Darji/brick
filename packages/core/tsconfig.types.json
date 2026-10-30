@@ -10,6 +10,7 @@
     "test/service-refs.types.ts",
     "test/resource-types.test.ts",
     "test/tool.test.ts",
+    "test/typed-errors.types.ts",
     "test/plugin.test.ts",
     "test/define-plugin.test.ts",
     "test/database-handle.test.ts",

@@ -83,7 +83,16 @@ export type NarrowAuthorizedContext<TCtx> = TCtx extends { user: infer U }
 export interface ActionErrorDefinition {
   status?: number;
   message: string;
+  /** Schema of the `details` the error carries. Checked in types only, not at runtime. */
+  details?: TSchema;
 }
+
+/** The `details` type of a declared error: its schema's type, or `unknown` when it has none. */
+export type ErrorDetails<TDef> = TDef extends {
+  details: infer D extends TSchema;
+}
+  ? Static<D>
+  : unknown;
 
 export interface ValidationErrorItem {
   path: string;
@@ -192,11 +201,17 @@ export interface StandardErrorMap {
 export type ErrorBuilder<
   TErrors extends Record<string, ActionErrorDefinition>,
 > = StandardErrorMap & {
-  [K in keyof TErrors]: (
-    overrideMessage?: string,
-    details?: unknown,
-    options?: ErrorOptions,
-  ) => never;
+  [K in keyof TErrors]: TErrors[K] extends { details: TSchema }
+    ? (
+        overrideMessage: string | undefined,
+        details: ErrorDetails<TErrors[K]>,
+        options?: ErrorOptions,
+      ) => never
+    : (
+        overrideMessage?: string,
+        details?: unknown,
+        options?: ErrorOptions,
+      ) => never;
 };
 
 export interface BaseActionConfig<

@@ -108,7 +108,12 @@ export { serializeSocketSchema } from "./socket-schema";
 export { redisBroker, type RedisBrokerOptions } from "./socket-redis";
 export { getActionAccess, setActionAccess, ACTION_ACCESS_KEY } from "./access";
 export type { ActionAccessInfo } from "./access";
-export { defineAction, buildErrorHelpers } from "./action";
+export {
+  defineAction,
+  defineError,
+  errorsOf,
+  buildErrorHelpers,
+} from "./action";
 export {
   defineResource,
   loadRecord,
@@ -149,6 +154,8 @@ export {
   type EventDelivery,
   type EventEnvelope,
   type EventListener,
+  type ListenerFailure,
+  type RetryDecision,
   type EventRecorder,
   type EventWorkflow,
   type EventsDefinition,

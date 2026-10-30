@@ -39,6 +39,8 @@ export type {
   EventDelivery,
   EventEnvelope,
   EventListener,
+  ListenerFailure,
+  RetryDecision,
   EventRecorder,
   EventWorkflow,
   EventsOptions,

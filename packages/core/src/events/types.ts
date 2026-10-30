@@ -1,3 +1,5 @@
+import type { ActionErrorDefinition, ErrorDetails } from "../types";
+
 /**
  * An event, as it was recorded. It is the same for every listener of it.
  */
@@ -43,6 +45,25 @@ export type CrudEventPayload<TRow = Record<string, unknown>> =
   | { id: unknown; before: TRow; after: TRow };
 
 /**
+ * What `retry` receives: one member per error the listener declares, or the
+ * fallback for anything else it threw.
+ */
+export type ListenerFailure<
+  TErrors extends Record<string, ActionErrorDefinition>,
+> =
+  | {
+      [K in keyof TErrors & string]: {
+        code: K;
+        message: string;
+        details: ErrorDetails<TErrors[K]>;
+      };
+    }[keyof TErrors & string]
+  | { code: "UNKNOWN"; message: string; cause: unknown };
+
+/** What a listener's `retry` decides: try again later, or park the delivery as dead now. */
+export type RetryDecision = "retry" | "dead";
+
+/**
  * A listener: code that runs when an event it listens for has been recorded.
  */
 export interface EventListener<TPayload = any> {
@@ -58,6 +79,13 @@ export interface EventListener<TPayload = any> {
    * retries the delivery with a growing delay. A listener has this or `workflow`.
    */
   readonly run?: (delivery: EventDelivery<TPayload>) => void | Promise<void>;
+  /**
+   * Decides what a failed delivery does next. Without it, every failure retries
+   * until `maxAttempts`. It cannot extend the attempts: `"retry"` still parks the
+   * delivery as dead once they run out.
+   */
+  readonly errors?: Record<string, ActionErrorDefinition>;
+  readonly retry?: (error: ListenerFailure<any>) => RetryDecision;
   /**
    * A durable workflow that runs for each delivery, on the app's `events.world`.
    * The delivery counts as done once its run has started; the workflow retries

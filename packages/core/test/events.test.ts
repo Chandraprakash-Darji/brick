@@ -4,7 +4,9 @@ import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import {
   brick,
   defineDatabase,
+  defineError,
   defineListener,
+  t,
   defineService,
   emitEvent,
   getGlobalRegistry,
@@ -883,5 +885,63 @@ describe("emitEvent", () => {
     await expect(emitEvent({}, "item.refunded", {})).rejects.toThrow(
       "Cannot emit",
     );
+  });
+});
+
+describe("typed listener errors", () => {
+  const Declined = defineError("CARD_DECLINED", {
+    status: 402,
+    message: "Card declined",
+    details: t.Object({ reason: t.String() }),
+  });
+
+  async function runWith(
+    run: Parameters<typeof defineListener>[0]["run"],
+    retry: (error: any) => "retry" | "dead",
+    maxAttempts = 3,
+  ) {
+    const seen: unknown[] = [];
+    const ctx = setup([
+      {
+        name: "charge",
+        on: "item.create",
+        errors: { ...Declined },
+        retry: (error: any) => (seen.push(error), retry(error)),
+        run,
+        maxAttempts,
+      } as any,
+    ]);
+    await ctx.events.transaction(ctx.db, {}, async (_tx, rec) => {
+      await rec("item.create", { id: 1 });
+    });
+    await ctx.hub.drain();
+    return { ctx, seen };
+  }
+
+  it("parks at once when retry says dead for a declared code", async () => {
+    const { ctx, seen } = await runWith(
+      (_d: any, { error }: any) =>
+        error.CARD_DECLINED(undefined, { reason: "x" }),
+      (error) => (error.code === "CARD_DECLINED" ? "dead" : "retry"),
+    );
+    expect(seen).toEqual([
+      {
+        code: "CARD_DECLINED",
+        message: "Card declined",
+        details: { reason: "x" },
+      },
+    ]);
+    expect((await ctx.hub.counts()).dead).toBe(1);
+  });
+
+  it("retries as before when retry says retry, and for undeclared failures", async () => {
+    const { ctx, seen } = await runWith(
+      () => {
+        throw new Error("boom");
+      },
+      () => "retry",
+    );
+    expect(seen[0]).toMatchObject({ code: "UNKNOWN", message: "boom" });
+    expect((await ctx.hub.counts()).pending).toBe(1);
   });
 });

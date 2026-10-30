@@ -303,6 +303,8 @@ v0.11 also settles where things go:
 - `secret()` is now `defineSecret()`.
 - Path parameters are converted to numbers when the input schema says so. This fixes `GET /:id` for integer ids, which returned 400 before.
 - OpenAPI tags every route with its service first, then your own tags.
+- Errors can carry typed `details`. `defineError("SLUG_EXISTS", { status: 409, message, details: t.Object({ slug: t.String() }) })` returns a map you spread into `errors`, and `error.SLUG_EXISTS(undefined, { slug })` checks the details in types and shows the schema in OpenAPI. `errorsOf(action)` returns an action's `errors` to re-declare elsewhere.
+- Event listeners take the same `errors`, plus `retry: (error) => "retry" | "dead"`, so a declined card can park at once while a network error retries. `error.code` is typed from the declared errors.
 
 ## Upgrade checklist
 

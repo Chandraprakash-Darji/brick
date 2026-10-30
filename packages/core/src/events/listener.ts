@@ -1,5 +1,13 @@
 import { isEventRef, type EventRef } from "./catalog";
-import type { EventDelivery, EventListener, EventWorkflow } from "./types";
+import { buildErrorHelpers } from "../action";
+import type { ActionErrorDefinition, ErrorBuilder } from "../types";
+import type {
+  EventDelivery,
+  EventListener,
+  EventWorkflow,
+  ListenerFailure,
+  RetryDecision,
+} from "./types";
 
 type EventOn = EventRef<any> | readonly EventRef<any>[];
 type PayloadOf<O> =
@@ -9,13 +17,24 @@ type PayloadOf<O> =
       ? P
       : never;
 
-type ListenerConfig<TPayload, TOn = string | readonly string[]> = {
+type ListenerConfig<
+  TPayload,
+  TOn = string | readonly string[],
+  TErrors extends Record<string, ActionErrorDefinition> = {},
+> = {
   name: string;
   on: TOn;
   maxAttempts?: number;
+  /** Errors `run` may raise with `error.CODE()`. Spread `defineError(...)` results or `errorsOf(action)` here. */
+  errors?: TErrors;
+  /** Decides what a failure does next. Without it every failure retries until `maxAttempts`. */
+  retry?: (error: ListenerFailure<TErrors>) => RetryDecision;
 } & (
   | {
-      run: (delivery: EventDelivery<TPayload>) => void | Promise<void>;
+      run: (
+        delivery: EventDelivery<TPayload>,
+        helpers: { error: ErrorBuilder<TErrors> },
+      ) => void | Promise<void>;
       workflow?: never;
     }
   | { workflow: EventWorkflow<TPayload>; run?: never }
@@ -33,6 +52,10 @@ type ListenerConfig<TPayload, TOn = string | readonly string[]> = {
  * `delivery.deliveryId` to make its work idempotent. A workflow needs no such
  * care: a delivery starts one run however often it is tried, and the workflow
  * retries its own steps.
+ *
+ * A listener can declare `errors`, as an action does, and raise them in `run` with
+ * `error.CODE()`. `retry(error)` then picks `"retry"` or `"dead"` from the typed
+ * `error.code`; anything not declared arrives as `{ code: "UNKNOWN", cause }`.
  *
  * @param config - `name` (unique; it is part of each delivery's id), `on` (a
  * declared event such as `orders.events.shipped`, which types the payload, or an
@@ -69,17 +92,24 @@ type ListenerConfig<TPayload, TOn = string | readonly string[]> = {
  *   run: ({ payload }) => notify(payload.id, payload.trackingId),
  * });
  */
-export function defineListener<const TOn extends EventOn>(
-  config: ListenerConfig<PayloadOf<TOn>, TOn>,
+export function defineListener<
+  const TOn extends EventOn,
+  const TErrors extends Record<string, ActionErrorDefinition> = {},
+>(
+  config: ListenerConfig<PayloadOf<TOn>, TOn, TErrors>,
 ): EventListener<PayloadOf<TOn>>;
-export function defineListener<TPayload = any>(
+export function defineListener<
+  TPayload = any,
+  const TErrors extends Record<string, ActionErrorDefinition> = {},
+>(
   config: ListenerConfig<
     TPayload,
-    string | EventRef<any> | readonly (string | EventRef<any>)[]
+    string | EventRef<any> | readonly (string | EventRef<any>)[],
+    TErrors
   >,
 ): EventListener<TPayload>;
 export function defineListener(
-  config: ListenerConfig<any, unknown>,
+  config: ListenerConfig<any, unknown, any>,
 ): EventListener {
   if (typeof config.name !== "string" || !config.name)
     throw new Error("An event listener needs a name");
@@ -121,10 +151,18 @@ export function defineListener(
     throw new Error(
       `Event listener '${name}': workflow must be a function marked "use workflow"`,
     );
+  const helpers = buildErrorHelpers(config.errors);
   return Object.freeze({
     name: config.name,
     on: Object.freeze(on),
-    ...(config.run !== undefined ? { run: config.run } : {}),
+    ...(config.run !== undefined
+      ? {
+          run: ((delivery: EventDelivery) =>
+            config.run!(delivery, { error: helpers })) as EventListener["run"],
+        }
+      : {}),
+    ...(config.errors ? { errors: config.errors } : {}),
+    ...(config.retry ? { retry: config.retry } : {}),
     ...(config.workflow !== undefined ? { workflow: config.workflow } : {}),
     ...(config.maxAttempts !== undefined
       ? { maxAttempts: config.maxAttempts }

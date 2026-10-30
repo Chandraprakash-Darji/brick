@@ -181,7 +181,12 @@ export function generateOpenApiSpec(
       }
 
       const errorAlternatives = new Set<string>();
-      const addError = (code: string, status: number, message: string) => {
+      const addError = (
+        code: string,
+        status: number,
+        message: string,
+        details?: unknown,
+      ) => {
         const key = `${status}:${code}`;
         if (errorAlternatives.has(key)) return;
         errorAlternatives.add(key);
@@ -190,7 +195,11 @@ export function generateOpenApiSpec(
             { $ref: "#/components/schemas/ErrorEnvelope" },
             {
               type: "object",
-              properties: { code: { const: code }, status: { const: status } },
+              properties: {
+                code: { const: code },
+                status: { const: status },
+                ...(details ? { details } : {}),
+              },
             },
           ],
         };
@@ -214,7 +223,7 @@ export function generateOpenApiSpec(
       if (action.config.errors) {
         for (const [code, errorDef] of Object.entries(action.config.errors)) {
           const def = errorDef as ActionErrorDefinition;
-          addError(code, def.status || 400, def.message || code);
+          addError(code, def.status || 400, def.message || code, def.details);
         }
       }
       addError("INTERNAL_SERVER_ERROR", 500, "Internal server error");

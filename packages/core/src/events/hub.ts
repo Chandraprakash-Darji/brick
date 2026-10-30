@@ -66,6 +66,8 @@ export interface EventsDefinition {
 /** What the dispatcher runs for a delivery. */
 export interface Deliverable {
   readonly maxAttempts?: number;
+  readonly errors?: EventListener["errors"];
+  readonly retry?: EventListener["retry"];
   run(delivery: EventDelivery): void | Promise<void>;
 }
 
@@ -315,22 +317,26 @@ export class EventsHub {
     let found = this.deliverables.get(name);
     if (!found) {
       const runtime = this.runtime;
-      found = listener.workflow
-        ? {
-            ...(listener.maxAttempts !== undefined
-              ? { maxAttempts: listener.maxAttempts }
-              : {}),
-            run: async (delivery) => {
-              await runtime!.startRun(listener, delivery);
-            },
-          }
-        : {
-            ...(listener.maxAttempts !== undefined
-              ? { maxAttempts: listener.maxAttempts }
-              : {}),
-            run: (delivery) =>
-              runWithDeps(this.deps, () => listener.run!(delivery)),
-          };
+      found = {
+        ...(listener.errors ? { errors: listener.errors } : {}),
+        ...(listener.retry ? { retry: listener.retry } : {}),
+        ...(listener.workflow
+          ? {
+              ...(listener.maxAttempts !== undefined
+                ? { maxAttempts: listener.maxAttempts }
+                : {}),
+              run: async (delivery) => {
+                await runtime!.startRun(listener, delivery);
+              },
+            }
+          : {
+              ...(listener.maxAttempts !== undefined
+                ? { maxAttempts: listener.maxAttempts }
+                : {}),
+              run: (delivery) =>
+                runWithDeps(this.deps, () => listener.run!(delivery)),
+            }),
+      };
       this.deliverables.set(name, found);
     }
     return found;

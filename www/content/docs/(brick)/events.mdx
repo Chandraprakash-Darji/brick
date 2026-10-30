@@ -190,6 +190,24 @@ await events.retryDead("evt_01J...:welcome-email");
 
 Set `maxAttempts` on a listener to override the dispatcher's default.
 
+### Typed errors and retry
+
+A listener can declare `errors`, as an action does (`defineError(...)` results or `errorsOf(action)`), and raise them from `run` with `error.CODE()`. Add `retry` to choose, per failure, between `"retry"` (the usual backoff) and `"dead"` (park it now):
+
+```ts
+const charge = defineListener({
+  name: "charge-card",
+  on: orders.events.placed,
+  errors: { ...errorsOf(chargeInvoice) },
+  retry: (error) => (error.code === "CARD_DECLINED" ? "dead" : "retry"),
+  run: async ({ payload }, { error }) => {
+    // error.CARD_DECLINED(undefined, { reason }) is checked like in an action
+  },
+});
+```
+
+`error` is a union with one member per declared code (`code`, `message`, typed `details`), plus `{ code: "UNKNOWN", message, cause }` for anything else the handler threw. Without `retry`, every failure retries until `maxAttempts`, as before. `"retry"` cannot extend `maxAttempts`, and a `retry` that throws counts as `"retry"`. Workflow steps do not take `errors` yet.
+
 ## Delivery settings
 
 `events.dispatch` tunes delivery. All values are optional.
