@@ -231,7 +231,7 @@ export function defineServiceSocket<
     if (after === undefined) return send();
     if (!inTransaction(after))
       throw new Error(
-        "Socket emit { after } needs an open transaction from runInTransaction",
+        "Socket emit { after: tx } needs a tx from runInTransaction(db, (tx) => ...); a plain db.transaction() is not tracked, so the emit could be sent for a write that rolls back",
       );
     void onTransactionCommit(after, send);
   };

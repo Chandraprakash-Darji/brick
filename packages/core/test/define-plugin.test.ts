@@ -309,6 +309,23 @@ describe("app part and lifecycle", () => {
     await app.events?.stop();
   });
 
+  it("refuses a plugin passed to brick() that a resource already installed", () => {
+    const audit = definePlugin({
+      name: "@acme/audit",
+      app: () => {},
+      resource: () => ({}),
+    });
+    const { service, page } = host();
+    const instance = audit();
+    page.use(instance);
+    for (const again of [instance, audit()])
+      expect(() =>
+        brick({ services: [service], requestLogging: false, plugins: [again] }),
+      ).toThrow(
+        `Plugin @acme/audit is already installed with ${service.name}.${page.name}.use(), which runs its app part too; remove it from brick({ plugins })`,
+      );
+  });
+
   it("a failed start stops what started and rethrows", async () => {
     const calls: string[] = [];
     const ok = definePlugin({

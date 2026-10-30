@@ -757,6 +757,24 @@ export function setupAppPlugins(
         );
     if (onApp.has(manifest.name))
       throw new Error(`Plugin ${manifest.name} is installed on the app twice`);
+    // Its `app` part already runs from the service or resource install; running it again would double every hook.
+    const installed = ordered.find(
+      (other) => internalsOf(other)!.manifest.name === manifest.name,
+    );
+    if (installed)
+      throw new Error(
+        `Plugin ${manifest.name} is already installed with ${internalsOf(
+          installed,
+        )!
+          .installs.map((install) =>
+            install.scope === "resource"
+              ? `${install.service}.${install.resource}.use()`
+              : `${install.service}.use()`,
+          )
+          .join(
+            ", ",
+          )}, which runs its app part too; remove it from brick({ plugins })`,
+      );
     onApp.add(manifest.name);
     if (!internals.installs.some((item) => item.scope === "app"))
       internals.installs.push({ scope: "app" });

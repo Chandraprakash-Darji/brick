@@ -6,6 +6,7 @@ import {
   resetGlobalRegistry,
   t,
 } from "../src";
+import { connection, reconnectDelay } from "../src/socket-redis";
 import { replayScenario } from "./socket-replay";
 
 const url = process.env.REDIS_URL ?? "redis://localhost:6379";
@@ -129,4 +130,40 @@ describe.skipIf(!reachable)("redis broker", () => {
 
   it("replays missed emits from the Redis stream", () =>
     replayScenario((app) => apps.push(app), redisBroker({ url })));
+});
+
+it("backs off Redis reconnects exponentially, capped at 30 s", () => {
+  for (const [failures, low, high] of [
+    [0, 250, 500],
+    [3, 2000, 4000],
+    [20, 15_000, 30_000],
+  ])
+    for (let i = 0; i < 20; i++) {
+      const delay = reconnectDelay(failures!);
+      expect(delay).toBeGreaterThanOrEqual(low!);
+      expect(delay).toBeLessThanOrEqual(high!);
+    }
+});
+
+it("waits out the backoff instead of dialing Redis on every get()", async () => {
+  const bun = Bun as any;
+  const original = bun.RedisClient;
+  let dials = 0;
+  bun.RedisClient = class extends original {
+    constructor(...args: any[]) {
+      super(...args);
+      dials++;
+    }
+  };
+  try {
+    // Nothing listens on port 1, so every connection fails.
+    const redis = connection("redis://127.0.0.1:1", () => {});
+    redis.get();
+    await Bun.sleep(50);
+    for (let i = 0; i < 100; i++) redis.get();
+    expect(dials).toBe(1);
+    redis.close();
+  } finally {
+    bun.RedisClient = original;
+  }
 });

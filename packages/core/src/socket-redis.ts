@@ -9,14 +9,21 @@ export interface RedisBrokerOptions {
   queue?: number;
 }
 
+/** Exponential backoff from 500 ms to 30 s, with jitter so processes don't reconnect in step. */
+export function reconnectDelay(failures: number): number {
+  const ceiling = Math.min(30_000, 500 * 2 ** failures);
+  return ceiling / 2 + Math.random() * (ceiling / 2);
+}
+
 /** One Redis connection that reconnects by itself and reports each fresh connection. */
-function connection(
+export function connection(
   url: string | undefined,
   connected: (redis: RedisClient) => void,
 ) {
   let redis: RedisClient | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let closed = false;
+  let failures = 0;
   const waiters: (() => void)[] = [];
   const lost = (client: RedisClient) => {
     if (redis !== client) return;
@@ -25,10 +32,10 @@ function connection(
     timer = setTimeout(() => {
       timer = undefined;
       start();
-    }, 1000);
+    }, reconnectDelay(failures++));
   };
   const start = () => {
-    if (closed || redis) return;
+    if (closed || redis || timer) return;
     // Bun's own reconnect keeps no subscriptions we can see; a fresh client resubscribes explicitly.
     const client = new Bun.RedisClient(url, {
       autoReconnect: false,
@@ -39,6 +46,7 @@ function connection(
     client.connect().then(
       () => {
         if (redis !== client) return;
+        failures = 0;
         connected(client);
         for (const wake of waiters.splice(0)) wake();
       },

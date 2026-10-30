@@ -673,7 +673,7 @@ it("emits { after: tx } on commit and drops it on rollback", async () => {
     ).rejects.toThrow("inner");
   });
   expect(() => live.emit("user:anon", "message", "x", { after: db })).toThrow(
-    "open transaction",
+    "runInTransaction",
   );
   live.emit("user:anon", "message", "last");
   await Bun.sleep(20);

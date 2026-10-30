@@ -82,6 +82,7 @@
     "@opentelemetry/core": "^2.12.0",
     "@opentelemetry/sdk-trace-base": "^2.12.0",
     "@sinclair/typebox": "^0.34.52",
+    "class-variance-authority": "^0.7.1",
     "commander": "^15.0.0",
     "elysia": "2.0.0-beta.29"
   },
@@ -96,7 +97,6 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "@workflow/builders": "5.0.5",
-    "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "fumadocs-core": "16.17.2",
     "fumadocs-openapi": "12.5.2",
