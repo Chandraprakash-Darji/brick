@@ -41,7 +41,7 @@ import {
 import { getActionAccess } from "./access";
 import { pluginOwner } from "./define-plugin";
 import { pickContextEnvelope } from "./context";
-import type { DepsOf, Ports } from "./deps";
+import { PLUGIN_DEPS, type DepsOf, type Ports } from "./deps";
 import type { NamedService } from "./rpc";
 import { createLogger, DEFAULT_LOG_PREFIXES } from "./logger";
 import { defineServiceSocket, type RegisteredSocket } from "./socket";
@@ -62,6 +62,8 @@ let _ctxSeq = 0;
 
 // Symbol to tie context resolution to a specific service instance and invocation
 const RESOLVED_SYMBOL = Symbol("resolved");
+/** The deps a resolved context was resolved with, to restore them when a plugin's copy comes back. */
+const OWN_DEPS = Symbol("ownDeps");
 
 export class ServiceImpl<
   TDb = BunSQLiteDatabase<Record<string, unknown>>,
@@ -333,8 +335,17 @@ export class ServiceImpl<
     if (this._isBuilt)
       throw new Error("Sockets must be declared before service build");
     this.claim("socket", config.name);
-    const socket = defineServiceSocket(this.name, config, (request) =>
-      resolveServiceContext(this, { request }),
+    const socket: RegisteredSocket = defineServiceSocket(
+      this.name,
+      config,
+      async (request) => {
+        const ctx = await resolveServiceContext(this, { request });
+        // A socket a plugin declared runs with the plugin's deps.
+        const deps = (socket as unknown as Record<symbol, unknown>)[
+          PLUGIN_DEPS
+        ];
+        return deps ? { ...ctx, deps } : ctx;
+      },
     );
     this.sockets.set(config.name, socket);
     getGlobalRegistry().touch();
@@ -491,7 +502,13 @@ async function resolveServiceContext<
 ): Promise<BaseContext<TDb> & TServiceContext> {
   // Only a context this service resolved itself is accepted as it is.
   if ((callCtx as any)?.[RESOLVED_SYMBOL] === service) {
-    return callCtx as BaseContext<TDb> & TServiceContext;
+    // A plugin action's copy carries the plugin's deps; this service's own actions get their own back.
+    const own = (callCtx as any)[OWN_DEPS];
+    return (
+      (callCtx as { deps?: unknown }).deps === own
+        ? callCtx
+        : { ...callCtx, deps: own }
+    ) as BaseContext<TDb> & TServiceContext;
   }
   const seq = ++_ctxSeq;
   const req = callCtx?.request ?? DEFAULT_REQUEST;
@@ -502,10 +519,13 @@ async function resolveServiceContext<
   const requestId = callCtx?.requestId ?? `req_${seq.toString(36)}`;
   const services = callCtx?.services ?? EMPTY_SERVICES;
   const metadata = callCtx?.metadata ?? EMPTY_METADATA;
-  // The app's deps for this service; a direct call with no app (a unit test) may pass its own.
+  // The app's deps for this service; a direct call with no app (a unit test) may pass its own,
+  // but never those of a context another service (or a plugin) resolved.
   const deps =
     service.deps ??
-    (callCtx as { deps?: unknown } | undefined)?.deps ??
+    ((callCtx as any)?.[RESOLVED_SYMBOL]
+      ? undefined
+      : (callCtx as { deps?: unknown } | undefined)?.deps) ??
     EMPTY_DEPS;
 
   const fullBaseCtx: BaseContext<TDb> = {
@@ -528,6 +548,7 @@ async function resolveServiceContext<
     ...resolvedExtra,
     deps,
     [RESOLVED_SYMBOL]: service,
+    [OWN_DEPS]: deps,
   };
   return finalCtx;
 }

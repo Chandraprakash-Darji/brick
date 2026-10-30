@@ -1,8 +1,10 @@
 import { beforeEach, expect, it } from "bun:test";
 import {
+  brick,
   defineDatabase,
   definePlugin,
   defineService,
+  port,
   resetGlobalRegistry,
   sqliteTable,
   syncSchema,
@@ -131,4 +133,53 @@ it("service-level hooks see every resource's writes, after commit too", async ()
   service.use(watcher());
   await item.create.run({ id: "c", name: "Cherry" });
   expect(seen).toEqual(["in tx c", "committed create c"]);
+});
+
+it("plugin hooks and crud() inside a plugin read the plugin's deps as ctx.deps", async () => {
+  const seen: unknown[] = [];
+  const tags = sqliteTable("dp_tags", { id: text("id").primaryKey() });
+  const tagger = definePlugin({
+    name: "@acme/tagger",
+    deps: { label: port<string>() },
+    service: ({ service, hooks }) => {
+      hooks.afterCreate(({ ctx }) => void seen.push(`hook ${ctx.deps.label}`));
+      service.resource({ name: "tag", table: tags, id: tags.id }).use(
+        crud({
+          access: "public",
+          fields: { id: { read: true, create: true } },
+          hooks: {
+            beforeCreate: ({ ctx }) =>
+              void seen.push(`crud ${Object.keys(ctx.deps)} ${ctx.deps.label}`),
+          },
+        }),
+      );
+    },
+  });
+  const database = defineDatabase({ tables: { items, tags } });
+  const service = defineService("tagshop", {
+    database,
+    deps: { carrier: port<string>() },
+  });
+  const item = service
+    .resource({ name: "item", table: items, id: items.id })
+    .use(
+      crud({
+        access: "public",
+        fields: {
+          id: { read: true, create: true },
+          name: { read: true, create: true },
+        },
+      }),
+    );
+  service.use(tagger({}, { deps: { label: "plugin" } }));
+  syncSchema(service);
+  brick({
+    services: [service],
+    deps: { carrier: "host" },
+    requestLogging: false,
+    docs: false,
+  });
+  await item.create.run({ id: "a", name: "Apple" });
+  await (service.getAction("tag.create") as any).run({ id: "t" });
+  expect(seen).toEqual(["hook plugin", "crud label plugin", "hook plugin"]);
 });

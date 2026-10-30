@@ -3,12 +3,14 @@ import { getTableConfig as pgTableConfig } from "drizzle-orm/pg-core";
 import {
   brick,
   brickVersion,
+  defineAction,
   defineDatabase,
   defineListener,
   definePlugin,
   defineSecret,
   defineService,
   emitEvent,
+  port,
   generateOpenApiSpec,
   getTableName,
   resetGlobalRegistry,
@@ -370,6 +372,249 @@ describe("app part and lifecycle", () => {
     });
     expect(app.definition.plugins?.[0]?.dashboard).toBe(
       `${import.meta.dir}/fixtures/dashboard.js`,
+    );
+  });
+});
+
+describe("plugin deps", () => {
+  interface Mailer {
+    send(to: string): string;
+  }
+  const mailer = (from: string): Mailer => ({ send: (to) => `${from}:${to}` });
+  const post = async (
+    app: { handle(request: Request): Promise<Response> },
+    path: string,
+    body: unknown = {},
+  ) =>
+    (
+      await app.handle(
+        new Request(`http://localhost${path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      )
+    ).json();
+
+  const seen: Record<string, unknown> = {};
+  const notify = definePlugin({
+    name: "@acme/brick-notify",
+    deps: { mailer: port<Mailer>() },
+    service: ({ service, deps }) => {
+      seen.service = deps.mailer;
+      service.action({
+        name: "notifySend",
+        input: t.Object({ to: t.String() }),
+        authorize: ({ ctx }) => typeof ctx.deps.mailer.send === "function",
+        execute: ({ input, ctx }) => ({
+          sent: ctx.deps.mailer.send(input.to),
+          keys: Object.keys(ctx.deps),
+        }),
+      });
+      // A host action it calls with its ctx still gets the host's deps.
+      service.action({
+        name: "relay",
+        execute: ({ ctx }) => service.getAction("own")!.run(undefined, ctx),
+      });
+    },
+    resource: ({ resource, routes, deps }) => {
+      seen.resource = deps.mailer;
+      resource.action({
+        name: "mail",
+        execute: ({ ctx }) => ({ sent: ctx.deps.mailer.send("res") }),
+      });
+      routes.endpoint({
+        name: "hook",
+        path: "/hook",
+        method: "POST",
+        handler: ({ ctx }) => ({ sent: ctx.deps.mailer.send("endpoint") }),
+      });
+      return {};
+    },
+    app: ({ deps, on }) => {
+      seen.app = deps.mailer;
+      on("start", (context) => void (seen.start = context.deps.mailer));
+    },
+  });
+
+  for (const compiler of [true, false])
+    it(`gives the plugin's actions the deps passed at install, never the host's (compiler: ${compiler})`, async () => {
+      const service = defineService("mail", {
+        deps: { carrier: port<string>() },
+      });
+      service.action({
+        name: "own",
+        execute: ({ ctx }) => ({ keys: Object.keys(ctx.deps) }),
+      });
+      const passed = mailer("plugin");
+      service.use(notify({}, { deps: { mailer: passed } }));
+      const app = brick({
+        services: [service],
+        deps: { carrier: "host" },
+        compiler,
+        requestLogging: false,
+        docs: false,
+      });
+      expect(seen.service).toBe(passed);
+      expect(await post(app, "/api/mail/notify-send", { to: "a" })).toEqual({
+        sent: "plugin:a",
+        keys: ["mailer"],
+      });
+      expect(await post(app, "/api/mail/own")).toEqual({ keys: ["carrier"] });
+      // A direct call too.
+      expect(
+        await (service.getAction("notifySend") as any).run({ to: "b" }),
+      ).toEqual({ sent: "plugin:b", keys: ["mailer"] });
+      expect(await (service.getAction("relay") as any).run()).toEqual({
+        keys: ["carrier"],
+      });
+      await app.start();
+      expect(seen.app).toBe(passed);
+      expect(seen.start).toBe(passed);
+      await app.stop();
+    });
+
+  it("reaches resource actions, endpoints and the setup's deps", async () => {
+    const { service, page } = host();
+    const passed = mailer("res");
+    page.use(notify({}, { deps: { mailer: passed } }));
+    expect(seen.resource).toBe(passed);
+    const app = brick({
+      services: [service],
+      requestLogging: false,
+      docs: false,
+    });
+    expect(await post(app, "/api/pages/page/mail")).toEqual({
+      sent: "res:res",
+    });
+    expect(await post(app, "/api/pages/page/hook")).toEqual({
+      sent: "res:endpoint",
+    });
+  });
+
+  it("gives a plugin without deps an empty ctx.deps, not the host's", async () => {
+    const plain = definePlugin({
+      name: "@acme/plain",
+      service: ({ service }) => {
+        service.action({
+          name: "plainKeys",
+          execute: ({ ctx }) => ({ keys: Object.keys(ctx.deps) }),
+        });
+      },
+    });
+    const service = defineService("plainhost", {
+      deps: { carrier: port<string>() },
+    });
+    service.use(plain());
+    const app = brick({
+      services: [service],
+      deps: { carrier: "host" },
+      requestLogging: false,
+      docs: false,
+    });
+    expect(await post(app, "/api/plainhost/plain-keys")).toEqual({ keys: [] });
+  });
+
+  it("fails at install when a dep is missing, naming it and how to pass it", () => {
+    expect(() => (notify as any)()).toThrow(
+      "@acme/brick-notify needs deps.mailer; pass it when installing: notify(options, { deps: { mailer } })",
+    );
+    expect(() => (notify as any)({}, { deps: { mailer: undefined } })).toThrow(
+      "needs deps.mailer",
+    );
+  });
+
+  it("fails at install on deps the plugin does not declare", () => {
+    expect(() =>
+      (notify as any)({}, { deps: { mailer: mailer("x"), extra: 1, more: 2 } }),
+    ).toThrow(
+      "@acme/brick-notify does not declare deps.extra, deps.more; it takes mailer",
+    );
+    const none = definePlugin({ name: "@acme/none", app: () => {} });
+    expect(() => (none as any)({}, { deps: { mailer: 1 } })).toThrow(
+      "@acme/none does not declare deps.mailer; it takes no deps",
+    );
+    expect(notify.info.deps).toEqual(["mailer"]);
+  });
+
+  it("runs a plugin's sockets with the plugin's deps", async () => {
+    const live = definePlugin({
+      name: "@acme/live",
+      deps: { mailer: port<Mailer>() },
+      service: ({ service }) => {
+        service.socket({
+          name: "live",
+          input: {},
+          handlers: {},
+          output: { hello: t.Object({ sent: t.String() }) },
+          allowMissingOrigin: true,
+          authorize: ({ ctx }) => Object.keys(ctx.deps).join() === "mailer",
+          open: ({ ctx, socket }) =>
+            socket.send("hello", { sent: ctx.deps.mailer.send("socket") }),
+        });
+      },
+    });
+    const service = defineService("livehost", {
+      deps: { carrier: port<string>() },
+    });
+    service.use(live({}, { deps: { mailer: mailer("plugin") } }));
+    const app = brick({
+      services: [service],
+      deps: { carrier: "host" },
+      requestLogging: false,
+      docs: false,
+    }).listen(0);
+    try {
+      const ws = new WebSocket(
+        `ws://localhost:${app.server!.port}/api/livehost/live`,
+      );
+      const first = await new Promise<unknown>((resolve, reject) => {
+        ws.onmessage = ({ data }) => resolve(JSON.parse(String(data)));
+        ws.onclose = () => reject(new Error("closed"));
+      });
+      ws.close();
+      expect(first).toMatchObject({ data: { sent: "plugin:socket" } });
+    } finally {
+      await app.stop(true);
+    }
+  });
+
+  it("gives a host action called with a plugin's ctx the host's deps, even outside brick()", async () => {
+    const relay = definePlugin({
+      name: "@acme/relay",
+      deps: { mailer: port<Mailer>() },
+      service: ({ service }) => {
+        service.action({
+          name: "relayOwn",
+          execute: ({ ctx }) => service.getAction("own")!.run(undefined, ctx),
+        });
+      },
+    });
+    const service = defineService("bare");
+    service.action({
+      name: "own",
+      execute: ({ ctx }) => ({ keys: Object.keys(ctx.deps) }),
+    });
+    service.use(relay({}, { deps: { mailer: mailer("x") } }));
+    expect(await (service.getAction("relayOwn") as any).run()).toEqual({
+      keys: [],
+    });
+  });
+
+  it("refuses one action object shared by two installs with different deps", () => {
+    const shared = defineAction({ name: "shared", execute: () => null });
+    const sharing = definePlugin({
+      name: "@acme/sharing",
+      deps: { mailer: port<Mailer>() },
+      service: ({ service }) => {
+        service.action(shared);
+      },
+    });
+    defineService("one").use(sharing({}, { deps: { mailer: mailer("a") } }));
+    expect(() =>
+      defineService("two").use(sharing({}, { deps: { mailer: mailer("b") } })),
+    ).toThrow(
+      '@acme/sharing: action "shared" is already bound to the deps of another install; create the action inside the setup so each install gets its own',
     );
   });
 });

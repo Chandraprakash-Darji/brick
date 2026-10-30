@@ -20,6 +20,7 @@ import {
   text as pgText,
   timestamp as pgTimestamp,
 } from "drizzle-orm/pg-core";
+import { PLUGIN_DEPS, runWithDeps, type DepsOf, type Ports } from "./deps";
 import type { EventCatalog, EventRef, EventRefs } from "./events/catalog";
 import type { EventListener } from "./events/types";
 import {
@@ -32,7 +33,7 @@ import {
 import { definitionSite } from "./registry";
 import type { SecretRef } from "./secrets";
 import { validateWithSchema } from "./typebox";
-import type { ActionContext, Resource, Service } from "./types";
+import type { ActionContext, BaseContext, Resource, Service } from "./types";
 
 /*
  * definePlugin: one plugin with a manifest Brick checks (name, supported Brick
@@ -186,8 +187,8 @@ function builders(
 /** Where `hooks.*` stores a plugin's hooks; `@brickkit/crud` runs them. */
 const HOST_HOOKS = Symbol.for("brickkit.plugin.hooks");
 
-interface HookBase {
-  ctx: ActionContext;
+interface HookBase<C> {
+  ctx: C;
   /** The write's open transaction: write other tables through it. */
   tx: any;
 }
@@ -196,31 +197,31 @@ interface HookBase {
  * `after*` run inside the write's transaction, after the host's own crud hooks;
  * a hook that throws rolls the write back. `afterCommit` runs after the commit.
  */
-export interface PluginHooks {
+export interface PluginHooks<C = ActionContext> {
   beforeCreate(
-    hook: (args: HookBase & { data: Record<string, unknown> }) => unknown,
+    hook: (args: HookBase<C> & { data: Record<string, unknown> }) => unknown,
   ): void;
   afterCreate(
-    hook: (args: HookBase & { row: Record<string, unknown> }) => unknown,
+    hook: (args: HookBase<C> & { row: Record<string, unknown> }) => unknown,
   ): void;
   beforeUpdate(
     hook: (
-      args: HookBase & { id: unknown; data: Record<string, unknown> },
+      args: HookBase<C> & { id: unknown; data: Record<string, unknown> },
     ) => unknown,
   ): void;
   afterUpdate(
     hook: (
-      args: HookBase & { id: unknown; row: Record<string, unknown> },
+      args: HookBase<C> & { id: unknown; row: Record<string, unknown> },
     ) => unknown,
   ): void;
-  beforeDelete(hook: (args: HookBase & { id: unknown }) => unknown): void;
-  afterDelete(hook: (args: HookBase & { id: unknown }) => unknown): void;
+  beforeDelete(hook: (args: HookBase<C> & { id: unknown }) => unknown): void;
+  afterDelete(hook: (args: HookBase<C> & { id: unknown }) => unknown): void;
   afterCommit(
     hook: (args: {
       operation: "create" | "update" | "delete";
       id: unknown;
       row?: Record<string, unknown>;
-      ctx: ActionContext;
+      ctx: C;
     }) => unknown,
   ): void;
 }
@@ -239,8 +240,27 @@ const HOOK_NAMES = [
 type Secrets = Record<string, SecretRef<any>>;
 type OptionsOf<O> = O extends TSchema ? Static<O> : {};
 
+/**
+ * The context of a plugin's actions, endpoints and hooks: the host's request
+ * context, loosely typed, with `deps` set to the plugin's own declared deps.
+ */
+export type PluginContext<P extends Ports = {}> = BaseContext<any> &
+  PluginServiceContext<P>;
+/** A plugin's view of its host's service context: loose, except `deps`, which is the plugin's. */
+export type PluginServiceContext<P extends Ports = {}> = {
+  [key: string]: any;
+  /** The values passed for the plugin's `deps` when it was installed. */
+  deps: DepsOf<P>;
+};
+
 /** What every setup callback receives. */
-export interface PluginSetupContext<O, S, T, E extends EventCatalog> {
+export interface PluginSetupContext<
+  O,
+  S,
+  T,
+  E extends EventCatalog,
+  P extends Ports = {},
+> {
   /** The validated options, defaults filled in. */
   options: O;
   /** The declared secrets, to read when they are needed. */
@@ -249,29 +269,35 @@ export interface PluginSetupContext<O, S, T, E extends EventCatalog> {
   tables: T;
   /** The plugin's events, as `emitEvent` and `defineListener` take them. */
   events: EventRefs<E>;
-  service: Service<any, any>;
-  routes: PluginRouteRegistrar<any>;
+  /** The values passed for `deps` when the plugin was installed. */
+  deps: DepsOf<P>;
+  /** The host service. Actions registered on it read the plugin's deps as `ctx.deps`. */
+  service: Service<any, PluginServiceContext<P>>;
+  routes: PluginRouteRegistrar<PluginContext<P>>;
   /** The host's CRUD writes: on a service, those of all its resources. */
-  hooks: PluginHooks;
+  hooks: PluginHooks<PluginContext<P>>;
 }
 
 /** The lifecycle context of `on("start")` and `on("stop")`. */
-export interface PluginLifecycleContext<O, S> {
+export interface PluginLifecycleContext<O, S, P extends Ports = {}> {
   options: O;
   secrets: S;
+  deps: DepsOf<P>;
 }
 
 /** What `app` receives: the app-wide part of a plugin. */
-export interface PluginAppContext<O, S> {
+export interface PluginAppContext<O, S, P extends Ports = {}> {
   options: O;
   secrets: S;
+  /** The values passed for `deps` when the plugin was installed. */
+  deps: DepsOf<P>;
   /**
    * Run when the app starts (`app.start()`, which `listen`, `brick dev` and
    * `brick start` call) in install order, and when it stops in reverse order.
    */
   on(
     event: "start" | "stop",
-    handler: (context: PluginLifecycleContext<O, S>) => void | Promise<void>,
+    handler: (context: PluginLifecycleContext<O, S, P>) => void | Promise<void>,
   ): void;
   /**
    * Run before every request is routed. Return a `Response` (or any value) to
@@ -283,7 +309,7 @@ export interface PluginAppContext<O, S> {
       set: { status?: number | string; headers: Record<string, string> };
     }) => unknown,
   ): void;
-  /** Event listeners to add to the app's `events`. */
+  /** Event listeners to add to the app's `events`; `useDeps()` in their `run` returns the plugin's deps. */
   listeners(...listeners: EventListener[]): void;
 }
 
@@ -294,6 +320,7 @@ export interface PluginManifest<
   E extends EventCatalog = {},
   RA extends object = {},
   SA = unknown,
+  P extends Ports = {},
 > {
   /** The npm package name, scoped: `@acme/brick-comments`. */
   name: string;
@@ -307,6 +334,12 @@ export interface PluginManifest<
   /** Secrets it reads, from `defineSecret`. */
   secrets?: S;
   /**
+   * What it needs from the app, declared with `port<T>()`. The user passes the
+   * values when installing: `notify(options, { deps: { mailer } })`. Setup
+   * parts read them as `deps`, the plugin's actions as `ctx.deps`.
+   */
+  deps?: P;
+  /**
    * Tables it owns. They are created in the host service's database for its
    * engine, named `<host>_<table>` (or with the install's `prefix`), and join
    * schema sync and migrations through `database.tables`.
@@ -316,20 +349,20 @@ export interface PluginManifest<
   events?: E;
   /** Installed with `resource.use()`; returns what the resource gains. */
   resource?: (
-    context: PluginSetupContext<OptionsOf<O>, S, T, E> & {
-      resource: Resource<any, any, any>;
+    context: PluginSetupContext<OptionsOf<O>, S, T, E, P> & {
+      resource: Resource<any, PluginContext<P>, any>;
     },
   ) => RA & (RA extends PromiseLike<unknown> ? never : unknown);
   /** Installed with `service.use()`; returns what `use` hands back. */
   service?: (
-    context: PluginSetupContext<OptionsOf<O>, S, T, E>,
+    context: PluginSetupContext<OptionsOf<O>, S, T, E, P>,
   ) => SA & (SA extends PromiseLike<unknown> ? never : unknown);
   /**
    * The app-wide part: lifecycle, middleware and listeners. Runs once per
    * plugin instance when `brick()` creates the app, whether the plugin was
    * installed with `brick({ plugins })`, `service.use()` or `resource.use()`.
    */
-  app?: (context: PluginAppContext<OptionsOf<O>, S>) => void;
+  app?: (context: PluginAppContext<OptionsOf<O>, S, P>) => void;
   /**
    * A dashboard extension module (`defineDashboard`), relative to the file
    * that calls `definePlugin`. `brick dev` merges it with the app's own.
@@ -351,6 +384,8 @@ export interface PluginInfo {
   readonly requires: readonly string[];
   readonly options?: TSchema;
   readonly secrets: readonly string[];
+  /** The names of the deps it declares, passed when installing. */
+  readonly deps: readonly string[];
   readonly capabilities: readonly (
     | "tables"
     | "events"
@@ -368,8 +403,9 @@ interface Installation {
   resource?: string;
 }
 interface Internals {
-  manifest: PluginManifest<any, any, any, any, any, any>;
+  manifest: PluginManifest<any, any, any, any, any, any, any>;
   options: Record<string, unknown>;
+  deps: Readonly<Record<string, unknown>>;
   install: PluginInstallOptions;
   dashboard?: string;
   installs: Installation[];
@@ -390,11 +426,16 @@ export type PluginFactory<
   O extends TSchema | undefined,
   RA extends object,
   SA,
+  P extends Ports = {},
 > = ((
   // shortcut: every option is optional in the type (TypeBox types carry no
   // defaults); a required one without a default fails when installed.
-  options?: Partial<OptionsOf<O>>,
-  install?: PluginInstallOptions,
+  ...args: {} extends P
+    ? [options?: Partial<OptionsOf<O>>, install?: PluginInstallOptions]
+    : [
+        options: Partial<OptionsOf<O>> | undefined,
+        install: PluginInstallOptions & { deps: DepsOf<P> },
+      ]
 ) => PluginInstance<RA, SA>) & { readonly info: PluginInfo };
 
 const toWords = (name: string) =>
@@ -444,7 +485,10 @@ export function definePlugin<
   const E extends EventCatalog = {},
   RA extends object = {},
   SA = unknown,
->(manifest: PluginManifest<O, S, T, E, RA, SA>): PluginFactory<O, RA, SA> {
+  P extends Ports = {},
+>(
+  manifest: PluginManifest<O, S, T, E, RA, SA, P>,
+): PluginFactory<O, RA, SA, P> {
   const { name } = manifest;
   if (!name || name.trim() !== name)
     throw new Error(
@@ -477,6 +521,7 @@ export function definePlugin<
     secrets: Object.freeze(
       Object.values(manifest.secrets ?? {}).map((secret) => secret.name),
     ),
+    deps: Object.freeze(Object.keys(manifest.deps ?? {})),
     capabilities: Object.freeze(
       (
         ["tables", "events", "resource", "service", "app", "dashboard"] as const
@@ -496,7 +541,7 @@ export function definePlugin<
 
   const factory = (
     input: Partial<OptionsOf<O>> = {},
-    install: PluginInstallOptions = {},
+    install: PluginInstallOptions & { deps?: Record<string, unknown> } = {},
   ): PluginInstance<RA, SA> => {
     const version = brickVersion();
     if (manifest.brick && version && !satisfiesRange(version, manifest.brick))
@@ -504,10 +549,12 @@ export function definePlugin<
         `${name} supports Brick ${manifest.brick}; this app runs ${version}`,
       );
     const options = checkOptions(name, manifest.options, input);
+    const deps = checkDeps(name, eventSpace, manifest.deps, install.deps);
     const secrets = (manifest.secrets ?? {}) as S;
     const internals: Internals = {
       manifest,
       options,
+      deps,
       install,
       dashboard,
       installs: [],
@@ -520,7 +567,7 @@ export function definePlugin<
       resource?: Resource<any, any, any>;
       routes: PluginRouteRegistrar<any>;
     }) => {
-      const { service, resource, routes } = context;
+      const { service, resource } = context;
       const host = resource ?? service;
       const where = resource
         ? `resource "${resource.name}"`
@@ -604,23 +651,50 @@ export function definePlugin<
           (fn: (args: any) => unknown) => {
             if (typeof fn !== "function")
               throw new Error(`${name}: hooks.${hook} needs a function`);
-            (added[hook] ??= []).push(fn);
+            (added[hook] ??= []).push((args) =>
+              fn({ ...args, ctx: { ...args.ctx, deps } }),
+            );
           },
         ]),
-      ) as unknown as PluginHooks;
+      ) as unknown as PluginHooks<any>;
 
+      const routes: PluginRouteRegistrar<any> = {
+        action: (config: any) => context.routes.action(config),
+        endpoint: (config) =>
+          context.routes.endpoint({
+            ...config,
+            handler: (args) =>
+              config.handler({ ...args, ctx: { ...args.ctx, deps } }),
+          }),
+      };
+      const before = new Set<unknown>([
+        ...service.actions.values(),
+        ...service.tools.values(),
+        ...service.listSockets(),
+      ]);
+      const started = bindings;
       const api = part({
         options: options as never,
         secrets,
         tables,
         events: events as EventRefs<E>,
-        service,
-        resource: resource!,
+        deps: deps as DepsOf<P>,
+        service: service as never,
+        resource: resource as never,
         routes,
         hooks,
       });
       if (api && typeof (api as { then?: unknown }).then === "function")
         throw new Error("Plugin setup must be synchronous");
+      // Every action and socket the setup added (its own, its resources', crud's) runs with the plugin's deps.
+      for (const action of [
+        ...service.actions.values(),
+        ...service.tools.values(),
+      ])
+        if (!before.has(action)) bindPluginDeps(name, action, deps, started);
+      for (const socket of service.listSockets())
+        if (!before.has(socket))
+          (socket as unknown as Record<symbol, unknown>)[PLUGIN_DEPS] ??= deps;
 
       pending.push(() => {
         const database = service.getDatabaseHandle?.();
@@ -666,6 +740,72 @@ export function definePlugin<
     }) as unknown as PluginInstance<RA, SA>;
   };
   return Object.assign(factory, { info });
+}
+
+/** Counts bindings, so a setup can tell a nested install's from an earlier one's. */
+let bindings = 0;
+/**
+ * Give an action's `execute` and `authorize` the plugin's deps as `ctx.deps`.
+ * The config is changed in place: every way an action runs (HTTP, compiled
+ * routes, `action.run`, RPC) reads `config.execute` from it. A nested
+ * definePlugin binds its own actions first, so they keep its deps.
+ *
+ * @throws When the action is already bound to another install's deps: one
+ * action object shared by two installs could only run with one of them.
+ */
+function bindPluginDeps(
+  plugin: string,
+  action: unknown,
+  deps: Readonly<Record<string, unknown>>,
+  started: number,
+) {
+  const config = (action as { config?: Record<string | symbol, any> }).config;
+  if (!config) return;
+  const bound = config[PLUGIN_DEPS] as
+    | { deps: Readonly<Record<string, unknown>>; at: number }
+    | undefined;
+  if (bound) {
+    if (bound.deps === deps || bound.at > started) return;
+    throw new Error(
+      `${plugin}: action "${(action as { name?: string }).name}" is already bound to the deps of another install; create the action inside the setup so each install gets its own`,
+    );
+  }
+  config[PLUGIN_DEPS] = { deps, at: ++bindings };
+  const { execute, authorize } = config;
+  if (typeof execute === "function")
+    config.execute = (args: { ctx?: object }) =>
+      execute({ ...args, ctx: { ...args.ctx, deps } });
+  if (typeof authorize === "function")
+    config.authorize = (args: { ctx?: object }) =>
+      authorize({ ...args, ctx: { ...args.ctx, deps } });
+}
+
+/** Check the deps passed at install against the ports the plugin declares. */
+function checkDeps(
+  plugin: string,
+  factory: string,
+  ports: Ports | undefined,
+  given: unknown = {},
+): Readonly<Record<string, unknown>> {
+  if (given === null || typeof given !== "object" || Array.isArray(given))
+    throw new Error(`${plugin}: deps must be an object`);
+  const declared = Object.keys(ports ?? {});
+  const provided = given as Record<string, unknown>;
+  const extra = Object.keys(provided).filter((key) => !declared.includes(key));
+  if (extra.length)
+    throw new Error(
+      `${plugin} does not declare ${extra.map((key) => `deps.${key}`).join(", ")}; ${
+        declared.length ? `it takes ${declared.join(", ")}` : "it takes no deps"
+      }`,
+    );
+  const missing = declared.filter((key) => provided[key] === undefined);
+  if (missing.length)
+    throw new Error(
+      `${plugin} needs ${missing.map((key) => `deps.${key}`).join(", ")}; pass it when installing: ${factory}(options, { deps: { ${missing.join(", ")} } })`,
+    );
+  return Object.freeze(
+    Object.fromEntries(declared.map((key) => [key, provided[key]])),
+  );
 }
 
 function checkOptions(
@@ -786,7 +926,8 @@ export function setupAppPlugins(
   const listeners: EventListener[] = [];
   const listed: InstalledPlugin[] = [];
   for (const plugin of ordered) {
-    const { manifest, options, installs, dashboard } = internalsOf(plugin)!;
+    const { manifest, options, deps, installs, dashboard } =
+      internalsOf(plugin)!;
     for (const install of installs)
       listed.push(
         Object.freeze({
@@ -797,7 +938,7 @@ export function setupAppPlugins(
         }),
       );
     if (!manifest.app) continue;
-    const lifecycle = { options, secrets: manifest.secrets ?? {} };
+    const lifecycle = { options, secrets: manifest.secrets ?? {}, deps };
     // A plugin's start and stop pair up, so stop runs only after its start did.
     const own = { start: [] as Function[], stop: [] as Function[] };
     manifest.app({
@@ -811,7 +952,19 @@ export function setupAppPlugins(
         middleware.push(handler);
       },
       listeners(...items) {
-        listeners.push(...items);
+        // `useDeps()` in a plugin's listener returns the plugin's deps, not the app's.
+        listeners.push(
+          ...items.map((listener) => {
+            const run = listener.run;
+            return run
+              ? {
+                  ...listener,
+                  run: (delivery: Parameters<typeof run>[0]) =>
+                    runWithDeps(deps, () => run(delivery)),
+                }
+              : listener;
+          }),
+        );
       },
     });
     lifecycles.push({

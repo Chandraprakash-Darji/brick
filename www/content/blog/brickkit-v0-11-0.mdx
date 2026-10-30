@@ -238,6 +238,7 @@ What each part does:
 
 - **`brick` and `requires`:** checked at install, with errors you can act on.
 - **`options`:** validated, with defaults applied.
+- **`deps`:** what the plugin needs from the app, as `port<T>()` slots. The user passes them at install, `notify({}, { deps: { mailer } })`, and a missing or extra one fails to compile and fails at install. The plugin's actions read exactly those as `ctx.deps`, never the host service's.
 - **`tables`:** the plugin owns its tables. They're built for your database engine, named after where the plugin is installed (`page_comments`), and picked up by schema sync. You no longer wire them up by hand.
 - **`events`:** join the host's catalog as `comments.added`.
 - **`hooks`:** subscribe to the host resource's CRUD lifecycle, inside the write's transaction (`tx`). An audit plugin can now install itself.

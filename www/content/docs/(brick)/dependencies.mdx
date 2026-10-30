@@ -89,6 +89,10 @@ await bookAction.execute({
 
 Deps given by an app take precedence over deps in a call context. Each `brick()` call keeps its own deps, so two apps in one process (each with its own services) never see each other's.
 
+### Plugins
+
+A plugin declares its own `deps` with `port<T>()`, and the user passes them when installing it: `orders.use(notify({}, { deps: { mailer } }))`. The plugin's actions read those as `ctx.deps`, not the service's. See [Build a plugin](/docs/plugins/build-plugin#dependencies).
+
 ## Service references
 
 `useService` calls another service's actions in-process, typed from that service:

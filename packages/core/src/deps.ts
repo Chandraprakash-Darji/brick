@@ -36,6 +36,9 @@ export function port<T>(): Port<T> {
   return Object.freeze({}) as Port<T>;
 }
 
+/** Where a socket a plugin declared keeps the plugin's deps; global so a second core copy finds it. */
+export const PLUGIN_DEPS: unique symbol = Symbol.for("brickkit.plugin.deps");
+
 const running = new AsyncLocalStorage<Record<string, unknown>>();
 
 /** Run `fn` with the deps of one app, so `useDeps()` inside it finds them. */

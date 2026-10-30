@@ -30,6 +30,8 @@ export type {
   PluginInstance,
   PluginInfo,
   PluginInstallOptions,
+  PluginContext,
+  PluginServiceContext,
   PluginSetupContext,
   PluginAppContext,
   PluginLifecycleContext,

@@ -225,7 +225,7 @@ describe("useService", () => {
 });
 
 describe("plugins with deps", () => {
-  it("runs plugin actions with ctx.deps through useService, and plugin listeners with useDeps()", async () => {
+  it("runs plugin actions with the plugin's deps through useService, and plugin listeners with useDeps(), never the host's", async () => {
     const items = sqliteTable("dep_plugin_items", {
       id: integer("id").primaryKey(),
     });
@@ -240,6 +240,7 @@ describe("plugins with deps", () => {
     const seen: string[] = [];
     const tracking = definePlugin({
       name: "@acme/tracking",
+      deps: { carrier: port<Carrier>() },
       resource: ({ routes }) => ({
         tracking: {
           book: routes.action({
@@ -248,8 +249,7 @@ describe("plugins with deps", () => {
             method: "POST",
             input: t.Object({ id: t.String() }),
             output: t.String(),
-            execute: ({ input, ctx }) =>
-              (ctx as any).deps.carrier.book(input.id),
+            execute: ({ input, ctx }) => ctx.deps.carrier.book(input.id),
           }),
         },
       }),
@@ -265,10 +265,10 @@ describe("plugins with deps", () => {
           }),
         ),
     });
-    item.use(tracking());
+    item.use(tracking({}, { deps: { carrier: carrier("p") } }));
     const app = brick({
       services: [service],
-      deps: { carrier: carrier("p") },
+      deps: { carrier: carrier("host") },
       events: { dispatch: { timer: false } },
       requestLogging: false,
       docs: false,
