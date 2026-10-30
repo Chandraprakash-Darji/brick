@@ -151,7 +151,7 @@ Usage:
   brick gen openapi <entry> [--output <file>]            Generate OpenAPI 3.1 JSON specification
   brick gen client <entry> [--output <file>]             Generate a typed browser client contract
   brick gen manifest                                     Write <generated>/services.gen.ts
-  brick lint [entry]                                     Check the project against the @brickkit/lint rules
+  brick lint [entry]                                     Check the project against the Brick lint rules
   brick info <entry>                                     Export architecture JSON schema
 
 With a brick.config.ts, the entry and most flags come from the config file,
@@ -472,7 +472,7 @@ ${PORT_RESOLUTION_HELP}`,
 
   program
     .command("lint")
-    .description("Check the project against the @brickkit/lint rules")
+    .description("Check the project against the Brick lint rules")
     .argument("[entry]", "Application entry file")
     .option("--config <path>", CONFIG_HELP)
     .action(async (entry: string | undefined, opts: ConfigOpts) => {

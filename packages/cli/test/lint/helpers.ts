@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { runFileRules, type LintMessage } from "../src";
+import { runFileRules, type LintMessage } from "../../src/lint/run";
 
 export interface Case {
   file: string;

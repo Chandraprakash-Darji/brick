@@ -2,7 +2,7 @@ import { afterEach, expect, it } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
-// Runs oxlint with the built @brickkit/lint plugin (bun run build first).
+// Runs oxlint with the built lint/oxlint plugin (bun run build first).
 const cli = resolve(import.meta.dir, "../src/bin.ts");
 const roots: string[] = [];
 

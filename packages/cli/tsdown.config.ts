@@ -15,6 +15,8 @@ export default defineConfig({
     "src/vite.ts",
     "src/dev-worker.ts",
     "src/dev-reporter.ts",
+    "src/lint/eslint.ts",
+    "src/lint/oxlint.ts",
   ],
   format: ["esm"],
   outDir: "dist",

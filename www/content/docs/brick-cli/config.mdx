@@ -78,7 +78,7 @@ Paths are relative to the folder that holds `brick.config.ts`.
 | `build.requestLogging` | `true`            | `build --no-request-logging`                           | build; only `true` is accepted, set `requestLogging` in `brick()`                                                                |
 | `dashboard.extension`  | none              | new                                                    | dev, build: the dashboard extension entry                                                                                        |
 | `dashboard.theme`      | built-in tokens   | new                                                    | dashboard and workflow inspector colours, radius (`radius`) and fonts (`fonts.sans`, `fonts.mono`), per scheme (`light`, `dark`) |
-| `lint.presets`         | `["recommended"]` | new                                                    | `brick lint`, `@brickkit/lint`                                                                                                   |
+| `lint.presets`         | `["recommended"]` | new                                                    | `brick lint`, the ESLint and oxlint plugin                                                                                       |
 | `lint.rules`           | `{}`              | new                                                    | per-rule `"error"`, `"warn"` or `"off"`, except rules that are always errors                                                     |
 | `lint.ignore`          | `[]`              | new                                                    | glob patterns skipped by every rule                                                                                              |
 

@@ -13,7 +13,7 @@ export type LintSeverity = "error" | "warn" | "off";
 export type LintPreset = "recommended" | "layout" | "strict" | "plugin";
 
 /**
- * Project and tooling settings read by the `brick` CLI and `@brickkit/lint`.
+ * Project and tooling settings read by the `brick` CLI and its lint rules.
  * Paths are relative to the folder that holds `brick.config.ts`. Runtime
  * behaviour (prefix, docs, telemetry, events, sockets) stays in `brick()`.
  */

@@ -591,28 +591,23 @@ export const checkRules: Record<string, Rule> = {
     },
   ),
 
-  "socket-authorize": rule(
-    "Sockets declare authorize and join, or are marked public: true.",
-    (context) => {
-      if (skip(context)) return {};
-      return {
-        CallExpression(node: Node) {
-          const definition = definitionOf(node);
-          if (definition?.kind !== "socket") return;
-          const isPublic = getProperty(definition.config, "public")?.value;
-          if (isPublic?.value === true) return;
-          const missing = ["authorize", "join"].filter(
-            (key) => !getProperty(definition.config, key),
-          );
-          if (missing.length)
-            context.report({
-              node: definition.nameNode ?? node,
-              message: `Socket declares no ${missing.join(" or ")}; add ${missing.length > 1 ? "them" : "it"}, or mark it public: true.`,
-            });
-        },
-      };
-    },
-  ),
+  "socket-authorize": rule("Sockets declare authorize and join.", (context) => {
+    if (skip(context)) return {};
+    return {
+      CallExpression(node: Node) {
+        const definition = definitionOf(node);
+        if (definition?.kind !== "socket") return;
+        const missing = ["authorize", "join"].filter(
+          (key) => !getProperty(definition.config, key),
+        );
+        if (missing.length)
+          context.report({
+            node: definition.nameNode ?? node,
+            message: `Socket declares no ${missing.join(" or ")}; add ${missing.length > 1 ? "them" : "it"}.`,
+          });
+      },
+    };
+  }),
 
   "no-wildcard-origins": rule(
     'No "*" in allowedOrigins or trustedOrigins.',

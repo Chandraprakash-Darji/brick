@@ -1,9 +1,15 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, relative, resolve, sep } from "node:path";
 import { getPluginActionRoute, kebabCase } from "@brickkit/core";
-import type { LintMessage, Severity } from "@brickkit/lint";
 import { loadBrickApp, type BrickApp } from "./app-entry";
 import { ConfigError, type LoadedConfig } from "./config";
+import {
+  ALWAYS_ERROR,
+  fileRules,
+  resolveRules,
+  type Severity,
+} from "./lint/presets";
+import { runFileRules, type LintMessage } from "./lint/run";
 import { writeServiceManifest } from "./manifest";
 
 const posix = (path: string) => path.split(sep).join("/");
@@ -18,7 +24,7 @@ interface AppCheck {
 }
 
 /**
- * `brick lint`: the @brickkit/lint file rules through oxlint, then the app
+ * `brick lint`: the file rules through oxlint, then the app
  * rules against the loaded app. Prints `file:line:col` lines and returns the
  * exit code: 1 when anything is an error.
  */
@@ -26,17 +32,12 @@ export async function runLint(options: {
   entry?: string;
   project?: LoadedConfig;
 }): Promise<number> {
-  const lint = await import("@brickkit/lint").catch(() => {
-    throw new ConfigError(
-      "Brick: brick lint needs @brickkit/lint and oxlint; add them: bun add -d @brickkit/lint oxlint",
-    );
-  });
   const { project } = options;
   const root = project?.root ?? process.cwd();
   const config = project?.config.lint ?? {};
   let resolved: Record<string, Severity>;
   try {
-    resolved = lint.resolveRules(config.presets, config.rules);
+    resolved = resolveRules(config.presets, config.rules);
   } catch (error) {
     throw new ConfigError(
       `brick.config.ts: lint.rules: ${(error as Error).message}`,
@@ -49,9 +50,9 @@ export async function runLint(options: {
     ? resolve(options.entry)
     : (project?.entry ?? resolve(root, "src/app.ts"));
   const ignore = [...(config.ignore ?? []), `${fromRoot(generated)}/**`];
-  const messages = lint.runFileRules({
+  const messages = runFileRules({
     root,
-    rules: lint.fileRules(resolved),
+    rules: fileRules(resolved),
     settings: {
       root,
       services: fromRoot(services),
@@ -70,7 +71,7 @@ export async function runLint(options: {
         entry,
         services,
         severity: (rule) =>
-          rule === lint.ALWAYS_ERROR
+          rule === ALWAYS_ERROR
             ? "error"
             : (resolved[`brick/${rule}`] ?? "off"),
         ignored: (rel) =>

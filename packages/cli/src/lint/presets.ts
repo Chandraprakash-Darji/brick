@@ -83,18 +83,16 @@ export function resolveRules(
 ): Record<string, Severity> {
   const resolved: Record<string, Severity> = {};
   for (const preset of presets) {
-    if (!PRESETS[preset])
-      throw new Error(`@brickkit/lint: unknown preset "${preset}"`);
+    if (!PRESETS[preset]) throw new Error(`Brick: unknown preset "${preset}"`);
     for (const [name, severity] of Object.entries(PRESETS[preset]))
       resolved[`brick/${name}`] = severity;
   }
   for (const [key, severity] of Object.entries(overrides)) {
     const name = key.replace(/^brick\//, "");
-    if (!KNOWN.has(name))
-      throw new Error(`@brickkit/lint: unknown rule "${key}"`);
+    if (!KNOWN.has(name)) throw new Error(`Brick: unknown rule "${key}"`);
     if (name === ALWAYS_ERROR && severity !== "error")
       throw new Error(
-        `@brickkit/lint: brick/${ALWAYS_ERROR} is always an error and cannot be turned off`,
+        `Brick: brick/${ALWAYS_ERROR} is always an error and cannot be turned off`,
       );
     resolved[`brick/${name}`] = severity;
   }

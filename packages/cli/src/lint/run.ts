@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { ConfigError } from "../config";
 import type { BrickSettings } from "./ast";
 import type { Severity } from "./presets";
 
@@ -18,13 +19,13 @@ export interface LintMessage {
   message: string;
 }
 
-/** This package's built plugin, which oxlint loads under Node. */
+/** The built lint/oxlint entry, which oxlint loads under Node. */
 function pluginPath() {
   const here = fileURLToPath(import.meta.url);
-  // From source (tests run src/ under Bun), use the build next to it.
+  // From source (tests run src/ under Bun), use the build; bundled, this code sits in dist/.
   return here.endsWith(".ts")
-    ? resolve(dirname(here), "../dist/index.js")
-    : resolve(dirname(here), "index.js");
+    ? resolve(dirname(here), "../../dist/lint/oxlint.js")
+    : resolve(dirname(here), "lint/oxlint.js");
 }
 
 function oxlintBin(root: string) {
@@ -39,8 +40,8 @@ function oxlintBin(root: string) {
       // not installed there; try the next place
     }
   }
-  throw new Error(
-    "@brickkit/lint: running the file rules needs oxlint; add it to the project (bun add -d oxlint).",
+  throw new ConfigError(
+    "Brick: brick lint needs oxlint; add it: bun add -d oxlint",
   );
 }
 
@@ -106,7 +107,7 @@ export function runFileRules(options: {
       report = JSON.parse(result.stdout);
     } catch {
       throw new Error(
-        `@brickkit/lint: oxlint failed (exit ${result.status}):\n${result.stderr || result.stdout}`,
+        `Brick: oxlint failed (exit ${result.status}):\n${result.stderr || result.stdout}`,
       );
     }
     return (report.diagnostics ?? []).map((diagnostic) => ({

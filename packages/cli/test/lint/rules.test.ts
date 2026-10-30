@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { rules } from "../src/presets";
+import { rules } from "../../src/lint/presets";
 import { lintCases, type Case } from "./helpers";
 
 const S = "src/services";
@@ -377,13 +377,13 @@ const CASES: Record<string, Case[]> = {
   "socket-authorize": [
     {
       file: "src/a.ts",
-      code: `s.socket({ name: "a", authorize: () => true, join: () => true });\ns.socket({ name: "b", public: true });\n`,
+      code: `s.socket({ name: "a", authorize: () => true, join: () => true });\n`,
       errors: 0,
     },
     {
       file: "src/b.ts",
-      code: `s.socket({ name: "a", authorize: () => true });\n`,
-      errors: 1,
+      code: `s.socket({ name: "a", authorize: () => true });\ns.socket({ name: "b", public: true });\n`,
+      errors: 2,
     },
   ],
   "no-wildcard-origins": [
@@ -466,7 +466,7 @@ const CASES: Record<string, Case[]> = {
   ],
 };
 
-describe("@brickkit/lint file rules", () => {
+describe("lint file rules", () => {
   it("has valid and invalid cases for every rule", () => {
     expect(Object.keys(CASES).sort()).toEqual(Object.keys(rules).sort());
   });

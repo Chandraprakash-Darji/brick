@@ -15,7 +15,6 @@
       "@brickkit/core": ["./packages/core/src"],
       "@brickkit/core/*": ["./packages/core/src/*"],
       "@brickkit/cli": ["./packages/cli/src"],
-      "@brickkit/lint": ["./packages/lint/src"],
       "@brickkit/cli/compiler": ["./packages/cli/src/compiler.ts"],
       "@brickkit/cli/workflows": ["./packages/cli/src/workflows.ts"]
     }

@@ -9,8 +9,7 @@
     "sourceMap": false,
     "paths": {
       "@brickkit/core": ["../core/dist/index.d.ts"],
-      "@brickkit/core/pg": ["../core/dist/pg.d.ts"],
-      "@brickkit/lint": ["../lint/dist/index.d.ts"]
+      "@brickkit/core/pg": ["../core/dist/pg.d.ts"]
     }
   },
   "include": ["src"]

@@ -1,12 +1,12 @@
 ---
 title: Lint
-description: Check a Brick app against the project structure and its bug and security rules with @brickkit/lint and brick lint.
+description: Check a Brick app against the project structure and its bug and security rules with brick lint, ESLint or oxlint.
 ---
 
-`@brickkit/lint` is a rule set that makes every Brick app follow the same [project structure](/docs/project-structure) and avoid the common bugs. It ships as an ESLint flat-config plugin, which oxlint loads through its JS plugin support, plus the `brick lint` command.
+Brick's lint rules make every Brick app follow the same [project structure](/docs/project-structure) and avoid the common bugs. They ship in `@brickkit/cli`: the `brick lint` command, plus an ESLint flat-config plugin (`@brickkit/cli/lint/eslint`) and the same plugin for oxlint's JS plugin support (`@brickkit/cli/lint/oxlint`).
 
 ```bash
-bun add -d @brickkit/lint oxlint
+bun add -d oxlint
 brick lint
 ```
 
@@ -30,7 +30,7 @@ src/services/billing/actions/charge.action.ts:6:9  error  Set access on this act
 ✖ 2 problems (2 errors, 0 warnings)
 ```
 
-It needs `@brickkit/lint` and `oxlint` in the project, and Node.js 22.18 or later on the `PATH` (oxlint runs JS plugins in Node).
+It needs `oxlint` in the project, and Node.js 22.18 or later on the `PATH` (oxlint runs JS plugins in Node).
 
 ## Presets
 
@@ -101,7 +101,7 @@ export default defineConfig({
 | Rule                  | Enforces                                                                                 | Preset      | Kind |
 | :-------------------- | :--------------------------------------------------------------------------------------- | :---------- | :--- |
 | `explicit-access`     | Every action and command sets `authorize` or `access`, and every `crud()` sets `access`. | recommended | file |
-| `socket-authorize`    | Sockets declare `authorize` and `join`, or are marked `public: true`.                    | recommended | file |
+| `socket-authorize`    | Sockets declare `authorize` and `join`.                                                  | recommended | file |
 | `no-wildcard-origins` | No `"*"` in `allowedOrigins` or `trustedOrigins`.                                        | recommended | file |
 | `strict-input`        | Input objects set `additionalProperties: false`. Fix: adds it.                           | strict      | file |
 
@@ -122,15 +122,19 @@ export default defineConfig({
 
 ## Editor setup
 
-The plugin reads `brick.config.ts` through `brick.configs.fromProject()`, so presets, rules, ignores and paths stay in one place.
+The editor configs read `brick.config.ts` through `fromProject()`, so presets, rules, ignores and paths stay in one place.
 
 ### ESLint
+
+```bash
+bun add -d eslint typescript-eslint
+```
 
 ESLint needs a TypeScript parser, such as `typescript-eslint`:
 
 ```js title="eslint.config.js"
 import tseslint from "typescript-eslint";
-import brick from "@brickkit/lint";
+import brick from "@brickkit/cli/lint/eslint";
 
 export default [
   ...tseslint.configs.recommended,
@@ -142,15 +146,13 @@ Without a config file, use a preset directly: `brick.configs.recommended`, `bric
 
 ### oxlint
 
-oxlint loads the same plugin through `jsPlugins` (alpha in oxlint). Its TypeScript config file runs in Node:
+oxlint loads the same plugin through `jsPlugins` (alpha in oxlint; tested with oxlint 1.88). `fromProject()` from `@brickkit/cli/lint/oxlint` returns the `jsPlugins`, `settings`, `rules` and `ignorePatterns` fields; the plugin specifier is `@brickkit/cli/lint/oxlint`. The TypeScript config file runs in Node 22.18 or later:
 
 ```ts title="oxlint.config.ts"
 import { defineConfig } from "oxlint";
-import brick from "@brickkit/lint";
+import { fromProject } from "@brickkit/cli/lint/oxlint";
 
-export default defineConfig(
-  await brick.configs.fromProject({ linter: "oxlint" }),
-);
+export default defineConfig(await fromProject());
 ```
 
 oxlint applies `lint.ignore` to all its rules, not only Brick's.
